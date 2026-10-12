@@ -20,6 +20,10 @@ IDENTITY_KEYS = frozenset({'source_sha256','runtime_config_sha256','collection_c
                           'contact_policy_fingerprint','image_source_install','gpu_uuid'})
 FUNCTIONAL_KEYS = frozenset({'schema_version','kind','run_id','worker_count','scene_manifest',
                             'controlled_identity'})
+QUALITY_RULE_KEYS = frozenset({'schema_version','kind','name','episode_rule','population','pass'})
+#: Only the denominator the approved documents define: every frozen scene stays in every gate's denominator. A population that
+#: drops FAILED/INVALID/no-evidence scenes is not defined; adding one is an explicit change here, never a rule-file value.
+QUALITY_POPULATIONS = frozenset({'ALL_FROZEN_SCENES'})
 QUALIFICATION_KEYS = frozenset({'schema_version','kind','qualification_run_id','worker_count',
     'scene_manifest','functional_manifest','formal_split_manifest','controlled_identity','quality_rules'})
 
@@ -84,7 +88,44 @@ def validate_functional_contract(document):
         raise ValueError('FUNCTIONAL_COLLECTION_CONTRACT_INVALID') from error
 
 
-def validate_qualification_contract(document):
+def quality_episode_rule(name):
+    """The per-episode rule version the code implements for gate `name`; a rule file may only name this one."""
+    from so101_demo.act import episode_qc, topic_loss
+    from so101_demo.parallel_batch import dynamic_manifest
+
+    return {'recorder_lossless': topic_loss.RULE_VERSION, 'frame_continuity': episode_qc.QC_RULE_VERSION,
+            'qc_valid_rate': episode_qc.QC_RULE_VERSION,
+            'teacher_physical_success_rate': dynamic_manifest.RULE_VERSION}[name]
+
+
+def validate_quality_rule(name, document):
+    """One gate's rule file: a closed document that names the code's own episode rule and a complete, integer pass value.
+
+    The code never supplies a count. A missing, valueless, open or unknown-keyed document is refused, so the gate contract cannot
+    be admitted with a rule that would later decide nothing.
+    """
+    try:
+        _require(name in QUALITY_NAMES and type(document) is dict and set(document) == QUALITY_RULE_KEYS)
+        _require(type(document['schema_version']) is int and document['schema_version'] == 1
+                 and document['kind'] == 'ACT_COLLECTION_QUALITY_RULE' and document['name'] == name)
+        _require(document['episode_rule'] == quality_episode_rule(name))
+        _require(document['population'] in QUALITY_POPULATIONS)
+        rule = document['pass']
+        _require(type(rule) is dict and rule.get('kind') in ('EVERY','AT_LEAST'))
+        if rule['kind'] == 'EVERY':
+            _require(set(rule) == {'kind'})
+        else:
+            _require(set(rule) == {'kind','numerator','denominator'}
+                     and type(rule['numerator']) is int and type(rule['denominator']) is int
+                     and 0 < rule['numerator'] <= rule['denominator'])
+        return copy.deepcopy(document)
+    except (ValueError,TypeError,KeyError,ImportError) as error:
+        raise ValueError('QUALITY_RULE_INVALID') from error
+
+
+def validate_qualification_contract(document, *, check_rules=True):
+    """The closed W8 gate contract. `check_rules=False` leaves each rule file's content to `validate_quality_rule`, called by
+    the report recomputation, which turns an undefined rule into a named reason instead of an unreadable contract."""
     try:
         _require(type(document) is dict and set(document) == QUALIFICATION_KEYS)
         _require(type(document['schema_version']) is int and document['schema_version'] == 1
@@ -98,8 +139,9 @@ def validate_qualification_contract(document):
         _require(not qualification & functional and not qualification & formal and not functional & formal)
         rules = document['quality_rules']
         _require(type(rules) is dict and set(rules) == QUALITY_NAMES)
-        for reference in rules.values():
-            read_document(validate_file_ref(reference))
+        for name,reference in rules.items():
+            if check_rules:
+                validate_quality_rule(name,read_document(validate_file_ref(reference)))
             validate_file_ref(reference)
         return copy.deepcopy(document)
     except (OSError,ValueError,TypeError,KeyError,UnicodeError) as error:

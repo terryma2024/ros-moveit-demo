@@ -1,0 +1,382 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "status",
+    "qualification_run_id",
+    "worker_count",
+    "controlled_identity",
+    "contract",
+    "campaign_index",
+    "waves",
+    "quality",
+    "resource_logs",
+    "reasons"
+  ],
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/[^\\u0000]*$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "package_source_sha256",
+        "install_sha256"
+      ],
+      "properties": {
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "package_source_sha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "install_sha256": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scene_id",
+        "task_id",
+        "registration",
+        "source",
+        "outcome"
+      ],
+      "properties": {
+        "scene_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "registration": {
+          "$ref": "#/$defs/ref"
+        },
+        "source": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ref"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NO_EVIDENCE"
+          ]
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "evidence",
+        "result"
+      ],
+      "properties": {
+        "rule": {
+          "$ref": "#/$defs/ref"
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "$ref": "#/$defs/row"
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "population",
+            "passed",
+            "verdict"
+          ],
+          "properties": {
+            "population": {
+              "enum": [
+                "ALL_FROZEN_SCENES"
+              ]
+            },
+            "passed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 40
+            },
+            "verdict": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "UNDEFINED",
+                "NOT_EVALUATED"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "const": "ACT_PARALLEL_COLLECTION_QUALIFICATION"
+    },
+    "status": {
+      "enum": [
+        "QUALIFIED",
+        "NOT_QUALIFIED"
+      ]
+    },
+    "qualification_run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worker_count": {
+      "type": "integer",
+      "const": 8
+    },
+    "controlled_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_sha256",
+        "runtime_config_sha256",
+        "collection_config_sha256",
+        "contact_policy_fingerprint",
+        "image_source_install",
+        "gpu_uuid"
+      ],
+      "properties": {
+        "source_sha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "runtime_config_sha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "collection_config_sha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "contact_policy_fingerprint": {
+          "$ref": "#/$defs/hash"
+        },
+        "image_source_install": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inference",
+            "shard"
+          ],
+          "properties": {
+            "inference": {
+              "$ref": "#/$defs/image"
+            },
+            "shard": {
+              "$ref": "#/$defs/image"
+            }
+          }
+        },
+        "gpu_uuid": {
+          "type": "string",
+          "pattern": "^GPU-[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "contract": {
+      "$ref": "#/$defs/ref"
+    },
+    "campaign_index": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "waves": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/ref"
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recorder_lossless",
+        "frame_continuity",
+        "qc_valid_rate",
+        "teacher_physical_success_rate"
+      ],
+      "properties": {
+        "recorder_lossless": {
+          "$ref": "#/$defs/gate"
+        },
+        "frame_continuity": {
+          "$ref": "#/$defs/gate"
+        },
+        "qc_valid_rate": {
+          "$ref": "#/$defs/gate"
+        },
+        "teacher_physical_success_rate": {
+          "$ref": "#/$defs/gate"
+        }
+      }
+    },
+    "resource_logs": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "$ref": "#/$defs/ref"
+      }
+    },
+    "reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z_]*(:[^\\u0000]+)?$"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "QUALIFIED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reasons": {
+            "maxItems": 0
+          },
+          "waves": {
+            "minItems": 2
+          },
+          "campaign_index": {
+            "$ref": "#/$defs/ref"
+          },
+          "quality": {
+            "properties": {
+              "recorder_lossless": {
+                "properties": {
+                  "evidence": {
+                    "minItems": 40
+                  },
+                  "result": {
+                    "properties": {
+                      "verdict": {
+                        "const": "PASS"
+                      }
+                    }
+                  }
+                }
+              },
+              "frame_continuity": {
+                "properties": {
+                  "evidence": {
+                    "minItems": 40
+                  },
+                  "result": {
+                    "properties": {
+                      "verdict": {
+                        "const": "PASS"
+                      }
+                    }
+                  }
+                }
+              },
+              "qc_valid_rate": {
+                "properties": {
+                  "evidence": {
+                    "minItems": 40
+                  },
+                  "result": {
+                    "properties": {
+                      "verdict": {
+                        "const": "PASS"
+                      }
+                    }
+                  }
+                }
+              },
+              "teacher_physical_success_rate": {
+                "properties": {
+                  "evidence": {
+                    "minItems": 40
+                  },
+                  "result": {
+                    "properties": {
+                      "verdict": {
+                        "const": "PASS"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NOT_QUALIFIED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reasons": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

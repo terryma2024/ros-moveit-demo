@@ -154,3 +154,91 @@ def test_shard_registry_recomputes_original_stop_before_slot_reuse(tmp_path, mon
         assert registry.records()[0]['launch']['ros_namespace'] == registry.records()[1]['launch']['ros_namespace']
         assert not registry.all_terminated(lambda cid: inspect_document())  # new launch still unknown
     registry.close()
+
+
+# ---- the read-only open used by the independent qualification verifier ------------------------------------------------------
+
+
+def tree_state(root):
+    return sorted((str(path.relative_to(root)), path.read_bytes()) for path in root.rglob('*') if path.is_file())
+
+
+def prepared_registry(tmp_path):
+    mod = module()
+    path = tmp_path/'launches.sqlite3'
+    registry = mod.ContainerLaunchRegistry(path)
+    item = launch(tmp_path)
+    registry.register(item)
+    owner = ContainerOwnerKey('a'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1)
+    registry.bind_container(item.launch_id, owner)
+    registry.prove_terminated(item.launch_id, inspect_document())
+    expected = registry.records()
+    registry.close()
+    return mod, path, item, owner, expected
+
+
+def test_read_only_registry_reads_the_same_records_and_changes_nothing(tmp_path):
+    mod, path, item, owner, expected = prepared_registry(tmp_path)
+    before = tree_state(tmp_path)
+    registry = mod.ContainerLaunchRegistry(path, create=False, read_only=True)
+    try:
+        assert registry.records() == expected
+        assert registry.all_terminated(lambda cid: inspect_document())
+        assert not registry.all_terminated(lambda cid: inspect_document(running=True))
+    finally:
+        registry.close()
+    assert tree_state(tmp_path) == before
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == ['launches.sqlite3']    # no journal, wal or shm file appears
+
+
+def test_every_mutating_method_of_a_read_only_registry_refuses(tmp_path):
+    mod, path, item, owner, expected = prepared_registry(tmp_path)
+    before = tree_state(tmp_path)
+    registry = mod.ContainerLaunchRegistry(path, create=False, read_only=True)
+    try:
+        other = mod.ContainerLaunch(**dict(asdict(item), launch_id='teacher-g9', role='teacher', container_name='so101-other'))
+        with pytest.raises(ValueError, match='LAUNCH_REGISTRY_READ_ONLY'):
+            registry.register(other)
+        with pytest.raises(ValueError, match='LAUNCH_REGISTRY_READ_ONLY'):
+            registry.bind_container(item.launch_id, owner)
+        with pytest.raises(ValueError, match='LAUNCH_REGISTRY_READ_ONLY'):
+            registry.bind_child(item.launch_id, None)
+        assert registry.records() == expected
+        # a stored settlement is re-proved from the original inspect document and never written back
+        assert registry.prove_terminated(item.launch_id, inspect_document()) is True
+        with pytest.raises(ValueError, match='LAUNCH_STOP_UNCONFIRMED'):
+            registry.prove_terminated(item.launch_id, inspect_document(running=True))
+    finally:
+        registry.close()
+    assert tree_state(tmp_path) == before
+
+
+def test_read_only_registry_cannot_settle_an_unsettled_launch(tmp_path):
+    mod = module()
+    path = tmp_path/'launches.sqlite3'
+    registry = mod.ContainerLaunchRegistry(path)
+    item = launch(tmp_path)
+    registry.register(item)
+    registry.bind_container(item.launch_id, ContainerOwnerKey('a'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1))
+    registry.close()
+    before = tree_state(tmp_path)
+    registry = mod.ContainerLaunchRegistry(path, create=False, read_only=True)
+    try:
+        with pytest.raises(ValueError, match='LAUNCH_REGISTRY_READ_ONLY'):
+            registry.prove_terminated(item.launch_id, inspect_document())
+        assert registry.records()[0]['exit_inspect'] is None
+        assert not registry.all_terminated(lambda cid: inspect_document())
+    finally:
+        registry.close()
+    assert tree_state(tmp_path) == before
+
+
+def test_read_only_open_refuses_creation_a_missing_file_and_bad_flags(tmp_path):
+    mod = module()
+    with pytest.raises(ValueError, match='LAUNCH_REGISTRY_PATH_INVALID'):
+        mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3', create=True, read_only=True)
+    with pytest.raises((ValueError, OSError)):
+        mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3', create=False, read_only=True)
+    assert list(tmp_path.iterdir()) == []
+    with pytest.raises(ValueError, match='LAUNCH_REGISTRY_PATH_INVALID'):
+        mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3', create=False, read_only='yes')

@@ -53,6 +53,7 @@ from so101_demo.runtime.container_campaign.task_control import ContainerTaskCont
 from so101_demo.runtime.container_campaign.task_results import reserve_task_output, write_task_result
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
 from test_act_diagnostic_episode_scope import _write_registry
+from collection_quality_rules import write_synthetic_rules
 from test_case_inputs import bound_registry, policies
 from so101_teleop.unified.contracts import Domain
 
@@ -342,12 +343,12 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1):
         world.scenes = write_json(inputs / 'qualification-scenes.json', dict(scenarios=scene_rows('load', 40, 200)))
         functional = write_json(inputs / 'functional-scenes.json', dict(scenarios=scene_rows('functional', 8, 100)))
         formal = write_json(inputs / 'formal-scenes.json', dict(scenarios=scene_rows('formal', 3, 300)))
-        rules = {name: write_json(inputs / (name + '.json'), dict(rule=name)) for name in (
-            'recorder_lossless', 'frame_continuity', 'qc_valid_rate', 'teacher_physical_success_rate')}
+        # TEST-ONLY synthetic rule files: the pass counts are not approved values (collection_quality_rules.py)
+        rules = write_synthetic_rules(inputs)
         world.manifest = write_json(inputs / 'gate.json', dict(schema_version=1, kind='ACT_PARALLEL_COLLECTION_GATE',
             qualification_run_id='gate-run', worker_count=8, scene_manifest=ref(world.scenes),
             functional_manifest=ref(functional), formal_split_manifest=ref(formal), controlled_identity=identity,
-            quality_rules={name: ref(path) for name, path in rules.items()}))
+            quality_rules=rules))
         qualification_contract = ref(world.manifest)
         world.worker_count, world.qualification, world.scene_ids = 8, True, [row['scene_id'] for row in scene_rows('load', 40, 200)]
     else:

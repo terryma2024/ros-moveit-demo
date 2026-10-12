@@ -12,6 +12,7 @@ import re
 import sqlite3
 import stat
 import threading
+import urllib.parse
 
 from so101_demo.runtime.container_campaign.paths import _path
 from so101_demo.runtime.container_campaign.process_identity import (
@@ -63,10 +64,10 @@ class ContainerLaunch:
 
 
 class ContainerLaunchRegistry:
-    def __init__(self, path: Path, *, create=True):
+    def __init__(self, path: Path, *, create=True, read_only=False):
         path = Path(path)
-        if (type(create) is not bool or not path.is_absolute()
-                or path.parent.resolve(strict=True) != path.parent or path.is_symlink()):
+        if (type(create) is not bool or type(read_only) is not bool or (create and read_only)
+                or not path.is_absolute() or path.parent.resolve(strict=True) != path.parent or path.is_symlink()):
             raise ValueError('LAUNCH_REGISTRY_PATH_INVALID')
         if create:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -75,8 +76,14 @@ class ContainerLaunchRegistry:
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
             raise ValueError('LAUNCH_REGISTRY_PATH_INVALID')
         self._lock = threading.RLock()
-        self._connection = sqlite3.connect(path, check_same_thread=False)
-        self._connection.execute('PRAGMA synchronous=FULL')
+        self._read_only = read_only
+        if read_only:
+            # mode=ro: the file is never written, no PRAGMA is issued and no journal or wal file can be created
+            self._connection = sqlite3.connect('file:'+urllib.parse.quote(str(path))+'?mode=ro', uri=True,
+                                               check_same_thread=False)
+        else:
+            self._connection = sqlite3.connect(path, check_same_thread=False)
+            self._connection.execute('PRAGMA synchronous=FULL')
         if create:
             with self._connection:
                 self._connection.execute('CREATE TABLE metadata (version INTEGER, kind TEXT)')
@@ -107,7 +114,12 @@ class ContainerLaunchRegistry:
                 return record
         raise ValueError('LAUNCH_NOT_REGISTERED')
 
+    def _writable(self):
+        if self._read_only:
+            raise ValueError('LAUNCH_REGISTRY_READ_ONLY')
+
     def register(self, launch: ContainerLaunch):
+        self._writable()
         if type(launch) is not ContainerLaunch:
             raise ValueError('CONTAINER_LAUNCH_RECORD_INVALID')
         with self._lock, self._connection:
@@ -140,6 +152,7 @@ class ContainerLaunchRegistry:
                                      (launch.launch_id, canonical_json(asdict(launch)).decode()))
 
     def bind_container(self, launch_id, owner: ContainerOwnerKey):
+        self._writable()
         with self._lock, self._connection:
             record = self._record(launch_id)
             if (type(owner) is not ContainerOwnerKey or record['owner'] is not None
@@ -152,6 +165,7 @@ class ContainerLaunchRegistry:
                                      (canonical_json(asdict(owner)).decode(), launch_id))
 
     def bind_child(self, launch_id, binding: ContainerChildBinding):
+        self._writable()
         with self._lock, self._connection:
             record = self._record(launch_id)
             if (type(binding) is not ContainerChildBinding or record['launch']['role'] != 'shard'
@@ -184,6 +198,7 @@ class ContainerLaunchRegistry:
                 except (OSError, ValueError, TypeError, KeyError) as error:
                     raise ValueError('LAUNCH_STOP_UNCONFIRMED') from error
             if record['exit_inspect'] is None:
+                self._writable()    # a read-only registry re-proves a stored settlement but never stores one
                 self._connection.execute('UPDATE launches SET exit_json=? WHERE launch_id=?',
                                          (canonical_json(inspect_document).decode(), launch_id))
             return True

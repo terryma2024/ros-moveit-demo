@@ -197,3 +197,67 @@ def test_half_built_journal_directory_fails_closed(tmp_path):
         world.journal.assign(instance_id=instance, task=task, host_output=output)
     with pytest.raises(ValueError, match='TASK_JOURNAL_TASK_NOT_ASSIGNED'):
         world.journal.fail(task_id='wave-0-w00-s1', reason='x')
+
+
+# ---- the pure reader used by the independent qualification verifier ---------------------------------------------------------
+
+
+def tree_state(root):
+    return sorted((str(path.relative_to(root)), path.is_dir(), None if path.is_dir() else path.read_bytes())
+                  for path in root.rglob('*'))
+
+
+def test_pure_reader_equals_records_and_changes_nothing(tmp_path):
+    from so101_demo.runtime.container_campaign.task_journal import read_task_journal
+    world = make_world(tmp_path)
+    task, second = assign(world), assign(world, 's2')
+    write_result(world, task, dict(v=1))
+    world.journal.collect(task_id=task.task_id,
+                          result=read_container_task_result(world.owners['w00'], task_id=task.task_id))
+    world.journal.fail(task_id=second.task_id, reason='controlled failure')
+    before = tree_state(tmp_path)
+    value = read_task_journal(world.journal.root, world.instances)
+    assert value == world.journal.records() and list(value) == sorted([task.task_id, second.task_id])
+    assert value[task.task_id]['collected'] is not None and value[second.task_id]['failed'] is not None
+    assert tree_state(tmp_path) == before
+
+
+def test_pure_reader_creates_nothing_for_an_absent_journal(tmp_path):
+    from so101_demo.runtime.container_campaign.task_journal import read_task_journal
+    world = make_world(tmp_path)
+    absent = tmp_path/'run/host/wave-9/task-journal'
+    before = tree_state(tmp_path)
+    with pytest.raises(ValueError, match='TASK_JOURNAL_ROOT_INVALID'):
+        read_task_journal(absent, world.instances)
+    assert tree_state(tmp_path) == before and not absent.exists() and not absent.parent.exists()
+
+
+@pytest.mark.parametrize('problem', ['relative_root', 'no_instances', 'foreign_instance', 'nested_instances', 'symlink_root',
+                                     'half_built', 'two_terminals'])
+def test_pure_reader_applies_the_same_refusals_as_the_journal(tmp_path, problem):
+    from so101_demo.runtime.container_campaign.task_journal import read_task_journal
+    world = make_world(tmp_path, workers=('w00', 'w01'))
+    task = assign(world)
+    root, instances = world.journal.root, world.instances
+    if problem == 'relative_root':
+        root = 'run/host/wave-0/task-journal'
+    elif problem == 'no_instances':
+        instances = {}
+    elif problem == 'foreign_instance':
+        instances = {'wave-0-w00-g1': dict(instances['wave-0-w00-g1'], owner_root=str(tmp_path/'missing'))}
+    elif problem == 'nested_instances':
+        instances = {'a': dict(instances['wave-0-w00-g1']),
+                     'b': dict(instances['wave-0-w01-g1'], owner_root=str(world.owners['w00']/'output'))}
+    elif problem == 'symlink_root':
+        link = tmp_path/'journal-alias'
+        link.symlink_to(world.journal.root, target_is_directory=True)
+        root = link
+    elif problem == 'half_built':
+        (world.journal.root/'wave-0-w00-s9').mkdir()
+    else:
+        write_result(world, task, dict(v=1))
+        world.journal.collect(task_id=task.task_id,
+                              result=read_container_task_result(world.owners['w00'], task_id=task.task_id))
+        (world.journal.root/task.task_id/'failed.json').write_text('{}')
+    with pytest.raises(ValueError, match='TASK_JOURNAL_(CONFIG|INSTANCE_ROOT|ROOT|RECORD)_INVALID|TASK_JOURNAL_TASK_NOT_ASSIGNED'):
+        read_task_journal(root, instances)

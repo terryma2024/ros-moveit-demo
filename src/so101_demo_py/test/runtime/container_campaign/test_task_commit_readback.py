@@ -488,6 +488,104 @@ def test_reserved_scene_collected_by_another_instance_is_refused(schedule_factor
         stolen.verify()
 
 
+# ---- the same recomputation from registry and journal records, with no live owner ---------------------------------------
+
+
+def wave_records(registry, wave='wave-0'):
+    return [record for record in registry.records() if record['launch']['wave_id'] == wave]
+
+
+def test_verify_wave_records_equals_the_class_result_without_live_owners(world):
+    registry, verifier, shards = real_verifier(world)
+    plan = dict(wave_index=0, scene_ids=['point-1'], assignment=None)
+    try:
+        expected = verifier.verify_wave(plan, wave_outcome(world), shards)
+        value = result_verifier.verify_wave_records(world.run, plan, wave_records(registry), verifier.case_inputs, False)
+        assert value == expected and value['case_results'][0]['proof']['teacher_task_result'] == 'PASS'
+        # the rows come from the collected journal records when no outcome is given, and equal an explicit outcome's rows
+        assert result_verifier.verify_wave_records(world.run, plan, wave_records(registry), verifier.case_inputs, False,
+            case_rows=wave_outcome(world)['case_results']) == expected
+        # a read-only registry gives the same records and the same wave record
+        readonly = ContainerLaunchRegistry(world.run/'host/launches.sqlite3', create=False, read_only=True)
+        try:
+            assert result_verifier.verify_wave_records(world.run, plan, wave_records(readonly), verifier.case_inputs,
+                                                       False) == expected
+        finally:
+            readonly.close()
+    finally:
+        registry.close()
+
+
+@pytest.mark.parametrize('problem', ['no_records', 'unbound_child', 'unbound_container', 'other_wave', 'duplicate_worker',
+                                     'foreign_root', 'service_role', 'unknown_scene_inputs', 'extra_plan_scene'])
+def test_verify_wave_records_refuses_records_that_are_not_this_waves_registered_shards(world, problem):
+    registry, verifier, shards = real_verifier(world)
+    plan = dict(wave_index=0, scene_ids=['point-1'], assignment=None)
+    records, inputs = wave_records(registry), verifier.case_inputs
+    try:
+        record = records[0]
+        if problem == 'no_records':
+            records = []
+        elif problem == 'unbound_child':
+            records = [dict(record, binding=None)]
+        elif problem == 'unbound_container':
+            records = [dict(record, owner=None)]
+        elif problem == 'other_wave':
+            records = [dict(record, launch=dict(record['launch'], wave_id='wave-1'))]
+        elif problem == 'duplicate_worker':
+            records = [record, dict(record, launch=dict(record['launch'], launch_id='wave-0-w00-g9'))]
+        elif problem == 'foreign_root':
+            records = [dict(record, launch=dict(record['launch'], owned_root=str(world.run/'wave-0/w00/g2')))]
+        elif problem == 'service_role':
+            records = [dict(record, launch=dict(record['launch'], role='teacher'))]
+        elif problem == 'unknown_scene_inputs':
+            inputs = {'point-2': inputs['point-1']}
+        else:
+            plan = dict(plan, scene_ids=['point-1', 'point-2'])
+        with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+            result_verifier.verify_wave_records(world.run, plan, records, inputs, False)
+    finally:
+        registry.close()
+
+
+def test_verify_wave_records_reads_the_journal_without_creating_anything(world):
+    registry, verifier, shards = real_verifier(world)
+    registry.close()
+    registry = ContainerLaunchRegistry(world.run/'host/launches.sqlite3', create=False, read_only=True)
+    plan = dict(wave_index=0, scene_ids=['point-1'], assignment=None)
+    before = sorted((str(p), p.is_dir()) for p in world.run.rglob('*'))
+    try:
+        result_verifier.verify_wave_records(world.run, plan, wave_records(registry), verifier.case_inputs, False)
+        missing = dict(plan, wave_index=3)
+        with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+            result_verifier.verify_wave_records(world.run, missing, [dict(wave_records(registry)[0],
+                launch=dict(wave_records(registry)[0]['launch'], wave_id='wave-3'))], verifier.case_inputs, False)
+    finally:
+        registry.close()
+    assert sorted((str(p), p.is_dir()) for p in world.run.rglob('*')) == before
+
+
+def scheduled(worker, assigned, collected):
+    return dict(worker_id=worker, assigned_monotonic_s=assigned, collected_monotonic_s=collected)
+
+
+def test_check_wave_scheduling_is_a_module_function_with_coded_refusals():
+    roots = {'w00': 'a', 'w01': 'b'}
+    plan = dict(wave_index=0, scene_ids=['s1', 's2', 's3', 's4', 's5', 's6'], assignment=ASSIGNMENT)
+    ok = {'s1': scheduled('w00', 1, 2), 's2': scheduled('w00', 3, 4), 's3': scheduled('w01', 1, 2),
+          's4': scheduled('w01', 3, 4), 's5': scheduled('w00', 5, 6), 's6': scheduled('w01', 5, 6)}
+    result_verifier.check_wave_scheduling(plan, ok, roots, True)
+    with pytest.raises(ValueError, match='INSTANCE_SHORT:w00'):
+        result_verifier.check_wave_scheduling(dict(plan, assignment=None), {name: dict(ok[name], worker_id='w01')
+                                                                            for name in ok} | {'s1': ok['s1']}, roots, True)
+    result_verifier.check_wave_scheduling(dict(plan, assignment=None), {'s1': ok['s1']}, {'w00': 'a'}, False)
+    with pytest.raises(ValueError, match='RESERVED_COLLECTED_ELSEWHERE:s1'):
+        result_verifier.check_wave_scheduling(plan, dict(ok, s1=scheduled('w01', 1, 2), s3=scheduled('w00', 1, 2)),
+                                              roots, True)
+    with pytest.raises(ValueError, match='SURPLUS_BEFORE_RESERVED:s5'):
+        result_verifier.check_wave_scheduling(plan, dict(ok, s5=scheduled('w00', 3.5, 6)), roots, True)
+
+
 # ---- the coordinator-commit readback of the schema 2 path stays valid --------------------------------------------------
 
 
