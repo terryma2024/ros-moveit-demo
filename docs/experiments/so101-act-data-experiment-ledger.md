@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 3ec625e2d
+current_commit: e33bb5f93
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3605
-next_experiment: NONE (no runtime experiment planned); Sonnet executor implements task_builder stage 1 (input contract, roots, local identity, Teacher context) per R/one-way-task3-builder-design.md, then stage 2 (local flow, fault split, stop/cleanup); Opus reviews each before a scoped commit.
+latest_checkpoint: CP-3606
+next_experiment: NONE (no runtime experiment planned); Sonnet writer implements Task 4 stage 1 (Host task journal and per-instance polling loop) per R/one-way-task4-host-design.md; Opus reviews before a scoped commit; then readback/frozen index/export and Task 5 wiring.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3606 — Task 3 local builder committed; Host-side design recorded; Task 4 started
+
+- Committed `e33bb5f93` "feat: execute collection tasks locally in shards". Three Sonnet stages, each reviewed by Opus on the exact source. Behavioural REDs: targeted.WuFdpsmz (diagnostic scope not refused before the task directory existed), targeted.yFMKM6E3 (29 fault cases wrongly business against a stub), targeted.w8Kak8dv (28 flow tests at the run() boundary). Executor GREEN targeted.BmGguvu1 rc0 256 pass; reviewer rerun targeted.WBjD0hDj rc0 283 pass/0 fail 47 s including the still-present old builder/worker tests, the Teacher client tests and the teleop task contract. Review: R/one-way-task3-builder-review.json/.patch.
+- Scope actually proven: wiring over real artifacts, result-store seal, workload, Teacher client with the local context probe, runtime, owned process tree and task result IO. ROS ports, perception chain, inference socket, evidence reader, native stack, recorder pilot, offline processor and Teacher manifest are controlled doubles. No VALID datum was sealed as VALID, no physical Teacher/Recorder episode, no real QC run, no Docker. Not a qualification result.
+- Rulings: revocation with no active runtime lease treats motion/controllers as vacuously stopped, native retirement supplies the authoritative proof on that path; perception terminal stays an execution fault (human decision on a sealable business form still open); the plan's Task 3 child/CLI wiring item is carried into the Task 5 stage together with STARTING/READY binding.
+- Read-only Host survey saved verbatim as R/one-way-task4-host-design.md (sha256 80a79864e5efde1cc147d9b0fe675eaa58e6e4f7fe46e5495118ae2506f40272). OBSERVED from source: formal export (`act/bundle.py`) calls `verify_coordinator_commit` unconditionally and no production code writes a frozen index of committed episodes; no production code composes `ContainerCampaignOwner` (CLI still uses the legacy entry); removing the heartbeat removes the only stop trigger for a bound child; `parallel_qualification_verifier` reads pick-place results, not container collection waves; no production producer of per-scene scope/inputs exists. These enlarge Tasks 4-5 beyond the plan's file lists; all stay inside the approved goal.
+- Coordinator decision recorded: the post-wave Host verifier bounds the container-built lease window by the Host assignment record (data-window check feeding an existing QC rule), kept out of task attribution, which remains task_id only.
+- Retained all; archived none; new scratch dirs and the helper scripts under /tmp/so101-debug-act-data-66c42e4c are deletion candidates only. Nothing deleted.
 
 ## CP-3605 — Executor core committed; task_builder design reviewed; user goal extends to the Docker collection
 
