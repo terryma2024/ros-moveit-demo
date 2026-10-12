@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3582
+latest_checkpoint: CP-3583
 next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3583 — Actual namespace launch composition verified; native image build live
+
+- Added direct verification of the actual configured_actions producer: it creates the namespaced GroupAction and durable selector-only controller/plugin YAML plus source/derived hash manifest. targeted.ph5VJPPV actual rc0,5 passed in.27s, fresh NVMe/import/tempfile/argv/log/JUnit retained. This is additional verification of the source producer, not a claimed new RED or physical namespace result.
+- Actual native image build image-build-20261012T053759Z uses committed source920714037a4a and current submodule, with 441.99MB retained common context and hashed Node/Bun/frontend-cache/lodepng inputs. Exact baseline image5998505c1deb... verified before launch and resolved by Docker to that digest. Source build process wrapper831723 and Docker build831725 are live; exec session29262 remains the authoritative poll handle. At latest observation, apt installation had advanced to Get328 (ROS packages) after finishing signed index downloads; native compilation and image freeze have not run yet. No image success, controller ready or end-to-end stop claim.
+- Slow apt progress was verified with current process argv/state and logs. A direct non-root /proc build-root inspection was denied by host DAC; repeated the read-only inspection with sudo -n and observed a progressing ROS package index file. No absent-resource/failed/stopped inference or automatic restart from that observation. Build remains live in the same generation; do not rerun prepare/build because a poll is quiet or interrupted. No full/package/benchmark tests started.
+- Next: poll this same build to terminal, inspect its actual install/compiler/provenance result, fix owning integration failures with a fresh retained source/context only after terminal evidence, then run the native no-motion container gate with exact owner heartbeats, namespace/GPU/EGL/controller/seven-joint/dualRGB readiness and original stop proof. Formal collection/measurement/live handlers and later gates remain pending; goal ACTIVE with concrete source progress plus a verified live wait. Other sessions and all evidence/probe containers preserved; archived none, scratch/exited diagnostics deletion candidates only; no deletion/push/hardware/training/threshold downgrade.
 
 ## CP-3582 — Namespaced native shard entry source GREEN; native image build next
 
