@@ -4,6 +4,7 @@ import hashlib
 import importlib
 import importlib.metadata
 import json
+import os
 from pathlib import Path
 import re
 import stat
@@ -171,12 +172,48 @@ def read_container_provenance(container_id, *, docker_runner):
         raise ValueError("IMAGE_PROVENANCE_INVALID") from error
 
 
+def read_installed_image():
+    with _open_regular("/act/provenance.json") as stream:
+        manifest = _json(stream.read())
+    runtime = runtime_readback(manifest["runtime"])
+    return verify_image_freeze(manifest, source_root="/act/source", install_root="/act/install", runtime=runtime)
+
+
+def write_build_freeze(role):
+    """Build-only producer; bootstrap never calls it or repairs a frozen image."""
+    import subprocess
+
+    _require(role in ("inference", "shard"))
+    modules = ["so101_demo"] + (["so101_teleop", "so101_quik"] if role == "shard" else [])
+    packages = ["so101_demo_py"] + (["so101_teleop", "so101_quik", "so101_mujoco_support",
+        "controller_manager", "mujoco_ros2_control", "mujoco_ros2_control_msgs",
+        "mujoco_ros2_control_plugins"] if role == "shard" else [])
+    versions = {distribution.metadata["Name"]: importlib.metadata.version(distribution.metadata["Name"])
+                for distribution in importlib.metadata.distributions() if distribution.metadata.get("Name")}
+    runtime = runtime_readback(dict(interpreter="/act/venv/bin/python", dependencies=versions,
+        module_origins={name: "/act/install" for name in modules},
+        package_prefixes={name: "/act/install" for name in packages}))
+    if role == "inference":
+        pins = {"torch": "2.13.0+cu130", "torchvision": "0.28.0+cu130", "ultralytics": "8.4.115",
+                "numpy": "1.26.4", "PyYAML": "6.0.2", "Pillow": "12.3.0"}
+        _require(all(importlib.metadata.version(name) == value for name, value in pins.items()))
+    dependencies = Path("/act/install/share/act-image-dependencies.json")
+    with dependencies.open("xb") as stream:
+        stream.write(canonical_json(dict(python=versions, apt=subprocess.check_output(
+            ["dpkg-query", "-W", "-f=${Package}=${Version}\\n"], text=True).splitlines())))
+    os.chmod(dependencies, 0o444)
+    with _open_regular("/act/source/.image-git.json") as stream:
+        metadata = _json(stream.read())
+    manifest = freeze_image(source_root="/act/source", install_root="/act/install", runtime=runtime, **metadata)
+    with Path("/act/provenance.json").open("xb") as stream:
+        stream.write(canonical_json(manifest)+b"\n")
+    print(canonical_json(verify_image_freeze(manifest, source_root="/act/source",
+        install_root="/act/install", runtime=runtime)).decode())
+
+
 def main():
     try:
-        with _open_regular("/act/provenance.json") as stream:
-            manifest = _json(stream.read())
-        runtime = runtime_readback(manifest["runtime"])
-        report = verify_image_freeze(manifest, source_root="/act/source", install_root="/act/install", runtime=runtime)
+        report = read_installed_image()
         print(canonical_json(report).decode())
         return 0
     except (OSError, ValueError, TypeError, KeyError, RuntimeError, ImportError) as error:

@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: d98cebe133a835796a3f135cbd4a043e1e008bc2
+current_commit: c287b30fa33e9e78bd52a3cdc62a24d5669dae62
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3577
+latest_checkpoint: CP-3578
 next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3578 — Installed image bootstrap source GREEN, actual image integration next
+
+- Added a fixed installed image bootstrap. It reads the image role, refuses foreign commands, checks actual image provenance, then execs the exact image interpreter with isolated Python and the role's current CLI. It imports no YOLO/Torch into the inference parent. The shard selection reserves the actual campaign_shard module name; that module is still unimplemented and no shard-ready claim is made.
+- Added the campaign-inference Dockerfile and shared ROS environment bootstrap. New campaign code is copied from a common source snapshot into /act/source and installed into /act/install; the cached CUDA dependency base is not treated as current source provenance. A new image venv prioritizes the installed campaign code and records actual module origins and all discovered Python dependency versions. Build-only freeze also records dpkg versions. Source and installed trees are separate; pip's generated build metadata cannot modify the immutable source inventory. Inline review moved dependency-file permissions before its inventory so the image cannot change a hashed file's mode after freezing it.
+- Targeted RED targeted.tBkFqHUW rc1, 9 missing bootstrap boundary failures. GREEN targeted.h0ypjK1K rc0, 83 passed in0.15s, fresh NVMe scratch/interpreter/tempfile/import/log/argv/JUnit retained. Bootstrap tests use explicit readback/exec I/O fixtures; they prove fixed command selection and refusal ordering, not real image bytes. Actual Docker build/start/readback is the next integration gate. No full/package/benchmark gate, GPU inference, ROS/controller motion or qualification.
+- Refreshed ownership: ai-station, existing branch/worktree, only intentional ledger metadata dirtiness before this source boundary, submodule bab9841a697e1edc1411ed620c55131003d21094, no live containers, /data1.4T free. Other Codex/Claude sessions preserved. Generic RclpyActionDriver still explicitly refuses ACT operations; it must not be used as a simulated substitute for the actual shard execution composition. Goal ACTIVE, previous turn was concrete source/namespace progress. All evidence retained, archived none, scratch/socket/probe deletion candidates only; no deletion/push/training/hardware.
 
 ## CP-3577 — Fixed role launch and image-byte readback source GREEN
 
