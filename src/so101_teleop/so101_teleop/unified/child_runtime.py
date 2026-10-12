@@ -518,3 +518,151 @@ def _target_from_packet(packet: SafetyPacket) -> RevokeTarget:
         ),
         revocation_revision=int(target.get("revocation_revision", 0)),
     )
+
+
+class ContainerChildIpcServer(ChildIpcServer):
+    """Container control: inner process ready proof and one owner heartbeat stream.
+
+    Goal RPCs retain the existing token/epoch/safety channels. Owner heartbeats
+    are their separate closed control packet and contain no resource authority.
+    Socket/ready artifacts survive close for the Host's generation readback.
+    """
+
+    def __init__(self, *args, owner_monitor, process_owner, **kwargs):
+        from so101_demo.runtime.container_campaign.heartbeat import OwnerHeartbeatMonitor
+        from so101_demo.runtime.container_campaign.process_identity import ProcessOwnerKey
+
+        if type(owner_monitor) is not OwnerHeartbeatMonitor or type(process_owner) is not ProcessOwnerKey:
+            raise ValueError("CONTAINER_CHILD_CONTROL_INVALID")
+        super().__init__(*args, **kwargs)
+        if (type(self.max_bytes) is not int or self.max_bytes <= 0
+                or type(self.runtime.normal_queue_limit) is not int or self.runtime.normal_queue_limit <= 0):
+            raise ValueError("CONTAINER_CHILD_CONTROL_INVALID")
+        self.owner_monitor, self.process_owner = owner_monitor, process_owner
+        self.socket_parent_fd = None
+        self._connections = set()
+        self._normal_connections = set()
+        self._handlers = set()
+
+    async def start(self):
+        from dataclasses import asdict
+        from so101_demo.runtime.container_campaign.process_identity import pid_namespace_inode, process_owner_matches
+        from so101_demo.runtime.inference.codec import open_socket_parent
+        from so101_demo.runtime.parallel_ipc.frames import transport_address
+
+        if self.socket_parent_fd is not None or not process_owner_matches(self.process_owner):
+            raise MutationError("CONTAINER_CHILD_PROCESS_IDENTITY_INVALID")
+        self.socket_root.mkdir(mode=0o700, exist_ok=True)
+        self.socket_parent_fd = open_socket_parent(self.normal_socket)
+        try:
+            for path in (self.normal_socket, self.safety_socket, self.socket_root / READY_FILE_NAME):
+                if path.exists() or path.is_symlink():
+                    raise MutationError("CONTAINER_CHILD_CONTROL_EXISTS")
+            for path, handler in ((self.normal_socket, self._handle_normal), (self.safety_socket, self._handle_safety)):
+                self._servers.append(await asyncio.start_unix_server(handler,
+                    path=transport_address(path, self.socket_parent_fd), limit=self.max_bytes+1))
+                os.chmod(path, 0o600)
+            ready = {"schema_version": 1, "kind": "container_child_ready",
+                "generation": self.owner_monitor.generation,
+                "process_owner": asdict(self.process_owner), "pid_namespace_inode": pid_namespace_inode(),
+                "service_epoch": self.service_epoch, "runtime_id": self.runtime.runtime_id,
+                "campaign_id": self.runtime.act_campaign_id, "worker_id": self.runtime.act_worker_id,
+                "execution_generation": self.runtime.act_generation,
+                "normal_socket": str(self.normal_socket), "safety_socket": str(self.safety_socket)}
+            fd = os.open(READY_FILE_NAME, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=self.socket_parent_fd)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(json.dumps(ready, sort_keys=True, allow_nan=False).encode()+b"\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(self.socket_parent_fd)
+        except BaseException:
+            await self.close()
+            raise
+
+    async def close(self):
+        for server in self._servers:
+            server.close()
+        for server in self._servers:
+            await server.wait_closed()
+        for writer in tuple(self._connections):
+            writer.close()
+        current = asyncio.current_task()
+        handlers = tuple(task for task in self._handlers if task is not current)
+        if handlers:
+            done, pending = await asyncio.wait(handlers, timeout=self.owner_monitor.timeout_ns/1e9)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.exception() if not task.cancelled() else None
+        if self.socket_parent_fd is not None:
+            os.close(self.socket_parent_fd)
+            self.socket_parent_fd = None
+
+    async def _handle_normal(self, reader, writer):
+        task = asyncio.current_task()
+        if len(self._normal_connections) >= self.runtime.normal_queue_limit+1:
+            try:
+                writer.write(encode(IpcReply(accepted=False, code="IPC_QUEUE_FULL")))
+                await writer.drain()
+            finally:
+                writer.close()
+                with contextlib.suppress(Exception):
+                    await writer.wait_closed()
+            return
+        self._handlers.add(task)
+        self._connections.add(writer)
+        self._normal_connections.add(writer)
+        try:
+            while True:
+                line = await reader.readline()
+                if not line:
+                    return
+                reply = await self._normal_reply(line, writer)
+                writer.write(encode(reply))
+                await writer.drain()
+        finally:
+            self.owner_monitor.disconnected(writer)
+            try:
+                if self.owner_monitor.expired:
+                    await self.runtime.mark_web_dead(self.owner_monitor.reason)
+            finally:
+                self._handlers.discard(task)
+                self._connections.discard(writer)
+                self._normal_connections.discard(writer)
+                writer.close()
+                with contextlib.suppress(Exception):
+                    await writer.wait_closed()
+
+    async def _normal_reply(self, line, writer):
+        from so101_demo.runtime.parallel_ipc.frames import _pairs
+
+        if len(line) > self.max_bytes:
+            return IpcReply(accepted=False, code="IPC_FRAME_TOO_LARGE")
+        if self.owner_monitor.expired:
+            await self.runtime.mark_web_dead(self.owner_monitor.reason)
+            return IpcReply(accepted=False, code="OWNER_HEARTBEAT_FENCED")
+        try:
+            document = json.loads(line, object_pairs_hook=_pairs,
+                parse_constant=lambda _value: (_ for _ in ()).throw(ValueError("nonfinite")))
+            if type(document) is dict and document.get("kind") == "owner_heartbeat":
+                uid = peer_uid(writer.get_extra_info("socket"))
+                if uid is None or uid != os.geteuid():
+                    raise ValueError("IPC_PEER_REJECTED")
+                result = self.owner_monitor.receive(document, connection=writer)
+                return IpcReply(accepted=True, code="OK", result=result)
+        except (ValueError, TypeError, UnicodeError) as error:
+            return IpcReply(accepted=False, code=str(error))
+        return await super()._normal_reply(line, writer)
+
+    async def _handle_safety(self, reader, writer):
+        task = asyncio.current_task()
+        self._handlers.add(task)
+        self._connections.add(writer)
+        try:
+            return await super()._handle_safety(reader, writer)
+        finally:
+            self._handlers.discard(task)
+            self._connections.discard(writer)

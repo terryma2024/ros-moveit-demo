@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 9a25d978ff0bf46508853c292e0d25bcdec7e386
+current_commit: 29cda62cb817f78e90e7caa165af0ba530583798
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3575
-next_experiment: Publish and independently verify typed ACT pre-motion results with actual stop/namespace evidence, then select the current workload and ports in shard/Host composition.
+latest_checkpoint: CP-3576
+next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3576 — Container identity and owner heartbeat boundary GREEN
+
+- Added distinct ContainerOwnerKey and ProcessOwnerKey, namespace-local kernel process readback, fixed Docker start/image identity, and strict generation/process/namespace/controller/ROS stop conjunction. Host checks Docker identity and maps only Docker's host init PID to the PID namespace inode; inner numeric PIDs are never interpreted on the Host. A forced exit or malformed stop fact does not release the fence.
+- Added container-specific control server, Host bridge owner and one persistent owner heartbeat channel. Receive-clock expiry, wrong generation, replay, connection takeover, owner disconnect and failed initial ACK close the generation. No reconnect, Host-PID liveness probe or filesystem heartbeat fallback. Existing generic bridge/server/watchdog paths remain unchanged. Ready/socket artifacts survive close for readback; closing the server alone is not a controller stop proof.
+- Functional RED evidence includes missing source boundaries (uKeiPVZ3, aSqyfHe3, TXSchcG5, bRhNSlEc), bool-PID/clock fence failures (R08kP4ys) and failed heartbeat startup remaining apparently healthy (MeypmItz). Retained collection/dependency/fixture/socket-length runs are not source regressions. KNBagjHC exposed an incorrect reply decoder import, corrected to the actual strict IpcReply contract. Targeted runner now uses a task-owned Pydantic 2 environment; generic socket fixtures use the registered short /tmp log root, while file fixtures remain on fresh NVMe scratch.
+- Final exact argv: run-targeted-container.zsh `src/so101_demo_py/test/runtime/container_campaign src/so101_teleop/test/unified/test_container_child_ownership.py src/so101_teleop/test/unified/test_unified_ipc.py src/so101_teleop/test/unified/test_unified_bridge.py src/so101_teleop/test/unified/test_unified_bridge_cleanup.py -q`. targeted.Fh4oVtbA actual rc 0, 68 passed in 15.84 s, wall 16 s; exact interpreter/import/tempfile proof, argv, logs and JUnit retained. Real Unix socket tests include long NVMe paths, owner ACK, disconnect fencing and wrong-generation startup refusal. No full/package/benchmark gate.
+- Real Docker namespace probe namespace-probe-77c67ccfe66a used only the selected GPU, a cached image, non-root UID/GID, read-only rootfs, cap-drop ALL, private PID/network/IPC and no model/ROS/action code. Inner PID 1 differs from host PID 762977; inode 4026533206 differs from Host 4026531836 and equals Docker host init's namespace inode. Graceful private probe receipt and exact stopped inspect (Running=false, Pid=0, ExitCode=0) retained. Container ef52282d94815e0a72f5597e55a606f4a961d039f8a96ebbce7d8e55b69d149d retained exited. This proves kernel namespace mapping only, not new role image provenance, ROS/controller stop or qualification.
+- Inline self review inspected the exact source/type/heartbeat/queue changes and generic regressions; scoped diff/hash retained. Actual shard entry, two role images, controller/ROS stop producer, Host result verification/commit, calibration/live and W1/W2/W8 remain open. Goal active; no live task stack, archived none, scratch/socket trees and exited namespace probe are deletion candidates only. Preserve other sessions and four historical exited containers; no deletion/push/training/hardware.
 
 ## CP-3575 — Uncertain ACT cleanup remains quarantined GREEN
 

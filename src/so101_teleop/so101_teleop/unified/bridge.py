@@ -575,6 +575,120 @@ def _write_retirement_receipt(root: Path, document: dict) -> None:
         os.close(directory_fd)
 
 
+class ContainerBridgeProcessOwner:
+    """Host ownership by Docker identity; inner ready/stop PID keys remain opaque."""
+
+    def __init__(self, *, container_owner, control_socket_root, runtime_id, service_epoch,
+                 campaign_id, worker_id, execution_generation, inspect_container=None,
+                 namespace_reader=None):
+        from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey
+
+        root = Path(control_socket_root)
+        if (type(container_owner) is not ContainerOwnerKey or not root.is_absolute()
+                or root.resolve(strict=True) != root
+                or any(type(value) is not str or not value for value in (
+                    runtime_id, service_epoch, campaign_id, worker_id))
+                or type(execution_generation) is not int or execution_generation <= 0):
+            raise MutationError("CONTAINER_BRIDGE_CONFIG_INVALID")
+        self.container_owner, self.control_socket_root = container_owner, root
+        self.runtime_id, self.service_epoch = runtime_id, service_epoch
+        self.campaign_id, self.worker_id = campaign_id, worker_id
+        self.execution_generation = execution_generation
+        self._inspect_container = inspect_container or self._docker_inspect
+        self._namespace_reader = namespace_reader or (lambda pid: os.stat(f"/proc/{pid}/ns/pid").st_ino)
+        self.binding = None
+        self.heartbeat_channel = None
+        self._heartbeat_closed = False
+
+    @staticmethod
+    def _docker_inspect(container_id):
+        result = subprocess.run(["docker", "inspect", container_id], capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise MutationError("CONTAINER_INSPECT_UNREADABLE")
+        documents = json.loads(result.stdout)
+        if type(documents) is not list or len(documents) != 1:
+            raise MutationError("CONTAINER_INSPECT_UNREADABLE")
+        return documents[0]
+
+    def _observe(self):
+        from so101_demo.runtime.container_campaign.process_identity import container_key_from_inspect
+
+        document = self._inspect_container(self.container_owner.container_id)
+        if container_key_from_inspect(document, launch_generation=self.container_owner.launch_generation) != self.container_owner:
+            raise MutationError("CONTAINER_OWNER_IDENTITY_CHANGED")
+        return document
+
+    def accept_ready(self, document):
+        from so101_demo.runtime.container_campaign.process_identity import ContainerChildBinding, ProcessOwnerKey
+
+        fields = {"schema_version", "kind", "generation", "process_owner", "pid_namespace_inode",
+                  "service_epoch", "runtime_id", "campaign_id", "worker_id", "execution_generation",
+                  "normal_socket", "safety_socket"}
+        expected = dict(schema_version=1, kind="container_child_ready",
+            generation=self.container_owner.launch_generation, service_epoch=self.service_epoch,
+            runtime_id=self.runtime_id, campaign_id=self.campaign_id, worker_id=self.worker_id,
+            execution_generation=self.execution_generation,
+            normal_socket="/act/control/normal.sock", safety_socket="/act/control/safety.sock")
+        try:
+            if (type(document) is not dict or set(document) != fields or self.binding is not None
+                    or any(type(document[name]) is not int for name in (
+                        "schema_version", "generation", "execution_generation", "pid_namespace_inode"))
+                    or any(document[name] != value for name, value in expected.items())):
+                raise ValueError("ready binding")
+            process = ProcessOwnerKey(**document["process_owner"])
+            observed = self._observe()
+            state = observed["State"]
+            if (state["Running"] is not True or state["Restarting"] is not False
+                    or type(state["Pid"]) is not int or state["Pid"] <= 0):
+                raise ValueError("container not running")
+            namespace = self._namespace_reader(state["Pid"])
+            if (type(namespace) is not int or namespace <= 0 or namespace != document["pid_namespace_inode"]
+                    or namespace == os.stat("/proc/self/ns/pid").st_ino):
+                raise ValueError("PID namespace")
+            self.binding = ContainerChildBinding(self.container_owner, process, namespace,
+                                                str(self.control_socket_root / NORMAL_SOCKET_NAME))
+            return self.binding
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            raise MutationError("CONTAINER_READY_IDENTITY_INVALID") from error
+
+    def ready(self):
+        if (self.binding is None or self._heartbeat_closed
+                or (self.heartbeat_channel is not None and self.heartbeat_channel.error is not None)):
+            return False
+        try:
+            observed = self._observe()
+            state = observed["State"]
+            return (state["Running"] is True and state["Restarting"] is False
+                and type(state["Pid"]) is int and state["Pid"] > 0
+                and self._namespace_reader(state["Pid"]) == self.binding.pid_namespace_inode)
+        except (OSError, ValueError, KeyError, MutationError):
+            return False
+
+    async def start_heartbeats(self, *, timeout_ns, max_bytes):
+        from so101_demo.runtime.container_campaign.heartbeat import OwnerHeartbeatChannel
+
+        if not self.ready() or self.heartbeat_channel is not None:
+            raise MutationError("CONTAINER_OWNER_HEARTBEAT_FENCED")
+        self.heartbeat_channel = OwnerHeartbeatChannel(socket_path=self.binding.control_socket,
+            generation=self.container_owner.launch_generation, timeout_ns=timeout_ns, max_bytes=max_bytes)
+        await self.heartbeat_channel.start()
+
+    async def stop_heartbeats(self):
+        self._heartbeat_closed = True
+        if self.heartbeat_channel is not None:
+            await self.heartbeat_channel.close()
+
+    def stopped(self, receipt):
+        from so101_demo.runtime.container_campaign.process_identity import shard_stop_proven
+
+        if self.binding is None:
+            return False
+        try:
+            return shard_stop_proven(self.binding, receipt, self._observe())
+        except (OSError, ValueError, KeyError, MutationError):
+            return False
+
+
 class BridgeProcessOwner:
     def __init__(self, launch: BridgeLaunch, arbiter: GlobalMutationArbiter, safety: SafetyLane) -> None:
         self.launch = launch

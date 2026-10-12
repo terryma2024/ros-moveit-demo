@@ -163,6 +163,19 @@ async def watchdog(runtime: ChildRuntime, *, web_pid: int | None, heartbeat: Pat
             return
 
 
+async def container_watchdog(runtime: ChildRuntime, *, owner_monitor) -> None:
+    """Fence the container's child on its local receive deadline, independently of goal queues."""
+    from so101_demo.runtime.container_campaign.heartbeat import OwnerHeartbeatMonitor
+
+    if type(owner_monitor) is not OwnerHeartbeatMonitor:
+        raise ValueError("OWNER_HEARTBEAT_CONFIG_INVALID")
+    while not runtime.web_dead:
+        if owner_monitor.expired:
+            await runtime.mark_web_dead(owner_monitor.reason)
+            return
+        await asyncio.sleep(owner_monitor.timeout_ns/2e9)
+
+
 async def serve(server: ChildIpcServer, runtime: ChildRuntime, watchdog_task: asyncio.Task) -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -234,4 +247,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
