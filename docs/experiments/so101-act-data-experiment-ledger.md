@@ -1,11 +1,11 @@
 ---
 task_id: so101-act-data-0917a
-goal: Complete the approved non-Head first MuJoCo collection-loop milestone under the takeover handoff; the broader ACT program remains outside this takeover.
-success_contract: All eight fixed takeover conditions: provenance, targeted safety/data/endpoint gates, default production composition, frozen complete build/package gates, one live FULL_RESTART, lossless Recorder/fresh-process QC/durable Coordinator readback, isolated negatives/independent review, verified milestone delivery.
+goal: Implement and verify the approved container campaign through fresh calibration/live, W1/W2, independent exact-W8 qualification and authorized training-ready formal-data manifest; stop before training and genuine safety/resource/approval blockers.
+success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one shard per container, current closed contracts and provenance, fresh calibration/live, complete eight-scene W1/W2, independent forty-scene two-wave exact-W8, committed valid formal-data manifest and proven owned cleanup; no threshold downgrade.
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: fa8c82b98eecda2fd41b7bcd4c18bb605428e9e9
+current_commit: 30e9665efbba4a8bb863dbdecdf007a6836d2e04
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,36 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3565
-next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
+latest_checkpoint: CP-3567
+next_experiment: Container private same-path mount/root boundary targeted RED -> GREEN, then shared service.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3567 — inference wire/config sub-boundary GREEN and inline review
+
+- Added current closed ACT inference contract, canonical binary JSON+RGB codec, campaign configuration reader and paired schemas; explicit YOLO score injection preserves other callers' default 0.25 and unchanged factory kwargs when unspecified. No production entry switched yet; this is not container runtime acceptance.
+- RED actual testcase calls: scratch/targeted.W8sdV4H9 rc 1 (70 failures: missing new inference modules), targeted.jkUExUOb rc 1 (26 failures: config/injection absent plus socket complete-frame wait), targeted.gEcUA2II rc 1 (6 Head configuration checks absent, schema tests deselected by global -k and not counted), targeted.DDK2Enqr rc 1 (2 schema-file failures). All paths relative to container-campaign-20261012T003700Z-2130aaf1 under the registered root; exact argv, temp proof, log and JUnit retained.
+- Socket root cause: Python's positive timeout polls before MSG_DONTWAIT; a complete frame stalled awaiting EOF. A socketpair test failed at its 2 s bound, then passed with an explicitly nonblocking trailing-byte peek. targeted.OdQcNgmu rc 0, 21 passed.
+- Final targeted boundary command: run-targeted.zsh `src/so101_demo_py/test/runtime/inference src/so101_demo_py/test/adapters/perception/test_yolo_seg_adapter.py src/so101_demo_py/test/adapters/perception/test_detector_factory.py src/so101_demo_py/test/runtime/test_parallel_ipc.py -q`; targeted.vXfSgZu6 rc 0, 177 passed in 2.36 s, wall 2 s. Source imported via registered test-import/so101_demo symlink; exact test-venv interpreter and retained ROS overlay origins proven. This is source-level targeted evidence, not new install/image/full package freeze.
+- Inline self review: strict fields/version/types, canonical duplicate/nonfinite rejection, bounded body/header/payload reads, mask totals/shape/nonempty checks, CUDA-only response, no scheduling authority/compat envelope, no transport files/hashes, full controlled-file hashing, same inference image pin, positive instance counts incl 3/5, unused Teacher weight independence for restricted measurement, symlink-free pinned input reads, and generic detector/IPC regression checked. `git diff --check` passed. Exact scoped patch/hash retained in inference-contract-config.patch and its .sha256.
+- Ruling: current HeadSearchBinding has no prediction-cutoff field; preserve its source-defined 0.25 detector cutoff rather than inventing a new binding schema or confusing local search min_confidence with model conf. New helper checks model/weights/thread/version against current binding, with actual runtime checks to be invoked by the service child in the next boundary. Cost if wrong: a future approved cutoff change requires explicit binding migration; current behavior is preserved.
+- First operational Teacher model/weight configuration is not fabricated now; actual weight/source readback will be frozen with the image/entry inputs. No calibration/live/W8/formal PASS claimed. No full ordinary/benchmark gate run.
+- Retained: all new scratch logs/JUnit/temp proofs and exact approved snapshots; archived none. Read-back scratch trees are deletion candidates only; no deletion. Preserved processes unchanged; no owned simulation/service processes.
+
+## CP-3566 — approved container dispatch activated; startup ownership and drift checked
+
+- Human dispatch 2130aaf1-f1e5-4e6d-810c-b12fcf785f7f explicitly approves Codex implementation, YOLO mode and native goal; overrides dst executor choice. One writer, inline Sol review; no new worktree/resume/hardware/training/push/deletion/threshold downgrades.
+- Native goal active, threadId 01a12d8d-d88c-7ea3-8054-9ae5fc5952c3, no token budget; create/get result recorded in startup-status.md. Actual execution argv selects gpt-6.1-sol/high with goals and approval/sandbox bypass.
+- Sole evidence root remains `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`; run subroot `container-campaign-20261012T003700Z-2130aaf1`. Exact handoff/snapshots retained and completely read. Design hash ddd2d86c6c79b385a3b122a68fefa3982477463bb6c668206ff560a7231f140d and implementation hash 02be30ceedcf73a6b118e22864a6a514e86b92a1a86ddbad2d438f196592ddaf verified.
+- OBSERVED initial clean worktree on codex/so101-act-data-0917a, HEAD 30e9665efbba4a8bb863dbdecdf007a6836d2e04, submodule bab9841a697e1edc1411ed620c55131003d21094. Bounded drift from 6baf54e63 touches five Head Search/detector/audit files; current simplifications and fixes preserved. Exact owning CLI/provider/schema paths in startup-status.md.
+- OBSERVED no competing active worktree writer, live simulation stack or running containers. Preserved idle Claude `%0`/PID 233819 and unsent composer, home Codex 703933, managed app-server/Claude desktop/daemon and four exited so101-quik containers. Owned executor 564888 in tmux codex-act-container-20261012 `%1`; no simulation processes yet.
+- Resources: /data NVMe 1.4 TiB available, RAM about 26 GiB available, GPU GPU-28221cec-9d21-7753-fd5a-da645740df19 RTX 5060 Ti 16311 MiB with 476 MiB used. No resource capacity PASS inferred.
+- Test interpreter verified executable: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`; pytest 7.4.4, xdist 3.8.0, numpy 1.26.4. Jazzy and retained final install setup exist; exact origins and fresh TMP proofs remain per-test requirements.
+- First boundary: new strict runtime/inference contract/codec/config and explicit threshold injection, then shared service. No tests/implementation had started at this checkpoint. Full ordinary gates only at approved integration/final-fix boundaries.
+- Ruling: Keep plan progress, briefs/reviews/test outputs under this registered run rather than the skill's default .superpowers scratch; this follows the repository's single evidence-root rule. Inline self review replaces skill/plan independent review as explicitly directed. No evidence/workspace deletion at finish. Cost if wrong: evidence tooling paths may require explicit arguments, not a weaker acceptance gate.
+- CP-3565 old-topology functional-40 remains 40/40, not container W8 qualification. HFA-010 UNKNOWN coverage and inconsistent stop-window metrics remain open, not silently passed.
+- Retained: this run's handoff/approved-docs/receipt/startup-status/preflight plus all historical evidence. Archived: none added. Deletion candidates: none yet. Next: targeted inference contract/config RED -> GREEN.
 
 ## CP-3565 — 900017 root cause is detector bbox mode-hopping, not overshoot; lock hold band (a6a312bd4); gates 0/0; uninterrupted functional-40 f41 = 40/40
 

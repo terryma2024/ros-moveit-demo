@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "evidence_root",
+    "controlled_runtime",
+    "head_service",
+    "teacher_service",
+    "shard_image",
+    "gpu_uuid",
+    "qualification_contract"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "ACT_CONTAINER_CAMPAIGN"
+    },
+    "evidence_root": {
+      "type": "string",
+      "pattern": "^/[^\\u0000]*$"
+    },
+    "controlled_runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/[^\\u0000]*$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "head_service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image",
+        "model",
+        "instances",
+        "torch_threads",
+        "torch_interop_threads",
+        "max_inflight_requests",
+        "max_frame_bytes",
+        "max_image_height",
+        "max_image_width",
+        "queue_timeout_s",
+        "inference_timeout_s"
+      ],
+      "properties": {
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "digest",
+            "package_source_sha256",
+            "install_sha256"
+          ],
+          "properties": {
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "package_source_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "install_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model_id",
+            "weights",
+            "classes",
+            "score_threshold"
+          ],
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "weights": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^/[^\\u0000]*$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            },
+            "classes": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              }
+            },
+            "score_threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "instances": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "torch_threads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "torch_interop_threads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_inflight_requests": {
+          "const": 8
+        },
+        "max_frame_bytes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 4294967295
+        },
+        "max_image_height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_image_width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "queue_timeout_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "inference_timeout_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "teacher_service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image",
+        "model",
+        "instances",
+        "torch_threads",
+        "torch_interop_threads",
+        "max_inflight_requests",
+        "max_frame_bytes",
+        "max_image_height",
+        "max_image_width",
+        "queue_timeout_s",
+        "inference_timeout_s"
+      ],
+      "properties": {
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "digest",
+            "package_source_sha256",
+            "install_sha256"
+          ],
+          "properties": {
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "package_source_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "install_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model_id",
+            "weights",
+            "classes",
+            "score_threshold"
+          ],
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "weights": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^/[^\\u0000]*$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            },
+            "classes": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              }
+            },
+            "score_threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "instances": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "torch_threads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "torch_interop_threads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_inflight_requests": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_frame_bytes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 4294967295
+        },
+        "max_image_height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_image_width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "queue_timeout_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "inference_timeout_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "shard_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "package_source_sha256",
+        "install_sha256"
+      ],
+      "properties": {
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "package_source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "install_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "gpu_uuid": {
+      "type": "string",
+      "pattern": "^GPU-.+$"
+    },
+    "qualification_contract": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^/[^\\u0000]*$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}
