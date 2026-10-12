@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: e33bb5f93
+current_commit: 421f8ac17
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3606
-next_experiment: NONE (no runtime experiment planned); Sonnet writer implements Task 4 stage 1 (Host task journal and per-instance polling loop) per R/one-way-task4-host-design.md; Opus reviews before a scoped commit; then readback/frozen index/export and Task 5 wiring.
+latest_checkpoint: CP-3607
+next_experiment: NONE (no runtime experiment planned); Sonnet writer implements Task 5 child and shard-owner wiring per R/one-way-task4-host-design.md sections 6-8; a read-only survey maps the remaining composition, provider, qualification, cleanup and gate work; first runtime experiment will be a no-motion real-container start/status/terminate after that wiring.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3607 — Task 4 Host polling, readback, frozen index and schema-3 export committed
+
+- Committed `421f8ac17` "feat: poll and verify container task results on host". Two Sonnet stages reviewed by Opus on the exact source (coordinator.py, task_journal.py, bundle.py diff, verify_container_task_registration). Review: R/one-way-task4-review.json/.patch.
+- REDs were mutation REDs (writer implemented stage 1 before its tests, then broke and restored the code): journal targeted.FAaSmicj, dispatch loop targeted.dKJ3axyt, readback targeted.ecKS2Ofx, export targeted.GtvM6pdH. No owner-level RED. Executor GREEN targeted.OQOwtNrB rc0 624 pass/1 skip. Reviewer rerun targeted.Fyf1fjAU rc0 2220 pass/7 skip/0 fail, 34 s, xdist 8: all of test/runtime/container_campaign, test/parallel_batch, ACT bundle/export/result-store/QC files and cli/test_act_train_cli. Targeted run, not the package gate.
+- Scope actually proven: Host journal attribution by task_id and registered instance/output mapping only; one task at a time with status polling as the only liveness signal; no resend after a lost reply; collection only after a matching SUCCEEDED; business failures and QC INVALID stay in the denominator; one instance fault ends that instance and fences later waves; frozen index lists committed episodes only for export-eligible tasks and never for qualification; schema-2 export behaviour unchanged. Instance control, clock, shard and QC recomputation are controlled doubles; the lease in the sealed fixture comes from a BatchCoordinator, not the container's local lease. No container, Docker, ROS, real Teacher/Recorder episode, real QC PASS readback or qualification evidence.
+- Open: audit lease equals the exec lease by code reading only (needs a real-producer check); `ContainerShardOwner.control_client` still depends on the heartbeat path until Task 5; no production code constructs the coordinator, verifier or owner yet.
+- Removed from source with their valid assertions migrated: test/parallel_batch/test_container_wave_assignment.py, test/act/test_container_commit_readback.py (history retained in version control). No evidence deleted. A writer left pre-edit file copies in /tmp/so101-debug-task4-host, outside the registered low-rate root; classified as a deletion candidate and later writers are told to use /tmp/so101-debug-act-data-66c42e4c only.
+- Retained all; archived none.
 
 ## CP-3606 — Task 3 local builder committed; Host-side design recorded; Task 4 started
 
