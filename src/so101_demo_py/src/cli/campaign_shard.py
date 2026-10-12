@@ -113,7 +113,7 @@ async def run_shard(spec, runtime_config):
         raise ValueError("CAMPAIGN_SHARD_ENVIRONMENT_DRIFT")
     prefix = Path(get_package_prefix("so101_demo_py"))
     observer = prefix / "lib/so101_demo_py/act_stack_ready"
-    ros2 = Path("/opt/ros/jazzy/bin/ros2")
+    ros2 = prefix / "bin/ros2"
     if prefix != Path("/act/install") or not os.access(observer,os.X_OK) or not os.access(ros2,os.X_OK):
         raise ValueError("CAMPAIGN_SHARD_INSTALLED_EXECUTABLE_MISSING")
     root = Path(spec["owned_root"])

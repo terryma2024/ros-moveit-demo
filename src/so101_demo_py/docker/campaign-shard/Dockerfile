@@ -17,7 +17,7 @@ RUN python3 -m venv --system-site-packages /act/venv \
     && printf '%s\n' 'import sys; sys.path[:0] = ["/act/install/lib/python3.12/site-packages", "/act/install/local/lib/python3.12/dist-packages", "/opt/ros/jazzy/lib/python3.12/site-packages", "/opt/venv/lib/python3.12/site-packages"]' \
        > /act/venv/lib/python3.12/site-packages/act-runtime.pth \
     && NO_PROXY="${NO_PROXY:+$NO_PROXY,}pypi.tuna.tsinghua.edu.cn" no_proxy="${no_proxy:+$no_proxy,}pypi.tuna.tsinghua.edu.cn" \
-       /act/venv/bin/python -m pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple pydantic==2.14.1 mujoco==3.4.0 colcon-override-check==0.0.1
+       /act/venv/bin/python -m pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple pydantic==2.14.1 mujoco==3.4.0 colcon-override-check==0.0.1 pytest==7.4.4 pytest-xdist==3.8.0
 
 COPY source /act/source
 RUN chmod -R a+rX,a-w /act/source \
@@ -36,6 +36,12 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; cd /ac
       --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
       -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
+
+# The vendor ros2 console script selects system Python. Keep its exact installed
+# body but bind this shard's copy to the frozen interpreter and inventory it.
+RUN mkdir -p /act/install/bin \
+    && /act/venv/bin/python -c 'from pathlib import Path; source=Path("/opt/ros/jazzy/bin/ros2").read_bytes(); assert source.startswith(b"#!"); body=source.split(b"\n",1)[1]; Path("/act/install/bin/ros2").write_bytes(b"#!/act/venv/bin/python\n"+body)' \
+    && chmod 0555 /act/install/bin/ros2
 
 COPY source/src/so101_demo_py/docker/campaign-inference/bootstrap.bash /act/bootstrap.bash
 RUN chmod 0555 /act/bootstrap.bash && printf '%s\n' shard > /act/image-role \
