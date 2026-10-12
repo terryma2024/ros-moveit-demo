@@ -35,6 +35,7 @@ class CollectionCaseArtifacts:
                 raise ValueError('ONE_TASK_ONE_CASE_REQUIRED')
             from .task_results import reserve_task_output
             root = reserve_task_output(root, task_id)
+        self.root=root
         for scene in self.references:
             scope,inputs=self._binding(scene)
             self.writers[scene]=_ArtifactResults({worker_id:root},RunMode.EXECUTE,

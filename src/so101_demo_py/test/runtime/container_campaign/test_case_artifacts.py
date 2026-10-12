@@ -51,6 +51,18 @@ def test_two_cases_reserve_distinct_original_store_bindings_and_recovery_receipt
     assert results.workspace(leases[0]).path.is_dir()
 
 
+def test_root_is_reserved_task_directory_or_worker_root(tmp_path):
+    module=importlib.import_module('so101_demo.runtime.container_campaign.case_artifacts')
+    refs={'scene-a':fixture(tmp_path)['scene-a']}
+    plain=tmp_path/'plain';plain.mkdir()
+    assert module.CollectionCaseArtifacts(worker_id='w00',launch_generation=1,worker_root=plain,
+        case_inputs=refs).root==plain
+    output=tmp_path/'output';output.mkdir()
+    task=module.CollectionCaseArtifacts(worker_id='w00',launch_generation=1,worker_root=output,
+        case_inputs=refs,task_id='task.1')
+    assert task.root==output/'tasks'/'task.1' and task.root.is_dir()
+
+
 @pytest.mark.parametrize('problem',['diagnostic','wrong_scene','wrong_inputs','null_inputs','extra_ref'])
 def test_case_binding_refuses_diagnostic_or_mismatched_originals(tmp_path,problem):
     module=importlib.import_module('so101_demo.runtime.container_campaign.case_artifacts')

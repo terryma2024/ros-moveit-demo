@@ -1,5 +1,7 @@
 """ACT cases borrow the native shard stack and retire only their own helper processes."""
 
+import copy
+import json
 import math
 from pathlib import Path
 
@@ -9,10 +11,13 @@ from so101_teleop.unified.act_stack import ActStackProcessOwner
 
 
 class ContainerCollectionRuntime(ActWorkerRuntime):
-    def __init__(self,*args,existing_stack,case_artifacts=None,**kwargs):
+    def __init__(self,*args,existing_stack,case_artifacts=None,native_owned_root=None,**kwargs):
         super().__init__(*args,**kwargs)
+        # The task data root (resources.worker_root) may differ from the native owned root that holds the stack.
+        native=self.resources.worker_root if native_owned_root is None else self._native_root(native_owned_root)
         if (self.run_mode is not RunMode.EXECUTE or not isinstance(existing_stack,ActStackProcessOwner)
-                or existing_stack.launch.evidence_root!=self.resources.worker_root/'stack'
+                or (native_owned_root is not None and self.resources.worker_root.is_relative_to(native/'stack'))
+                or existing_stack.launch.evidence_root!=native/'stack'
                 or existing_stack.launch.ros_domain_id!=self.resources.ros_domain_id
                 or getattr(existing_stack.launch,'ros_namespace',None)!=self.resources.controller_namespace
                 or existing_stack.launch.session_id!=self.resources.session_id):
@@ -20,8 +25,25 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
         self.stack=existing_stack
         self._case_artifacts=case_artifacts
         self._case_cleaned_key=None
+        self.collection_facts=None
+
+    @staticmethod
+    def _native_root(value):
+        try:
+            root=Path(value)
+            if not root.is_absolute() or root.resolve(strict=True)!=root or not root.is_dir():
+                raise ValueError
+        except (OSError,TypeError,ValueError):
+            raise ValueError('COLLECTION_BORROWED_STACK_MISMATCH') from None
+        return root
+
+    def _write_collection_record(self,point_root,facts,reason):
+        """Keep what the offline pipeline reported so the task can tell a data verdict from a pipeline fault."""
+        self.collection_facts=(copy.deepcopy(facts),reason)
+        super()._write_collection_record(point_root,facts,reason)
 
     def reset_point(self,lease):
+        self.collection_facts=None
         if self._case_artifacts is not None:
             if (self._recorders or (self._active_lease is not None
                     and self._case_cleaned_key!=self._lease_key(self._active_lease))):
@@ -68,5 +90,54 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
             ready=self.worker_ready_gate() is True and self._monotonic()<deadline_monotonic_s
             if ready:self._case_cleaned_key=key
             return ready
+        except Exception:
+            return False
+
+    def retire_case(self,lease,*,cancelled,absent):
+        """Stop this case's helpers and name what is proven. `cancelled` is None on the clean path; on the stop or
+        fault path it is whether the revocation proved motion stopped and controllers confirmed. Only an exact
+        True counts; a failed or missing check is False, never inferred."""
+        proofs={}
+
+        def check(name,call):
+            try:
+                proofs[name]=call() is True
+            except Exception:
+                proofs[name]=False
+
+        def shut():
+            self._processes.shutdown()
+            return True
+
+        def disk_empty():
+            document=json.loads((self.resources.worker_root/'owned-runtime-processes.json').read_bytes())
+            return document['processes']==[]
+
+        started=self._active_lease is not None
+        shutdown_failed=not self._ran(shut)
+        check('processes_empty',lambda:not shutdown_failed and self._processes.manifest.processes==())
+        check('manifest_readback_empty',disk_empty)
+        check('recorder_proven',lambda:not self._recorders and (lease is None and not started
+                                                                  or self.recorder_stop_proven(lease) is True))
+        if not started:
+            proofs['controller_proven']=True   # reset never began: no motion or goal can exist for this case
+        elif cancelled is None:
+            check('controller_proven',lambda:absent is True or self._confirm_no_controller_goal(lease) is True)
+        else:
+            check('controller_proven',lambda:cancelled is True and self._confirm_no_controller_goal(lease) is True)
+        check('runtime_closed',lambda:self._close_runtime() or True)
+        if lease is not None:
+            key=self._lease_key(lease)
+            self._execute_consumers.pop(key,None)
+            self._paused_for_inference.discard(key)
+        if cancelled is None:
+            check('stack_alive',lambda:self.stack.process is not None and self.stack.process.poll() is None)
+            check('ready_gate',lambda:self.worker_ready_gate() is True)
+        return proofs
+
+    @staticmethod
+    def _ran(call):
+        try:
+            return call() is True
         except Exception:
             return False

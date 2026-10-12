@@ -466,3 +466,49 @@ def test_stop_timeouts_are_required(tmp_path, name):
             module().ContainerTaskExecutor(instance_id='instance-01', builder=lambda spec: None,
                 retirement=ExternalRetirement(), output_root=tmp_path, **kwargs)
     asyncio.run(run())
+
+
+from test_task_builder import Rig, env, flow, make_task, shared_env  # noqa: F401  (fixtures and the controlled-double rig)
+
+
+def test_real_builder_business_failure_succeeds_and_next_task_gets_fresh_objects(flow, monkeypatch):
+    """The real executor with `partial(build_collection_task, ...)`. Real: builder, artifacts and result store, runtime,
+    Teacher client, workload, owned process tree, write_task_result. Controlled doubles: the ROS ports, perception chain,
+    inference socket, bag recorder, offline processor process and native retirement (never needed on this path).
+    A wiring test, not a Teacher, QC or physical qualification."""
+    from functools import partial
+    from so101_demo.runtime.container_campaign.task_builder import build_collection_task
+    rig = Rig(flow, monkeypatch, teacher='FAILED', build=False)
+    second_task = make_task(flow, dict(flow.document, task_id='e-second'), task_id='e-second')
+    retirement = ExternalRetirement()
+
+    async def finished(executor, task_id):
+        async def wait():
+            while True:
+                status = await executor.get_status(task_id)
+                if status.task.state in ('SUCCEEDED', 'FAILED'):
+                    return status
+                await asyncio.sleep(.02)
+        return await asyncio.wait_for(wait(), 120)
+
+    async def run():
+        executor = module().ContainerTaskExecutor(instance_id='instance-01',
+            builder=partial(build_collection_task, **rig.build_kwargs), retirement=retirement,
+            output_root=flow.output, stop_timeout_s=10., retire_timeout_s=10., owner_timeout_s=120.)
+        try:
+            for spec in (rig.task, second_task):
+                assert (await executor.assign_task(spec)).state == 'ACCEPTED'
+                status = await finished(executor, spec.task_id)
+                assert status.task.state == 'SUCCEEDED', status.task.fault_reason
+                assert status.state == 'READY'
+                stored = read_task_result(flow.output, spec.task_id)
+                assert stored['task_id'] == spec.task_id
+                assert stored['result']['teacher_task_result'] == 'FAIL' and stored['result']['act_data_status'] == 'INVALID'
+                assert (flow.output/'tasks'/spec.task_id/'task-result.json').is_file()
+                assert (flow.output/'tasks'/spec.task_id/stored['result']['sealed']['path']/'result.json').is_file()
+            assert executor.cleanup_errors == [] and retirement.calls == 0
+        finally:
+            await executor.terminate('fixture end')
+    asyncio.run(run())
+    assert len(rig.groups) == 2 and rig.groups[0] is not rig.groups[1], 'each task rebuilt its runtime and process tree'
+    assert [group.manifest.processes for group in rig.groups] == [(), ()]
