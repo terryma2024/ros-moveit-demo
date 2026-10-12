@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 2db7b26c4aa72df7f897d96b007e864cd7d98a50
+current_commit: 6a012c43b69eded01245719c04879c4db1e4c1ac
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -70,10 +70,19 @@ open_hypotheses:
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
 latest_checkpoint: CP-3583
-next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
+next_experiment: Inspect the same live native shard image build, prove actual no-motion readiness and original stop readback, then implement Host lifecycle/registries and production workload ports; retain full final calibration/live/W8/formal goal.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3584 — Disk-only dispatch guard GREEN; actual native image build still live
+
+- Implemented the approved lightweight resource-log boundary. Disk free space uses the requested ROOT's actual statvfs available blocks and fragment size, never root-reserved blocks. The dispatch guard requires a nonnegative integer approved floor and stops at that floor; absent a positive approved floor, callers use zero rather than an invented budget. Read errors propagate for owner fencing instead of becoming zero/infinity. No Teacher/data outcome, resource authorization, metric registry, coverage reducer or quality gate is introduced.
+- Low-frequency log append retains whatever observations/missing reasons existing producers provide. It rejects nonfinite values before touching the file, refuses symlink targets, verifies a regular file owned by the executing user, and appends/fsyncs without overwriting earlier rows. High GPU utilization or unavailable NVML only remains an observation. Production owner invocation is pending at its integration boundary; unit GREEN is not a live campaign stop-dispatch PASS.
+- The initial direct shell invocation of the nonexecutable retained test runner returned126 before pytest; corrected by invoking zsh explicitly, not counted as functional RED. Functional RED targeted.IYvEmJnz: exact pytest boundary ran, rc1,15 failures for absent new module,0.09s. GREEN targeted.Q4vmxQXz: rc0,15 passed,0.02s; fresh exact interpreter/tempfile/import/argv/log/JUnit under registered NVMe scratch, short socket roots retained. No full/package/benchmark gate.
+- Prepared retained run-native-shard-probe.py and .zsh for actual no-motion image integration only. It verifies image ancestry/source/install, uses frozen private spec/mounts/GPU/domain/namespace, binds actual inner ready identity, starts one persistent Host heartbeat, waits real installed readiness, and independently reads original stop evidence plus exact Docker exit after owner loss. It preserves uncertain termination rather than forcing an exit or manufacturing PASS. Python compile and base-inspect shape readback succeeded; the script has not launched a container. Calibration/qualification/formal handlers remain required.
+- Inline self review checked statvfs available-versus-reserved blocks, bool/int and invalid-space rejection, error propagation, finite serialization before append, no-follow/owner file checks, retained log rows and absence of quality/Teacher authority. Exact source/test hashes and RED/GREEN readbacks retained in this dispatch's resource-log-review.json; source behavior remains outside the already-running image snapshot and will enter the final common freeze.
+- SAME native image build image-build-20261012T053759Z remains live: source920714037a4a/submodulebab9841a697e1edc1411ed620c55131003d21094, DockerPID831725/wrapper831723/session29262. Latest verified apt downloads include ROS MoveIt warehouse; no result.json/iid/native compilation yet. Slow downloading is not a source regression or genuine resource blocker. No restart/reprepare. Fresh tmux ownership preserves Claude%0/Codex%1 and unrelated sessions; only owned build is live, no task simulation/inference launched. Goal ACTIVE and full objective unchanged, this turn concrete source progress, no genuine blocker. Retained all, archived none, scratch/socket/exited diagnostics deletion candidates only; no deletion/push/hardware/training/threshold downgrade.
 
 ## CP-3583 — Actual namespace launch composition verified; native image build live
 
