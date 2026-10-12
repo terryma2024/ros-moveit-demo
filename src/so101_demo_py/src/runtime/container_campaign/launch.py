@@ -6,12 +6,13 @@ teacher and shard entries from the frozen campaign configuration.
 """
 
 from dataclasses import dataclass
+import json
 import math
 from pathlib import Path
 import re
 
 from so101_demo.runtime.container_campaign.paths import _path, build_role_mounts
-from so101_demo.runtime.inference.config import _image, calibration_runtime_hash
+from so101_demo.runtime.inference.config import _image, _open_regular, calibration_runtime_hash
 
 
 def _require(condition):
@@ -82,16 +83,25 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
         _require(type(uid) is int and uid > 0 and type(gid) is int and gid > 0)
         _require(type(host_paths) is dict and set(host_paths) == {
             "owned_root", "approved_inputs", "socket_roots", "config_paths", "entry"})
-        mounts = build_role_mounts(role, **{name: host_paths[name] for name in (
-            "owned_root", "approved_inputs", "socket_roots", "config_paths")})
         owned = _path(host_paths["owned_root"], directory=True)
+        entry = host_paths['entry']
+        task_output = None
+        if role == 'shard':
+            _require(type(entry) is ShardLaunchArgs)
+            with _open_regular(entry.spec) as stream:
+                spec = json.load(stream)
+            _require(type(spec) is dict)
+            if spec.get('workload_kind') == 'act_collection':
+                task_output = owned/'output'
+        mounts = build_role_mounts(role, **{name: host_paths[name] for name in (
+            "owned_root", "approved_inputs", "socket_roots", "config_paths")},
+            task_output_root=task_output)
         temporary = _path(owned / "tmp", directory=True)
         _require((owned.stat().st_uid, owned.stat().st_gid) == (uid, gid))
         _require((temporary.stat().st_uid, temporary.stat().st_gid) == (uid, gid))
         for mount in mounts:
             _require(not any(character in str(path) for path in (mount.source, mount.target)
                              for character in (",", "\n", "\r")))
-        entry = host_paths["entry"]
         environment = ["NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics",
             "TMPDIR="+str(temporary), "TMP="+str(temporary), "TEMP="+str(temporary),
             "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1",

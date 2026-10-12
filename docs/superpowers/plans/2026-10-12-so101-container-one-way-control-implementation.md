@@ -73,7 +73,7 @@ zsh "$ACT_RUN_ROOT/run-targeted-container.zsh" <本任务的测试路径> -q
 - [x] 对上述两个测试文件运行定向 RED，记录真正合同或适配器边界的失败。
 - [x] 实现封闭合同和单次控制 exchange；start/terminate 委托原有 owner；不引入 HTTP、额外服务或第五操作。
 - [x] 对上述两个文件及已有 `test_control_client.py`、`test_unified_ipc.py` 运行定向 GREEN；检查通用 IPC 的旧支持范围未被容器改造覆盖。
-- [ ] inline self review 并 scoped commit：`feat: add four-operation container task control`。
+- [x] inline self review 并 scoped commit：`feat: add four-operation container task control`，`4e50afec0`；最终定向 gate 49 passed，见 CP-3601。
 
 ### Task 2: 固定输出和原始结果引用
 
@@ -83,11 +83,11 @@ zsh "$ACT_RUN_ROOT/run-targeted-container.zsh" <本任务的测试路径> -q
 
 容器在任务目录写 `task-result.json`，其中 task_id 原样来自 assign 请求，业务结果和已有数据文件引用由真实 producer 产生。完成记录与结果文件完整落盘后才发布 SUCCEEDED；不添加执行身份签名、提交证明或回调 token。
 
-- [ ] 写 `test_fixed_output_mount_and_distinct_instances`、`test_task_workspace_not_overwritten`、`test_foreign_or_symlink_output_refused`、`test_sealed_paths_readable_on_host_without_rewrite`。测试同名 task 在不同实例隔离、两项任务不覆盖，以及 sealed 文件回收前后 SHA256 相同。
-- [ ] 对 `test_task_output.py` 运行 RED。
-- [ ] shard mount 将实例 output 专属目录映射到 `/act/output`；与 native 控制/停止证据目录分开记录。禁止暴露 Host journal 或其他实例。跨进程文件引用在写入时使用登记映射形成；Host 解析仅允许该映射，不修改 sealed 内容或全局替换路径字符串。
-- [ ] 验证当前 result store 对 `attempts/<scene>/<attempt>` 的要求，在容器注入边界支持任务 workspace，保持数据文件自身的原有字段及 QC/hash 内容规则；任务归属用 task_id，不引入旧租约证明。原有通用默认行为不变。
-- [ ] 运行新增测试及现有路径/artifacts/result schema/QC/commit 定向 GREEN。固定路径测试必须使用两个不同 Host 根与同一个容器目标路径，不能用同路径 fixture 掩盖问题。
+- [x] 写 `test_fixed_output_mount_and_distinct_instances`、`test_task_workspace_not_overwritten`、`test_foreign_or_symlink_output_refused`、`test_sealed_paths_readable_on_host_without_rewrite`。不同实例 Host 根对应固定容器目标；跨根原始字节保持测试控制外部 mount，未声称真实 Docker/QC。
+- [x] 对 `test_task_output.py` 运行 RED。
+- [x] shard launch 为 act_collection 强制将实例 output 专属目录映射到 `/act/output`；native 控制/停止证据仍用原有私有目录。不同实例不能共用输出根。回收不修改已有结果内容；真实 producer 引用在 Tasks3–5 接入后验证。
+- [x] 容器注入边界使用 `tasks/<task_id>/attempts/<scene>/<attempt>`，保持原有 result store 的内部布局与内容检查，无需修改全局 ActCollectionResultStore 或新增租约证明。
+- [x] 运行新增测试及现有路径/artifacts/result schema/QC/commit 定向 GREEN，最终 165 passed，见 CP-3602。
 - [ ] inline self review 并 scoped commit：`feat: bind task results to fixed container output`。
 
 ### Task 3: 容器本地完整任务执行与故障清理

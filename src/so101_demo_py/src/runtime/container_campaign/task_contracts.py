@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+TASK_ID_PATTERN = r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$'
 
 class _Closed(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True, strict=True)
@@ -26,13 +27,13 @@ class InputRef(_Closed):
 
 
 class TaskSpec(_Closed):
-    task_id: str = Field(pattern=r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$')
+    task_id: str = Field(pattern=TASK_ID_PATTERN)
     inputs_ref: InputRef
     deadline_monotonic_s: float = Field(gt=0, allow_inf_nan=False)
 
 
 class TaskStatus(_Closed):
-    task_id: str = Field(pattern=r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$')
+    task_id: str = Field(pattern=TASK_ID_PATTERN)
     state: Literal['ACCEPTED', 'RUNNING', 'SUCCEEDED', 'FAILED']
     fault_reason: str | None = Field(default=None, min_length=1, max_length=300)
 
@@ -52,7 +53,7 @@ class InstanceStatus(_Closed):
 
 
 class _StatusQuery(_Closed):
-    task_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$')
+    task_id: str | None = Field(default=None, pattern=TASK_ID_PATTERN)
 
 
 class _Terminate(_Closed):

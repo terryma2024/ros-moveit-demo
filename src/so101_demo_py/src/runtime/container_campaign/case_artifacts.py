@@ -13,7 +13,8 @@ from so101_demo.runtime.inference.config import validate_file_ref
 
 
 class CollectionCaseArtifacts:
-    def __init__(self,*,worker_id,launch_generation,worker_root,case_inputs,clock=time.monotonic):
+    def __init__(self,*,worker_id,launch_generation,worker_root,case_inputs,clock=time.monotonic,
+                 task_id=None):
         _require_id('worker_id',worker_id)
         _require_positive_int('launch_generation',launch_generation)
         root=Path(worker_root)
@@ -28,6 +29,13 @@ class CollectionCaseArtifacts:
             _require_id('scene_id',scene)
             if type(refs) is not dict or set(refs)!={'scope','inputs_manifest'}:
                 raise ValueError('COLLECTION_CASE_INPUTS_INVALID')
+            scope,inputs=self._binding(scene)
+        if task_id is not None:
+            if len(self.references) != 1:
+                raise ValueError('ONE_TASK_ONE_CASE_REQUIRED')
+            from .task_results import reserve_task_output
+            root = reserve_task_output(root, task_id)
+        for scene in self.references:
             scope,inputs=self._binding(scene)
             self.writers[scene]=_ArtifactResults({worker_id:root},RunMode.EXECUTE,
                 collection_scope=scope,collection_inputs_manifest=inputs,clock=clock)

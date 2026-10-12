@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 61a013292
+current_commit: 4e50afec0
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3601
-next_experiment: Implement approved one-way plan Task 2 fixed /act/output mapping and task-result.json; integrate executor and real child afterward, remove old protocol before final freeze/gates.
+latest_checkpoint: CP-3602
+next_experiment: Implement one-way plan Task3 local executor/real builder, then Host polling and actual child/entry composition; remove old protocol before final freeze/gates.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3602 — Fixed task output and ID-only immutable result readback targeted GREEN
+
+- Task1 committed4e50afec0; its final expanded gate targeted.WqkEkL7z rc0/49pass1.71s wall2 supersedes the prior47-test run. Native full goal remains active, same worktree/branch, inline single writer, preserved drafts/other sessions, no runtime container launch.
+- Task2 adds task_output_path/host_task_output, a dedicated instance output -> /act/output mount, and immutable per-task task-result.json with only task_id/result. Collection launch now requires the owned output directory and derives the fixed mount from act_collection spec; readiness-only and service roles retain their existing mounts. Result recovery checks ID equality and file shape only, not an execution-identity/commit-proof chain. Missing, duplicate/mismatched ID, symlink file, foreign instance output, directory reuse and result overwrite refuse.
+- Ruling: keep original result store internals under tasks/<task_id>/attempts/<scene>/<attempt> — task-local writer roots preserve original reset/scope/input/QC/seal fields and avoid a global artifact-schema migration. No ActCollectionResultStore change needed. Ruling: separate task_results.py for immutable result IO rather than mix it into case_artifacts — independent ID-only readback has no Teacher/Coordinator authority dependency. Existing internal data identity is metadata, not a new task handshake.
+- Intended REDtargeted.aoshQ36j rc1/8fail0.21s (missing output helpers/mount/artifact injection). First GREENzTQUja6C rc0/30pass0.29s. Additional launch/missing-directory REDjPpN7MON rc1/2fail9pass0.30s; fixed collection launch mount derivation and normalized missing-directory readback refusal. Related Y4BKSlGI rc0/89pass2.95s. Final F9bhUqiv rc0/165pass7.87s wall8, new task output/contract/control, original paths/launch/artifacts and actual result schema/QC/commit regressions. All unique NVMe scratch/exact interpreter/import/tempfile/argv/JUnit/rc/timing retained.
+- Path tests derive real launch argv and use real original artifact stores/reserved workspaces. Cross-root byte-preservation uses a controlled external mount/copy and explicit synthetic episode bytes; it is not a physical Teacher, MCAP/QC or actual Docker mount acceptance. Real producers, raw/episode/QC absolute-reference boundaries and Host quality/index readers must be connected and verified in Tasks3–5/7. No complete physical data chain or qualification claim. Inline patch/source/JUnit audit retained at one-way-task2-review.json/.patch.
+- Retained all; archived none; test scratch is a deletion candidate only, not deleted. No full package/benchmark gate, no hardware/training/push/evidence deletion/threshold downgrade. Continue Task3 autonomously.
 
 ## CP-3601 — Native goal ACTIVE; new task contract and Host adapter targeted GREEN
 

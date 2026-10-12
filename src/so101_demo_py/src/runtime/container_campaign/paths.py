@@ -107,7 +107,8 @@ def _owned_role(role, owned, run):
         raise ValueError("live case path")
 
 
-def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config_paths):
+def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config_paths,
+                      task_output_root=None):
     """Produce launch mounts; artifact contents/path contracts remain unchanged.
 
     This checks local mount provenance only. Campaign resource authorization
@@ -120,6 +121,11 @@ def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config
         if type(approved_inputs) is not tuple or type(config_paths) is not tuple:
             raise ValueError("input list")
         mounts = [RoleMount(owned, owned, False, "evidence" if role == "shard" else "service_logs")]
+        if task_output_root is not None:
+            output = _path(task_output_root, directory=True)
+            if role != 'shard' or output != owned/'output':
+                raise ValueError('task output owner')
+            mounts.append(RoleMount(output, Path('/act/output'), False, 'task_output'))
         for source in (*approved_inputs, *config_paths):
             source = _path(source)
             # Do not expose the root, another shard, or any Host journal to a role.
@@ -149,3 +155,23 @@ def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise ValueError("ROLE_MOUNT_INVALID") from error
     return tuple(mounts)
+
+
+def task_output_path(output_root, task_id):
+    """Locate one task without accepting a path from the task request."""
+    from .task_contracts import TASK_ID_PATTERN
+
+    try:
+        root = _path(output_root, directory=True)
+        if type(task_id) is not str or re.fullmatch(TASK_ID_PATTERN, task_id) is None:
+            raise ValueError('task id')
+        path = root/'tasks'/task_id
+        if path.resolve() != path or path.is_symlink():
+            raise ValueError('task path')
+        return path
+    except (OSError, TypeError, ValueError) as error:
+        raise ValueError('TASK_OUTPUT_PATH_INVALID') from error
+
+
+def host_task_output(owner_root, task_id):
+    return task_output_path(_path(owner_root, directory=True)/'output', task_id)
