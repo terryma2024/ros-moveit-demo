@@ -23,9 +23,11 @@ def fixture(tmp_path):
         service_epoch="epoch", runtime_id="runtime", normal_queue_limit=2,
         act_campaign_id="campaign", act_worker_id="worker", act_generation=3)
     process = read_process_owner(os.getpid())
-    server = module.ContainerChildIpcServer(runtime, socket_root=tmp_path / "control",
+    identity = module.ContainerChildIdentity(runtime_id="runtime", act_campaign_id="campaign",
+        act_worker_id="worker", act_generation=3, normal_queue_limit=2)
+    server = module.ContainerChildIpcServer(identity, socket_root=tmp_path / "control",
         owner=runtime.owner, service_epoch="epoch", service_token="private-token",
-        owner_monitor=monitor, process_owner=process)
+        task_port=NS(assign_task=stop_act, get_status=stop_act, terminate=stop_act), generation=7, close_timeout_s=1., process_owner=process)
     return now, monitor, runtime, process, server
 
 
@@ -216,3 +218,140 @@ def write_stop_originals(root, receipt):
         pid_namespace_inode=receipt["pid_namespace_inode"], ros_namespace=namespace,
         session_id="session1", ros_domain_id=181, native_owner=native_owner,
         controller_stop_sha256=hashlib.sha256(goals).hexdigest(), native_stop_sha256=hashlib.sha256(native).hexdigest(), errors=[])))
+
+
+class RecordingTaskPort:
+    """Controlled double for the in-container executor; the server and frames are real."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def assign_task(self, task):
+        from so101_demo.runtime.container_campaign.task_contracts import TaskStatus
+        self.calls.append(("assign_task", task))
+        return TaskStatus(task_id=task.task_id, state="ACCEPTED")
+
+    async def get_status(self, task_id=None):
+        from so101_demo.runtime.container_campaign.task_contracts import InstanceStatus
+        self.calls.append(("get_status", task_id))
+        if task_id == "missing":
+            raise ValueError("TASK_ID_UNKNOWN")
+        return InstanceStatus(instance_id="instance-01", state="READY")
+
+    async def terminate(self, reason):
+        from so101_demo.runtime.container_campaign.task_contracts import InstanceStatus
+        self.calls.append(("terminate", reason))
+        return InstanceStatus(instance_id="instance-01", state="STOPPING", fault_reason=reason)
+
+
+def task_server(tmp_path, port, **changes):
+    module = importlib.import_module("so101_teleop.unified.child_runtime")
+    from so101_demo.runtime.container_campaign.process_identity import read_process_owner
+    identity = module.ContainerChildIdentity(runtime_id="runtime", act_campaign_id="campaign",
+        act_worker_id="worker", act_generation=3, normal_queue_limit=2)
+    arguments = dict(socket_root=tmp_path / "control", owner=OwnerKey(1, 1, 1, "a"*64, "b"*64),
+        service_epoch="epoch", service_token="private-token", max_bytes=4096, task_port=port,
+        generation=7, close_timeout_s=1., process_owner=read_process_owner(os.getpid()))
+    return module.ContainerChildIpcServer(identity, **(arguments | changes))
+
+
+async def exchange(server, frame):
+    reader, writer = await connect(server)
+    try:
+        writer.write(frame if isinstance(frame, bytes) else json.dumps(frame).encode() + b"\n")
+        await writer.drain()
+        return json.loads(await reader.readline())
+    finally:
+        writer.close()
+        await writer.wait_closed()
+
+
+def request(operation, payload, deadline_ns=None):
+    import time
+    return dict(operation=operation, payload=payload, deadline_ns=deadline_ns or time.monotonic_ns() + 5_000_000_000)
+
+
+def test_task_request_reaches_executor_and_generic_rpc_refused(tmp_path):
+    import time
+    async def run():
+        port = RecordingTaskPort()
+        server = task_server(tmp_path, port)
+        await server.start()
+        try:
+            spec = dict(task_id="task-001", inputs_ref=dict(path="/act/input/t.json", sha256="a"*64),
+                        deadline_monotonic_s=time.monotonic() + 5)
+            assigned = await exchange(server, request("assign_task", spec))
+            assert assigned["accepted"] is True and assigned["result"] == dict(
+                task_id="task-001", state="ACCEPTED", fault_reason=None)
+            status = await exchange(server, request("get_status", dict(task_id=None)))
+            assert status["result"]["state"] == "READY" and status["result"]["instance_id"] == "instance-01"
+            stopped = await exchange(server, request("terminate", dict(reason="done")))
+            assert stopped["result"]["state"] == "STOPPING" and stopped["result"]["fault_reason"] == "done"
+            assert [name for name, _ in port.calls] == ["assign_task", "get_status", "terminate"]
+            assert port.calls[0][1].task_id == "task-001"
+            refused = await exchange(server, request("get_status", dict(task_id="missing")))
+            assert refused["accepted"] is False and refused["code"] == "TASK_ID_UNKNOWN"
+            before = len(port.calls)
+            generic = [
+                dict(version=1, operation="observe", command_id="c", deadline_ns=time.monotonic_ns() + 10**9,
+                     service_epoch="epoch", runtime_id="runtime", service_token="private-token"),
+                request("plan_joints", {}), request("cancel", {}), dict(kind="unknown_kind"), [1], request("observe", {}),
+            ]
+            for frame in generic:
+                reply = await exchange(server, frame)
+                assert reply["accepted"] is False and reply["code"] == "CONTAINER_OPERATION_NOT_ALLOWED", frame
+            malformed = await exchange(server, b"not json\n")
+            assert malformed["accepted"] is False and malformed["code"].startswith("CONTAINER_TASK_REJECTED")
+            oversize = await exchange(server, request("get_status", dict(task_id="x"*5000)))
+            assert oversize["accepted"] is False and oversize["code"] == "IPC_FRAME_TOO_LARGE"
+            expired = await exchange(server, request("get_status", dict(task_id=None), deadline_ns=1))
+            assert expired["accepted"] is False and "TASK_REQUEST_DEADLINE_EXPIRED" in expired["code"]
+            assert len(port.calls) == before
+            # The safety socket carries no task or goal authority in the container.
+            reader, writer = await asyncio.open_unix_connection(
+                __import__("so101_demo.runtime.parallel_ipc.frames", fromlist=["x"]).transport_address(
+                    server.safety_socket, server.socket_parent_fd))
+            writer.write(b"{}\n")
+            await writer.drain()
+            assert json.loads(await reader.readline())["code"] == "CONTAINER_OPERATION_NOT_ALLOWED"
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            await server.close()
+    asyncio.run(run())
+
+
+def test_foreign_peer_is_refused_before_any_task_dispatch(tmp_path, monkeypatch):
+    from so101_teleop.unified import child_runtime
+    async def run():
+        port = RecordingTaskPort()
+        server = task_server(tmp_path, port)
+        await server.start()
+        try:
+            monkeypatch.setattr(child_runtime, "peer_uid", lambda _sock: os.geteuid() + 1)
+            reply = await exchange(server, request("get_status", dict(task_id=None)))
+            assert reply == dict(accepted=False, code="IPC_PEER_REJECTED", ack=None, terminal=None, result=None)
+            monkeypatch.setattr(child_runtime, "peer_uid", lambda _sock: None)
+            assert (await exchange(server, request("get_status", dict(task_id=None))))["code"] == "IPC_PEER_REJECTED"
+            assert port.calls == []
+        finally:
+            await server.close()
+    asyncio.run(run())
+
+
+def test_no_heartbeat_request_kind_on_container_socket(tmp_path):
+    async def run():
+        port = RecordingTaskPort()
+        server = task_server(tmp_path, port)
+        await server.start()
+        try:
+            reply = await exchange(server, dict(kind="owner_heartbeat", generation=7, sequence=1, sent_monotonic_ns=1))
+            assert reply["accepted"] is False and reply["code"] == "CONTAINER_OPERATION_NOT_ALLOWED"
+            assert port.calls == []
+        finally:
+            await server.close()
+    asyncio.run(run())
+    from so101_teleop.unified.child_runtime import ContainerChildIpcServer
+    import inspect
+    assert "heartbeat" not in inspect.signature(ContainerChildIpcServer.__init__).parameters
+    assert not hasattr(ContainerChildIpcServer, "owner_monitor")

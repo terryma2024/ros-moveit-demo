@@ -192,3 +192,99 @@ def test_pending_task_prevents_second_task_assignment():
             await control.assign_task(second)
     asyncio.run(run())
     assert owner.calls == ['start', 'assign_task']
+
+
+class ProofOwner(ExternalOwner):
+    """Controlled owner double offering the real shard owner's two Host-side proof calls."""
+
+    def __init__(self):
+        super().__init__()
+        self.exit_document = None
+        self.proof_ok = False
+
+    def instance_exit(self):
+        return self.exit_document
+
+    async def prove_stopped(self):
+        self.calls.append('prove_stopped')
+        return dict(terminated=self.proof_ok, launch_id='instance-01', errors=[])
+
+
+def exit_record(reason, confirmed=True):
+    return dict(schema_version=1, kind='ACT_SHARD_INSTANCE_EXIT', state='STOPPING', fault_reason=reason,
+                task=None, cleanup_confirmed=confirmed, cleanup_errors=[])
+
+
+def test_exited_instance_status_keeps_fault_and_stop_proof():
+    _contracts, module = modules()
+    owner = ProofOwner()
+    owner.exit_document = exit_record('Coordinator status polling timed out')
+    control = module.ContainerTaskControl(owner=owner)
+    async def run():
+        await control.start()
+        result = await control.terminate('finished')
+        # The Host never polled this fault; it comes from the child's own exit record.
+        assert result.fault_reason == 'Coordinator status polling timed out'
+        assert result.state == 'TERMINATED' and result.resources_released is True
+        assert (await control.get_status()).fault_reason == 'Coordinator status polling timed out'
+    asyncio.run(run())
+    assert owner.calls == ['start', 'terminate', 'close']
+
+
+def test_host_observed_fault_is_not_replaced_by_the_exit_record():
+    _contracts, module = modules()
+    owner = ProofOwner()
+    owner.exit_document = exit_record('later reason')
+    control = module.ContainerTaskControl(owner=owner)
+    async def run():
+        await control.start()
+        control._status = control._status.model_copy(update={'fault_reason': 'seen by Host'})
+        assert (await control.terminate('x')).fault_reason == 'seen by Host'
+    asyncio.run(run())
+
+
+def test_unproven_exit_keeps_fault_but_never_claims_release():
+    _contracts, module = modules()
+    owner = ProofOwner()
+    owner.released = False
+    owner.exit_document = exit_record('native stop failed', confirmed=False)
+    control = module.ContainerTaskControl(owner=owner)
+    async def run():
+        await control.start()
+        result = await control.terminate('fault')
+        assert result.fault_reason == 'native stop failed'
+        assert result.state == 'STOPPING' and result.resources_released is False
+    asyncio.run(run())
+
+
+def test_missing_exit_record_falls_back_to_the_terminate_reason():
+    _contracts, module = modules()
+    owner = ProofOwner()
+    control = module.ContainerTaskControl(owner=owner)
+    async def run():
+        await control.start()
+        assert (await control.terminate('CONTAINER_INSTANCE_EXECUTION_FAULT')).fault_reason == (
+            'CONTAINER_INSTANCE_EXECUTION_FAULT')
+    asyncio.run(run())
+
+
+def test_late_exit_is_proven_on_repeated_terminate():
+    _contracts, module = modules()
+    owner = ProofOwner()
+    owner.released = False
+    control = module.ContainerTaskControl(owner=owner)
+    async def run():
+        await control.start()
+        first = await control.terminate('fault')
+        assert first.resources_released is False and owner.calls == ['start', 'terminate', 'close']
+        again = await control.terminate('fault')
+        assert again.state == 'STOPPING' and again.resources_released is False
+        status = await control.get_status()
+        assert status.state == 'STOPPING' and status.resources_released is False
+        owner.proof_ok = True
+        released = await control.terminate('fault')
+        assert released.state == 'TERMINATED' and released.resources_released is True
+        assert (await control.get_status()).resources_released is True
+        await control.terminate('fault')
+    asyncio.run(run())
+    assert owner.calls == ['start', 'terminate', 'close', 'prove_stopped', 'prove_stopped', 'prove_stopped']

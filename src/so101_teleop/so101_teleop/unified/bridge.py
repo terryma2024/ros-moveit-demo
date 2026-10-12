@@ -603,8 +603,6 @@ class ContainerBridgeProcessOwner:
         self._inspect_container = inspect_container or self._docker_inspect
         self._namespace_reader = namespace_reader or (lambda pid: os.stat(f"/proc/{pid}/ns/pid").st_ino)
         self.binding = None
-        self.heartbeat_channel = None
-        self._heartbeat_closed = False
 
     @staticmethod
     def _docker_inspect(container_id):
@@ -658,8 +656,7 @@ class ContainerBridgeProcessOwner:
             raise MutationError("CONTAINER_READY_IDENTITY_INVALID") from error
 
     def ready(self):
-        if (self.binding is None or self._heartbeat_closed
-                or (self.heartbeat_channel is not None and self.heartbeat_channel.error is not None)):
+        if self.binding is None:
             return False
         try:
             observed = self._observe()
@@ -669,20 +666,6 @@ class ContainerBridgeProcessOwner:
                 and self._namespace_reader(state["Pid"]) == self.binding.pid_namespace_inode)
         except (OSError, ValueError, KeyError, MutationError):
             return False
-
-    async def start_heartbeats(self, *, timeout_ns, max_bytes):
-        from so101_demo.runtime.container_campaign.heartbeat import OwnerHeartbeatChannel
-
-        if not self.ready() or self.heartbeat_channel is not None:
-            raise MutationError("CONTAINER_OWNER_HEARTBEAT_FENCED")
-        self.heartbeat_channel = OwnerHeartbeatChannel(socket_path=self.binding.control_socket,
-            generation=self.container_owner.launch_generation, timeout_ns=timeout_ns, max_bytes=max_bytes)
-        await self.heartbeat_channel.start()
-
-    async def stop_heartbeats(self):
-        self._heartbeat_closed = True
-        if self.heartbeat_channel is not None:
-            await self.heartbeat_channel.close()
 
     def stopped(self):
         from so101_demo.runtime.container_campaign.process_identity import shard_stop_proven

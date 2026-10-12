@@ -36,6 +36,7 @@ from .ipc import (
     IpcReply,
     IpcRequest,
     SafetyPacket,
+    decode_container_task,
     decode_request,
     decode_safety_packet,
     encode,
@@ -44,6 +45,7 @@ from .ipc import (
 READY_FILE_NAME = "child-ready.json"
 NORMAL_SOCKET_NAME = "normal.sock"
 SAFETY_SOCKET_NAME = "safety.sock"
+TASK_OPERATIONS = ("assign_task", "get_status", "terminate")
 
 
 def peer_uid(sock) -> int | None:
@@ -520,29 +522,46 @@ def _target_from_packet(packet: SafetyPacket) -> RevokeTarget:
     )
 
 
-class ContainerChildIpcServer(ChildIpcServer):
-    """Container control: inner process ready proof and one owner heartbeat stream.
+@dataclass(frozen=True)
+class ContainerChildIdentity:
+    """The identity fields the container control server publishes; it owns no goal runtime."""
 
-    Goal RPCs retain the existing token/epoch/safety channels. Owner heartbeats
-    are their separate closed control packet and contain no resource authority.
-    Socket/ready artifacts survive close for the Host's generation readback.
+    runtime_id: str
+    act_campaign_id: str
+    act_worker_id: str
+    act_generation: int
+    normal_queue_limit: int
+
+
+class ContainerChildIpcServer(ChildIpcServer):
+    """Container control: inner process ready proof and the three Host task operations.
+
+    The normal socket decodes only `assign_task`, `get_status` and `terminate` and hands
+    them to an executor-shaped `task_port`. Every other request, including generic goal
+    RPCs, heartbeats and anything on the safety socket, is refused. Socket/ready
+    artifacts survive close for the Host's generation readback.
     """
 
-    def __init__(self, *args, owner_monitor, process_owner, **kwargs):
-        from so101_demo.runtime.container_campaign.heartbeat import OwnerHeartbeatMonitor
+    def __init__(self, identity, *, task_port, generation, close_timeout_s, process_owner, **kwargs):
         from so101_demo.runtime.container_campaign.process_identity import ProcessOwnerKey
 
-        if type(owner_monitor) is not OwnerHeartbeatMonitor or type(process_owner) is not ProcessOwnerKey:
+        if (type(identity) is not ContainerChildIdentity or type(process_owner) is not ProcessOwnerKey
+                or any(not callable(getattr(task_port, name, None)) for name in (
+                    "assign_task", "get_status", "terminate"))
+                or type(generation) is not int or generation <= 0
+                or type(close_timeout_s) not in (int, float) or not close_timeout_s > 0):
             raise ValueError("CONTAINER_CHILD_CONTROL_INVALID")
-        super().__init__(*args, **kwargs)
+        super().__init__(identity, **kwargs)
         if (type(self.max_bytes) is not int or self.max_bytes <= 0
-                or type(self.runtime.normal_queue_limit) is not int or self.runtime.normal_queue_limit <= 0):
+                or type(identity.normal_queue_limit) is not int or identity.normal_queue_limit <= 0):
             raise ValueError("CONTAINER_CHILD_CONTROL_INVALID")
-        self.owner_monitor, self.process_owner = owner_monitor, process_owner
+        self.task_port, self.generation, self.close_timeout_s = task_port, generation, close_timeout_s
+        self.process_owner = process_owner
         self.socket_parent_fd = None
         self._connections = set()
         self._normal_connections = set()
         self._handlers = set()
+        self._busy = 0
 
     async def start(self):
         from dataclasses import asdict
@@ -563,7 +582,7 @@ class ContainerChildIpcServer(ChildIpcServer):
                     path=transport_address(path, self.socket_parent_fd), limit=self.max_bytes+1))
                 os.chmod(path, 0o600)
             ready = {"schema_version": 1, "kind": "container_child_ready",
-                "generation": self.owner_monitor.generation,
+                "generation": self.generation,
                 "process_owner": asdict(self.process_owner), "pid_namespace_inode": pid_namespace_inode(),
                 "service_epoch": self.service_epoch, "runtime_id": self.runtime.runtime_id,
                 "campaign_id": self.runtime.act_campaign_id, "worker_id": self.runtime.act_worker_id,
@@ -583,14 +602,18 @@ class ContainerChildIpcServer(ChildIpcServer):
     async def close(self):
         for server in self._servers:
             server.close()
-        for server in self._servers:
-            await server.wait_closed()
+        # A request already being answered (e.g. the terminate that ended the executor) finishes its reply first.
+        deadline = time.monotonic() + self.close_timeout_s
+        while self._busy and time.monotonic() < deadline:
+            await asyncio.sleep(0.005)
         for writer in tuple(self._connections):
             writer.close()
+        for server in self._servers:
+            await server.wait_closed()
         current = asyncio.current_task()
         handlers = tuple(task for task in self._handlers if task is not current)
         if handlers:
-            done, pending = await asyncio.wait(handlers, timeout=self.owner_monitor.timeout_ns/1e9)
+            done, pending = await asyncio.wait(handlers, timeout=self.close_timeout_s)
             for task in pending:
                 task.cancel()
             if pending:
@@ -617,52 +640,74 @@ class ContainerChildIpcServer(ChildIpcServer):
         self._normal_connections.add(writer)
         try:
             while True:
-                line = await reader.readline()
+                try:
+                    line = await reader.readline()
+                except (ValueError, asyncio.LimitOverrunError):
+                    writer.write(encode(IpcReply(accepted=False, code="IPC_FRAME_TOO_LARGE")))
+                    await writer.drain()
+                    return
                 if not line:
                     return
-                reply = await self._normal_reply(line, writer)
-                writer.write(encode(reply))
-                await writer.drain()
+                self._busy += 1
+                try:
+                    reply = await self._normal_reply(line, writer)
+                    writer.write(encode(reply))
+                    await writer.drain()
+                finally:
+                    self._busy -= 1
         finally:
-            self.owner_monitor.disconnected(writer)
-            try:
-                if self.owner_monitor.expired:
-                    await self.runtime.mark_web_dead(self.owner_monitor.reason)
-            finally:
-                self._handlers.discard(task)
-                self._connections.discard(writer)
-                self._normal_connections.discard(writer)
-                writer.close()
-                with contextlib.suppress(Exception):
-                    await writer.wait_closed()
+            self._handlers.discard(task)
+            self._connections.discard(writer)
+            self._normal_connections.discard(writer)
+            writer.close()
+            with contextlib.suppress(Exception):
+                await writer.wait_closed()
 
     async def _normal_reply(self, line, writer):
+        from so101_demo.runtime.container_campaign.task_contracts import InstanceStatus, TaskSpec, TaskStatus
         from so101_demo.runtime.parallel_ipc.frames import _pairs
 
         if len(line) > self.max_bytes:
             return IpcReply(accepted=False, code="IPC_FRAME_TOO_LARGE")
-        if self.owner_monitor.expired:
-            await self.runtime.mark_web_dead(self.owner_monitor.reason)
-            return IpcReply(accepted=False, code="OWNER_HEARTBEAT_FENCED")
+        uid = peer_uid(writer.get_extra_info("socket"))
+        if uid is None or uid != os.geteuid():
+            return IpcReply(accepted=False, code="IPC_PEER_REJECTED")
         try:
             document = json.loads(line, object_pairs_hook=_pairs,
                 parse_constant=lambda _value: (_ for _ in ()).throw(ValueError("nonfinite")))
-            if type(document) is dict and document.get("kind") == "owner_heartbeat":
-                uid = peer_uid(writer.get_extra_info("socket"))
-                if uid is None or uid != os.geteuid():
-                    raise ValueError("IPC_PEER_REJECTED")
-                result = self.owner_monitor.receive(document, connection=writer)
-                return IpcReply(accepted=True, code="OK", result=result)
-        except (ValueError, TypeError, UnicodeError) as error:
+        except (ValueError, TypeError, UnicodeError):
+            document = None
+        if document is not None and (type(document) is not dict or document.get("operation") not in TASK_OPERATIONS
+                or not set(document) <= {"operation", "deadline_ns", "payload"}):
+            return IpcReply(accepted=False, code="CONTAINER_OPERATION_NOT_ALLOWED")
+        try:
+            packet = decode_container_task(line, max_bytes=self.max_bytes, now_ns=time.monotonic_ns())
+            if packet.operation == "assign_task":
+                result = await self.task_port.assign_task(TaskSpec.model_validate(packet.payload))
+                expected = TaskStatus
+            elif packet.operation == "get_status":
+                result = await self.task_port.get_status(packet.payload.get("task_id"))
+                expected = InstanceStatus
+            else:
+                result = await self.task_port.terminate(packet.payload["reason"])
+                expected = InstanceStatus
+            if type(result) is not expected:
+                raise ValueError("CONTAINER_TASK_RESULT_INVALID")
+        except (ValueError, IpcProtocolError) as error:
             return IpcReply(accepted=False, code=str(error))
-        return await super()._normal_reply(line, writer)
+        return IpcReply(accepted=True, code="OK", result=result.model_dump())
 
     async def _handle_safety(self, reader, writer):
         task = asyncio.current_task()
         self._handlers.add(task)
         self._connections.add(writer)
         try:
-            return await super()._handle_safety(reader, writer)
+            while await reader.readline():
+                writer.write(encode(IpcReply(accepted=False, code="CONTAINER_OPERATION_NOT_ALLOWED")))
+                await writer.drain()
         finally:
             self._handlers.discard(task)
             self._connections.discard(writer)
+            writer.close()
+            with contextlib.suppress(Exception):
+                await writer.wait_closed()

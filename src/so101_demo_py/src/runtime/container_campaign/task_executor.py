@@ -40,8 +40,10 @@ def _thread_call(function, *args):
 
 class ContainerTaskExecutor:
     def __init__(self, *, instance_id, builder, retirement, output_root=Path('/act/output'),
-                 owner_timeout_s, stop_timeout_s, retire_timeout_s, clock=time.monotonic):
-        self._status = InstanceStatus(instance_id=instance_id, state='READY')
+                 owner_timeout_s, stop_timeout_s, retire_timeout_s, clock=time.monotonic, ready=True):
+        if type(ready) is not bool:
+            raise ValueError('TASK_EXECUTOR_CONFIG_INVALID')
+        self._status = InstanceStatus(instance_id=instance_id, state='READY' if ready else 'STARTING')
         if (not callable(builder) or not callable(clock)
                 or not _positive(owner_timeout_s) or not _positive(stop_timeout_s)
                 or not _positive(retire_timeout_s)
@@ -63,6 +65,18 @@ class ContainerTaskExecutor:
         self.cleanup_confirmed = False
         self.cleanup_errors = []
         self._watchdog = asyncio.create_task(self._watch())
+
+    @property
+    def closing(self):
+        return self._closing
+
+    def mark_ready(self):
+        """STARTING -> READY once the native stack is proven; a stopping instance never becomes ready."""
+        if self._closing or self._status.state != 'STARTING':
+            return False
+        self._status = self._status.model_copy(update={'state': 'READY'})
+        self._changed.set()
+        return True
 
     def _expired(self):
         now = self.clock()

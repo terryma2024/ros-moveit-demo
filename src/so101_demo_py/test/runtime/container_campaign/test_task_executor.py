@@ -512,3 +512,40 @@ def test_real_builder_business_failure_succeeds_and_next_task_gets_fresh_objects
     asyncio.run(run())
     assert len(rig.groups) == 2 and rig.groups[0] is not rig.groups[1], 'each task rebuilt its runtime and process tree'
     assert [group.manifest.processes for group in rig.groups] == [(), ()]
+
+
+def test_starting_instance_refuses_tasks_until_marked_ready(tmp_path):
+    """Real executor; the builder and retirement are controlled doubles."""
+    async def run():
+        executor = module().ContainerTaskExecutor(instance_id='instance-01', builder=lambda spec: None,
+            retirement=ExternalRetirement(), output_root=tmp_path, stop_timeout_s=1., retire_timeout_s=1.,
+            owner_timeout_s=5., ready=False)
+        assert (await executor.get_status()).state == 'STARTING'
+        with pytest.raises(ValueError, match='TASK_EXECUTOR_NOT_READY_OR_EXPIRED'):
+            await executor.assign_task(task())
+        assert executor.mark_ready() is True
+        assert (await executor.get_status()).state == 'READY'
+        assert executor.mark_ready() is False
+        await executor.terminate('fixture end')
+    asyncio.run(run())
+
+
+def test_mark_ready_after_stop_began_keeps_stopping(tmp_path):
+    async def run():
+        executor = module().ContainerTaskExecutor(instance_id='instance-01', builder=lambda spec: None,
+            retirement=ExternalRetirement(), output_root=tmp_path, stop_timeout_s=1., retire_timeout_s=1.,
+            owner_timeout_s=5., ready=False)
+        await executor.terminate('startup failed')
+        assert executor.mark_ready() is False
+        assert (await executor.get_status()).state == 'STOPPING'
+    asyncio.run(run())
+
+
+def test_starting_instance_is_stopped_when_status_polling_never_arrives(tmp_path):
+    async def run():
+        executor = module().ContainerTaskExecutor(instance_id='instance-01', builder=lambda spec: None,
+            retirement=ExternalRetirement(), output_root=tmp_path, stop_timeout_s=1., retire_timeout_s=1.,
+            owner_timeout_s=.05, ready=False)
+        assert await asyncio.wait_for(executor.wait_stopped(), 2) is True
+        assert (await executor.get_status()).fault_reason == 'Coordinator status polling timed out'
+    asyncio.run(run())

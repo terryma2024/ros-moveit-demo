@@ -70,6 +70,15 @@ class ContainerShardOwner:
                 for name,value in expected.items())
                 or type(self.spec.get('runtime_id')) is not str or not self.spec['runtime_id']):
             raise ValueError('SHARD_SPEC_CONTEXT_MISMATCH')
+        if self.spec['workload_kind']=='act_collection':
+            identity={name:getattr(admitted_context,name) for name in (
+                'manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint')}
+            if (self.spec['business_identity']!=identity
+                    or self.spec['campaign_config']!=dict(path=admitted_context.campaign_config_path,
+                        sha256=admitted_context.campaign_config_sha256)
+                    or self.spec['deadline_monotonic_s']!=admitted_context.deadline_monotonic_s
+                    or self.spec['wave_id']!=launch.wave_id):
+                raise ValueError('SHARD_SPEC_CONTEXT_MISMATCH')
         self.spec_sha256 = hashlib.sha256(entry.spec.read_bytes()).hexdigest()
         self.argv = build_container_argv(role='shard',image=images,gpu_uuid=admitted_context.physical_gpu_uuid,
             host_paths=dict(owned_root=self.root,approved_inputs=approved_inputs,config_paths=config_paths,
@@ -78,7 +87,7 @@ class ContainerShardOwner:
         if images['shard']['digest'] != launch.image_digest:
             raise ValueError('SHARD_OWNER_CONFIG_INVALID')
         self.image = dict(images['shard'])
-        self.token,self.startup_budget,self.heartbeat_budget,self.stop_budget = (
+        self.token,self.startup_budget,self.status_budget,self.stop_budget = (
             service_token,startup_timeout_s,heartbeat_timeout_s,stop_timeout_s)
         self.max_bytes,self.docker,self.namespace_reader,self.clock = (
             max_frame_bytes,docker_runner,namespace_reader,monotonic_ns)
@@ -160,7 +169,6 @@ class ContainerShardOwner:
                 namespace_reader=self.namespace_reader)
             binding = self.bridge.accept_ready(read_document(control/'child-ready.json'))
             self.registry.bind_child(self.launch.launch_id,binding)
-            await self.bridge.start_heartbeats(timeout_ns=int(self.heartbeat_budget*1e9),max_bytes=self.max_bytes)
             await self._wait_file(self.root/'runtime-ready.json',deadline)
             await self._wait_file(self.root/'stack-readiness.json',deadline)
             ready = read_document(self.root/'runtime-ready.json')
@@ -192,9 +200,6 @@ class ContainerShardOwner:
         if (observed['State']['Running'] is not True or observed['State']['Restarting'] is not False
                 or observed['State'].get('OOMKilled') is True):
             raise ValueError('SHARD_CONTAINER_NOT_RUNNING')
-        if self.bridge is not None and self.bridge.heartbeat_channel is not None:
-            if self.bridge.heartbeat_channel.error is not None:
-                raise ValueError('SHARD_OWNER_HEARTBEAT_FAILED')
         return True
 
     async def _wait_file(self,path,deadline):
@@ -213,7 +218,8 @@ class ContainerShardOwner:
 
     def control_client(self):
         from so101_demo.runtime.container_campaign.control_client import ContainerControlClient
-        if not self._runtime_ready or self.bridge is None or self.bridge.binding is None or self._closing:
+        # Status polling starts with the child binding, while the native stack is still starting.
+        if self.bridge is None or self.bridge.binding is None or self._closing:
             raise ValueError('SHARD_RUNTIME_NOT_READY')
         return ContainerControlClient(binding=self.bridge.binding,context=self.context,
             runtime_id=self.spec['runtime_id'],service_token=self.token,max_bytes=self.max_bytes,
@@ -233,16 +239,16 @@ class ContainerShardOwner:
             try:
                 if self.owner is None:
                     raise ValueError('LAUNCH_OWNER_UNKNOWN')
-                if self.bridge is not None:
-                    await self.bridge.stop_heartbeats()
                 observed = await self._observe()
-                if self.bridge is None and observed['State']['Running'] is True:
-                    # Startup failure before a control binding: signal only the
-                    # exact known owner. Missing inner evidence stays fenced.
+                if observed['State']['Running'] is True:
+                    # Signal only the exact registered owner. The child's SIGTERM path is idempotent with
+                    # an already running terminate, so a failed or slow RPC cannot leave it running.
                     result = await asyncio.to_thread(self.docker,
                         ['docker','kill','--signal','TERM',self.owner.container_id])
                     if result.returncode != 0:
-                        raise ValueError('SHARD_CONTAINER_SIGNAL_FAILED')
+                        observed = await self._observe()
+                        if observed['State']['Running'] is True:
+                            raise ValueError('SHARD_CONTAINER_SIGNAL_FAILED')
                 deadline = self.clock()+int(self.stop_budget*1e9)
                 while observed['State']['Running'] is True:
                     if self.clock() >= deadline:
@@ -256,3 +262,33 @@ class ContainerShardOwner:
         result = dict(terminated=not errors,launch_id=self.launch.launch_id,errors=errors)
         _write(self.root/'host-cleanup.json',result)
         return result
+
+    async def prove_stopped(self):
+        """Re-read the exact registered container and the child's original stop evidence; sends no signal."""
+        errors = []
+        try:
+            if not self._registered or self.owner is None:
+                raise ValueError('LAUNCH_OWNER_UNKNOWN')
+            observed = await self._observe()
+            self.registry.prove_terminated(self.launch.launch_id,observed)
+            if not (self.root/'late-exit-proof.json').exists():
+                _write(self.root/'late-exit-proof.json',observed)
+        except Exception as error:
+            errors.append(dict(type=type(error).__name__,reason=str(error)))
+        return dict(terminated=not errors,launch_id=self.launch.launch_id,errors=errors)
+
+    def instance_exit(self):
+        """The child's own exit record, or None when it is absent or not a closed, valid record."""
+        try:
+            record = read_document(self.root/'instance-exit.json')
+            if (type(record) is not dict or set(record) != {'schema_version','kind','state','fault_reason','task',
+                    'cleanup_confirmed','cleanup_errors'} or type(record['schema_version']) is not int
+                    or record['schema_version'] != 1 or record['kind'] != 'ACT_SHARD_INSTANCE_EXIT'
+                    or record['fault_reason'] is not None and (type(record['fault_reason']) is not str
+                        or not 0 < len(record['fault_reason']) <= 300)
+                    or type(record['cleanup_confirmed']) is not bool or type(record['cleanup_errors']) is not list
+                    or record['task'] is not None and type(record['task']) is not dict):
+                return None
+            return record
+        except (OSError,ValueError,TypeError,KeyError):
+            return None

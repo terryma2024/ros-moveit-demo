@@ -4,6 +4,8 @@ import importlib
 import json
 from pathlib import Path
 import shutil
+import hashlib
+import time
 
 import pytest
 
@@ -71,3 +73,62 @@ def test_no_motion_image_gate_cannot_forward_a_goal():
     for operation in (driver.submit,driver.cancel,driver.terminal):
         with pytest.raises(ValueError, match="SHARD_READINESS_HAS_NO_MOTION_PORT"):
             asyncio.run(operation(object()))
+
+
+def collection_fixture(tmp_path):
+    from test_config_identity import campaign_fixture,write_config
+    path,document=fixture(tmp_path)
+    campaign=campaign_fixture(tmp_path)
+    campaign['gpu_uuid']=document['gpu_uuid']
+    campaign_path=write_config(tmp_path,campaign)
+    original_runtime=dict(document['controlled_runtime'])
+    identity=dict(manifest_sha256='a'*64,runtime_config_sha256=campaign['controlled_runtime']['sha256'],
+        collection_config_sha256='c'*64,contact_policy_fingerprint='d'*64)
+    document.update(workload_kind='act_collection',controlled_runtime=campaign['controlled_runtime'],
+        parallel_runtime=original_runtime,business_identity=identity,
+        campaign_config=dict(path=str(campaign_path),sha256=hashlib.sha256(campaign_path.read_bytes()).hexdigest()),
+        wave_id='wave-00',deadline_monotonic_s=time.monotonic()+3600)
+    path.write_text(json.dumps(document))
+    return path,document
+
+
+def test_collection_spec_uses_original_controlled_json_and_builds_the_task_builder(tmp_path):
+    """Real spec loader and real builder selection; the native stack is an opaque object."""
+    import functools
+    mod=importlib.import_module('so101_demo.cli.campaign_shard')
+    path,document=collection_fixture(tmp_path)
+    actual,runtime=mod.load_spec(path)
+    assert actual==document and runtime.heartbeat_timeout_s==5.
+    stack=object()
+    builder=mod.shard_builder(actual,stack=stack,output_root=Path('/act/output'))
+    from so101_demo.runtime.container_campaign.task_builder import build_collection_task
+    assert type(builder) is functools.partial and builder.func is build_collection_task
+    assert builder.args==() and builder.keywords==dict(stack=stack,shard_spec=actual,output_root=Path('/act/output'))
+    assert not hasattr(mod,'build_shard_driver') and not hasattr(mod,'ChildRuntime')
+
+
+def test_readiness_workload_builder_refuses_every_task(tmp_path):
+    mod=importlib.import_module('so101_demo.cli.campaign_shard')
+    path,_document=fixture(tmp_path)
+    spec,_runtime=mod.load_spec(path)
+    builder=mod.shard_builder(spec,stack=object(),output_root=tmp_path)
+    with pytest.raises(ValueError,match='SHARD_READINESS_HAS_NO_MOTION_PORT'):
+        builder(object())
+    with pytest.raises(ValueError,match='CAMPAIGN_SHARD_WORKLOAD_UNKNOWN'):
+        mod.shard_builder(dict(spec,workload_kind='hardware'),stack=object(),output_root=tmp_path)
+
+
+@pytest.mark.parametrize('damage',['extra','missing','hash','identity','wave','expired','bool_deadline'])
+def test_bad_collection_spec_refuses_before_any_native_runtime(tmp_path,monkeypatch,damage):
+    mod=importlib.import_module('so101_demo.cli.campaign_shard')
+    path,document=collection_fixture(tmp_path)
+    if damage=='extra':document['allow_legacy']=True
+    elif damage=='missing':document.pop('campaign_config')
+    elif damage=='hash':document['parallel_runtime']['sha256']='f'*64
+    elif damage=='identity':document['business_identity']['runtime_config_sha256']='f'*64
+    elif damage=='wave':document['wave_id']='wave-1'
+    elif damage=='expired':document['deadline_monotonic_s']=time.monotonic()-1
+    else:document['deadline_monotonic_s']=True
+    path.write_text(json.dumps(document))
+    monkeypatch.setattr(mod,'run_shard',lambda *args:pytest.fail('bad collection spec started native runtime'))
+    assert mod.main(['--spec',str(path)])==2

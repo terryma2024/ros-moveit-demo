@@ -13,6 +13,7 @@ class ContainerTaskControl:
         self._status = InstanceStatus(instance_id=self.instance_id, state='STARTING')
         self._started = self._closing = False
         self._stop_task = None
+        self._prove_lock = asyncio.Lock()
         self._tasks = {}
 
     async def start(self):
@@ -28,7 +29,7 @@ class ContainerTaskControl:
         return self._status
 
     def _request(self, operation, payload):
-        budget = getattr(self.owner, 'heartbeat_budget', self.owner.startup_budget)
+        budget = getattr(self.owner, 'status_budget', self.owner.startup_budget)
         deadline = min(time.monotonic()+budget, self.owner.context.deadline_monotonic_s)
         packet = TaskRequest(operation=operation, deadline_ns=int(deadline*1e9), payload=payload)
         packet.check_deadline(time.monotonic_ns())
@@ -67,6 +68,8 @@ class ContainerTaskControl:
         if self._closing:
             if task_id is not None and (self._status.task is None or self._status.task.task_id != task_id):
                 raise ValueError('TASK_ID_MISMATCH')
+            if self._stop_task is not None and self._stop_task.done():
+                await self._reprove()
             return self._status
         if not self._started:
             raise ValueError('TASK_INSTANCE_NOT_STARTED')
@@ -88,9 +91,17 @@ class ContainerTaskControl:
         TaskRequest(operation='terminate', deadline_ns=time.monotonic_ns(),
                     payload=dict(reason=reason))
         self._closing = True
-        if self._stop_task is None:
+        first = self._stop_task is None
+        if first:
             self._stop_task = asyncio.create_task(self._terminate(reason))
-        return await asyncio.shield(self._stop_task)
+        status = await asyncio.shield(self._stop_task)
+        if not first:
+            status = await self._reprove()
+        return status
+
+    def _released(self, receipt):
+        return (type(receipt) is dict and receipt.get('terminated') is True
+                and receipt.get('launch_id') == self.instance_id)
 
     async def _terminate(self, reason):
         self._status = self._status.model_copy(update={'state': 'STOPPING',
@@ -102,8 +113,30 @@ class ContainerTaskControl:
             # Socket loss cannot prevent cleanup of the registered Docker owner.
             pass
         receipt = await self.owner.close()
-        released = (type(receipt) is dict and receipt.get('terminated') is True
-                    and receipt.get('launch_id') == self.instance_id)
+        released = self._released(receipt)
+        await self._adopt_fault(reason)
         self._status = self._status.model_copy(update={
             'state': 'TERMINATED' if released else 'STOPPING', 'resources_released': released})
         return self._status
+
+    async def _adopt_fault(self, reason):
+        """A fault the Host never polled comes from the child's own exit record, else from the terminate reason."""
+        if self._status.fault_reason is not None:
+            return
+        read = getattr(self.owner, 'instance_exit', None)
+        record = await asyncio.to_thread(read) if callable(read) else None
+        fault = record.get('fault_reason') if type(record) is dict else None
+        fault = fault if type(fault) is str and fault else reason[:300]
+        self._status = self._status.model_copy(update={'fault_reason': fault})
+
+    async def _reprove(self):
+        """A late exit can still be proven by the original owner; no signal is sent here."""
+        prove = getattr(self.owner, 'prove_stopped', None)
+        if not callable(prove):
+            return self._status
+        async with self._prove_lock:
+            if self._status.resources_released:
+                return self._status
+            if self._released(await prove()):
+                self._status = self._status.model_copy(update={'state': 'TERMINATED', 'resources_released': True})
+            return self._status
