@@ -1,0 +1,156 @@
+"""Durable launch ownership survives owner loss without authorizing takeover."""
+
+from dataclasses import asdict
+import importlib
+
+import pytest
+
+from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey
+
+
+def module():
+    return importlib.import_module('so101_demo.runtime.container_campaign.registry')
+
+
+def launch(tmp_path, *, role='head', generation=1):
+    return module().ContainerLaunch(launch_id=f'{role}-g{generation}', role=role,
+        worker_id=None, wave_id=None, launch_generation=generation,
+        container_name=f'so101-test-{role}-g{generation}', image_digest='sha256:'+'b'*64,
+        owned_root=str(tmp_path))
+
+
+def inspect_document(*, running=False, started='2026-10-12T01:02:03.123Z'):
+    return dict(Id='a'*64, Image='sha256:'+'b'*64, State=dict(StartedAt=started,
+        Running=running, Restarting=False, Pid=500 if running else 0,
+        Status='running' if running else 'exited', ExitCode=0))
+
+
+def test_intent_persisted_before_container_binding_and_reopened_without_resume(tmp_path):
+    mod = module()
+    path = tmp_path/'launches.sqlite3'
+    registry = mod.ContainerLaunchRegistry(path)
+    item = launch(tmp_path)
+    registry.register(item)
+    assert registry.records()[0]['launch'] == asdict(item)
+    assert registry.records()[0]['owner'] is None
+    registry.close()
+    registry = mod.ContainerLaunchRegistry(path, create=False)
+    assert registry.records()[0]['launch'] == asdict(item)
+    with pytest.raises(ValueError, match='LAUNCH_OWNER_UNKNOWN'):
+        registry.prove_terminated(item.launch_id, inspect_document())
+    registry.close()
+
+
+def test_only_same_actual_container_exit_can_settle_a_service_launch(tmp_path):
+    mod = module()
+    registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
+    item = launch(tmp_path)
+    registry.register(item)
+    owner = ContainerOwnerKey('a'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1)
+    registry.bind_container(item.launch_id, owner)
+    with pytest.raises(ValueError, match='LAUNCH_STOP_UNCONFIRMED'):
+        registry.prove_terminated(item.launch_id, inspect_document(running=True))
+    with pytest.raises(ValueError, match='LAUNCH_STOP_UNCONFIRMED'):
+        registry.prove_terminated(item.launch_id, inspect_document(started='2026-10-12T01:03:00Z'))
+    assert registry.prove_terminated(item.launch_id, inspect_document()) is True
+    assert registry.prove_terminated(item.launch_id, inspect_document()) is True
+    assert registry.records()[0]['exit_inspect'] == inspect_document()
+    assert registry.all_terminated(lambda cid: inspect_document())
+    assert not registry.all_terminated(lambda cid: inspect_document(running=True))
+    registry.close()
+
+
+def test_unidentified_or_unsettled_launch_fences_registry_completion(tmp_path):
+    registry = module().ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
+    assert not registry.all_terminated(lambda cid: inspect_document())
+    item = launch(tmp_path)
+    registry.register(item)
+    assert not registry.all_terminated(lambda cid: inspect_document())
+    registry.bind_container(item.launch_id, ContainerOwnerKey('a'*64,
+        '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1))
+    assert not registry.all_terminated(lambda cid: inspect_document())
+    registry.close()
+
+
+def test_duplicate_role_and_foreign_binding_refused_without_overwrite(tmp_path):
+    mod = module()
+    registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
+    item = launch(tmp_path)
+    registry.register(item)
+    with pytest.raises(ValueError, match='LAUNCH_COLLISION'):
+        registry.register(launch(tmp_path, generation=2))
+    owner = ContainerOwnerKey('a'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'c'*64, 1)
+    with pytest.raises(ValueError, match='LAUNCH_BINDING_MISMATCH'):
+        registry.bind_container(item.launch_id, owner)
+    assert registry.records()[0]['owner'] is None
+    registry.close()
+
+
+def test_shard_cannot_settle_from_docker_exit_without_inner_original_proof(tmp_path):
+    mod = module()
+    registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
+    item = mod.ContainerLaunch(launch_id='wave-00-w00-g1', role='shard', worker_id='w00',
+        wave_id='wave-00', launch_generation=1, container_name='so101-shard-w00-g1',
+        image_digest='sha256:'+'b'*64, owned_root=str(tmp_path), ros_namespace='/act/test/w00',
+        ros_domain_id=181, session_id='wave00-w00-g1')
+    registry.register(item)
+    registry.bind_container(item.launch_id, ContainerOwnerKey('a'*64,
+        '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1))
+    with pytest.raises(ValueError, match='LAUNCH_STOP_UNCONFIRMED'):
+        registry.prove_terminated(item.launch_id, inspect_document())
+    assert registry.records()[0]['exit_inspect'] is None
+    registry.close()
+
+
+def test_existing_or_symlink_registry_cannot_be_created_as_new_campaign(tmp_path):
+    mod = module()
+    path = tmp_path/'launches.sqlite3'
+    registry = mod.ContainerLaunchRegistry(path)
+    registry.close()
+    with pytest.raises(FileExistsError):
+        mod.ContainerLaunchRegistry(path)
+    link = tmp_path/'foreign.sqlite3'
+    link.symlink_to(path)
+    with pytest.raises(ValueError, match='LAUNCH_REGISTRY_PATH_INVALID'):
+        mod.ContainerLaunchRegistry(link, create=False)
+
+
+@pytest.mark.parametrize('tamper', [False, True])
+def test_shard_registry_recomputes_original_stop_before_slot_reuse(tmp_path, monkeypatch, tamper):
+    import asyncio
+    from test_shard_retirement import fixture as stop_fixture
+    from so101_demo.runtime.container_campaign.process_identity import ContainerChildBinding, pid_namespace_inode
+    _, root, process, _, retirement, _ = stop_fixture(tmp_path, monkeypatch)
+    asyncio.run(retirement.retire(fenced=True))
+    mod = module()
+    registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
+    item = mod.ContainerLaunch(launch_id='wave-00-w00-g7', role='shard', worker_id='w00',
+        wave_id='wave-00', launch_generation=7, container_name='so101-shard-w00-g7',
+        image_digest='sha256:'+'b'*64, owned_root=str(root), ros_namespace='/act/campaign/w00',
+        ros_domain_id=181, session_id='session1')
+    owner = ContainerOwnerKey('a'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 7)
+    registry.register(item)
+    registry.bind_container(item.launch_id, owner)
+    binding = ContainerChildBinding(owner, process, pid_namespace_inode(), str(root/'control/normal.sock'))
+    registry.bind_child(item.launch_id, binding)
+    assert registry.prove_terminated(item.launch_id, inspect_document())
+    assert registry.all_terminated(lambda cid: inspect_document())
+    if tamper:
+        (root/'retirement/controller-stop.json').write_text('{}')
+        assert not registry.all_terminated(lambda cid: inspect_document())
+    next_root = tmp_path/'next-owned'
+    next_root.mkdir()
+    next_launch = mod.ContainerLaunch(launch_id='wave-01-w00-g8', role='shard', worker_id='w00',
+        wave_id='wave-01', launch_generation=8, container_name='so101-shard-w00-g8',
+        image_digest='sha256:'+'b'*64, owned_root=str(next_root), ros_namespace='/act/campaign/w00',
+        ros_domain_id=181, session_id='session2')
+    if tamper:
+        with pytest.raises(ValueError, match='LAUNCH_STOP_UNCONFIRMED'):
+            registry.register(next_launch)
+    else:
+        registry.register(next_launch)
+        assert len(registry.records()) == 2
+        assert registry.records()[0]['launch']['ros_domain_id'] == registry.records()[1]['launch']['ros_domain_id']
+        assert registry.records()[0]['launch']['ros_namespace'] == registry.records()[1]['launch']['ros_namespace']
+        assert not registry.all_terminated(lambda cid: inspect_document())  # new launch still unknown
+    registry.close()
