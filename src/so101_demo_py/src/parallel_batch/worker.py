@@ -161,14 +161,16 @@ class ParallelWorker(WorkerRevocation, WorkerProtocol, WorkerCommit):
         failure_boundary = "scheduler_trace"
         try:
             if self._workload is not None:
-                action_may_have_started = True
                 failure_boundary = "act_collection"
                 decision = self._workload.run_authorized(
                     lease, runtime=self._runtime, broker=self._broker,
-                    boundary=self._boundary, start_event_id=start_event_id,
+                    boundary=self._boundary, teacher_boundary=self._teacher_boundary,
+                    stop_before_motion=lambda current: self._safe_stop(current, action_may_have_started=False),
+                    recorder_stopped=self._recorder_stopped, start_event_id=start_event_id,
                     start_event_type=start_event_type, reset_epoch=reset_epoch,
                 )
-                return decision, True, None
+                action_may_have_started = self._workload.action_may_have_started
+                return decision, action_may_have_started, None
             if self._mode is RunMode.DRY_RUN:
                 decision = self._boundary(
                     lambda current: self._runtime.scheduler_trace(current))
@@ -231,6 +233,8 @@ class ParallelWorker(WorkerRevocation, WorkerProtocol, WorkerCommit):
                 None if self._mode is RunMode.DRY_RUN else terminal_failure
             )
         except Exception as error:
+            if self._workload is not None:
+                action_may_have_started = self._workload.action_may_have_started
             decision, _, stopped, confirmed = self._safe_stop(
                 lease, action_may_have_started=action_may_have_started)
             refusal = (self._input_refusal(error)

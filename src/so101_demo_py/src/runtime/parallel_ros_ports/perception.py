@@ -61,6 +61,13 @@ class PerceptionPorts:
     def _record_perception_response(self, workspace, response):
         pass
 
+    def _perception_terminal(self, decision, failure_type, failure_message):
+        return PerceptionTerminal(decision.disposition, decision.reason or "PERCEPTION_TERMINAL",
+                                  failure_type, failure_message)
+
+    def _record_pose_rejection(self, reason):
+        pass
+
     def _start_perception_request(self, policy, request, snapshot, *, depth_timestamp_s, depth_sha256):
         policy.start_request(request, depth_timestamp_s=depth_timestamp_s, depth_sha256=depth_sha256)
 
@@ -226,6 +233,7 @@ class PerceptionPorts:
                     except LocalizationError as error:
                         if error.code != "GEOMETRY_REJECTED":
                             raise
+                        self._record_pose_rejection(str(error))
                         decision = policy.record_result(
                             response.request,
                             ModelOutcome.NORMAL_REJECTION,
@@ -238,6 +246,8 @@ class PerceptionPorts:
                         broker_generation=response.broker_generation,
                     )
                     decision = policy.admit_pose(response.request, localized)
+                    if decision.disposition != "CONTINUE":
+                        self._record_pose_rejection(latch.rejection_reason)
                     if decision.disposition == "CONTINUE":
                         admitted = self._admitted_pose(lease, localized)
                         self._admitted[lease.attempt_id] = admitted
@@ -249,12 +259,7 @@ class PerceptionPorts:
                         response.outcome,
                         broker_generation=response.broker_generation,
                     )
-            return PerceptionTerminal(
-                decision.disposition,
-                decision.reason or "PERCEPTION_TERMINAL",
-                failure_type,
-                failure_message,
-            )
+            return self._perception_terminal(decision, failure_type, failure_message)
         finally:
             if not retain_source:
                 close = getattr(source, "close", None)

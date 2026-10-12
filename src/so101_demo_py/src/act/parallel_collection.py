@@ -204,33 +204,60 @@ def campaign_config_from(collection_config: dict, *, qualification: bool) -> dic
 
 
 class ActFixedCollectionWorkload:
-    """The port the existing parallel worker dispatches to for a fixed ACT collection wave.
-
-    It has the same shape as the retired single-scenario port: the worker sees a `kind` and a
-    `run_authorized` call, and every decision about *what* to collect stays inside the campaign, so the
-    worker cannot widen a wave or re-collect a sealed scene.
-    """
+    """Execute the one scene leased to this shard from the frozen scene list."""
 
     kind = "act_fixed_collection"
 
-    def __init__(self, campaign, *, runtime, boundary=None) -> None:
-        self.campaign = campaign
-        self.runtime = runtime
-        self.boundary = boundary
+    def __init__(self, *, scene_ids):
+        from so101_demo.parallel_batch.contracts.common import _require_id
 
-    def run_authorized(self, lease, *, start_event_id, start_event_type, reset_epoch) -> dict:
-        if (not isinstance(lease, dict) or lease.get("admitted") is not True
-                or lease.get("start_event_id") != start_event_id
-                or lease.get("start_event_type") != start_event_type):
-            # the same refusal the runtime adapter makes: no lease, no collection
-            raise ValueError("ACT_COLLECTION_LEASE_UNAVAILABLE")
-        if lease.get("reset_epoch") != reset_epoch:
-            raise ValueError("ACT_COLLECTION_RESET_EPOCH_MISMATCH")
-        # the campaign is the executor here: the runtime adapter is its collect port, not this caller's
-        if not callable(getattr(self.campaign, "run", None)):
-            raise ValueError("ACT_COLLECTION_CAMPAIGN_UNAVAILABLE")
-        run = lambda: self.campaign.run()
-        outcome = self.boundary(run) if self.boundary is not None else run()
-        if not isinstance(outcome, dict) or "campaign_index" not in outcome:
-            raise ValueError("ACT_COLLECTION_OUTCOME_INVALID")
-        return outcome
+        if type(scene_ids) is not tuple or not scene_ids or len(set(scene_ids)) != len(scene_ids):
+            raise ValueError("ACT_COLLECTION_SCENES_INVALID")
+        try:
+            for scene_id in scene_ids:
+                _require_id("scene_id", scene_id)
+        except (ValueError, TypeError) as error:
+            raise ValueError("ACT_COLLECTION_SCENES_INVALID") from error
+        self.scene_ids = frozenset(scene_ids)
+        self.action_may_have_started = False
+
+    def run_authorized(self, lease, *, runtime, broker, boundary, teacher_boundary,
+                       stop_before_motion, recorder_stopped, start_event_id,
+                       start_event_type, reset_epoch):
+        from so101_demo.parallel_batch.act_attempt import ActPerceptionDecision, ActPerceptionTerminal
+        from so101_demo.parallel_batch.act_inference import ActLocalizedPose
+        from so101_demo.parallel_batch.contracts.common import ExecutionKind
+        from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
+        from so101_demo.runtime.parallel_ros_ports.observations import AdmittedPose
+
+        self.action_may_have_started = False
+        if type(lease) is not LeaseIdentity or lease.point_id not in self.scene_ids:
+            raise ValueError("ACT_COLLECTION_SCENE_NOT_RESERVED")
+        if (start_event_id != f"attempt-start-{lease.attempt_id}"
+                or start_event_type != "ATTEMPT_STARTED"):
+            raise ValueError("ACT_COLLECTION_LOCAL_START_MISMATCH")
+        snapshot = boundary(lambda current: runtime.inference_snapshot(current))
+        chain = boundary(lambda current: broker.request_model(current, ExecutionKind.ATTEMPT,
+            snapshot=snapshot, start_event_id=start_event_id, start_event_type=start_event_type,
+            reset_epoch=reset_epoch))
+        if type(chain) is ActPerceptionTerminal:
+            request = chain.request
+        elif type(chain) is AdmittedPose and type(chain.localized) is ActLocalizedPose:
+            request = chain.localized.request
+        else:
+            raise ValueError("ACT_COLLECTION_PERCEPTION_RESULT_REQUIRED")
+        fields = ("batch_id", "coordinator_epoch", "worker_id", "worker_generation",
+                  "point_id", "attempt_id", "lease_generation")
+        if (any(getattr(request, field) != getattr(lease, field) for field in fields)
+                or request.reset_epoch != reset_epoch):
+            raise ValueError("ACT_COLLECTION_TERMINAL_LEASE_MISMATCH")
+        if type(chain) is ActPerceptionTerminal:
+            _decision, fenced, stopped, confirmed = stop_before_motion(lease)
+            return ActPerceptionDecision.from_terminal(chain, stop_facts=dict(fenced=fenced,
+                motion_stopped=stopped, controllers_stopped=confirmed,
+                recorder_stopped=recorder_stopped(lease)))
+        admitted = boundary(lambda current: runtime.admit_pose(current, chain))
+        if admitted is not chain:
+            raise ValueError("ACT_COLLECTION_ADMITTED_POSE_CHANGED")
+        self.action_may_have_started = True
+        return teacher_boundary(lambda current: runtime.execute_expert(current, admitted))

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import hashlib
+
+from so101_demo.parallel_batch.act_attempt import ActPerceptionTerminal
 
 from so101_demo.parallel_batch.act_inference import (
     ActInferenceFrame, ActInferenceRequest, ActInferenceResult, ActLocalizedPose, ActPoseAdmissionLatch,
@@ -23,6 +26,9 @@ class ActRosRuntimePorts(ParallelRosRuntimePorts):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._act_capture_sequence = 0
+        self._act_last_result = None
+        self._act_rejection_reason = None
+        self._act_audit_workspace = None
 
     def reset_point(self, lease):
         receipt = super().reset_point(lease)
@@ -35,11 +41,17 @@ class ActRosRuntimePorts(ParallelRosRuntimePorts):
         return receipt
 
     def run_perception_chain(self, *args, **kwargs):
+        self._act_last_result = None
+        self._act_rejection_reason = None
+        self._act_audit_workspace = None
         try:
             return super().run_perception_chain(*args, **kwargs)
         finally:
             # Raw masks are only needed while the current local latch checks quality.
             self._admission_candidates.clear()
+            self._act_last_result = None
+            self._act_rejection_reason = None
+            self._act_audit_workspace = None
 
     def _candidate_list(self, response):
         self._check_perception_result(response)
@@ -81,6 +93,31 @@ class ActRosRuntimePorts(ParallelRosRuntimePorts):
             raise RuntimeError("ACT_INFERENCE_AUDIT_ALREADY_EXISTS")
         workspace.write_json(relative, {"schema_version": 1, "kind": "ACT_LOCAL_INFERENCE_AUDIT",
                                         **asdict(response)})
+        self._act_last_result = response
+        self._act_audit_workspace = workspace
+
+    def _record_pose_rejection(self, reason):
+        self._act_rejection_reason = reason
+
+    def _perception_terminal(self, decision, failure_type, failure_message):
+        response = self._act_last_result
+        if response is None:
+            raise RuntimeError("ACT_PERCEPTION_AUDIT_MISSING")
+        terminal = ActPerceptionTerminal(disposition=decision.disposition,
+            reason=decision.reason or "PERCEPTION_TERMINAL", failure_type=failure_type,
+            failure_message=failure_message, request=response.request,
+            wire_outcome=response.response["outcome"],
+            audit_relative_path=f"perception/inference/{response.request.request_id}.json",
+            rejection_reason=self._act_rejection_reason)
+        workspace = self._act_audit_workspace
+        path = workspace.path / "perception/terminal.json"
+        if path.exists() or path.is_symlink():
+            raise RuntimeError("ACT_PERCEPTION_TERMINAL_ALREADY_EXISTS")
+        audit = workspace.path / terminal.audit_relative_path
+        workspace.write_json("perception/terminal.json", {"schema_version": 1,
+            "kind": "ACT_PERCEPTION_TERMINAL", "terminal": asdict(terminal),
+            "inference_audit_sha256": hashlib.sha256(audit.read_bytes()).hexdigest()})
+        return terminal
 
     def _start_perception_request(self, policy, request, snapshot, **kwargs):
         if (type(request) is not ActInferenceRequest

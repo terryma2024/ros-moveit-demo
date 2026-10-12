@@ -255,105 +255,40 @@ def test_the_real_wave_size_partitions_a_full_formal_manifest(tmp_path):
     assert _json.loads(open(outcome["campaign_index"]).read())["scene_count"] == 45
 
 
-def test_workload_refuses_an_unadmitted_lease_and_never_widens_a_wave(tmp_path):
-    from so101_demo.act.parallel_collection import (
-        ActFixedCollectionWorkload, FixedActCollectionCampaign,
-    )
-
-    rows = [{"scene_id": f"act-{index}", "split": "train"} for index in range(3)]
-    manifest = {"kind": "EIGHT_WORKER", "scenarios": rows,
-                "qualification_contract": {"revoked": False, "scenes": 40}}
-    campaign = FixedActCollectionCampaign(manifest, {"max_wave_size": 2, "qualification": False},
-                                          context=None, root=tmp_path,
-                                          collect_port=_CollectPort(), claim=_Claim())
-    workload = ActFixedCollectionWorkload(campaign, runtime=None)
-    lease = {"admitted": True, "start_event_id": "start-1", "start_event_type": "campaign_start",
-             "reset_epoch": 4}
-    outcome = workload.run_authorized(lease, start_event_id="start-1",
-                                      start_event_type="campaign_start", reset_epoch=4)
-    assert outcome["scene_count"] == 3 and outcome["claim_released"] is True
-    assert workload.kind == "act_fixed_collection"
-
-    # an unadmitted or mismatched lease refuses before any collection happens
-    for bad in ({"admitted": False, "start_event_id": "start-1",
-                 "start_event_type": "campaign_start", "reset_epoch": 4},
-                {"admitted": True, "start_event_id": "other",
-                 "start_event_type": "campaign_start", "reset_epoch": 4},
-                {"admitted": True, "start_event_id": "start-2",
-                 "start_event_type": "campaign_start", "reset_epoch": 4},
-                None):
-        with pytest.raises(ValueError, match="ACT_COLLECTION_LEASE_UNAVAILABLE"):
-            ActFixedCollectionWorkload(campaign, runtime=None).run_authorized(
-                bad, start_event_id="start-1", start_event_type="campaign_start", reset_epoch=4)
-    with pytest.raises(ValueError, match="ACT_COLLECTION_RESET_EPOCH_MISMATCH"):
-        ActFixedCollectionWorkload(campaign, runtime=None).run_authorized(
-            lease, start_event_id="start-1", start_event_type="campaign_start", reset_epoch=9)
-
-
-def test_workload_runs_inside_a_boundary_when_the_worker_supplies_one(tmp_path):
-    from so101_demo.act.parallel_collection import (
-        ActFixedCollectionWorkload, FixedActCollectionCampaign,
-    )
-
-    bounds = []
-
-    def boundary(work):
-        bounds.append("enter")
-        try:
-            return work()
-        finally:
-            bounds.append("exit")
-
-    manifest = {"kind": "EIGHT_WORKER", "scenarios": [{"scene_id": "act-0", "split": "train"}],
-                "qualification_contract": {"revoked": False, "scenes": 40}}
-    campaign = FixedActCollectionCampaign(manifest, {"max_wave_size": 20, "qualification": False},
-                                          context=None, root=tmp_path, collect_port=_CollectPort(),
-                                          claim=_Claim())
-    workload = ActFixedCollectionWorkload(campaign, runtime=None, boundary=boundary)
-    workload.run_authorized({"admitted": True, "start_event_id": "s", "start_event_type": "t",
-                             "reset_epoch": 1}, start_event_id="s", start_event_type="t",
-                            reset_epoch=1)
-    assert bounds == ["enter", "exit"]
-
-
-def test_workload_needs_a_campaign_that_can_run():
+def test_fixed_workload_refuses_dictionary_lease_before_any_port_call():
     from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 
-    workload = ActFixedCollectionWorkload(object(), runtime=None)
-    with pytest.raises(ValueError, match="ACT_COLLECTION_CAMPAIGN_UNAVAILABLE"):
-        workload.run_authorized({"admitted": True, "start_event_id": "s",
-                                 "start_event_type": "t", "reset_epoch": 1},
-                                start_event_id="s", start_event_type="t", reset_epoch=1)
+    workload = ActFixedCollectionWorkload(scene_ids=("act-1",))
+    for lease in ({"admitted": True}, None):
+        with pytest.raises(ValueError, match="ACT_COLLECTION_SCENE_NOT_RESERVED"):
+            workload.run_authorized(lease, runtime=None, broker=None,
+                boundary=lambda _call: pytest.fail("boundary entered for an invalid lease"),
+                teacher_boundary=None, stop_before_motion=None, recorder_stopped=None,
+                start_event_id="s", start_event_type="ATTEMPT_STARTED", reset_epoch="reset-1")
 
 
-def test_the_worker_accepts_either_act_workload_only_in_execute_mode(tmp_path):
-    """The worker's workload port is exact-typed: the two ACT workloads, and only in EXECUTE mode."""
+def test_workload_has_one_current_constructor():
+    from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 
-    from types import SimpleNamespace
+    with pytest.raises(TypeError):
+        ActFixedCollectionWorkload(object(), runtime=None)
 
+
+def test_worker_accepts_fixed_collection_workload_only_in_execute_mode():
     from parallel_batch_worker_support import Fake
     from so101_demo.parallel_batch.contracts.common import RunMode
     from so101_demo.parallel_batch.worker import ParallelWorker
     from so101_demo.parallel_batch.worker_parts.contracts import WorkerError
-
     from so101_demo.act import collection as act_collection
     from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 
-    workload = ActFixedCollectionWorkload(SimpleNamespace(run=lambda: {}), runtime=None)
+    workload = ActFixedCollectionWorkload(scene_ids=("p1",))
     ports = Fake(RunMode.EXECUTE).ports()
     ports["workload"] = workload
-    ParallelWorker(ports)                                     # accepted in EXECUTE mode
-    # the single-scenario port was dead code (no runtime implements `collect_authorized_scenario`) and is gone
+    ParallelWorker(ports)
     assert not hasattr(act_collection, "ActCollectionWorkload")
-
-    # outside EXECUTE mode neither may be attached
     for mode in (RunMode.PLAN_ONLY, RunMode.DRY_RUN):
         ports = Fake(mode).ports()
         ports["workload"] = workload
         with pytest.raises(WorkerError, match="WORKLOAD_PORT_INVALID"):
             ParallelWorker(ports)
-    # and an arbitrary object is still refused, so the port is not duck-typed
-    ports = Fake(RunMode.EXECUTE).ports()
-    ports["workload"] = SimpleNamespace(run=lambda: {}, kind="act_fixed_collection")
-    with pytest.raises(WorkerError, match="WORKLOAD_PORT_INVALID"):
-        ParallelWorker(ports)

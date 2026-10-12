@@ -35,34 +35,37 @@ def cylinder(*, radius=0.04, height=0.09):
     return mask, camera, message, transform
 
 
-def build_case(tmp_path, *, radius=0.04, height=0.09):
+def build_case(tmp_path, *, radius=0.04, height=0.09, identity=None, reset_epoch="reset-2"):
     from so101_demo.parallel_batch.artifacts import AttemptWorkspace
     from so101_demo.parallel_batch.contracts.common import ExecutionKind, RunMode
     from so101_demo.parallel_batch.contracts.identity import AttemptIdentity, LeaseIdentity
     from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
     module = importlib.import_module("so101_demo.runtime.act_ros_runtime")
-    identity = dict(batch_id="batch", coordinator_epoch=1, worker_id="worker", worker_generation=1,
-                    point_id="point", attempt_id="attempt", lease_generation=1)
+    if identity is None:
+        identity = dict(batch_id="batch", coordinator_epoch=1, worker_id="worker", worker_generation=1,
+                        point_id="point", attempt_id="attempt", lease_generation=1)
     lease = LeaseIdentity(**identity, lease_issued_monotonic_s=1., lease_deadline_monotonic_s=100.)
-    workspace = AttemptWorkspace.create(tmp_path / "workers/worker", AttemptIdentity(**identity),
-        reset_epoch="reset-2", source_stamp={"simulation_time_s": 10.0}, run_mode=RunMode.EXECUTE)
+    workspace = AttemptWorkspace.create(tmp_path / "workers" / identity["worker_id"], AttemptIdentity(**identity),
+        reset_epoch=reset_epoch, source_stamp={"simulation_time_s": 10.0,
+                                            "simulation_session_id": "session"}, run_mode=RunMode.EXECUTE)
     mask, camera, depth, transform = cylinder(radius=radius, height=height)
     calls, closed = [], []
     source = NS(lookup_exact=lambda *args: calls.append(args) or transform,
                 close=lambda: closed.append(True))
-    ports = module.ActRosRuntimePorts(NS(session_id="session", worker_id="worker", generation=1),
+    ports = module.ActRosRuntimePorts(NS(session_id="session", worker_id=identity["worker_id"],
+                                        generation=identity["worker_generation"]),
         catalog={}, config=NS(yolo_model_id="cup-model", max_frame_age_s=1., max_rgbd_skew_s=0.05,
                               max_tf_skew_s=0.05), broker_generation=1,
         dependencies={"workspace_provider": lambda _lease: workspace, "authorize": lambda _req: True,
           "source_clock": lambda _reset: 12.0, "dynamic_template": lambda: NS(
               workspace_bounds_m=(-0.2, -0.5, 0.1, 0.2, -0.1, 0.3))})
-    ports._reset_receipts["attempt"] = ResetBoundaryReceipt("reset-2", "session", 1., 10.)
+    ports._reset_receipts[identity["attempt_id"]] = ResetBoundaryReceipt(reset_epoch, "session", 1., 10.)
     ports._rgbd[12_000_000_000] = (source, camera, depth, "camera_optical")
     local = importlib.import_module("so101_demo.parallel_batch.act_inference")
     frame = local.ActInferenceFrame(np.zeros((120, 160, 3), dtype=np.uint8), 2., 12_000_000_000,
                                     "camera_optical", "session", "ros_sim", 1)
     request = local.ActInferenceRequest(**identity, request_id="r1", model_id="cup-model",
-        reset_epoch="reset-2", image_timestamp_s=12., execution_kind=ExecutionKind.ATTEMPT,
+        reset_epoch=reset_epoch, image_timestamp_s=12., execution_kind=ExecutionKind.ATTEMPT,
         source_stamp_ns=frame.source_stamp_ns, source_frame_id=frame.source_frame_id,
         image_shape=frame.shape, simulation_session_id="session", frame_sequence=1,
         service_generation="teacher-g1", deadline_monotonic_ns=10**18)
