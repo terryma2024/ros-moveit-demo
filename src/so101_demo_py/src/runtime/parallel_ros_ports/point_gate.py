@@ -86,8 +86,10 @@ class PointGate:
 
     def initial_gate(self, lease, reset_receipt):
         teacher_profile = self.dependencies.get("act_profile") is True
-        call = self.dependencies.get("observe_initial", observe_parallel_initial_gate)
-        value = call(reset_receipt)
+        namespace=self.worker_ros_namespace()
+        call = self.dependencies.get("observe_initial")
+        value=(call(reset_receipt) if call is not None else observe_parallel_initial_gate(
+            reset_receipt,namespace=namespace,teacher_profile=teacher_profile))
         if type(value) is not InitialGateObservation:
             failures = ["type"]
         else:
@@ -118,7 +120,7 @@ class PointGate:
                 (
                     "worker_nodes",
                     self.worker_node_inventory_matches(value.worker_node_fqns,
-                                                       teacher_profile=teacher_profile),
+                                                       teacher_profile=teacher_profile,namespace=namespace),
                 ),
             )
             failures = [name for name, accepted in predicates if not accepted]
@@ -126,7 +128,7 @@ class PointGate:
             message = "POINT_INITIAL_GATE_OBSERVATION_REJECTED:" + ",".join(failures)
             if type(value) is InitialGateObservation and "worker_nodes" in failures:
                 message += ";worker_nodes=" + _worker_node_diagnostic(
-                    value.worker_node_fqns, self.expected_worker_nodes()
+                    value.worker_node_fqns, tuple((namespace or '')+name for name in self.expected_worker_nodes())
                 )
             raise RuntimeError(message)
         return SimpleNamespace(

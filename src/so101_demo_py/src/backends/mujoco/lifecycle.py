@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from ...ports.lifecycle import PauseReceipt, ReadinessResult, ShutdownResult
+from ...runtime.container_campaign.ros_namespace import container_ros_init_options
 
 
 def _identity(evidence: Any) -> tuple[str, int]:
@@ -83,7 +84,7 @@ class MujocoPauseControl:
         from mujoco_ros2_control_msgs.srv import SetPause
 
         self._context = rclpy.context.Context()
-        rclpy.init(context=self._context)
+        rclpy.init(context=self._context,**container_ros_init_options())
         self._node = rclpy.create_node(
             "so101_live_runtime_pause_control", context=self._context
         )

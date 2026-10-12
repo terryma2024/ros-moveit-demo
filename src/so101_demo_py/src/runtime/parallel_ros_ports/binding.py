@@ -40,7 +40,14 @@ class RuntimeBinding:
         )
 
     @classmethod
-    def worker_node_inventory_matches(cls, nodes, *, teacher_profile=False):
+    def worker_node_inventory_matches(cls, nodes, *, teacher_profile=False,namespace=None):
+        if namespace is not None:
+            from so101_demo.runtime.container_campaign.ros_namespace import validate_container_namespace
+            validate_container_namespace(namespace)
+            if (type(nodes) is not tuple or any(type(node) is not str
+                    or not node.startswith(namespace+'/') for node in nodes)):
+                return False
+            nodes=tuple(node[len(namespace):] for node in nodes)
         if (
             type(nodes) is not tuple
             or any(not isinstance(node, str) for node in nodes)
@@ -78,6 +85,13 @@ class RuntimeBinding:
             and fixed_internal.issubset(nodes)
             and category_counts == [1, 1, 1]
         )
+
+    def worker_ros_namespace(self):
+        from so101_demo.runtime.container_campaign.ros_namespace import container_ros_namespace
+        namespace=container_ros_namespace()
+        if namespace is not None and namespace!=self.resources.controller_namespace:
+            raise ValueError('CONTAINER_ROS_NAMESPACE_DRIFT')
+        return namespace
 
     def rebind_resources(self, resources):
         if (

@@ -111,6 +111,8 @@ async def run_shard(spec, runtime_config):
             or os.environ.get("ROS_NAMESPACE") != spec["ros_namespace"]
             or os.environ.get("MUJOCO_GL") != "egl"):
         raise ValueError("CAMPAIGN_SHARD_ENVIRONMENT_DRIFT")
+    os.environ['SO101_ACT_CONTAINER_NAMESPACE']=spec['ros_namespace']
+    os.environ['SO101_ACT_CONTAINER_OWNED_ROOT']=spec['owned_root']
     prefix = Path(get_package_prefix("so101_demo_py"))
     observer = prefix / "lib/so101_demo_py/act_stack_ready"
     ros2 = prefix / "bin/ros2"

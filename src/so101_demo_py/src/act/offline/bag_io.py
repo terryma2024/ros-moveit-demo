@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from .container_bag_topics import logical_channel_map
 
 STORAGE_ID = "mcap"
 
@@ -17,11 +18,12 @@ def bag_info(uri) -> dict:
     import rosbag2_py
 
     metadata = rosbag2_py.Info().read_metadata(str(uri), STORAGE_ID)
+    names=logical_channel_map(uri,[item.topic_metadata.name for item in metadata.topics_with_message_count])
     return {
         "message_count": int(metadata.message_count),
         "starting_time_ns": int(metadata.starting_time.nanoseconds),
         "duration_ns": int(metadata.duration.nanoseconds),
-        "topics": {item.topic_metadata.name: {"type": item.topic_metadata.type, "count": int(item.message_count),
+        "topics": {names[item.topic_metadata.name]: {"type": item.topic_metadata.type, "count": int(item.message_count),
                                                 "qos": item.topic_metadata.offered_qos_profiles}
                    for item in metadata.topics_with_message_count},
     }
@@ -34,11 +36,15 @@ def read_messages(uri, topics=None):
     reader = rosbag2_py.SequentialReader()
     reader.open(_storage(Path(uri)), rosbag2_py.ConverterOptions("", ""))
     types = {item.name: item.type for item in reader.get_all_topics_and_types()}
+    names=logical_channel_map(uri,types)
     if topics is not None:
-        reader.set_filter(rosbag2_py.StorageFilter(topics=list(topics)))
+        wanted=set(topics)
+        selected=[physical for physical,logical in names.items() if logical in wanted]
+        if wanted and not selected:return
+        reader.set_filter(rosbag2_py.StorageFilter(topics=selected))
     while reader.has_next():
         topic, data, stamp = reader.read_next()
-        yield topic, types[topic], int(stamp), bytes(data)
+        yield names[topic], types[topic], int(stamp), bytes(data)
 
 
 class BagWriter:

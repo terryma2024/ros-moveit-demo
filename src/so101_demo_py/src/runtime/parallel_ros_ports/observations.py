@@ -20,6 +20,7 @@ from so101_demo.parallel_batch.perception import (
     LocalizedPose,
 )
 from so101_demo.runtime.parallel_ros_ports.binding import RuntimeBinding
+from so101_demo.runtime.container_campaign.ros_namespace import container_ros_init_options
 from so101_demo.runtime.parallel_ros_ports.isolated_node import (
     _ACTIVE_GOAL_STATES,
     _open_isolated_ros_node,
@@ -150,7 +151,7 @@ def observe_worker_shutdown(session_id: str, *, timeout_s: float) -> ShutdownObs
 
     initialized_here = not rclpy.ok()
     if initialized_here:
-        rclpy.init()
+        rclpy.init(**container_ros_init_options())
     node = rclpy.create_node("so101_parallel_recovery_observer")
     deadline = time.monotonic() + timeout_s
     previous = None
@@ -462,6 +463,8 @@ def observe_parallel_initial_gate(
     boundary: ResetBoundaryReceipt,
     *,
     timeout_s: float = 5.0,
+    namespace: str | None = None,
+    teacher_profile: bool = False,
 ) -> InitialGateObservation:
     """Collect fresh joint, goal, scene, graph and MuJoCo contact observations."""
 
@@ -481,7 +484,7 @@ def observe_parallel_initial_gate(
 
     initialized_here = not rclpy.ok()
     if initialized_here:
-        rclpy.init()
+        rclpy.init(**container_ros_init_options())
     service_node = rclpy.create_node("so101_parallel_gate_services")
     graph_node = rclpy.create_node("so101_parallel_gate_graph")
     goal_receipts = {}
@@ -557,7 +560,8 @@ def observe_parallel_initial_gate(
                 and all(future.done() for future in cancel_futures.values())
                 and scene_future.done()
                 and stable_graph_samples >= 2
-                and RuntimeBinding.worker_node_inventory_matches(graph)
+                and RuntimeBinding.worker_node_inventory_matches(graph,
+                    namespace=namespace,teacher_profile=teacher_profile)
             ):
                 break
         else:

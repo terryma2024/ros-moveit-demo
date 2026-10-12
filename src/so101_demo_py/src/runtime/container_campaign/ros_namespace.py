@@ -1,6 +1,7 @@
 """Explicit container ROS addressing; frame IDs and robot parameters stay intact."""
 
 import copy
+import os
 import re
 
 
@@ -44,7 +45,7 @@ def namespace_remappings(namespace):
         "trajectory_execution_event", "display_planned_path")
     # Jazzy's installed rcl rejects wildcard remap rules. Keep all current
     # absolute endpoints explicit; relative names already use PushRosNamespace.
-    endpoints = set(names)
+    endpoints = set(names)|{'cup_pose','mujoco_ros2_control_node/set_pause'}
     controllers = ('arm_controller','gripper_controller','neck_controller')
     for controller in controllers:
         for topic in ('controller_state','state','joint_trajectory','speed_scaling_input',
@@ -70,3 +71,27 @@ def namespace_remappings(namespace):
         'simulation/physics_cancellation_ack','simulation/physics_step_fence_request','simulation/physics_step_fence_ack'))
     endpoints.add('move_group/moveit')
     return tuple(('/'+name,namespace+'/'+name) for name in sorted(endpoints))
+
+
+def container_ros_namespace(*,environment=None):
+    """Addressing marker set only after native entry validates the shard spec.
+
+    This is not motion/resource authority. Generic processes without the marker
+    keep their original ROS argument and endpoint behavior.
+    """
+    values=os.environ if environment is None else environment
+    namespace=values.get('SO101_ACT_CONTAINER_NAMESPACE')
+    if namespace is None:return None
+    validate_container_namespace(namespace)
+    if values.get('ROS_NAMESPACE')!=namespace:
+        raise ValueError('CONTAINER_ROS_NAMESPACE_DRIFT')
+    return namespace
+
+
+def container_ros_init_options(*,environment=None):
+    namespace=container_ros_namespace(environment=environment)
+    if namespace is None:return {}
+    args=['--ros-args','-r','__ns:='+namespace]
+    for source,target in namespace_remappings(namespace):
+        args.extend(['-r',source+':='+target])
+    return dict(args=args)

@@ -13,6 +13,7 @@ import stat
 import time
 
 from so101_demo.parallel_batch.contracts.common import AttemptStatus
+from so101_demo.runtime.container_campaign.ros_namespace import container_ros_init_options
 from so101_demo.parallel_batch.start_guard_probe import read_process_identity
 from so101_demo.runtime.parallel_worker_parts.plan_prefix import RosDynamicPlanPrefixAdapter
 from so101_demo.runtime.parallel_worker_parts.receipts import (
@@ -38,7 +39,7 @@ class ExecutionPorts:
         from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
 
         context = rclpy.context.Context()
-        rclpy.init(context=context)
+        rclpy.init(context=context,**container_ros_init_options())
         node = rclpy.create_node(
             "so101_parallel_planner",
             context=context,
