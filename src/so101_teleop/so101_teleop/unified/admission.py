@@ -690,6 +690,9 @@ class UnifiedWorkloadService:
                     if row is None:
                         raise ValueError("CAMPAIGN_CONTEXT_MISSING")
                     return AdmittedCampaignContext.from_dict(json.loads(row[0]))
+                if (spec.kind == 'act_collection_start'
+                        and spec.execution_generation != store.execution_generation(Domain.VALIDATION)+1):
+                    raise ValueError('ACT_CONTAINER_GENERATION_STALE')
             # Reserve the complete child map before taking either durable resource.
             # Another registry user cannot create a collision between validation and
             # persistence, and a failed database/lease step rolls this map back.
@@ -707,6 +710,10 @@ class UnifiedWorkloadService:
                 try:
                     with store.immediate_transaction():
                         store.require_idle()
+                        if spec.kind == 'act_collection_start':
+                            if spec.execution_generation != store.execution_generation(Domain.VALIDATION)+1:
+                                raise ValueError('ACT_CONTAINER_GENERATION_STALE')
+                            store.bump_execution_generation_locked(Domain.VALIDATION)
                         reservation = store.insert_parent(spec, operation_id=operation_id)
                         child_map = [item.__dict__ for item in children]
                         child_map_sha256 = hashlib.sha256(json.dumps(

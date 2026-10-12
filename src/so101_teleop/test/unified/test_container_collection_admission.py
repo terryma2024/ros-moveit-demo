@@ -23,7 +23,8 @@ def fixture(tmp_path):
     root = paths['run']
     fingerprint, proposal, activation, receipt = _write_policy(root)
     activation.write_text(json.dumps(receipt))
-    base = _start_spec(root, fingerprint, proposal, activation, calibration_status='QUALIFIED')
+    base = replace(_start_spec(root, fingerprint, proposal, activation, calibration_status='QUALIFIED'),
+                   execution_generation=1)
     runtime = json.loads(Path(base.payload['runtime_config_path']).read_text())
     detector = runtime['head_search']['detector']
     image = dict(digest='sha256:'+'b'*64, package_source_sha256='c'*64, install_sha256='d'*64)
