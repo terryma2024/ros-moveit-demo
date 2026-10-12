@@ -176,6 +176,44 @@ def observe_worker_shutdown(session_id: str, *, timeout_s: float) -> ShutdownObs
             rclpy.shutdown()
 
 
+_GOAL_LANES = {
+    "arm": "/arm_controller/follow_joint_trajectory/_action",
+    "gripper": "/gripper_controller/follow_joint_trajectory/_action",
+    "moveit": "/execute_trajectory/_action",
+}
+
+
+def _lane_settled(statuses, answer):
+    """Whether one action lane has no live goal.
+
+    A lane that published a status is settled when none of its goals is accepted, executing or canceling. An action
+    server that never had a goal publishes no status at all, so such a lane is settled by the server's own answer to a
+    cancel-all request: success with no goal canceling. A live goal would be in that answer, so the rule never accepts one."""
+    if statuses is not None:
+        return all(status not in _ACTIVE_GOAL_STATES for status in statuses)
+    return (answer is not None and getattr(answer, "return_code", None) == 0
+            and not answer.goals_canceling)
+
+
+def _log_goal_check_failure(kind, statuses, answers, services):
+    """One stderr line naming, per lane, what the check saw: the next failure must not need a guess."""
+    import json
+    import sys
+
+    lanes = {}
+    for name in _GOAL_LANES:
+        answer = answers.get(name)
+        lanes[name] = {
+            "service_ready": services.get(name),
+            "answer": None if answer is None else {
+                "return_code": getattr(answer, "return_code", None),
+                "goals_canceling": len(answer.goals_canceling)},
+            "statuses": statuses[name],
+        }
+    print("PARALLEL_GOAL_CHECK_UNSETTLED " + json.dumps({"check": kind, "lanes": lanes}, sort_keys=True),
+          file=sys.stderr, flush=True)
+
+
 def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
     """Cancel arm, gripper, and MoveIt execution goals and observe all settled."""
 
@@ -186,11 +224,7 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
 
     owner = _open_isolated_ros_node(rclpy, "so101_parallel_goal_cancellation")
     node = owner.node
-    names = {
-        "arm": "/arm_controller/follow_joint_trajectory/_action",
-        "gripper": "/gripper_controller/follow_joint_trajectory/_action",
-        "moveit": "/execute_trajectory/_action",
-    }
+    names = _GOAL_LANES
     statuses = {name: None for name in names}
 
     def callback(name):
@@ -211,26 +245,25 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
         name: node.create_client(CancelGoal, prefix + "/cancel_goal")
         for name, prefix in names.items()
     }
+    services = {}
+    futures = {}
     try:
         deadline = time.monotonic() + timeout_s
-        futures = []
-        for client in clients.values():
+        for name, client in clients.items():
             remaining = deadline - time.monotonic()
-            if remaining <= 0 or not client.wait_for_service(timeout_sec=remaining):
+            services[name] = remaining > 0 and client.wait_for_service(timeout_sec=remaining)
+            if not services[name]:
+                _log_goal_check_failure("cancel", statuses, {}, services)
                 return False
-            futures.append(client.call_async(CancelGoal.Request()))
+            futures[name] = client.call_async(CancelGoal.Request())
         while time.monotonic() < deadline:
             owner.spin_once(timeout_sec=0.01)
-            if (
-                all(future.done() and future.result() is not None for future in futures)
-                and all(value is not None for value in statuses.values())
-                and all(
-                    status not in _ACTIVE_GOAL_STATES
-                    for values in statuses.values()
-                    for status in values
-                )
+            if all(future.done() and future.result() is not None for future in futures.values()) and all(
+                _lane_settled(statuses[name], futures[name].result()) for name in names
             ):
                 return True
+        _log_goal_check_failure("cancel", statuses, {
+            name: future.result() for name, future in futures.items() if future.done()}, services)
         return False
     finally:
         del subscriptions
@@ -238,41 +271,50 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
 
 
 def observe_no_parallel_goals(*, timeout_s: float) -> bool:
-    """Independently observe exact controller and MoveIt status topics settled."""
+    """Independently observe exact controller and MoveIt status topics settled.
+
+    A lane that published no status is settled by an empty cancel-all answer, see `_lane_settled`; the request only asks
+    the server to cancel what it has, so it can stop a late goal but never starts one."""
 
     from action_msgs.msg import GoalStatusArray
+    from action_msgs.srv import CancelGoal
     import rclpy
     from rclpy.qos import qos_profile_action_status_default
 
     owner = _open_isolated_ros_node(rclpy, "so101_parallel_goal_confirmation")
     node = owner.node
-    topics = (
-        "/arm_controller/follow_joint_trajectory/_action/status",
-        "/gripper_controller/follow_joint_trajectory/_action/status",
-        "/execute_trajectory/_action/status",
-    )
-    statuses = {topic: None for topic in topics}
+    names = _GOAL_LANES
+    statuses = {name: None for name in names}
     subscriptions = [
         node.create_subscription(
             GoalStatusArray,
-            topic,
-            lambda message, key=topic: statuses.__setitem__(
+            prefix + "/status",
+            lambda message, key=name: statuses.__setitem__(
                 key, tuple(int(item.status) for item in message.status_list)
             ),
             qos_profile_action_status_default,
         )
-        for topic in topics
+        for name, prefix in names.items()
     ]
+    clients = {
+        name: node.create_client(CancelGoal, prefix + "/cancel_goal")
+        for name, prefix in names.items()
+    }
+    services = {}
+    futures = {}
     try:
         deadline = time.monotonic() + timeout_s
+        for name, client in clients.items():
+            services[name] = client.wait_for_service(timeout_sec=max(0.0, min(1.0, deadline - time.monotonic())))
+            if services[name]:
+                futures[name] = client.call_async(CancelGoal.Request())
         while time.monotonic() < deadline:
             owner.spin_once(timeout_sec=0.01)
-            if all(value is not None for value in statuses.values()):
-                return all(
-                    status not in _ACTIVE_GOAL_STATES
-                    for values in statuses.values()
-                    for status in values
-                )
+            answers = {name: future.result() for name, future in futures.items() if future.done()}
+            if all(_lane_settled(statuses[name], answers.get(name)) for name in names):
+                return True
+        _log_goal_check_failure("confirm", statuses, {
+            name: future.result() for name, future in futures.items() if future.done()}, services)
         return False
     finally:
         del subscriptions

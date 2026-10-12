@@ -126,6 +126,9 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
             check('controller_proven',lambda:absent is True or self._confirm_no_controller_goal(lease) is True)
         else:
             check('controller_proven',lambda:cancelled is True and self._confirm_no_controller_goal(lease) is True)
+        if lease is not None and self._lease_key(lease) in self._physics_held:
+            # before the runtime closes its pause control: native retirement must find the simulation running
+            check('physics_resumed',lambda:self.release_physics_hold(lease))
         check('runtime_closed',lambda:self._close_runtime() or True)
         if lease is not None:
             key=self._lease_key(lease)

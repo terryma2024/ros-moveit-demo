@@ -52,7 +52,7 @@ def _mkdir_private_chain(root, target):
     return target
 
 
-def _worker_node_diagnostic(observed, expected):
+def _worker_node_diagnostic(observed, expected, *, max_bytes=320):
     """Return bounded deterministic detail without changing exact equality."""
 
     normalized = tuple(
@@ -82,7 +82,7 @@ def _worker_node_diagnostic(observed, expected):
     }
     bounded["truncated"] = truncated
     payload = json.dumps(bounded, sort_keys=True, separators=(",", ":"))
-    while len(payload.encode()) > 320:
+    while len(payload.encode()) > max_bytes:
         for name in ("unexpected", "duplicates", "missing"):
             if bounded[name]:
                 bounded[name].pop()

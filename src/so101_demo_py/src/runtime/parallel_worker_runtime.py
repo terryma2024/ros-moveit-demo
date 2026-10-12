@@ -261,6 +261,8 @@ class ParallelWorkerRuntime(WorkerCaptures, PointProtocol, CollectionRecorder, E
         self._published_pose_keys: set[tuple[object, ...]] = set()
         self._execute_consumers: dict[tuple[object, ...], Any] = {}
         self._paused_for_inference: set[tuple[object, ...]] = set()
+        # leases whose reset or inference freeze still holds the simulation paused (resumed by the gate or localization)
+        self._physics_held: set[tuple[object, ...]] = set()
         self._active_lease: Any | None = None
         self._stop_requested = threading.Event()
         self._revocation_receipt_lock = threading.Lock()

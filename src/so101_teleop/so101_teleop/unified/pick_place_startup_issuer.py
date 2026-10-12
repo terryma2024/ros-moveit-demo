@@ -43,6 +43,14 @@ def _validated_observation(raw: bytes, *, session_id: str, ros_domain_id: int,
         raise ValueError("ACT_STACK_READINESS_OUTPUT_INVALID") from error
 
 
+def _observer_failure(result) -> str:
+    """The failed observer's exit code and its last stderr line, which names the check that was not ready."""
+    message = f"ACT_STACK_READINESS_COMMAND_FAILED rc={result.returncode}"
+    stderr = result.stderr if isinstance(result.stderr, bytes) else b""
+    lines = [line for line in stderr.decode("utf-8", errors="replace").splitlines() if line.strip()]
+    return message + (": " + lines[-1].strip()[:600] if lines else "")
+
+
 class InstalledActStackReadinessProbe:
     """Run the installed no-motion observer once in the owned stack's exact domain."""
 
@@ -89,7 +97,7 @@ class InstalledActStackReadinessProbe:
         except (OSError, subprocess.TimeoutExpired) as error:
             raise ValueError("ACT_STACK_READINESS_COMMAND_FAILED") from error
         if result.returncode != 0:
-            raise ValueError("ACT_STACK_READINESS_COMMAND_FAILED")
+            raise ValueError(_observer_failure(result))
         raw = result.stdout
         _validated_observation(raw, session_id=self.launch.session_id,
                                ros_domain_id=self.launch.ros_domain_id,

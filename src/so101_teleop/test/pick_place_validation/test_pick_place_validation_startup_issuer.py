@@ -119,6 +119,37 @@ def test_probe_rejects_wrong_or_stale_observation_without_writing(tmp_path, chan
     assert not (root / "readiness.json").exists()
 
 
+def test_failed_observer_error_carries_the_observers_last_stderr_line(tmp_path):
+    """The observer prints why it was not ready as its last stderr line; that line used to be dropped."""
+    context, child, launch, root, artifact = prepared(tmp_path)
+    binary = tmp_path / "act_stack_ready"
+    binary.write_text("#!/usr/bin/env python3\n")
+    binary.chmod(0o700)
+    failure = '{"checks":{"advancing_physics":false},"failure_code":"ACT_STACK_WORLD_SESSION_INVALID","ready":false}'
+
+    def runner(argv, **kwargs):
+        return subprocess.CompletedProcess(
+            argv, 1, b"", b"[WARN] [rcl]: ROS_LOCALHOST_ONLY is deprecated\n" + failure.encode() + b"\n")
+
+    probe = InstalledActStackReadinessProbe(launch, binary, run=runner, clock_ns=lambda: NOW_NS)
+    with pytest.raises(ValueError, match="^ACT_STACK_READINESS_COMMAND_FAILED rc=1: ") as caught:
+        probe()
+    assert failure in str(caught.value) and "ROS_LOCALHOST_ONLY" not in str(caught.value)
+
+    long = InstalledActStackReadinessProbe(
+        launch, binary, clock_ns=lambda: NOW_NS,
+        run=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 2, b"", b"x" * 5000))
+    with pytest.raises(ValueError) as caught:
+        long()
+    assert len(str(caught.value)) < 1000
+
+    silent = InstalledActStackReadinessProbe(
+        launch, binary, clock_ns=lambda: NOW_NS,
+        run=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 3, b"", b""))
+    with pytest.raises(ValueError, match="^ACT_STACK_READINESS_COMMAND_FAILED rc=3$"):
+        silent()
+
+
 def test_failed_observer_and_retired_owner_cannot_issue(tmp_path):
     context, child, launch, root, artifact = prepared(tmp_path)
     probe, _ = observe(tmp_path, launch, artifact, returncode=1)

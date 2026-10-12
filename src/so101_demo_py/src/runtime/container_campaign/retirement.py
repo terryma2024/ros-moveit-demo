@@ -64,6 +64,16 @@ def _native(raw, *, owner, session_id, ros_domain_id, after_ns):
     return value
 
 
+def _with_causes(error, limit=1200):
+    """The error text followed by its causes: a stop that failed only says `STOP_NOT_CONFIRMED` without the probe's own words."""
+    parts, seen, current = [str(error)], {id(error)}, error.__cause__
+    while current is not None and id(current) not in seen and len(parts) < 4:
+        seen.add(id(current))
+        parts.append(f"{type(current).__name__}: {current}")
+        current = current.__cause__
+    return " <- ".join(parts)[:limit]
+
+
 def _goals_stopped(goal,native):
     # No-status idle servers still need a positive original ACK on every lane,
     # physical stop and termination of every owned action-server process. No
@@ -137,7 +147,7 @@ class NativeShardRetirement:
             _write(audit_root, "stack-stop.json", raw)
             native_ref = hashlib.sha256(raw).hexdigest()
         except Exception as error:
-            errors.append(dict(boundary="native_stop", error_type=type(error).__name__, reason=str(error)))
+            errors.append(dict(boundary="native_stop", error_type=type(error).__name__, reason=_with_causes(error)))
             native_observation = None
         if not process_owner_matches(self.owner) or pid_namespace_inode() != self.namespace_inode:
             raise ValueError("SHARD_RETIREMENT_PROCESS_CHANGED")

@@ -348,3 +348,68 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
     assert seen["camera"] is camera
     assert seen["depth"] is depth
     assert seen["transform"] == ("world", "task_camera_frame", 12_000_000_000)
+
+
+def _rejected_namespaced_gate(tmp_path, monkeypatch, *, observed, attempt_root=True):
+    from so101_demo.runtime.parallel_ros_ports.observations import (
+        InitialGateObservation,
+        ResetBoundaryReceipt,
+    )
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    namespace = "/act/campaign_w1f_20261012T220436Z/w00"
+    monkeypatch.setenv("SO101_ACT_CONTAINER_NAMESPACE", namespace)
+    monkeypatch.setenv("ROS_NAMESPACE", namespace)
+    reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
+    observation = InitialGateObservation(
+        reset_epoch="reset-2", simulation_session_id="session-1",
+        source_frame_monotonic_s=11.0, joint_positions=(0.0,) * 6,
+        active_controller_goal_ids=(), moveit_attached_object_ids=(),
+        has_contact=False, worker_node_fqns=tuple(sorted(observed)), node_graph_stable=True,
+    )
+    resources = SimpleNamespace(session_id="session-1", controller_namespace=namespace)
+    if attempt_root:
+        resources.worker_root = tmp_path
+    ports = ParallelRosRuntimePorts(
+        resources,
+        catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
+        dependencies={"observe_initial": lambda _boundary: observation, "act_profile": True},
+    )
+    with pytest.raises(RuntimeError) as rejected:
+        ports.initial_gate(_lease(), reset)
+    return namespace, str(rejected.value)
+
+
+def test_a_rejected_worker_inventory_keeps_the_full_observation_in_a_file(tmp_path, monkeypatch):
+    """The 300 character fault reason cut off the node list; the whole observation goes to the task directory."""
+    namespace = "/act/campaign_w1f_20261012T220436Z/w00"
+    required = tuple(namespace + name for name in (
+        "/arm_controller", "/gripper_controller", "/neck_controller", "/joint_state_broadcaster", "/move_group",
+        "/mujoco_ros2_control_node", "/robot_state_publisher", "/so101_base_to_camera_link",
+        "/so101_camera_link_to_task_camera_frame", "/controller_manager",
+        "/move_group_private_94319910618432", "/moveit_simple_controller_manager", "/robotsystem",
+        "/transform_listener_impl_abcdef"))
+    stray = tuple(f"{namespace}/stray_node_{index:02d}" for index in range(20))
+    observed = (*required, *stray)
+
+    _namespace, message = _rejected_namespaced_gate(tmp_path, monkeypatch, observed=observed)
+
+    assert message.startswith("POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes;worker_nodes=")
+    assert len(message) <= 300
+    name = message.split(";observation=", 1)[1]
+    assert name == "gate-observation-attempt-1.json"
+    document = json.loads((tmp_path / name).read_text())
+    assert document["failures"] == ["worker_nodes"]
+    assert document["worker_nodes"]["observed"] == sorted(observed)
+    assert document["worker_nodes"]["unknown"] == sorted(node.removeprefix(namespace) for node in stray)
+    assert "/moveit" in document["worker_nodes"]["missing_internal"]
+    assert document["worker_nodes"]["namespace"] == namespace
+
+
+def test_a_rejected_worker_inventory_without_a_task_directory_keeps_the_original_message(tmp_path, monkeypatch):
+    _namespace, message = _rejected_namespaced_gate(
+        tmp_path, monkeypatch, observed=("/act/campaign_w1f_20261012T220436Z/w00/move_group",), attempt_root=False)
+
+    assert message.startswith("POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes;worker_nodes=")
+    assert ";observation=" not in message
+    assert list(tmp_path.iterdir()) == []

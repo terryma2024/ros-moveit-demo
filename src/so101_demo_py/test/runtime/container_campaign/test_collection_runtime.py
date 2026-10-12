@@ -224,6 +224,43 @@ def test_retire_case_names_the_fact_that_failed(tmp_path,monkeypatch,problem):
         'not_ready':{'ready_gate'},'stale_manifest_file':{'manifest_readback_empty'}}[problem]
 
 
+def _reset_receipt():
+    from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
+    return ResetBoundaryReceipt('reset-2','session1',10.5,1.,2)
+
+
+def test_retire_case_resumes_a_simulation_the_task_left_paused(tmp_path,monkeypatch):
+    """The reset freezes physics for the point gate and the gate resumes it. A fault in between must not hand the stack
+    back to native retirement frozen: the stop check needs advancing physics and fresh samples."""
+    resumed=[]
+    receipt=_reset_receipt()
+    runtime,lease,tree,stack,data=_retire_rig(tmp_path,monkeypatch,reset_point=lambda lease:receipt,
+        resume_physics=lambda lease,reset:resumed.append((lease,reset)) or True)
+    runtime.reset_point(lease)
+    assert resumed==[]
+    proofs=runtime.retire_case(lease,cancelled=False,absent=False)
+    assert resumed==[(lease,receipt)] and proofs['physics_resumed'] is True
+    runtime.retire_case(lease,cancelled=False,absent=False)
+    assert len(resumed)==1   # the hold is released once
+
+
+def test_retire_case_reports_a_simulation_it_could_not_resume(tmp_path,monkeypatch):
+    runtime,lease,tree,stack,data=_retire_rig(tmp_path,monkeypatch,reset_point=lambda lease:_reset_receipt(),
+        resume_physics=lambda lease,reset:False)
+    runtime.reset_point(lease)
+    proofs=runtime.retire_case(lease,cancelled=False,absent=False)
+    assert proofs['physics_resumed'] is False
+    assert runtime.retire_case(lease,cancelled=False,absent=False)['physics_resumed'] is False   # still held, tried again
+
+
+def test_retire_case_leaves_a_running_simulation_alone(tmp_path,monkeypatch):
+    resumed=[]
+    runtime,lease,tree,stack,data=_retire_rig(tmp_path,monkeypatch,
+        resume_physics=lambda lease,reset:resumed.append(lease) or True)
+    proofs=runtime.retire_case(lease,cancelled=None,absent=False)
+    assert 'physics_resumed' not in proofs and resumed==[]
+
+
 def test_retire_case_reports_a_helper_that_survives_its_signals(tmp_path,monkeypatch):
     runtime,lease,tree,stack,data=_retire_rig(tmp_path,monkeypatch,
         tree=dict(signal_process=lambda pid,signum:None,interrupt_timeout_s=.2,terminate_timeout_s=.2))

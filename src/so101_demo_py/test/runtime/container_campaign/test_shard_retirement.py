@@ -145,6 +145,34 @@ def test_uncertain_or_forced_stop_is_retained_and_never_retried(tmp_path, monkey
             ros_namespace="/act/campaign/w00", session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
 
 
+def test_an_unconfirmed_native_stop_names_what_the_stack_probe_saw(tmp_path, monkeypatch):
+    """`STOP_NOT_CONFIRMED` alone left a real run undiagnosable: the observer's own failure line was dropped."""
+    import json
+    from so101_teleop.unified.contracts import MutationError
+    mod, root, owner, _native, retirement, calls = fixture(tmp_path, monkeypatch)
+    observer_line = '{"checks":{"advancing_physics":false},"failure_code":"ACT_STACK_WORLD_SESSION_INVALID","ready":false}'
+
+    async def refuse(**kwargs):
+        calls.append("native-stop")
+        try:
+            raise ValueError("ACT_STACK_READINESS_COMMAND_FAILED rc=1: " + observer_line)
+        except ValueError as error:
+            raise MutationError("STOP_NOT_CONFIRMED") from error
+
+    retirement.stack.stop = refuse
+    receipt = asyncio.run(retirement.retire(fenced=True))
+    assert receipt["controllers_stopped"] is False
+    audit = json.loads((root / "retirement/audit.json").read_bytes())
+    (error,) = audit["errors"]
+    assert error["boundary"] == "native_stop" and error["error_type"] == "MutationError"
+    assert error["reason"].startswith("STOP_NOT_CONFIRMED")
+    assert "ACT_STACK_WORLD_SESSION_INVALID" in error["reason"] and len(error["reason"]) <= 1500
+    # the written evidence still reads back as an unconfirmed stop
+    with pytest.raises(ValueError, match="SHARD_STOP_EVIDENCE_UNCONFIRMED"):
+        mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7,
+            ros_namespace="/act/campaign/w00", session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
+
+
 def test_unfenced_stop_cannot_invoke_ros_or_publish_receipt(tmp_path, monkeypatch):
     _, root, _owner, _native, retirement, calls = fixture(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="SHARD_RETIREMENT_NOT_FENCED"):

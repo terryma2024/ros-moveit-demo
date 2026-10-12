@@ -215,3 +215,116 @@ def test_recovery_goal_checks_use_transient_local_action_status_qos(monkeypatch)
     assert ros_runtime_observations.cancel_and_confirm_parallel_goals(timeout_s=1.0) is True
     assert ros_runtime_observations.observe_no_parallel_goals(timeout_s=1.0) is True
     assert captured_qos == [qos_profile_action_status_default] * 6
+
+
+class _GoalLaneNode:
+    """Three action lanes whose cancel-all answer and status samples a test chooses; nothing else."""
+
+    def __init__(self, *, canceling, statuses, return_code=0):
+        self.canceling, self.statuses, self.return_code = canceling, statuses, return_code
+        self.callbacks = {}
+        self.cancel_requests = []
+
+    def create_subscription(self, _message, topic, callback, _qos):
+        self.callbacks[topic] = callback
+        return object()
+
+    def create_client(self, _service, topic):
+        node = self
+
+        class Client:
+            @staticmethod
+            def wait_for_service(*, timeout_sec):
+                return timeout_sec > 0.0
+
+            @staticmethod
+            def call_async(_request):
+                node.cancel_requests.append(topic)
+                goals = node.canceling.get(topic.removesuffix("/cancel_goal"), [])
+
+                class Future:
+                    @staticmethod
+                    def done():
+                        return True
+
+                    @staticmethod
+                    def result():
+                        return SimpleNamespace(return_code=node.return_code, goals_canceling=goals)
+
+                return Future()
+
+        return Client()
+
+
+class _GoalLaneOwner:
+    def __init__(self, node):
+        self.node = node
+
+    def spin_once(self, *, timeout_sec):
+        assert timeout_sec > 0.0
+        for topic, callback in self.node.callbacks.items():
+            states = self.node.statuses.get(topic.removesuffix("/status"))
+            if states is not None:
+                callback(SimpleNamespace(status_list=[SimpleNamespace(status=state) for state in states]))
+
+    @staticmethod
+    def close():
+        return None
+
+
+_LANES = (
+    "/arm_controller/follow_joint_trajectory/_action",
+    "/gripper_controller/follow_joint_trajectory/_action",
+    "/execute_trajectory/_action",
+)
+
+
+def _goal_checks(monkeypatch, *, canceling=None, statuses=None, return_code=0):
+    from so101_demo.runtime.parallel_ros_ports import observations as ros_runtime_observations
+
+    node = _GoalLaneNode(canceling=canceling or {}, statuses=statuses or {}, return_code=return_code)
+    monkeypatch.setattr(
+        ros_runtime_observations, "_open_isolated_ros_node", lambda *_args, **_kwargs: _GoalLaneOwner(node)
+    )
+    return (
+        ros_runtime_observations.cancel_and_confirm_parallel_goals(timeout_s=0.3),
+        ros_runtime_observations.observe_no_parallel_goals(timeout_s=0.3),
+        node,
+    )
+
+
+def test_idle_action_servers_that_never_published_a_status_are_settled_by_an_empty_cancel_answer(monkeypatch):
+    """An action server that never had a goal publishes no status; its empty cancel-all answer is the evidence."""
+    cancelled, confirmed, node = _goal_checks(monkeypatch)
+
+    assert cancelled is True
+    assert confirmed is True
+    assert sorted(node.cancel_requests) == sorted([lane + "/cancel_goal" for lane in _LANES] * 2)
+
+
+def test_a_lane_with_a_live_goal_is_never_settled_by_the_idle_rule(monkeypatch):
+    goal = SimpleNamespace(goal_id=SimpleNamespace(uuid=[1] * 16))
+    live_ack = {_LANES[0]: [goal]}
+
+    cancelled, confirmed, _node = _goal_checks(monkeypatch, canceling=live_ack)
+    assert cancelled is False
+    assert confirmed is False
+
+    # a status sample that still shows a goal accepted or executing keeps the lane open, whatever the ack says
+    for state in (1, 2, 3):
+        cancelled, confirmed, _node = _goal_checks(monkeypatch, statuses={_LANES[2]: [state]})
+        assert cancelled is False
+        assert confirmed is False
+
+    # an answer that is not a plain success is not idle evidence either
+    cancelled, confirmed, _node = _goal_checks(monkeypatch, return_code=1)
+    assert cancelled is False
+    assert confirmed is False
+
+
+def test_lanes_with_settled_statuses_still_settle(monkeypatch):
+    cancelled, confirmed, _node = _goal_checks(
+        monkeypatch, statuses={lane: [4, 5, 6] for lane in _LANES})
+
+    assert cancelled is True
+    assert confirmed is True

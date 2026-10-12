@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
+from pathlib import Path
+import re
 import time
 from types import SimpleNamespace
 
@@ -127,9 +130,16 @@ class PointGate:
         if failures:
             message = "POINT_INITIAL_GATE_OBSERVATION_REJECTED:" + ",".join(failures)
             if type(value) is InitialGateObservation and "worker_nodes" in failures:
+                # The fault reason is capped at 300 characters, which cuts off a long node list. When the task directory
+                # exists the whole observation is written there and the reason names the file, after a shorter summary.
+                reference = self._write_gate_observation(
+                    lease, value, failures, namespace=namespace, teacher_profile=teacher_profile)
                 message += ";worker_nodes=" + _worker_node_diagnostic(
-                    value.worker_node_fqns, tuple((namespace or '')+name for name in self.expected_worker_nodes())
+                    value.worker_node_fqns, tuple((namespace or '')+name for name in self.expected_worker_nodes()),
+                    max_bytes=320 if reference is None else 100,
                 )
+                if reference is not None:
+                    message += ";observation=" + reference
             raise RuntimeError(message)
         return SimpleNamespace(
             batch_id=lease.batch_id,
@@ -148,6 +158,40 @@ class PointGate:
             no_contact=True,
             no_stale_node=True,
         )
+
+    def _write_gate_observation(self, lease, value, failures, *, namespace, teacher_profile):
+        """Write the complete rejected gate observation beside the task's other evidence; the file name, or None."""
+        root = getattr(self.resources, "worker_root", None)
+        attempt = str(getattr(lease, "attempt_id", ""))
+        if root is None or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,100}", attempt) is None:
+            return None
+        name = f"gate-observation-{attempt}.json"
+        document = {
+            "schema_version": 1,
+            "kind": "POINT_INITIAL_GATE_OBSERVATION_REJECTED",
+            "attempt_id": attempt,
+            "failures": list(failures),
+            "reset_epoch": value.reset_epoch,
+            "simulation_session_id": value.simulation_session_id,
+            "node_graph_stable": value.node_graph_stable,
+            "has_contact": value.has_contact,
+            "active_controller_goal_ids": list(value.active_controller_goal_ids),
+            "moveit_attached_object_ids": list(value.moveit_attached_object_ids),
+            "joint_positions": list(value.joint_positions),
+            "worker_nodes": self.worker_node_inventory_report(
+                value.worker_node_fqns, teacher_profile=teacher_profile, namespace=namespace),
+        }
+        payload = json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        try:
+            descriptor = os.open(Path(root) / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            try:
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        except OSError:
+            return None
+        return name
 
     def _capture_aligned(self):
         factory = self.dependencies.get("rgbd_source", RosRgbdSnapshotSource)

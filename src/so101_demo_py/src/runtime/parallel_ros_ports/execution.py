@@ -175,6 +175,8 @@ class ExecutionPorts:
             return call(child)
 
         deadline = time.monotonic() + 20.0
+        # the container consumer runs under the stack namespace: its graph name is `<namespace>/so101_dynamic_cup_pick_place`
+        consumer_name = (self.worker_ros_namespace() or "") + "/so101_dynamic_cup_pick_place"
         try:
             owner, publisher = self._prime_pose_publisher()
         except Exception:
@@ -192,7 +194,7 @@ class ExecutionPorts:
                     if name == "so101_dynamic_cup_pick_place"
                 )
                 if (
-                    consumer_nodes == ("/so101_dynamic_cup_pick_place",)
+                    consumer_nodes == (consumer_name,)
                     and publisher.get_subscription_count() == 1
                     and owner.node.get_clock().now().nanoseconds > 0
                 ):
