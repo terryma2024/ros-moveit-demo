@@ -22,12 +22,15 @@ def _collection_runtime(path):
     return _load_runtime_config(share/collection['parallel_runtime']['path'])
 
 
-def prepare_collection_operation(arguments, *, services):
+def prepare_collection_operation(arguments, *, services, contact_policy_fingerprint):
     """Prepare a real operation without admitting, allocating or writing files.
 
     Generation is the next persistent validation generation. The unified entry
     compares and commits that allocation atomically with admission; a competing
     admission makes this proposal stale. No admitted context exists here.
+
+    `contact_policy_fingerprint` is the explicit value the caller took from the campaign's frozen inputs
+    (`case_inputs.campaign_binding`); no contact proposal, receipt or calibration report is named or read here.
     """
     from dataclasses import asdict
     import re
@@ -52,7 +55,7 @@ def prepare_collection_operation(arguments, *, services):
     root = Path(arguments.root)
     config_path = Path(arguments.campaign_config)
     config_digest = _digest(config_path)
-    config = load_campaign_config(config_path,expected_sha256=config_digest)
+    config = load_campaign_config(config_path,roles=('teacher',),expected_sha256=config_digest)
     registered = validate_registered_evidence_root(config['evidence_root'],config['evidence_root'],
                                                   registration=workload.root_registration)
     if (not root.is_absolute() or root.resolve(strict=True) != root or not root.is_dir()
@@ -66,8 +69,7 @@ def prepare_collection_operation(arguments, *, services):
     runtime = _collection_runtime(arguments.collection_config)
     if arguments.worker_count > runtime.max_worker_count or arguments.worker_count > len(runtime.ros_domain_ids):
         raise ValueError('COLLECTION_RUNTIME_WORKER_COUNT_INVALID')
-    proposal = read_document(arguments.policy)
-    fingerprint = proposal.get('policy_fingerprint')
+    fingerprint = contact_policy_fingerprint
     if type(fingerprint) is not str or re.fullmatch(r'[0-9a-f]{64}',fingerprint) is None:
         raise ValueError('COLLECTION_POLICY_INVALID')
     manifest = read_document(arguments.manifest)
@@ -87,8 +89,7 @@ def prepare_collection_operation(arguments, *, services):
         slots.append(asdict(ActWorkerSlot(campaign_id,worker_id,generation,domain,namespace,
                                          namespace+'/arm_controller')))
     payload = dict(campaign_id=campaign_id,backend='mujoco',worker_count=arguments.worker_count,
-        contact_policy_fingerprint=fingerprint,proposal_path=str(arguments.policy),
-        activation_receipt_path=str(arguments.activation_receipt),evidence_root=str(root),
+        contact_policy_fingerprint=fingerprint,evidence_root=str(root),
         service_epoch=workload.service_epoch,resource_binding_id=workload.resource_binding_id,
         qualification_mode=arguments.qualification,
         qualification_receipt_path=str(arguments.qualification_contract)
@@ -96,8 +97,7 @@ def prepare_collection_operation(arguments, *, services):
         worker_slots=slots,registered_evidence_root=str(registered),campaign_config_path=str(config_path),
         campaign_config_sha256=config_digest)
     for name,path in (('source',arguments.source),('manifest',arguments.manifest),
-            ('runtime_config',arguments.runtime_config),('collection_config',arguments.collection_config),
-            ('calibration_report',arguments.calibration)):
+            ('runtime_config',arguments.runtime_config),('collection_config',arguments.collection_config)):
         payload[name+'_path'],payload[name+'_sha256'] = str(path),_digest(path)
     if config['controlled_runtime'] != dict(path=payload['runtime_config_path'],sha256=payload['runtime_config_sha256']):
         raise ValueError('CAMPAIGN_CONFIG_BINDING_MISMATCH')

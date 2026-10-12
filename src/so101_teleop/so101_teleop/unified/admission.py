@@ -247,7 +247,11 @@ _ACT_PAYLOAD_KEYS = frozenset({
     "resource_binding_id", "qualification_mode", "qualification_receipt_path", "children",
     "calibration_report_path", "calibration_report_sha256",
 })
-_COLLECTION_PAYLOAD_KEYS = (_ACT_PAYLOAD_KEYS - {'children'}) | frozenset({
+# A container collection start carries neither a calibration report nor a contact proposal/activation receipt (CP-3609): the
+# contact policy is bound by `contact_policy_fingerprint` alone and verified per task inside the shard.
+_COLLECTION_EXCLUDED_KEYS = frozenset({
+    'children', 'proposal_path', 'activation_receipt_path', 'calibration_report_path', 'calibration_report_sha256'})
+_COLLECTION_PAYLOAD_KEYS = (_ACT_PAYLOAD_KEYS - _COLLECTION_EXCLUDED_KEYS) | frozenset({
     'worker_slots', 'registered_evidence_root', 'campaign_config_path', 'campaign_config_sha256'})
 
 # a pick-place validation payload additionally names its preparation receipt; a collection payload must not
@@ -412,7 +416,7 @@ class UnifiedWorkloadService:
             from so101_demo.runtime.inference.config import load_campaign_config
             from so101_demo.runtime.container_campaign.paths import validate_registered_evidence_root
             self._verify_artifact(payload['campaign_config_path'], payload['campaign_config_sha256'])
-            campaign_config = load_campaign_config(payload['campaign_config_path'],
+            campaign_config = load_campaign_config(payload['campaign_config_path'], roles=('teacher',),
                                                   expected_sha256=payload['campaign_config_sha256'])
             registered = validate_registered_evidence_root(campaign_config['evidence_root'],
                 payload['registered_evidence_root'], registration=self.root_registration)
@@ -424,7 +428,7 @@ class UnifiedWorkloadService:
         for name in ("source", "runtime_config", "collection_config"):
             verified = self._verify_artifact(
                 payload[f"{name}_path"], payload[f"{name}_sha256"],
-                read_bytes=name == "runtime_config" and (pick_place_validation or container_collection),
+                read_bytes=name == "runtime_config" and pick_place_validation,
             )
             if name == "runtime_config":
                 runtime_bytes = verified
@@ -455,69 +459,73 @@ class UnifiedWorkloadService:
             expected_identity = {name:payload[name] for name in ('source_sha256','runtime_config_sha256',
                 'collection_config_sha256','contact_policy_fingerprint')}
             expected_identity.update(gpu_uuid=campaign_config['gpu_uuid'], image_source_install=dict(
-                inference=campaign_config['head_service']['image'], shard=campaign_config['shard_image']))
+                inference=campaign_config['teacher_service']['image'], shard=campaign_config['shard_image']))
             if contract['worker_count'] != payload['worker_count'] or contract['controlled_identity'] != expected_identity:
                 raise ValueError('COLLECTION_RUN_CONTRACT_BINDING_MISMATCH')
             expected_ref = (dict(path=payload['manifest_path'],sha256=payload['manifest_sha256'])
                             if payload['worker_count'] == 8 else None)
             if campaign_config['qualification_contract'] != expected_ref:
                 raise ValueError('COLLECTION_RUN_CONTRACT_BINDING_MISMATCH')
-        try:
-            calibration_path = Path(payload["calibration_report_path"])
-            if (not calibration_path.is_absolute() or ".." in calibration_path.parts
-                    or not calibration_path.resolve().is_relative_to(root.resolve())):
-                raise ValueError("CALIBRATION_REQUIRED")
-            self._verify_artifact(str(calibration_path), payload["calibration_report_sha256"])
-            calibration_bytes = calibration_path.read_bytes()
-            if hashlib.sha256(calibration_bytes).hexdigest() != payload["calibration_report_sha256"]:
-                raise ValueError("CALIBRATION_REQUIRED")
-            calibration = json.loads(calibration_bytes)
-            from so101_demo.act.calibration import installed_calibration_identity, require_gate
-
-            if not diagnostic:
-                require_gate(calibration,
-                             "formal_collection" if spec.kind.startswith("act_collection")
-                             else "pick_place_validation")
-            # the installed ACT profile must still exist and be readable; the
-            # comparison of that identity with the report's recorded one
-            (self.calibration_identity_probe or installed_calibration_identity)()
-        except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
-            raise ValueError("CALIBRATION_REQUIRED") from error
-        # Per the owner's amendment the report's own recorded identity is not
-        # compared with the tree that is running; the probe above still refuses a missing profile.
-        if diagnostic:
-            # the Head Search prerequisite is the only thing this scope removes: every non-Head
-            # check and its measured values must still be present
-            from so101_demo.act.diagnostic_episode_inputs import require_nonhead_gate
-
-            require_nonhead_gate(calibration)
-        if pick_place_validation or container_collection:
-            from so101_demo.act.head_search_binding import validate_head_search_binding
+        if container_collection:
+            # no calibration report: only the installed ACT profile must still exist and be readable
             try:
-                binding = validate_head_search_binding(json.loads(runtime_bytes), calibration)
-                if container_collection:
-                    from so101_demo.runtime.inference.config import verify_head_configuration
-                    verify_head_configuration(campaign_config['head_service'], binding=binding,
-                        runtime_versions={name:binding.detector[name]
-                                          for name in ('torch_version','ultralytics_version')})
-            except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
-                raise ValueError("HEAD_SEARCH_CONFIG_INVALID") from error
-        proposal = self._read_json(payload["proposal_path"], root)
-        receipt = self._read_json(payload["activation_receipt_path"], root)
-        try:
-            from so101_demo.act.contact_calibration import verify_disabled_proposal
-            from so101_demo.act.contact_policy import verify_activation
+                from so101_demo.act.calibration import installed_calibration_identity
 
-            verify_disabled_proposal(proposal)
-            verify_activation(proposal["payload"], receipt)
-        except (ImportError, KeyError, TypeError, ValueError) as error:
-            raise ValueError("POLICY_NOT_ACTIVATED") from error
-        if (
-            proposal["policy_fingerprint"] != payload["contact_policy_fingerprint"]
-            or receipt["policy_fingerprint"] != payload["contact_policy_fingerprint"]
-            or receipt["evidence_root"] != str(root)
-        ):
-            raise ValueError("POLICY_NOT_ACTIVATED")
+                (self.calibration_identity_probe or installed_calibration_identity)()
+            except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
+                raise ValueError("CALIBRATION_REQUIRED") from error
+        else:
+            try:
+                calibration_path = Path(payload["calibration_report_path"])
+                if (not calibration_path.is_absolute() or ".." in calibration_path.parts
+                        or not calibration_path.resolve().is_relative_to(root.resolve())):
+                    raise ValueError("CALIBRATION_REQUIRED")
+                self._verify_artifact(str(calibration_path), payload["calibration_report_sha256"])
+                calibration_bytes = calibration_path.read_bytes()
+                if hashlib.sha256(calibration_bytes).hexdigest() != payload["calibration_report_sha256"]:
+                    raise ValueError("CALIBRATION_REQUIRED")
+                calibration = json.loads(calibration_bytes)
+                from so101_demo.act.calibration import installed_calibration_identity, require_gate
+
+                if not diagnostic:
+                    require_gate(calibration,
+                                 "formal_collection" if spec.kind.startswith("act_collection")
+                                 else "pick_place_validation")
+                # the installed ACT profile must still exist and be readable; the
+                # comparison of that identity with the report's recorded one
+                (self.calibration_identity_probe or installed_calibration_identity)()
+            except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
+                raise ValueError("CALIBRATION_REQUIRED") from error
+            # Per the owner's amendment the report's own recorded identity is not
+            # compared with the tree that is running; the probe above still refuses a missing profile.
+            if diagnostic:
+                # the Head Search prerequisite is the only thing this scope removes: every non-Head
+                # check and its measured values must still be present
+                from so101_demo.act.diagnostic_episode_inputs import require_nonhead_gate
+
+                require_nonhead_gate(calibration)
+            if pick_place_validation:
+                from so101_demo.act.head_search_binding import validate_head_search_binding
+                try:
+                    validate_head_search_binding(json.loads(runtime_bytes), calibration)
+                except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+                    raise ValueError("HEAD_SEARCH_CONFIG_INVALID") from error
+            proposal = self._read_json(payload["proposal_path"], root)
+            receipt = self._read_json(payload["activation_receipt_path"], root)
+            try:
+                from so101_demo.act.contact_calibration import verify_disabled_proposal
+                from so101_demo.act.contact_policy import verify_activation
+
+                verify_disabled_proposal(proposal)
+                verify_activation(proposal["payload"], receipt)
+            except (ImportError, KeyError, TypeError, ValueError) as error:
+                raise ValueError("POLICY_NOT_ACTIVATED") from error
+            if (
+                proposal["policy_fingerprint"] != payload["contact_policy_fingerprint"]
+                or receipt["policy_fingerprint"] != payload["contact_policy_fingerprint"]
+                or receipt["evidence_root"] != str(root)
+            ):
+                raise ValueError("POLICY_NOT_ACTIVATED")
         if diagnostic:
             self._require_diagnostic_scope(payload, root)
         if spec.kind.startswith("act_collection") and not payload["qualification_mode"]:

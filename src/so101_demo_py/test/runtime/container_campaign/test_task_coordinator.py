@@ -166,7 +166,7 @@ def make_world(tmp_path, config, *, workers=('w00',), scenes=('s1', 's2'), scrip
         scene_manifest=ref(manifest), clock=clock, sleep=clock.sleep,
         control_factory=lambda shard: made.append(shard.launch.worker_id) or controls[shard.launch.worker_id])
     endpoints = {role: SimpleNamespace(service_generation='g-'+role, max_frame_bytes=4096)
-                 for role in ('head', 'teacher')}
+                 for role in ('teacher',)}
     plan = dict(wave_index=0, scene_ids=list(scenes), assignment=plan_assignment)
     return SimpleNamespace(coordinator=coordinator, shards=tuple(shards), controls=controls, plan=plan,
         endpoints=endpoints, clock=clock, context=context, made=made, journal_root=journal_root, run=run,
@@ -349,7 +349,7 @@ def test_host_task_input_document_is_accepted_by_container_loader(tmp_path, monk
     shard = SimpleNamespace(root=env.root, launch=SimpleNamespace(launch_id='wave-0-w00-g1', worker_id='w00',
         launch_generation=1, wave_id='wave-0', owned_root=str(env.root)))
     endpoints = {role: SimpleNamespace(service_generation='service-'+role,
-                 max_frame_bytes=env.campaign[role+'_service']['max_frame_bytes']) for role in ('head', 'teacher')}
+                 max_frame_bytes=env.campaign[role+'_service']['max_frame_bytes']) for role in ('teacher',)}
     context = SimpleNamespace(deadline_monotonic_s=time.monotonic()+3000)
     dispatch = InstanceDispatch(control=None, shard=shard, assignment=None, journal=None, endpoints=endpoints,
         scene_manifest=env.document['scene_manifest'], config=env.runtime, context=context,
@@ -358,8 +358,43 @@ def test_host_task_input_document_is_accepted_by_container_loader(tmp_path, monk
     task = dispatch.prepare_task('default')
     loaded = load_task_input(task, env.spec)
     assert task.task_id == 'wave-0-w00-default' and loaded.scene_id == 'default' and loaded.root == env.root
-    assert loaded.head['service_generation'] == 'service-head' and loaded.teacher['role'] == 'teacher'
+    assert loaded.teacher['service_generation'] == 'service-teacher' and loaded.teacher['role'] == 'teacher'
+    assert not hasattr(loaded, 'head')
     assert loaded.refs == {name: env.document[name] for name in ('scope', 'inputs_manifest')}
+
+
+def test_task_document_names_only_launched_services(tmp_path, monkeypatch):
+    """The Host writes exactly the loader's closed field set; a Head endpoint is neither written nor accepted."""
+    import copy
+    import time
+    from test_task_builder import make_env, make_task
+    from so101_demo.runtime.container_campaign import task_builder
+    from so101_demo.runtime.container_campaign.task_builder import load_task_input
+    env = make_env(tmp_path, monkeypatch)
+    shard = SimpleNamespace(root=env.root, launch=SimpleNamespace(launch_id='wave-0-w00-g1', worker_id='w00',
+        launch_generation=1, wave_id='wave-0', owned_root=str(env.root)))
+    # the launched set has one service; an extra, unlaunched Head endpoint in the mapping is never written
+    endpoints = {role: SimpleNamespace(service_generation='service-'+role,
+                 max_frame_bytes=env.campaign[role+'_service']['max_frame_bytes']) for role in ('head', 'teacher')}
+    dispatch = InstanceDispatch(control=None, shard=shard, assignment=None, journal=None, endpoints=endpoints,
+        scene_manifest=env.document['scene_manifest'], config=env.runtime,
+        context=SimpleNamespace(deadline_monotonic_s=time.monotonic()+3000),
+        case_inputs={'default': dict(scope=env.document['scope'], inputs_manifest=env.document['inputs_manifest'])},
+        dispatch_allowed=lambda: True)
+    task = dispatch.prepare_task('default')
+    document = json.loads(open(task.inputs_ref.path).read())
+    assert set(document) == task_builder._FIELDS and 'head' not in document and 'teacher' in document
+    assert load_task_input(task, env.spec).teacher == document['teacher']
+    # a document that names a Head endpoint is a different, refused shape
+    stale = copy.deepcopy(document)
+    stale['head'] = dict(role='head', socket_path='/act/ipc/head/inference.sock', service_generation='service-head',
+                         max_frame_bytes=document['teacher']['max_frame_bytes'])
+    with pytest.raises(ValueError):
+        load_task_input(make_task(env, stale, task_id=document['task_id']), env.spec)
+    # and one that omits Teacher is refused too
+    missing = {key: value for key, value in document.items() if key != 'teacher'}
+    with pytest.raises(ValueError):
+        load_task_input(make_task(env, missing, task_id=document['task_id']), env.spec)
 
 
 def outage_from(poll):

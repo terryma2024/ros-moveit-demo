@@ -64,11 +64,14 @@ class ServiceEndpoint:
 
 class ContainerServiceOwner:
     def __init__(self, *, admitted_context, config, paths, roles, registry,
-                 head_descriptor, head_descriptor_sha256, startup_timeout_s,
-                 receive_budget_s, stop_timeout_s, docker_runner=_docker, query=_query,
+                 startup_timeout_s, receive_budget_s, stop_timeout_s, head_descriptor=None,
+                 head_descriptor_sha256=None, docker_runner=_docker, query=_query,
                  monotonic_ns=time.monotonic_ns):
-        required_roles = ('head',) if getattr(admitted_context, 'workload_kind', None) == (
-            'act_calibration_measurement_start') else ('head', 'teacher')
+        # Measurement launches Head only, a validation kind Head and Teacher, and collection Teacher only (CP-3608 ruling 2:
+        # collection does not run Head Search). The Head descriptor exists only for a launched Head.
+        kind = getattr(admitted_context, 'workload_kind', None)
+        required_roles = (('head',) if kind == 'act_calibration_measurement_start'
+                          else ('teacher',) if kind == 'act_collection_start' else ('head', 'teacher'))
         allowed = {'act_calibration_measurement_start', 'act_collection_start',
                    'pick_place_validation_full', 'pick_place_validation_phase'}
         if (type(admitted_context) is not AdmittedCampaignContext
@@ -94,9 +97,14 @@ class ContainerServiceOwner:
             _service(self.config[role+'_service'], role, readback=True)
         if self.config['head_service']['image'] != self.config['teacher_service']['image']:
             raise ValueError('SERVICE_OWNER_CONFIG_INVALID')
-        if calibration_runtime_hash(head_descriptor) != head_descriptor_sha256:
+        if 'head' in roles:
+            if (head_descriptor is None or head_descriptor_sha256 is None
+                    or calibration_runtime_hash(head_descriptor) != head_descriptor_sha256):
+                raise ValueError('SERVICE_OWNER_CONFIG_INVALID')
+        elif head_descriptor is not None or head_descriptor_sha256 is not None:
             raise ValueError('SERVICE_OWNER_CONFIG_INVALID')
-        self.head_descriptor, self.head_descriptor_sha256 = Path(head_descriptor), head_descriptor_sha256
+        self.head_descriptor = None if head_descriptor is None else Path(head_descriptor)
+        self.head_descriptor_sha256 = head_descriptor_sha256
         self.startup_timeout_s, self.receive_budget_s, self.stop_timeout_s = (
             startup_timeout_s, receive_budget_s, stop_timeout_s)
         self.docker_runner, self.query, self.clock = docker_runner, query, monotonic_ns

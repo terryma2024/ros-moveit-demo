@@ -170,7 +170,7 @@ class InstanceDispatch:
             launch_generation=self.generation, wave_id=self.wave_id, scene_id=scene_id,
             scene_manifest=dict(self.scene_manifest), scope=dict(refs['scope']),
             inputs_manifest=dict(refs['inputs_manifest']))
-        for role in ('head', 'teacher'):
+        for role in ('teacher',):
             endpoint = self.endpoints[role]
             document[role] = dict(role=role, socket_path='/act/ipc/'+role+'/inference.sock',
                 service_generation=endpoint.service_generation, max_frame_bytes=endpoint.max_frame_bytes)

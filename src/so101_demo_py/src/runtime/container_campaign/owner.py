@@ -35,7 +35,7 @@ class ContainerCampaignOwner:
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind!='act_collection_start'
                 or type(service_owner) is not ContainerServiceOwner or service_owner.context!=admitted_context
-                or service_owner.roles!=('head','teacher') or service_owner.registry.records()
+                or service_owner.roles!=('teacher',) or service_owner.registry.records()
                 or root.resolve(strict=True)!=root or str(root)!=admitted_context.evidence_root
                 or service_owner.paths['run']!=root or type(qualification) is not bool
                 or type(slots) is not tuple or len(slots)!=admitted_context.worker_count
@@ -43,7 +43,7 @@ class ContainerCampaignOwner:
                 or not callable(launcher) or not callable(monotonic_ns) or not callable(disk_reader)
                 or type(approved_disk_floor_bytes) is not int or approved_disk_floor_bytes<0):
             raise ValueError('CAMPAIGN_OWNER_CONFIG_INVALID')
-        if (load_campaign_config(admitted_context.campaign_config_path,
+        if (load_campaign_config(admitted_context.campaign_config_path,roles=('teacher',),
                 expected_sha256=admitted_context.campaign_config_sha256)!=config or service_owner.config!=config):
             raise ValueError('CAMPAIGN_OWNER_CONFIG_CHANGED')
         for index,slot in enumerate(slots):

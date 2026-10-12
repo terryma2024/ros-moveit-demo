@@ -98,7 +98,7 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
     document=dict(schema_version=1,kind='ACT_CONTAINER_COLLECTION_TASK',task_id='task-1',worker_id='w00',
         launch_generation=1,wave_id='wave-0',scene_id=row['scene_id'],scene_manifest=ref(scene_path),
         scope=ref(scope),inputs_manifest=ref(frozen_path))
-    for role in ('head','teacher'):
+    for role in ('teacher',):
         document[role]=dict(role=role,socket_path='/act/ipc/'+role+'/inference.sock',
             service_generation='service-'+role,max_frame_bytes=campaign[role+'_service']['max_frame_bytes'])
     for name,value in dict(SO101_ACT_CONTAINER_NAMESPACE=namespace,ROS_NAMESPACE=namespace,
@@ -212,7 +212,7 @@ def test_task_input_refuses_foreign_instance_or_changed_bytes(env,damage):
 
 @pytest.mark.parametrize('damage',['generation_spec','catalog_position','legacy_broker','diagnostic','env_domain',
                                    'env_root','env_session','env_gl','runtime_sha','model','frame_size',
-                                   'foreign_head_socket','contact_policy','foreign_namespace'])
+                                   'foreign_teacher_socket','head_endpoint','contact_policy','foreign_namespace'])
 def test_bad_input_refuses_before_task_directory_exists(env,monkeypatch,damage):
     document=copy.deepcopy(env.document);spec=copy.deepcopy(env.spec)
     if damage=='generation_spec':spec['launch_generation']=2
@@ -221,7 +221,9 @@ def test_bad_input_refuses_before_task_directory_exists(env,monkeypatch,damage):
         value=json.loads(scene.read_bytes());value['scenarios'][0]['cup_position_world_m']=[0.,0.]
         scene.write_text(json.dumps(value));document['scene_manifest']=ref(scene)
     elif damage=='legacy_broker':document['teacher']['socket_path']='/generic/broker.sock'
-    elif damage=='foreign_head_socket':document['head']['socket_path']='/act/ipc/teacher/inference.sock'
+    elif damage=='foreign_teacher_socket':document['teacher']['socket_path']='/act/ipc/head/inference.sock'
+    elif damage=='head_endpoint':
+        document['head']=dict(document['teacher'],role='head',socket_path='/act/ipc/head/inference.sock')
     elif damage=='frame_size':document['teacher']['max_frame_bytes']+=1
     elif damage=='diagnostic':
         scope=private_copy(env,document['scope']['path'])

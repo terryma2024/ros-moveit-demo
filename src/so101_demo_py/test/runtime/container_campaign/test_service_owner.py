@@ -16,7 +16,11 @@ from so101_demo.runtime.parallel_ipc.frames import canonical_json
 from so101_teleop.unified.contracts import AdmittedCampaignContext
 
 
-def fixture(tmp_path, *, measurement=False, fail_teacher=False, refuse_stop=False, ready_drift=False):
+def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False, refuse_stop=False, ready_drift=False,
+            roles=None, descriptor_given=None, descriptor_sha=None):
+    """Collection (the default) launches Teacher only; `validation` launches Head and Teacher; `measurement` Head only.
+
+    `roles`, `descriptor_given` and `descriptor_sha` override what the owner is built with, to probe its refusals."""
     mod = importlib.import_module('so101_demo.runtime.container_campaign.service_owner')
     paths = make_campaign_paths(tmp_path, 'campaign')
     source, install = tmp_path/'source', tmp_path/'install'
@@ -50,7 +54,8 @@ def fixture(tmp_path, *, measurement=False, fail_teacher=False, refuse_stop=Fals
     config_path = paths['run']/'campaign.json'
     config_path.write_text(json.dumps(config))
     context = AdmittedCampaignContext(campaign_id='campaign', operation_id='operation',
-        workload_kind='act_calibration_measurement_start' if measurement else 'act_collection_start',
+        workload_kind='act_calibration_measurement_start' if measurement else (
+            'pick_place_validation_phase' if validation else 'act_collection_start'),
         service_epoch='epoch', execution_generation=1, stable_host_id='host',
         physical_gpu_uuid=config['gpu_uuid'], worker_count=1 if measurement else 8,
         source_sha256='a'*64, manifest_sha256='a'*64, runtime_config_sha256=sha,
@@ -101,16 +106,19 @@ def fixture(tmp_path, *, measurement=False, fail_teacher=False, refuse_stop=Fals
             weights_sha256=settings['model']['weights']['sha256'],
             service_config_sha256='f'*64 if ready_drift else hashlib.sha256(canonical_json(settings)).hexdigest(),
             gpu_uuid=config['gpu_uuid'], configured_instances=3, loaded_instances=3, ready=True)
+    roles = roles or (('head',) if measurement else ('head','teacher') if validation else ('teacher',))
+    has_head = 'head' in roles if descriptor_given is None else descriptor_given
     owner = mod.ContainerServiceOwner(admitted_context=context, config=config, paths=paths,
-        roles=('head',) if measurement else ('head','teacher'), registry=registry,
-        head_descriptor=descriptor, head_descriptor_sha256=hashlib.sha256(descriptor.read_bytes()).hexdigest(),
+        roles=roles, registry=registry,
+        head_descriptor=descriptor if has_head else None,
+        head_descriptor_sha256=(descriptor_sha or hashlib.sha256(descriptor.read_bytes()).hexdigest()) if has_head else None,
         startup_timeout_s=1., receive_budget_s=.1, stop_timeout_s=.1,
         docker_runner=docker, query=query)
     return owner, registry, calls, containers
 
 
 def test_services_start_once_and_survive_borrowed_clients_until_owner_closes(tmp_path):
-    owner, registry, calls, containers = fixture(tmp_path)
+    owner, registry, calls, containers = fixture(tmp_path, validation=True)
     async def run():
         endpoints = await owner.start()
         assert set(endpoints) == {'head','teacher'}
@@ -140,6 +148,70 @@ def test_actual_service_exit_is_health_failure_before_any_new_dispatch(tmp_path)
     registry.close()
 
 
+def test_collection_services_launch_teacher_only(tmp_path):
+    owner, registry, calls, containers = fixture(tmp_path)
+    async def run():
+        endpoints = await owner.start()
+        assert owner.roles == ('teacher',) and set(endpoints) == {'teacher'}
+        runs = [argv for argv in calls if argv[:2] == ['docker','run']]
+        assert len(runs) == 1 and runs[0][runs[0].index('--role')+1] == 'teacher'
+        assert '--head-descriptor' not in runs[0] and set(containers) == {'2'*64}
+        assert await owner.check_health() is True
+        host = owner.paths['host']
+        assert (host/'teacher-ready.json').is_file() and not list(host.glob('head-*'))
+        assert not (owner.paths['run']/'head-service.json').exists()
+        assert [item['launch']['role'] for item in registry.records()] == ['teacher']
+        assert (await owner.close())['terminated'] is True
+        assert len([argv for argv in calls if argv[:2] == ['docker','kill']]) == 1
+    asyncio.run(run())
+    registry.close()
+
+
+def fresh(tmp_path, name):
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def test_collection_owner_refuses_a_head_role_or_a_head_descriptor(tmp_path):
+    for index, kwargs in enumerate((dict(roles=('head','teacher')), dict(roles=('head',)), dict(roles=('teacher','head')),
+                                    dict(descriptor_given=True))):
+        with pytest.raises(ValueError, match='SERVICE_OWNER_CONFIG_INVALID'):
+            fixture(fresh(tmp_path, str(index)), **kwargs)
+
+
+def test_head_descriptor_required_only_when_head_launched(tmp_path):
+    for index, (kwargs, ok) in enumerate((
+            (dict(validation=True), True), (dict(measurement=True), True), (dict(), True),
+            (dict(validation=True, descriptor_given=False), False), (dict(measurement=True, descriptor_given=False), False),
+            (dict(validation=True, descriptor_sha='e'*64), False), (dict(measurement=True, descriptor_sha='e'*64), False),
+            (dict(descriptor_given=True), False))):
+        directory = fresh(tmp_path, str(index))
+        if not ok:
+            with pytest.raises(ValueError, match='SERVICE_OWNER_CONFIG_INVALID'):
+                fixture(directory, **kwargs)
+            continue
+        owner, registry, _, _ = fixture(directory, **kwargs)
+        assert (owner.head_descriptor is not None) == ('head' in owner.roles)
+        assert (owner.head_descriptor_sha256 is not None) == ('head' in owner.roles)
+        registry.close()
+
+
+def test_measurement_still_head_only(tmp_path):
+    owner, registry, calls, containers = fixture(tmp_path, measurement=True)
+    async def run():
+        endpoints = await owner.start()
+        assert owner.roles == ('head',) and set(endpoints) == {'head'}
+        assert [argv[argv.index('--role')+1] for argv in calls if argv[:2] == ['docker','run']] == ['head']
+        assert (await owner.close())['terminated'] is True
+    asyncio.run(run())
+    registry.close()
+    for index, kwargs in enumerate((dict(measurement=True, roles=('head','teacher')),
+                                    dict(measurement=True, roles=('teacher',)))):
+        with pytest.raises(ValueError, match='SERVICE_OWNER_CONFIG_INVALID'):
+            fixture(fresh(tmp_path, 'other-'+str(index)), **kwargs)
+
+
 def test_measurement_only_launches_head_without_reading_unused_teacher_weights(tmp_path):
     owner, registry, calls, _ = fixture(tmp_path, measurement=True)
     async def run():
@@ -151,13 +223,25 @@ def test_measurement_only_launches_head_without_reading_unused_teacher_weights(t
 
 
 def test_partial_start_retires_known_container_and_unknown_intent_keeps_fence(tmp_path):
-    owner, registry, calls, containers = fixture(tmp_path, fail_teacher=True)
+    owner, registry, calls, containers = fixture(tmp_path, validation=True, fail_teacher=True)
     async def run():
         with pytest.raises(ValueError, match='SERVICE_OWNER_START_FAILED'):
             await owner.start()
         receipt = await owner.close()
         assert receipt['terminated'] is False
         assert not containers['1'*64]['State']['Running']
+        assert not registry.all_terminated(owner.inspect_container)
+    asyncio.run(run())
+    registry.close()
+
+
+def test_teacher_launch_failure_keeps_the_unknown_launch_fenced(tmp_path):
+    owner, registry, calls, containers = fixture(tmp_path, fail_teacher=True)
+    async def run():
+        with pytest.raises(ValueError, match='SERVICE_OWNER_START_FAILED'):
+            await owner.start()
+        assert (await owner.close())['terminated'] is False
+        assert containers == {} and registry.records()[0]['owner'] is None
         assert not registry.all_terminated(owner.inspect_container)
     asyncio.run(run())
     registry.close()

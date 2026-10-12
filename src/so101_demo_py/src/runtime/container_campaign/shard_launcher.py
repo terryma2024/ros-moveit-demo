@@ -20,7 +20,7 @@ class ContainerShardLauncher:
         if (type(context) is not AdmittedCampaignContext or context.workload_kind!='act_collection_start'
                 or type(registry) is not ContainerLaunchRegistry or str(paths['run'])!=context.evidence_root
                 or type(approved_inputs) is not tuple or type(config_paths) is not tuple
-                or load_campaign_config(context.campaign_config_path,
+                or load_campaign_config(context.campaign_config_path,roles=('teacher',),
                     expected_sha256=context.campaign_config_sha256)!=config):
             raise ValueError('COLLECTION_SHARD_LAUNCHER_INVALID')
         self.context,self.config,self.paths,self.registry=context,config,paths,registry
@@ -39,7 +39,7 @@ class ContainerShardLauncher:
                     or slot.worker_id!=f'w{index:02d}' for index,slot in enumerate(slots))):
             raise ValueError('COLLECTION_SHARD_WAVE_INVALID')
         validate_file_ref(self.parallel_runtime)
-        config=load_campaign_config(self.context.campaign_config_path,
+        config=load_campaign_config(self.context.campaign_config_path,roles=('teacher',),
             expected_sha256=self.context.campaign_config_sha256)
         if config!=self.config:raise ValueError('COLLECTION_SHARD_CONFIG_DRIFT')
         identity={name:getattr(self.context,name) for name in (

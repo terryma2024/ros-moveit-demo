@@ -31,11 +31,16 @@ def fixture(tmp_path,monkeypatch):
     return paths,slot,spec,store,workload,inspect
 
 
+def prepare(module,args,workload,spec):
+    """The caller passes the fingerprint it took from the frozen inputs; here it is the fixture's controlled value."""
+    return module.prepare_collection_operation(args,services=SimpleNamespace(act_workload=workload,act_error=None),
+        contact_policy_fingerprint=spec.payload['contact_policy_fingerprint'])
+
+
 def arguments(spec):
     p = spec.payload
     return SimpleNamespace(campaign_id=p['campaign_id'],manifest=Path(p['manifest_path']),
-        source=Path(p['source_path']),policy=Path(p['proposal_path']),
-        activation_receipt=Path(p['activation_receipt_path']),calibration=Path(p['calibration_report_path']),
+        source=Path(p['source_path']),
         runtime_config=Path(p['runtime_config_path']),collection_config=Path(p['collection_config_path']),
         campaign_config=Path(p['campaign_config_path']),root=Path(p['evidence_root']),
         qualification=True,qualification_contract=None,resume=False,worker_count=1)
@@ -55,7 +60,8 @@ def test_preparation_has_no_resource_or_file_effect_and_actual_admission_persist
     args.manifest.write_text(json.dumps(document))
     before = tuple(paths['run'].rglob('*'))
     try:
-        prepared = module.prepare_collection_operation(args,services=services)
+        prepared = module.prepare_collection_operation(args,services=services,
+            contact_policy_fingerprint=spec.payload['contact_policy_fingerprint'])
         assert type(prepared) is OperationSpec and prepared.domain is Domain.VALIDATION
         assert prepared.execution_generation == 1
         assert prepared.runtime_id == workload.runtime_id
@@ -86,7 +92,7 @@ def test_preparation_refuses_invalid_inputs_without_allocating_generation(tmp_pa
     else: args.qualification=False; args.worker_count=8
     try:
         with pytest.raises(ValueError):
-            module.prepare_collection_operation(args,services=SimpleNamespace(act_workload=workload,act_error=None))
+            prepare(module,args,workload,spec)
         assert store.execution_generation(Domain.VALIDATION) == 0
         assert store._query_one('SELECT * FROM gpu_workload_leases') is None
         assert workload.slot_registry.slots() == ()
@@ -99,8 +105,7 @@ def test_generation_conflict_or_failed_admission_never_leaks_gpu_or_slots(tmp_pa
     import so101_demo.runtime.act_fixed_collection_composition as module
     paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
     try:
-        prepared = module.prepare_collection_operation(arguments(spec),services=SimpleNamespace(
-            act_workload=workload,act_error=None))
+        prepared = prepare(module,arguments(spec),workload,spec)
         if failure == 'generation_advanced':
             with store.immediate_transaction():
                 store.bump_execution_generation_locked(Domain.VALIDATION)
@@ -116,5 +121,48 @@ def test_generation_conflict_or_failed_admission_never_leaks_gpu_or_slots(tmp_pa
         assert workload.slot_registry.slots() == ()
         assert store._query_one('SELECT * FROM gpu_workload_leases') is None
         assert store._query_one('SELECT * FROM act_campaign_contexts') is None
+    finally:
+        store.close()
+
+
+def test_prepare_takes_fingerprint_from_frozen_inputs(tmp_path,monkeypatch):
+    """The arguments name no proposal, receipt or report; the fingerprint is the caller's explicit value (the later CLI stage
+    passes `campaign_binding(...)['contact_policy_fingerprint']`) and nothing is read to derive it."""
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
+    args = arguments(spec)
+    for removed in ('policy','activation_receipt','calibration'):
+        assert not hasattr(args,removed)
+    services = SimpleNamespace(act_workload=workload,act_error=None)
+    try:
+        fingerprint = 'a'*64
+        assert fingerprint != spec.payload['contact_policy_fingerprint']
+        prepared = module.prepare_collection_operation(args,services=services,contact_policy_fingerprint=fingerprint)
+        assert prepared.payload['contact_policy_fingerprint'] == fingerprint
+        for invalid in ('A'*64,'a'*63,'',None,123):
+            with pytest.raises(ValueError,match='COLLECTION_POLICY_INVALID'):
+                module.prepare_collection_operation(args,services=services,contact_policy_fingerprint=invalid)
+        with pytest.raises(TypeError):
+            module.prepare_collection_operation(args,services=services)
+        assert store.execution_generation(Domain.VALIDATION) == 0
+        # the value is the business identity: the run contract's controlled identity must carry the same one
+        with pytest.raises(ValueError,match='COLLECTION_RUN_CONTRACT_BINDING_MISMATCH'):
+            workload.start(prepared,allow_existing=False)
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is None
+    finally:
+        store.close()
+
+
+def test_prepare_payload_matches_reduced_closed_key_set(tmp_path,monkeypatch):
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    from so101_teleop.unified.admission import _COLLECTION_PAYLOAD_KEYS
+    paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
+    try:
+        payload = prepare(module,arguments(spec),workload,spec).payload
+        assert set(payload) == _COLLECTION_PAYLOAD_KEYS
+        assert not {'proposal_path','activation_receipt_path','calibration_report_path','calibration_report_sha256',
+                    'children'} & set(payload)
+        assert {'contact_policy_fingerprint','worker_slots','campaign_config_path','campaign_config_sha256',
+                'registered_evidence_root','runtime_config_path','runtime_config_sha256'} <= set(payload)
     finally:
         store.close()

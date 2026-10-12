@@ -43,7 +43,7 @@ from so101_teleop.unified.act_stack import ActStackProcessOwner
 
 KIND='ACT_CONTAINER_COLLECTION_TASK'
 _FIELDS={'schema_version','kind','task_id','worker_id','launch_generation','wave_id','scene_id',
-    'scene_manifest','scope','inputs_manifest','teacher','head'}
+    'scene_manifest','scope','inputs_manifest','teacher'}
 _ENDPOINT={'role','socket_path','service_generation','max_frame_bytes'}
 
 
@@ -68,7 +68,6 @@ class TaskInput:
     teacher_policy: dict
     recorder_policy: dict
     teacher: dict
-    head: dict
     shard_spec: dict
 
 
@@ -128,14 +127,14 @@ def load_task_input(task,shard_spec,*,clock=time.monotonic):
         if type(document[name]) is not type(shard_spec[name]) or document[name]!=shard_spec[name]:
             raise ValueError('COLLECTION_TASK_CONTEXT_MISMATCH')
     config=_load_runtime_config(validate_file_ref(shard_spec['parallel_runtime']))
-    campaign=load_campaign_config(validate_file_ref(shard_spec['campaign_config']),
+    campaign=load_campaign_config(validate_file_ref(shard_spec['campaign_config']),roles=('teacher',),
         expected_sha256=shard_spec['campaign_config']['sha256'])
     identity=shard_spec['business_identity']
     if (campaign['gpu_uuid']!=shard_spec['gpu_uuid']
             or campaign['controlled_runtime']['sha256']!=identity['runtime_config_sha256']
             or config.yolo_model_id!=campaign['teacher_service']['model']['model_id']):
         raise ValueError('COLLECTION_TASK_MODEL_OR_RUNTIME_MISMATCH')
-    for role in ('head','teacher'):
+    for role in ('teacher',):
         endpoint=document[role]
         if (type(endpoint) is not dict or set(endpoint)!=_ENDPOINT
                 or endpoint['role']!=role or endpoint['socket_path']!='/act/ipc/'+role+'/inference.sock'
@@ -172,7 +171,7 @@ def load_task_input(task,shard_spec,*,clock=time.monotonic):
     for ref in (document['scene_manifest'],*refs.values()):validate_file_ref(ref)
     return TaskInput(task_id=task.task_id,root=root,scene_id=document['scene_id'],row=row,refs=refs,
         config=config,campaign=campaign,teacher_policy=dict(frozen['teacher_execution_policy']['values']),
-        recorder_policy=recorder,teacher=document['teacher'],head=document['head'],
+        recorder_policy=recorder,teacher=document['teacher'],
         shard_spec=shard_spec)
 
 

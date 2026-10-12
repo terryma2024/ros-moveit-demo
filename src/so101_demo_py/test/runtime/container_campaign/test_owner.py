@@ -24,7 +24,7 @@ def fixture(tmp_path,**kwargs):
     identity={name:getattr(context,name) for name in ('source_sha256','runtime_config_sha256',
         'collection_config_sha256','contact_policy_fingerprint')}
     identity.update(gpu_uuid=context.physical_gpu_uuid,image_source_install=dict(
-        inference=service.config['head_service']['image'],shard=service.config['shard_image']))
+        inference=service.config['teacher_service']['image'],shard=service.config['shard_image']))
     manifest=dict(schema_version=1,kind='ACT_COLLECTION_FUNCTIONAL_RUN',run_id='functional',worker_count=1,
         controlled_identity=identity,scene_manifest=dict(path=str(scenes),sha256=hashlib.sha256(scenes.read_bytes()).hexdigest()))
     path.write_text(json.dumps(manifest))
@@ -48,13 +48,31 @@ def test_partial_service_start_has_single_cleanup_and_keeps_unknown_launch_fence
             await owner.run(manifest)
         first,second=await asyncio.gather(owner.close(),owner.close())
         assert first==second and first['terminated'] is False
-        assert len([v for v in calls if v[:2]==['docker','run']])==2
-        assert not containers['1'*64]['State']['Running']
-        assert stopped and registry.records()[1]['owner'] is None
+        assert len([v for v in calls if v[:2]==['docker','run']])==1
+        assert containers=={}
+        assert stopped and registry.records()[0]['owner'] is None
         with pytest.raises(ValueError,match='CAMPAIGN_OWNER_ALREADY_STARTED'):
             await owner.run(manifest)
     try:
         asyncio.run(run())
+    finally:
+        registry.close()
+
+
+def test_owner_refuses_head_role_for_collection(tmp_path):
+    owner,service,registry,calls,containers,manifest,stopped=fixture(tmp_path)
+    module=importlib.import_module('so101_demo.runtime.container_campaign.owner')
+    arguments=dict(admitted_context=owner.context,config=owner.config,root=owner.root,service_owner=service,
+        slots=owner.slots,manifest_path=owner.manifest_path,qualification=True,launcher=owner.launcher,
+        coordinator=owner.coordinator,verifier=owner.verifier)
+    try:
+        assert service.roles==('teacher',)
+        assert module.ContainerCampaignOwner(**arguments).services.roles==('teacher',)
+        for roles in (('head','teacher'),('head',),()):
+            service.roles=roles
+            with pytest.raises(ValueError,match='CAMPAIGN_OWNER_CONFIG_INVALID'):
+                module.ContainerCampaignOwner(**arguments)
+        assert calls==[] and registry.records()==()
     finally:
         registry.close()
 
