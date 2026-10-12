@@ -35,6 +35,7 @@ from .diagnostic_episode_inputs import (
     profile_config_identity,
     require_nonhead_gate,
     resource_policy_identity,
+    verify_proposal_in_own_mode,
 )
 
 
@@ -283,10 +284,8 @@ def _inspect_reference(root: Path) -> dict:
 
 
 def _verify_disabled(path: Path) -> bool:
-    from .contact_calibration import verify_disabled_proposal
-
     try:
-        verify_disabled_proposal(json.loads(path.read_bytes()))
+        verify_proposal_in_own_mode(json.loads(path.read_bytes()))
     except (ValueError, KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
         return False
     return True

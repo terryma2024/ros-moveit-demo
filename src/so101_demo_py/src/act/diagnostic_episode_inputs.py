@@ -585,6 +585,17 @@ def verify_contact_activation(payload: dict, receipt: dict, identity: dict, *, m
         raise ValueError("INPUT_ACTIVATION_STALE") from error
 
 
+def verify_proposal_in_own_mode(proposal) -> None:
+    """Verify a disabled proposal under the validation mode its own envelope declares.
+
+    The freeze and the discovery share this one rule so they cannot disagree about which proposals are well formed.
+    """
+
+    from .contact_calibration import proposal_validation_mode, verify_disabled_proposal
+
+    verify_disabled_proposal(proposal, validation_mode=proposal_validation_mode(proposal))
+
+
 def _verify_roles(registry: dict, *, mode=None) -> dict:
     """Resolve one approved candidate per role, run the semantic cross-checks, return the bytes.
 
@@ -646,11 +657,8 @@ def _verify_roles(registry: dict, *, mode=None) -> dict:
             asserted_resource.get(key) != value for key, value in derived_resource.items()):
         raise ValueError("INPUT_IDENTITY_MISMATCH")
 
-    from .contact_calibration import proposal_validation_mode, verify_disabled_proposal
-
     try:
-        verify_disabled_proposal(documents["contact_proposal"],
-                                 validation_mode=proposal_validation_mode(documents["contact_proposal"]))
+        verify_proposal_in_own_mode(documents["contact_proposal"])
     except ValueError as error:
         raise ValueError("INPUT_NOT_APPROVED") from error
     identity = registry["roles"]["scene_model"]["identity"]
