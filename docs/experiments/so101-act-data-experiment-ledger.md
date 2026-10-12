@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 42acc787eacd9d8350b0f3ef4705c9ddd0df2eb2
+current_commit: 9cc0068b8592de1471e47e8b84963ed1128ee5bf
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,63 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3612
-next_experiment: EXP-575 (to be planned): Teacher inference service start, ready and one synthetic round trip from the Host and from inside a readiness shard, no motion; then Host package gates on a fresh build of the frozen commit.
+latest_checkpoint: CP-3613
+next_experiment: NONE planned; fix the 25 so101_demo_py package gate failures (Sonnet writer, Opus review), rerun the full Host gates on the fixed commit, rebuild images; the first real single-scene collection task waits for the human answer on the activation receipt.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3613 — EXP-575 VALID (Teacher service, no motion); Host package gate NOT passed: 25 so101_demo_py failures
+
+- Host gates on commit 9cc0068b8 (docs-only above freeze 42acc787e; src, scripts and third_party identical), gate directory R/gates/9cc0068b8592, scripts REG/centering-convergence-20261012/scripts via R/run-host-gates.zsh. Fresh colcon build of 14 packages rc 0 in 190 s. `colcon test` of the 13 non-demo packages rc 0, test-result 2320 tests, 0 errors, 0 failures, 60 skipped, 515 s (R/gates/9cc0068b8592/test-run.7WVh4OJf). so101_demo_py ordinary gate with the grounded-sam interpreter (mujoco 3.12.0), installed package, xdist 8 of 32 logical CPUs, NVMe scratch inside the gate directory: rc 1, 25 failed, 12332 passed, 167 skipped, 446 s (R/gates/9cc0068b8592/demo-run.tSbtKZVo, junit.xml). Worktree HEAD and cleanliness unchanged after the gates. The package gate is NOT passed.
+- Failure groups (OBSERVED from junit): 12 in test/runtime/container_campaign/test_task_builder.py (TASK_CLEANUP_UNCONFIRMED in the perception and stop-before-motion cases, a Teacher deadline guard event never set, two FileNotFoundError under the pytest tmp tree, one lease-deadline case); 9 in test/adapters/perception/test_parallel_perception_runtime.py and 1 in test/adapters/act/test_act_head_local_runtime.py (HEAD_LOCAL_RUNTIME_CAMERA_STALE), files not touched in this phase; 3 repository contract tests (test_no_module_over_lines, test_no_process_names, test_installed_provenance). The same task-builder tests pass serially in the targeted venv; whether the cause is test isolation under eight workers or a real cleanup-timing defect is NOT yet determined (HYPOTHESIS only).
+- EXP-575 ran after the gates released the GPU. Record below. Process deviation, stated plainly: no PLANNED ledger entry was written before launch, because the probe's pre-flight requires a clean worktree and the ledger lives in it; the hypothesis, checks and pass criteria were fixed beforehand in R/run-teacher-service-probe.py (sha256 67e9c0555990155e5e2c440637237cd1be1989c29cb01eb71187a89019faf145), CP-3612 named the experiment, and the entry below is written after the fact from the retained evidence.
+- Design saved verbatim as R/one-way-qualification-report-design.md (sha256 ec61433173a370f84a2a5bfa3eadf42314d3270fc235e4e5db809b331c9003a1): container qualification report, independent verifier and formal admission replacement. It lists human decisions D1-D8, first among them that no aggregate pass count exists anywhere for the QC valid rate or the Teacher success rate; not assumed.
+- Retained: both gate run directories, REG/act-teacher-probe-63ff1583d8ef. Deletion candidates, not deleted: dry-run roots REG/act-teacher-probe-07c4222c8d10 and REG/act-teacher-probe-a4b7650e9624, R/__pycache__ created by a probe import, exited probe containers, older images.
+
+```yaml
+experiment_id: EXP-575
+status: VALID
+prior_experiment: EXP-574; CP-3580 gpu-image-probe-65ede85c8bb6 (head-role inference container with unqualified candidate weights)
+hypothesis: On the rebuilt images the real Teacher inference service, started through the production ContainerServiceOwner with the Teacher-only role set, reaches an identity-matched ready state on the GPU, answers a synthetic request from the Host, is reachable from inside a real readiness shard through the read-only /act/ipc/teacher mount, and stops with registry exit proof.
+prediction: ready within the 180 s startup budget with configured equal to loaded instances and every identity field equal to the campaign config; a well-formed response with matching request id and service generation from both the Host and the shard; service and shard exits proven.
+single_variable: the Teacher inference service on the image of EXP-574, added to an otherwise unchanged no-motion readiness shard.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree clean; src, scripts and third_party equal to the image commit 42acc787e (Host HEAD 9cc0068b8 is docs-only above it).
+  - No running container, no GPU compute process, disk above the floor; frozen Teacher weights hash equal to FROZEN_YOLO_WEIGHTS_SHA256.
+success_criteria:
+  - T1 identity-matched ready, T2 health, T3 Host synthetic round trip, S1 in-shard round trip through a read-only mount, SHARD_STOP, T5 service close with exit proof, NO_LEFTOVER.
+failure_criteria:
+  - Any of those FAIL with the boundary reached; any outcome other than DETECTED or NOT_DETECTED for the synthetic frame.
+invalid_criteria:
+  - Pre-flight refusal; a competing container or GPU process; a signal to a container this run did not register.
+provenance:
+  source_commit: 42acc787eacd9d8350b0f3ef4705c9ddd0df2eb2 (images); Host HEAD 9cc0068b8592de1471e47e8b84963ed1128ee5bf
+  install_overlay: inference image sha256:e912aca35fda0f6a67a331c11971aa6f0a550b42ecf0c4943077a1cef9b308ef and shard image sha256:b5558327b8f242da63af7b842ca0f1926a903fc34cf4cbf9492a6f0ba6dee4b6, /act/install in each
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host probe R/container-test-venv/bin/python
+  ros_domain_id: 181
+  gz_partition: the readiness shard's simulation session id
+commands:
+  - command: zsh R/run-teacher-service-probe.zsh --inference-build-dir R/image-build-20261012T171409Z --shard-build-dir R/image-build-20261012T171518Z
+    exit_code: 0
+observed:
+  - Status COMPLETE_ALL_PASS; no container of the run left running.
+  - T1 PASS - ready 12.54 s after start (budget 180 s), configured and loaded instances 1, no identity mismatch, in-image provenance equal.
+  - T2 PASS - owner health check.
+  - T3 PASS - Host round trip 59.8 ms (service side 57.1 ms), outcome NOT_DETECTED with reason NO_CANDIDATES for a zero RGB8 480x640 frame, request id and service generation match. No detection was asserted or observed.
+  - T4 observation - one compute process /act/venv/bin/python using 298 MiB; GPU total used 784 MiB of 16311 MiB.
+  - S1 PASS - inside the readiness shard /act/ipc/teacher is mounted read-only and the socket is reachable; in-shard inference 19.0 ms, same service generation and ready identity as the Host leg, uid/gid 1000.
+  - SHARD_STOP PASS - terminate reason PROBE_TERMINATE, exit code 0, stop evidence and registry proof present. T5 PASS - service close terminated, exit code 0, not OOM killed, registry exit proof.
+inferred:
+  - A collection shard can reach the shared Teacher service over the read-only IPC mount; the readiness shard uses the same mount rule as collection shards.
+conclusion: The Teacher inference service path works on the rebuilt images from the Host and from inside a shard, with one instance and probe values for threads and inflight limit. The campaign config used was written by the probe (values traced in host/campaign-config-provenance.json); it is not an approved campaign config. No reset, Teacher motion, Recorder or collection task ran; not collection, physical, detection-quality or qualification evidence.
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-teacher-probe-63ff1583d8ef (host/probe-result.json, host/service-ready.json, host/host-response.json, host/shard-request-response.json, host/gpu-while-ready.json, host/docker-calls.jsonl)
+  - /tmp/so101-debug-act-data-66c42e4c/teacher-service-probe-20261012T174457Z.log
+decision: KEEP
+next_experiment: NONE
+```
 
 ## CP-3612 — EXP-574 VALID: rebuilt images and real no-motion control path pass
 
@@ -154,7 +206,7 @@ evidence:
   - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-nomotion-1fdada4b7b7e (host/probe-result.json, host/docker-calls.jsonl, host/polls-*.jsonl, host/readbacks-wave-0-w00-g1)
   - /tmp/so101-debug-act-data-66c42e4c/nomotion-probe-20261012T172135Z.log
 decision: KEEP
-next_experiment: EXP-575
+next_experiment: EXP-575 (done, see CP-3613)
 ```
 
 ## CP-3610 — Shard wiring, old-protocol cleanup, ROS scoping, perception ruling and formal scene scope committed
