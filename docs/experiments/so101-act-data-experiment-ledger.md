@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 9cc0068b8592de1471e47e8b84963ed1128ee5bf
+current_commit: ea4cc4e161486fd1072235822381a9bab44957e6
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,28 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3613
-next_experiment: NONE planned; fix the 25 so101_demo_py package gate failures (Sonnet writer, Opus review), rerun the full Host gates on the fixed commit, rebuild images; the first real single-scene collection task waits for the human answer on the activation receipt.
+latest_checkpoint: CP-3614
+next_experiment: NONE planned; rebuild both images from the gated source (code-only rebuild, timing to be recorded), implement the container qualification report and verifier; the first real single-scene collection task waits for the human answer on the activation receipt.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3614 — Host package gates PASS on ea4cc4e16 after three runs; gate failure root causes recorded
+
+- Gate history, all through R/run-host-gates.zsh (fresh colcon build of 14 packages, so101_demo_py with the grounded-sam interpreter and the installed package at xdist 8 of 32 logical CPUs, the other 13 packages through colcon test, NVMe scratch inside each gate directory):
+  - R/gates/9cc0068b8592 - build 190 s rc 0; other packages 2320 tests 0 failures 60 skipped; so101_demo_py rc 1, 25 failed, 12332 passed, 167 skipped. NOT passed.
+  - R/gates/d9e4cf5f60e2 (commit d9e4cf5f6) - build 189 s rc 0; other packages 2320 tests 0 failures; so101_demo_py rc 1, 12 failed, 12345 passed, 167 skipped. NOT passed.
+  - R/gates/ea4cc4e16148 (commit ea4cc4e16) - build 191 s rc 0; other packages 2320 tests, 0 errors, 0 failures, 60 skipped, 511 s; so101_demo_py rc 0, 12357 passed, 0 failed, 167 skipped, 344.7 s (demo-run.CgEvnGtD). Worktree HEAD unchanged and clean after the run. PASSED.
+- Root causes of the 25 failures (commit d9e4cf5f6 fixed 13, commit ea4cc4e16 fixed 12):
+  - Nine YOLO detector tests: this branch added a score threshold attribute to the detector (70ffa0f07) and the tests built the object without it, turning a model error into an infrastructure error. Deterministic; fixed in the test fixture.
+  - Module line limit: act/diagnostic_episode_inputs.py reached 1326 lines against a 1200 limit after the scene manifest binding; read-only candidate inspection moved to act/diagnostic_episode_inspection.py. No limit or exemption change.
+  - Two test names added on this branch violated the process-name contract; renamed. The installed launcher inventory test lacked the container shard launch file this branch installs; added.
+  - Twelve task builder tests: CONFIRMED root cause is the coordinator's own gate launch. The gate ran as a background job (setsid nohup ... &), whose processes ignore SIGINT; the test rig's helper children inherited that before Python could install its interrupt handler, the owned process tree's first stop signal was ignored, the stop waited its 20 s interrupt timeout, and the revocation missed two 5 s windows. Evidence: exact 12-failure reproduction with the gate's own script under an ignored SIGINT, thread stacks at the hang (revoke thread joining the stop thread, stop thread in child.wait after SIGINT at process_tree.py:258), and 0 failures under the same condition after the rig starts its helper children with the default disposition (R/gates/d9e4cf5f60e2/demo-run.18QiuIpY, .CsnImz0i, .HeRH2FOY before; .q7gjhiQL, .EW9WLwTs after).
+- Disproven: the coordinator's earlier HYPOTHESIS that those twelve were caused by a host-wide stall during the first gate (CP-3613); the second gate on a quiet host reproduced the same twelve. Path length was also ruled out by padded-path runs.
+- One Head local runtime freshness test (test_close_reports_unquiesced_worker_instead_of_claiming_retirement) failed once in the first gate and not in the two later gates nor in repeated runs; file untouched on this branch since the last passing gate; cause not determined, recorded as not reproduced.
+- INFERRED production note, not tested: WorkerOwnedProcessTree does not reset SIGINT in its children. A shard started by a parent that ignores SIGINT with a helper that installs no handler would fall back to SIGTERM after the 20 s interrupt timeout and the 5 s revocation window would report an unconfirmed cleanup (bounded, fail-closed). Real consumers install their own handlers and the container entry process has the default disposition. No source change made.
+- Images sha256:e912aca3... and sha256:b5558327... were built from 42acc787e; source changed since (module split, test fixes), so they must be rebuilt before any real collection.
+- Retained: the three gate directories with every run. Deletion candidates, not deleted: gate build and install trees of the two failed gates, reproduction scratch under R/scratch and R/gates/d9e4cf5f60e2/demo-run.*, helper plugins under R/gate-env-import.
 
 ## CP-3613 — EXP-575 VALID (Teacher service, no motion); Host package gate NOT passed: 25 so101_demo_py failures
 
