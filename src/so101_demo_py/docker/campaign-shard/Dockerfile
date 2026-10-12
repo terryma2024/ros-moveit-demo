@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
     ros-jazzy-control-toolbox ros-jazzy-mujoco-vendor ros-jazzy-backward-ros \
     ros-jazzy-ros-gz-interfaces ros-jazzy-tf2-geometry-msgs ros-jazzy-vision-msgs
 RUN apt-get install --yes --no-install-recommends \
-    ros-jazzy-ros2-control-cmake ros-jazzy-ros2-control-test-assets
+    ros-jazzy-ros2-control-cmake ros-jazzy-ros2-control-test-assets \
+    ros-jazzy-example-interfaces ros-jazzy-launch-testing-ros
 RUN python3 -m venv --system-site-packages /act/venv \
     && printf '%s\n' 'import sys; sys.path[:0] = ["/act/install/lib/python3.12/site-packages", "/act/install/local/lib/python3.12/dist-packages", "/opt/ros/jazzy/lib/python3.12/site-packages", "/opt/venv/lib/python3.12/site-packages"]' \
        > /act/venv/lib/python3.12/site-packages/act-runtime.pth \
@@ -28,6 +29,7 @@ ENV PATH=/act/build-tools:/act/source/build-deps/node/bin:/act/venv/bin:/opt/ros
     SO101_TELEOP_BUN=/act/build-tools/bun \
     AMENT_PREFIX_PATH=/act/install:/opt/ros/jazzy
 RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; cd /act/build-source; \
+    /act/venv/bin/python -c '\''import json, pathlib; print("ROS_PACKAGE_READBACK=" + json.dumps(sorted(p.name for p in pathlib.Path("/opt/ros/jazzy/share").iterdir() if p.is_dir())))'\''; \
     /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
       --build-base /act/build --install-base /act/install --merge-install --packages-up-to so101_demo_py \
       --allow-overriding controller_manager hardware_interface_testing mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
