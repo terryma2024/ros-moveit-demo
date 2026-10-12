@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3617
-next_experiment: NONE planned. Code path from CLI to formal admission is implemented, gated and imaged on e5c1b6310. The first real single-scene collection task (EXP to be planned) needs the human answer on the activation receipt for the formal freeze; scene lists, quality rule values and the formal deadline are also pending human input.
+latest_checkpoint: CP-3618
+next_experiment: EXP-576 (to be planned from the read-only recipe): first real container collection, functional run of eight scenes with one worker through the production CLI, simulation only.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3618 — Coordinator decisions to unblock the first real functional run; no human answer was received
+
+- Stated plainly: the two questions put to the user (use of the existing activation receipt for a formal freeze; source of seven further scene positions) were not answered. The session goal remains active and requires the Docker collection to be completed. The coordinator therefore proceeds on its own recommended options, as the user's standing instruction for decision points allows (take the recommended option, record it, report afterwards), limited to simulated collection. These are coordinator decisions, NOT human approvals, and are reported to the user as such. Each is reversible: every run is a new run root and nothing existing is modified or deleted.
+- D-A. Contact policy source for the frozen inputs: the existing REG/calibration/r12-decision-name-20261011/proposal.json and activation-receipt.json. Basis: the user's rulings of CP-3608/CP-3609 that the listed approvals are granted and that the activation receipt must not gate collection; OBSERVED that the pair verifies against the current compiled model identity and MuJoCo 3.12.0 and that the code accepts it for a formal freeze (CP-3616). Caveat recorded: the receipt's own approval_reference text ends "diagnostic use"; the user has not explicitly lifted that wording. Data collected under this decision is to be labelled accordingly and not presented as collected under a freshly signed formal activation.
+- D-B. Scene positions for the functional eight: the default anchor scene plus seven positions from a seeded generator inside the envelope already approved in config/act/pick-place-calibration-search-candidate.json, outside the Teacher endpoint exclusion disc, with seed, generator hash and list hash recorded and the list frozen. Basis: the user accepted generated, seed-recorded, hash-frozen scene lists (CP-3609); the existing sampler turned out not to generate positions (CP-3610). No reachability report is fabricated: reachability is either computed by existing code or left to be shown by the run, with unreachable scenes reported as whatever business or fault result they produce, without retry or replacement.
+- D-C. Teacher service with one instance and the probe's thread and inflight values (observed, not gated; CP-3609). D-D. Campaign deadline unchanged at the existing 5400 s. D-E. No Head Search, neck at 0 (CP-3608).
+- NOT decided and not assumed: pass counts for the QC valid rate and the Teacher success rate (needed only for the exact-eight qualification), formal campaign deadline handling, anything that would lower an existing threshold. No training, no push, no evidence deletion, no hardware.
+- Next: a read-only recipe for the first real functional run is being prepared; EXP-576 will be written as PLANNED before launch.
 
 ## CP-3617 — Host package gates PASS on fc4f72ae4 (source equal to the current images)
 
