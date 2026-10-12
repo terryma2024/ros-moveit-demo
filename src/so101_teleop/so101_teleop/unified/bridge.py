@@ -447,6 +447,8 @@ class ActCampaignLifecycle:
         self.context: AdmittedCampaignContext | None = None
 
     async def start(self, spec) -> tuple[AdmittedCampaignContext, tuple[ActWorkerPort, ...]]:
+        if spec.kind in ('act_collection_start','act_collection_resume'):
+            raise MutationError('ACT_CONTAINER_OWNER_REQUIRED')
         if self.context is not None:
             raise MutationError("ACT_CAMPAIGN_ALREADY_STARTED")
         # A repeated command may be read back through admission, but only a

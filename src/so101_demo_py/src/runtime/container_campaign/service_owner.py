@@ -22,7 +22,7 @@ from so101_demo.runtime.container_campaign.process_identity import ContainerOwne
 from so101_demo.runtime.container_campaign.provenance import read_container_provenance
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
 from so101_demo.runtime.inference.client import InferenceClient
-from so101_demo.runtime.inference.config import _service, calibration_runtime_hash
+from so101_demo.runtime.inference.config import _service, calibration_runtime_hash, load_campaign_config
 from so101_demo.runtime.inference.contract import validate_service_response
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
 from so101_teleop.unified.contracts import AdmittedCampaignContext
@@ -79,6 +79,11 @@ class ContainerServiceOwner:
             raise ValueError('SERVICE_OWNER_CONFIG_INVALID')
         self.context = admitted_context
         self.config, self.paths, self.roles, self.registry = copy.deepcopy(config), paths, roles, registry
+        if (admitted_context.campaign_config_path is None or admitted_context.campaign_config_sha256 is None
+                or admitted_context.registered_evidence_root != config['evidence_root']
+                or load_campaign_config(admitted_context.campaign_config_path, roles=roles,
+                    expected_sha256=admitted_context.campaign_config_sha256) != self.config):
+            raise ValueError('SERVICE_OWNER_CONTEXT_MISMATCH')
         if (str(paths['run']) != admitted_context.evidence_root
                 or not paths['run'].is_relative_to(Path(config['evidence_root']))
                 or config['gpu_uuid'] != admitted_context.physical_gpu_uuid

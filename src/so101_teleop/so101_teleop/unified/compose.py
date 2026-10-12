@@ -202,6 +202,8 @@ def compose_domain_services(
                 visible_physical_uuids=visible, resource_binding_id=binding,
                 owner_pid=owner_pid, owner_started_ticks=owner_started_ticks,
                 clock_ns=clock, gpu_inventory_probe=inventory_probe,
+                root_registration=dict(path=str(evidence_root.resolve(strict=True)),
+                                       uid=evidence_root.stat().st_uid, gid=evidence_root.stat().st_gid),
             )
         except Exception as error:  # noqa: BLE001 - ACT remains unavailable without physical proof
             act_error = f"{type(error).__name__}: {error}"

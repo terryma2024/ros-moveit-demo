@@ -188,7 +188,7 @@ def test_formal_and_pick_place_validation_schemas_refuse_the_diagnostic_fields(t
             service.start(replace(spec, kind="act_collection_start"))
         with pytest.raises(ValueError, match="CAMPAIGN_START_SCHEMA"):
             service.start(replace(spec, kind="pick_place_validation_phase"))
-        with pytest.raises(ValueError, match="CAMPAIGN_START_SCHEMA"):
+        with pytest.raises(ValueError, match="ACT_CONTAINER_RESUME_FORBIDDEN"):
             service.start(replace(spec, kind="act_collection_resume"))
         assert service.arbiter.is_idle()
     finally:

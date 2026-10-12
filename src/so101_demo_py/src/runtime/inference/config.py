@@ -98,7 +98,7 @@ def _service(service, role, *, readback):
         _require(service["max_inflight_requests"] == 8)
 
 
-def load_campaign_config(path, *, roles=("head", "teacher")):
+def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
     """Validate one format and read hashes only for roles actually launched.
 
     Restricted measurement loads only head. Unused Teacher configuration still
@@ -111,6 +111,9 @@ def load_campaign_config(path, *, roles=("head", "teacher")):
         with _open_regular(path) as stream:
             payload = stream.read(1024 * 1024 + 1)
         _require(len(payload) <= 1024 * 1024)
+        if expected_sha256 is not None:
+            _sha(expected_sha256)
+            _require(hashlib.sha256(payload).hexdigest() == expected_sha256)
         document = json.loads(payload.decode("utf-8"), object_pairs_hook=_pairs,
             parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
         _keys(document, ("schema_version", "kind", "evidence_root", "controlled_runtime",

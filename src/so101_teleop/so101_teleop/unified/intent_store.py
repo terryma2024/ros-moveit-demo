@@ -142,6 +142,20 @@ CREATE TABLE IF NOT EXISTS act_campaign_contexts (
   campaign_id TEXT NOT NULL UNIQUE,
   context_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS act_worker_slots (
+  campaign_id TEXT NOT NULL,
+  worker_id TEXT NOT NULL,
+  execution_generation INTEGER NOT NULL,
+  ros_domain_id INTEGER NOT NULL,
+  namespace TEXT NOT NULL,
+  controller_name TEXT NOT NULL,
+  slot_json TEXT NOT NULL,
+  active INTEGER NOT NULL CHECK (active IN (0,1)),
+  PRIMARY KEY (campaign_id, worker_id, execution_generation)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS act_active_slot_domain ON act_worker_slots(ros_domain_id) WHERE active=1;
+CREATE UNIQUE INDEX IF NOT EXISTS act_active_slot_namespace ON act_worker_slots(namespace) WHERE active=1;
+CREATE UNIQUE INDEX IF NOT EXISTS act_active_slot_controller ON act_worker_slots(controller_name) WHERE active=1;
 """
 
 

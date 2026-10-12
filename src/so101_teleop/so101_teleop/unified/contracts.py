@@ -91,6 +91,9 @@ class AdmittedCampaignContext:
     evidence_root: str
     admitted_at_monotonic_s: float
     deadline_monotonic_s: float
+    registered_evidence_root: str | None = None
+    campaign_config_path: str | None = None
+    campaign_config_sha256: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("campaign_id", "operation_id", "workload_kind", "service_epoch", "stable_host_id", "physical_gpu_uuid", "resource_binding_id"):
@@ -114,6 +117,16 @@ class AdmittedCampaignContext:
             raise ValueError("CAMPAIGN_CONTEXT_ADMISSION_TIME")
         if not isinstance(self.deadline_monotonic_s, (int, float)) or not math.isfinite(self.deadline_monotonic_s) or self.deadline_monotonic_s <= self.admitted_at_monotonic_s:
             raise ValueError("CAMPAIGN_CONTEXT_DEADLINE")
+        container_inputs = (self.registered_evidence_root, self.campaign_config_path, self.campaign_config_sha256)
+        if any(value is not None for value in container_inputs):
+            if (any(type(value) is not str or not value for value in container_inputs)
+                    or not Path(self.registered_evidence_root).is_absolute()
+                    or '..' in Path(self.registered_evidence_root).parts
+                    or not Path(self.campaign_config_path).is_absolute()
+                    or '..' in Path(self.campaign_config_path).parts
+                    or re.fullmatch(r'[0-9a-f]{64}', self.campaign_config_sha256) is None
+                    or not Path(self.evidence_root).is_relative_to(Path(self.registered_evidence_root))):
+                raise ValueError('CAMPAIGN_CONTEXT_CONTAINER_INPUTS')
 
     def to_dict(self) -> dict:
         return asdict(self)

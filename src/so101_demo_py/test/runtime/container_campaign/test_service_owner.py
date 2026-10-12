@@ -47,6 +47,8 @@ def fixture(tmp_path, *, measurement=False, fail_teacher=False, refuse_stop=Fals
             max_image_height=480, max_image_width=640, queue_timeout_s=10., inference_timeout_s=20.)
     if measurement:
         config['teacher_service']['model']['weights']['path'] = str(tmp_path/'unused-teacher.pt')
+    config_path = paths['run']/'campaign.json'
+    config_path.write_text(json.dumps(config))
     context = AdmittedCampaignContext(campaign_id='campaign', operation_id='operation',
         workload_kind='act_calibration_measurement_start' if measurement else 'act_collection_start',
         service_epoch='epoch', execution_generation=1, stable_host_id='host',
@@ -54,7 +56,9 @@ def fixture(tmp_path, *, measurement=False, fail_teacher=False, refuse_stop=Fals
         source_sha256='a'*64, manifest_sha256='a'*64, runtime_config_sha256=sha,
         collection_config_sha256='a'*64, contact_policy_fingerprint='a'*64,
         domain_session_map_sha256='a'*64, resource_binding_id='binding', evidence_root=str(paths['run']),
-        admitted_at_monotonic_s=1, deadline_monotonic_s=time.monotonic()+3600)
+        admitted_at_monotonic_s=1, deadline_monotonic_s=time.monotonic()+3600,
+        registered_evidence_root=str(tmp_path), campaign_config_path=str(config_path),
+        campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
     descriptor = paths['run']/'head-descriptor.json'
     descriptor.write_text(json.dumps(dict(backend='yolo_seg', weights_path=config['head_service']['model']['weights']['path'],
         weights_sha256=config['head_service']['model']['weights']['sha256'], model_id='head', image_size_px=640,

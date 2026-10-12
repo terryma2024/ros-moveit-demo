@@ -35,6 +35,7 @@ from .contracts import (
 from .bridge import ActChildLaunch, ActChildRegistry
 from .gpu_workload import ActGpuWorkloadArbiter, GpuLeaseRequest, resolve_physical_gpu
 from .instances import InstanceRegistry
+from .worker_slots import ActWorkerSlot, ActWorkerSlotRegistry
 
 DEFAULT_DEADLINE_NS = 1 << 62
 
@@ -236,7 +237,7 @@ class AdmissionGateway:
 
 
 _ACT_START_KINDS = frozenset({"pick_place_validation_phase", "pick_place_validation_full", "act_collection_start",
-                              "act_collection_resume", "act_diagnostic_episode"})
+                              "act_diagnostic_episode"})
 _DIAGNOSTIC_START_KIND = "act_diagnostic_episode"
 _ACT_PAYLOAD_KEYS = frozenset({
     "campaign_id", "backend", "worker_count", "source_path", "source_sha256",
@@ -246,6 +247,8 @@ _ACT_PAYLOAD_KEYS = frozenset({
     "resource_binding_id", "qualification_mode", "qualification_receipt_path", "children",
     "calibration_report_path", "calibration_report_sha256",
 })
+_COLLECTION_PAYLOAD_KEYS = (_ACT_PAYLOAD_KEYS - {'children'}) | frozenset({
+    'worker_slots', 'registered_evidence_root', 'campaign_config_path', 'campaign_config_sha256'})
 
 # a pick-place validation payload additionally names its preparation receipt; a collection payload must not
 # (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
@@ -278,13 +281,16 @@ class UnifiedWorkloadService:
         stable_host_id: str, gpu_selector: str, visible_physical_uuids: tuple[str, ...],
         resource_binding_id: str, owner_pid: int, owner_started_ticks: int,
         clock_ns, owner_identity_valid=_real_owner, gpu_inventory_probe=None,
-        calibration_identity_probe=None,
+        calibration_identity_probe=None, root_registration=None, container_inspect=None,
     ) -> None:
         if gpu_arbiter.store is not arbiter.store:
             raise ValueError("WORKLOAD_STORE_MISMATCH")
         self.arbiter = arbiter
         self.gpu_arbiter = gpu_arbiter
         self.child_registry = child_registry
+        self.slot_registry = ActWorkerSlotRegistry(arbiter.store, child_registry=child_registry)
+        self.root_registration = root_registration
+        self.container_inspect = container_inspect or self._inspect_container
         self.service_epoch = service_epoch
         self.runtime_id = runtime_id
         self.stable_host_id = stable_host_id
@@ -298,6 +304,11 @@ class UnifiedWorkloadService:
         self.owner_identity_valid = owner_identity_valid
         self.clock_ns = clock_ns
         self._start_lock = threading.RLock()
+
+    @staticmethod
+    def _inspect_container(container_id):
+        from .bridge import ContainerBridgeProcessOwner
+        return ContainerBridgeProcessOwner._docker_inspect(container_id)
 
     @staticmethod
     def _read_json(path_value: str, root: Path) -> dict:
@@ -342,7 +353,9 @@ class UnifiedWorkloadService:
             raise ValueError("CAMPAIGN_ARTIFACT_HASH_MISMATCH")
         return data
 
-    def _validate_start(self, spec: OperationSpec) -> tuple[dict, tuple[ActChildLaunch, ...], str]:
+    def _validate_start(self, spec: OperationSpec) -> tuple[dict, tuple, str]:
+        if spec.kind == 'act_collection_resume':
+            raise ValueError('ACT_CONTAINER_RESUME_FORBIDDEN')
         if spec.domain is not Domain.VALIDATION or spec.kind not in _ACT_START_KINDS:
             raise ValueError("UNKNOWN_OPERATION")
         if spec.runtime_id != self.runtime_id or spec.deadline_ns <= self.clock_ns():
@@ -352,8 +365,9 @@ class UnifiedWorkloadService:
             raise ValueError("CAMPAIGN_START_SCHEMA")
         pick_place_validation = spec.kind in ("pick_place_validation_phase", "pick_place_validation_full")
         diagnostic = spec.kind == _DIAGNOSTIC_START_KIND
+        container_collection = spec.kind == 'act_collection_start'
         expected = (_PICK_PLACE_VALIDATION_PAYLOAD_KEYS if pick_place_validation else
-                    _DIAGNOSTIC_PAYLOAD_KEYS if diagnostic else _ACT_PAYLOAD_KEYS)
+                    _DIAGNOSTIC_PAYLOAD_KEYS if diagnostic else _COLLECTION_PAYLOAD_KEYS)
         if set(payload) != expected:
             # a payload missing only the calibration pair is a calibration problem, not a schema one
             if set(payload) == expected - {"calibration_report_path",
@@ -393,11 +407,24 @@ class UnifiedWorkloadService:
         root = Path(payload["evidence_root"])
         if not root.is_absolute() or ".." in root.parts or not root.is_dir():
             raise ValueError("CAMPAIGN_EVIDENCE_ROOT_INVALID")
+        campaign_config = None
+        if container_collection:
+            from so101_demo.runtime.inference.config import load_campaign_config
+            from so101_demo.runtime.container_campaign.paths import validate_registered_evidence_root
+            self._verify_artifact(payload['campaign_config_path'], payload['campaign_config_sha256'])
+            campaign_config = load_campaign_config(payload['campaign_config_path'],
+                                                  expected_sha256=payload['campaign_config_sha256'])
+            registered = validate_registered_evidence_root(campaign_config['evidence_root'],
+                payload['registered_evidence_root'], registration=self.root_registration)
+            if (root.resolve(strict=True) != root or root == registered or not root.is_relative_to(registered)
+                    or campaign_config['controlled_runtime'] != dict(
+                        path=payload['runtime_config_path'], sha256=payload['runtime_config_sha256'])):
+                raise ValueError('CAMPAIGN_CONFIG_BINDING_MISMATCH')
         runtime_bytes = None
         for name in ("source", "runtime_config", "collection_config"):
             verified = self._verify_artifact(
                 payload[f"{name}_path"], payload[f"{name}_sha256"],
-                read_bytes=name == "runtime_config" and spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"),
+                read_bytes=name == "runtime_config" and (pick_place_validation or container_collection),
             )
             if name == "runtime_config":
                 runtime_bytes = verified
@@ -446,10 +473,15 @@ class UnifiedWorkloadService:
             from so101_demo.act.diagnostic_episode_inputs import require_nonhead_gate
 
             require_nonhead_gate(calibration)
-        if spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"):
+        if pick_place_validation or container_collection:
             from so101_demo.act.head_search_binding import validate_head_search_binding
             try:
-                validate_head_search_binding(json.loads(runtime_bytes), calibration)
+                binding = validate_head_search_binding(json.loads(runtime_bytes), calibration)
+                if container_collection:
+                    from so101_demo.runtime.inference.config import verify_head_configuration
+                    verify_head_configuration(campaign_config['head_service'], binding=binding,
+                        runtime_versions={name:binding.detector[name]
+                                          for name in ('torch_version','ultralytics_version')})
             except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise ValueError("HEAD_SEARCH_CONFIG_INVALID") from error
         proposal = self._read_json(payload["proposal_path"], root)
@@ -503,19 +535,39 @@ class UnifiedWorkloadService:
                 raise ValueError("EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID")
         elif payload["qualification_receipt_path"] is not None:
             raise ValueError("QUALIFICATION_RECEIPT_UNEXPECTED")
-        if not isinstance(payload["children"], list) or len(payload["children"]) != payload["worker_count"]:
-            raise ValueError("CHILD_COUNT_MISMATCH")
-        proposed = ActChildRegistry()
-        for item in self.child_registry.launches():
-            proposed.register(item)
-        for item in payload["children"]:
-            if not isinstance(item, dict) or set(item) != set(ActChildLaunch.__dataclass_fields__):
-                raise ValueError("CHILD_LAUNCH_SCHEMA")
-            child = ActChildLaunch(**item)
-            if child.campaign_id != payload["campaign_id"] or child.execution_generation != spec.execution_generation:
-                raise ValueError("CHILD_CAMPAIGN_MISMATCH")
-            proposed.register(child)
-        children = tuple(ActChildLaunch(**item) for item in payload["children"])
+        if container_collection:
+            documents = payload['worker_slots']
+            if type(documents) is not list or len(documents) != payload['worker_count']:
+                raise ValueError('WORKER_SLOT_COUNT_MISMATCH')
+            children = []
+            for index, document in enumerate(documents):
+                if type(document) is not dict or set(document) != set(ActWorkerSlot.__dataclass_fields__):
+                    raise ValueError('WORKER_SLOT_SCHEMA')
+                slot = ActWorkerSlot(**document)
+                if (slot.campaign_id != payload['campaign_id'] or slot.execution_generation != spec.execution_generation
+                        or slot.worker_id != f'w{index:02d}'):
+                    raise ValueError('WORKER_SLOT_CAMPAIGN_MISMATCH')
+                children.append(slot)
+            children = tuple(children)
+            self.slot_registry.validate(children)
+        else:
+            if not isinstance(payload["children"], list) or len(payload["children"]) != payload["worker_count"]:
+                raise ValueError("CHILD_COUNT_MISMATCH")
+            proposed = ActChildRegistry()
+            for item in self.child_registry.launches():
+                proposed.register(item)
+            for item in payload["children"]:
+                if not isinstance(item, dict) or set(item) != set(ActChildLaunch.__dataclass_fields__):
+                    raise ValueError("CHILD_LAUNCH_SCHEMA")
+                child = ActChildLaunch(**item)
+                if child.campaign_id != payload["campaign_id"] or child.execution_generation != spec.execution_generation:
+                    raise ValueError("CHILD_CAMPAIGN_MISMATCH")
+                for slot in self.slot_registry.slots():
+                    for name in ('ros_domain_id','namespace','controller_name'):
+                        if getattr(slot,name) == getattr(child,name):
+                            raise ValueError('WORKER_SLOT_RESOURCE_SHARED')
+                proposed.register(child)
+            children = tuple(ActChildLaunch(**item) for item in payload["children"])
         try:
             current_visible = tuple(self.gpu_inventory_probe())
         except Exception as error:
@@ -523,6 +575,8 @@ class UnifiedWorkloadService:
         if current_visible != self.visible_physical_uuids:
             raise ValueError("GPU_MAPPING_DRIFT")
         physical_uuid = resolve_physical_gpu(self.gpu_selector, current_visible)
+        if container_collection and physical_uuid != campaign_config['gpu_uuid']:
+            raise ValueError('CAMPAIGN_GPU_BINDING_MISMATCH')
         return payload, children, physical_uuid
 
     # every runtime artifact a diagnostic payload names must be the frozen copy of this role; the
@@ -603,6 +657,8 @@ class UnifiedWorkloadService:
         """Validate everything, acquire resources and persist one context atomically."""
         with self._start_lock:
             payload, children, physical_uuid = self._validate_start(spec)
+            if spec.kind == 'act_collection_start' and allow_existing is not False:
+                raise ValueError('ACT_CONTAINER_NEW_CAMPAIGN_REQUIRED')
             store = self.arbiter.store
             with store.immediate_transaction():
                 repeated = store.repeat(spec.command_id, store.fingerprint(spec))
@@ -619,7 +675,8 @@ class UnifiedWorkloadService:
             # Reserve the complete child map before taking either durable resource.
             # Another registry user cannot create a collision between validation and
             # persistence, and a failed database/lease step rolls this map back.
-            with self.child_registry.reserve_many(children):
+            reservation_registry = self.slot_registry if spec.kind == 'act_collection_start' else self.child_registry
+            with reservation_registry.reserve_many(children):
                 operation_id = uuid.uuid4().hex
                 lease = GpuLeaseRequest(
                     stable_host_id=self.stable_host_id, physical_gpu_uuid=physical_uuid,
@@ -652,6 +709,9 @@ class UnifiedWorkloadService:
                             evidence_root=str(Path(payload["evidence_root"])),
                             admitted_at_monotonic_s=self.clock_ns() / 1e9,
                             deadline_monotonic_s=spec.deadline_ns / 1e9,
+                            registered_evidence_root=payload.get('registered_evidence_root'),
+                            campaign_config_path=payload.get('campaign_config_path'),
+                            campaign_config_sha256=payload.get('campaign_config_sha256'),
                         )
                         store._connection.execute(
                             "INSERT INTO act_campaign_contexts VALUES (?,?,?)",
@@ -683,7 +743,9 @@ class UnifiedWorkloadService:
             )
             if row is None or AdmittedCampaignContext.from_dict(json.loads(row[0])) != context:
                 raise ValueError("CAMPAIGN_CONTEXT_MISMATCH")
-            launches = tuple(item for item in self.child_registry.launches()
+            container_collection = context.workload_kind == 'act_collection_start'
+            resources = self.slot_registry.slots() if container_collection else self.child_registry.launches()
+            launches = tuple(item for item in resources
                              if item.campaign_id == context.campaign_id
                              and item.execution_generation == context.execution_generation)
             if not launches:
@@ -701,6 +763,8 @@ class UnifiedWorkloadService:
             ).encode()).hexdigest()
             if len(launches) != context.worker_count or child_map_sha256 != context.domain_session_map_sha256:
                 raise ValueError("CHILD_RELEASE_MISMATCH")
+            if container_collection:
+                self._verify_container_cleanup(context, launches)
             with store.immediate_transaction():
                 gpu_row = store._query_one(
                     "SELECT * FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
@@ -718,11 +782,44 @@ class UnifiedWorkloadService:
                     raise ValueError("GPU_LEASE_OWNER_MISMATCH")
                 outcome = store.settle_locked(context.operation_id, cleanup_confirmed=True)
                 if outcome.code is None:
+                    if container_collection:
+                        self.slot_registry.release_many_locked(launches)
                     store._connection.execute(
                         "DELETE FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
                         (context.stable_host_id, context.physical_gpu_uuid),
                     )
             if outcome.code:
                 raise MutationError(outcome.code)
-            self.child_registry.release_many(launches)
+            if not container_collection:
+                self.child_registry.release_many(launches)
             return outcome.projection
+
+    def _verify_container_cleanup(self, context, slots):
+        import sqlite3
+        from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
+        registry = None
+        try:
+            root = Path(context.evidence_root)
+            registry = ContainerLaunchRegistry(root/'host/launches.sqlite3', create=False)
+            by_worker = {slot.worker_id:slot for slot in slots}
+            for record in registry.records():
+                item = record['launch']
+                if item['role'] in ('head','teacher'):
+                    if Path(item['owned_root']) != root/'services'/item['role']:
+                        raise ValueError('foreign service root')
+                elif item['role'] == 'shard':
+                    slot = by_worker[item['worker_id']]
+                    owned = Path(item['owned_root'])
+                    if (owned != root/item['wave_id']/slot.worker_id/f"g{item['launch_generation']}"
+                            or not item['wave_id'].startswith('wave-')
+                            or item['ros_domain_id'] != slot.ros_domain_id or item['ros_namespace'] != slot.namespace):
+                        raise ValueError('foreign shard scope')
+                else:
+                    raise ValueError('unknown role')
+            if not registry.all_terminated(self.container_inspect):
+                raise ValueError('owned launch stop not proven')
+        except (OSError, ValueError, TypeError, KeyError, RuntimeError, sqlite3.Error) as error:
+            raise ValueError('ACT_CONTAINER_CLEANUP_NOT_CONFIRMED') from error
+        finally:
+            if registry is not None:
+                registry.close()

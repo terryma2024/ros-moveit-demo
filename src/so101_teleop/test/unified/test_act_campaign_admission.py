@@ -573,23 +573,18 @@ def test_start_registry_race_does_not_commit_parent_or_gpu_lease(tmp_path):
 
 
 def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_path):
-    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
-    receipt_path.write_text(json.dumps(receipt))
-    store = IntentStore.open(tmp_path / "state")
+    from test_container_collection_admission import fixture
+    from dataclasses import asdict
+    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
     try:
-        service = _service(store)
-        base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,
-                           calibration_status="QUALIFIED")
-        payload = dict(base.payload, worker_count=8, children=[
-            launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
-            for index in range(8)
-        ])
-        # a collection payload must not carry the calibration receipt pair
-        payload = {k: v for k, v in payload.items() if k not in ("preparation_receipt_path", "preparation_receipt_sha256")}
-        formal = replace(base, kind="act_collection_start", payload=payload)
+        slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}',ros_domain_id=181+index,
+                 namespace=f'/act/campaign/w{index:02d}',controller_name=f'/act/campaign/w{index:02d}/arm_controller'))
+                 for index in range(8)]
+        formal = replace(base,payload=dict(base.payload,worker_count=8,worker_slots=slots,qualification_mode=False))
         with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_REQUIRED"):
             service.start(formal)
         assert service.child_registry.launches() == ()
+        assert service.slot_registry.slots() == ()
         assert service.arbiter.is_idle()
         assert store._query_one("SELECT * FROM gpu_workload_leases") is None
     finally:
@@ -597,27 +592,23 @@ def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_pa
 
 
 def test_formal_eight_worker_rejects_a_self_declared_passed_json_without_independent_verifier(tmp_path):
-    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
-    receipt_path.write_text(json.dumps(receipt))
-    base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,
-                       calibration_status="QUALIFIED")
-    fake_path = tmp_path / "qualification.json"
+    from test_container_collection_admission import fixture
+    from dataclasses import asdict
+    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
+    fake_path = paths['run'] / "qualification.json"
     fake_path.write_text(json.dumps({
         "status": "PASSED", "worker_count": 8,
         "source_sha256": base.payload["source_sha256"],
         "runtime_config_sha256": base.payload["runtime_config_sha256"],
         "collection_config_sha256": base.payload["collection_config_sha256"],
-        "contact_policy_fingerprint": fingerprint,
+        "contact_policy_fingerprint": base.payload['contact_policy_fingerprint'],
     }))
-    payload = dict(base.payload, worker_count=8, qualification_receipt_path=str(fake_path),
-                   children=[launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
-                             for index in range(8)])
-    # a collection payload must not carry the calibration receipt pair
-    payload = {k: v for k, v in payload.items() if k not in ("preparation_receipt_path", "preparation_receipt_sha256")}
-    formal = replace(base, kind="act_collection_start", payload=payload)
-    store = IntentStore.open(tmp_path / "state")
+    slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}',ros_domain_id=181+index,
+             namespace=f'/act/campaign/w{index:02d}',controller_name=f'/act/campaign/w{index:02d}/arm_controller'))
+             for index in range(8)]
+    formal = replace(base,payload=dict(base.payload, worker_count=8, qualification_mode=False,
+                   qualification_receipt_path=str(fake_path), worker_slots=slots))
     try:
-        service = _service(store)
         # the refusal now comes from the independent verifier itself (so101_demo.act.parallel_qualification_verifier):
         # the self-declared document cites no re-derivable evidence, so it is refused as invalid evidence
         # rather than as a missing verifier. The test's point is unchanged: the document is rejected and
@@ -625,6 +616,7 @@ def test_formal_eight_worker_rejects_a_self_declared_passed_json_without_indepen
         with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"):
             service.start(formal)
         assert service.child_registry.launches() == ()
+        assert service.slot_registry.slots() == ()
         assert service.arbiter.is_idle()
         assert store._query_one("SELECT * FROM gpu_workload_leases") is None
     finally:
