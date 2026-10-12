@@ -16,7 +16,7 @@ import sqlite3
 import pytest
 
 from collection_qualification_world import (
-    GPU, WORKERS, build_world, install_controlled_qc, ref, sha, write_json,
+    GPU, WORKERS, build_world, controlled_frozen_reader, install_controlled_qc, ref, sha, write_json,
 )
 from collection_quality_rules import synthetic_rule, write_synthetic_rules
 from so101_demo.act import collection_qualification_recompute as recompute
@@ -24,11 +24,6 @@ from so101_demo.act.parallel_qualification_verifier import build_collection_qual
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
 
 NAMES = ('recorder_lossless', 'frame_continuity', 'qc_valid_rate', 'teacher_physical_success_rate')
-
-
-def controlled_frozen_reader(path):
-    """The strict frozen-set reader is replaced by a read of the controlled manifest and its side file (see the world module)."""
-    return {**json.loads(path.read_bytes()), **json.loads((path.parent/'controlled-frozen-binding.json').read_bytes())}
 
 
 @pytest.fixture

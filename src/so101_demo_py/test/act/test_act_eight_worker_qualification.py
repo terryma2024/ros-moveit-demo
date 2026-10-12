@@ -1,4 +1,9 @@
-"""The independent W8 verifier refuses anything it cannot re-derive from disk."""
+"""The pick-place live qualification documents are not collection qualification evidence.
+
+The old eight-worker verifier (`verify_eight_worker_qualification`) is gone: a `QUALIFIED` document with a `live_campaign` block
+is the pick-place live shape, and the collection verifier (`verify_collection_qualification`) refuses it at its closed form check
+before it reads anything else. The tests that only exercise the pick-place bundle and journal helpers are unchanged.
+"""
 
 import hashlib
 import json
@@ -6,12 +11,19 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.parallel_qualification_verifier import verify_eight_worker_qualification
+from so101_demo.act import parallel_qualification_verifier as verifier
+from so101_demo.act.parallel_qualification_verifier import verify_collection_qualification
+from so101_demo.runtime.container_campaign.paths import make_campaign_paths
+
+REFUSED = "COLLECTION_QUALIFICATION_"
 
 
 def _document(tmp_path, **overrides):
-    """A qualified document whose campaign summary and journals really exist on disk."""
+    """A pick-place live document whose campaign summary and journals really exist on disk, placed at a registered run's report path."""
 
+    registered = tmp_path / "registered"
+    registered.mkdir(exist_ok=True)
+    run = make_campaign_paths(registered, "run-1")["run"]
     case_root = tmp_path / "campaign"
     case_root.mkdir(parents=True, exist_ok=True)
     digests = []
@@ -32,57 +44,48 @@ def _document(tmp_path, **overrides):
                     "preparation_receipt_sha256": "0" * 64,
                     "journal_sha256": digests}}
     document.update(overrides)
-    path = tmp_path / "qualified.json"
+    path = run / "host" / "qualification-report.json"
     path.write_text(json.dumps(document))
-    return path, case_root
+    return path, registered, case_root
 
 
-def test_a_document_whose_evidence_re_derives_verifies(tmp_path):
-    path, _root = _document(tmp_path)
-    assert verify_eight_worker_qualification(path, {}) is True
+def _refused(path, registered, code=REFUSED + "REPORT_INVALID"):
+    with pytest.raises(ValueError, match=code):
+        verify_collection_qualification(path, registered_root=registered, expected_identity=None)
 
 
-@pytest.mark.parametrize("mutation,code", [
-    (lambda doc, root: doc.update({"status": "PASSED"}), "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
-    (lambda doc, root: doc.update({"worker_count": 4}), "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
-    (lambda doc, root: doc.pop("live_campaign"), "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
-    (lambda doc, root: doc["live_campaign"].update({"journal_sha256": []}),
-     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
-    (lambda doc, root: doc["live_campaign"].update({"campaign_result_sha256": "f" * 64}),
-     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_MISMATCH"),
-    (lambda doc, root: doc["live_campaign"].update({"journal_sha256": ["a" * 64]}),
-     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_MISMATCH"),
-    (lambda doc, root: doc["live_campaign"].update({"case_root": str(root / "gone")}),
-     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
-])
-def test_the_verifier_refuses_what_it_cannot_re_derive(tmp_path, mutation, code):
-    path, root = _document(tmp_path)
+def test_the_old_verifier_is_gone():
+    assert not hasattr(verifier, "verify_eight_worker_qualification")
+
+
+def test_a_pick_place_document_whose_evidence_re_derives_is_still_refused(tmp_path):
+    """Before: the old verifier returned True for this document. After: it is not a collection report."""
+    path, registered, _root = _document(tmp_path)
+    _refused(path, registered)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda doc, root: doc.update({"status": "PASSED"}),
+    lambda doc, root: doc.update({"worker_count": 4}),
+    lambda doc, root: doc.pop("live_campaign"),
+    lambda doc, root: doc["live_campaign"].update({"journal_sha256": []}),
+    lambda doc, root: doc["live_campaign"].update({"campaign_result_sha256": "f" * 64}),
+    lambda doc, root: doc["live_campaign"].update({"journal_sha256": ["a" * 64]}),
+    lambda doc, root: doc["live_campaign"].update({"case_root": str(root / "gone")}),
+], ids=["passed_word", "four_workers", "no_live_block", "no_journals", "result_digest", "journal_digest", "case_root"])
+def test_every_mutation_of_a_pick_place_document_stays_refused(tmp_path, mutation):
+    """Before: each mutation selected one old verifier code. After: the closed form check refuses all of them alike."""
+    path, registered, root = _document(tmp_path)
     document = json.loads(path.read_text())
     mutation(document, root)
     path.write_text(json.dumps(document))
-    with pytest.raises(ValueError, match=code):
-        verify_eight_worker_qualification(path, {})
+    _refused(path, registered)
 
 
 def test_a_missing_document_refuses(tmp_path):
-    with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"):
-        verify_eight_worker_qualification(tmp_path / "absent.json", {})
-
-
-@pytest.mark.parametrize("payload,code", [
-    ({"preparation_receipt_path": ""}, "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
-    ({"preparation_receipt_path": "/nonexistent/receipt.json"}, "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
-])
-def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
-    """When the payload names a bundle it must open, and its evidence must agree.
-
-    The positive path needs a committed prepared bundle; `test_act_pick_place_validation_artifact_bundle.py`'s `ValidInputs`
-    fixture (lines 34-86) is the model for it, and that test belongs with the next increment.
-    """
-
-    path, _root = _document(tmp_path)
-    with pytest.raises(ValueError, match=code):
-        verify_eight_worker_qualification(path, payload)
+    registered = tmp_path / "registered"
+    registered.mkdir()
+    _refused(registered / "run-1" / "host" / "qualification-report.json", registered, REFUSED + "PATH_INVALID")
 
 
 def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consumes(tmp_path):
@@ -146,8 +149,8 @@ def test_journal_rows_for_a_prepared_bundle_can_be_built_and_match_it(tmp_path):
                                         manifest_document_sha256=document_sha)
 
 
-def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verifies(tmp_path):
-    """The verifier's positive path, end to end."""
+def test_a_complete_pick_place_document_over_a_prepared_bundle_is_refused(tmp_path):
+    """Before: a fully valid pick-place document over a prepared bundle verified. After: the collection verifier refuses it."""
 
     from test_act_pick_place_validation_artifact_bundle import _inputs
 
@@ -209,12 +212,8 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
                                   "campaign_result_sha256": hashlib.sha256(campaign.read_bytes()).hexdigest(),
                                   "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
                                   "journal_sha256": digests}}
-    path = tmp_path / "qualified.json"
+    registered = tmp_path / "registered"
+    registered.mkdir()
+    path = make_campaign_paths(registered, "run-1")["run"] / "host" / "qualification-report.json"
     path.write_text(json.dumps(document))
-    payload = {"preparation_receipt_path": str(receipt), "manifest_path": str(bundle.manifest)}
-    assert verify_eight_worker_qualification(path, payload) is True
-    # one variable: a journal edited after sealing is no longer the one the document cites
-    sealed = cases / f"{fulls[0]}.json"
-    sealed.write_bytes(sealed.read_bytes().replace(b'"PASSED"', b'"FAILED"'))
-    with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_MISMATCH"):
-        verify_eight_worker_qualification(path, payload)
+    _refused(path, registered)

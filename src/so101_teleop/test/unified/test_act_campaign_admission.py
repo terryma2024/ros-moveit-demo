@@ -591,34 +591,62 @@ def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_pa
         store.close()
 
 
-def test_formal_eight_worker_rejects_a_self_declared_passed_json_without_independent_verifier(tmp_path):
-    from test_container_collection_admission import fixture
+def _formal_with_receipt(base, first_slot, path):
     from dataclasses import asdict
-    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
-    fake_path = paths['run'] / "qualification.json"
-    fake_path.write_text(json.dumps({
+    slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}',ros_domain_id=181+index,
+             namespace=f'/act/campaign/w{index:02d}',controller_name=f'/act/campaign/w{index:02d}/arm_controller'))
+             for index in range(8)]
+    return replace(base,payload=dict(base.payload, worker_count=8, qualification_mode=False,
+                   qualification_receipt_path=str(path),
+                   qualification_receipt_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest(), worker_slots=slots))
+
+
+def _legacy_receipt(base, path):
+    path.write_text(json.dumps({
         "status": "PASSED", "worker_count": 8,
         "source_sha256": base.payload["source_sha256"],
         "runtime_config_sha256": base.payload["runtime_config_sha256"],
         "collection_config_sha256": base.payload["collection_config_sha256"],
         "contact_policy_fingerprint": base.payload['contact_policy_fingerprint'],
     }))
-    slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}',ros_domain_id=181+index,
-             namespace=f'/act/campaign/w{index:02d}',controller_name=f'/act/campaign/w{index:02d}/arm_controller'))
-             for index in range(8)]
-    formal = replace(base,payload=dict(base.payload, worker_count=8, qualification_mode=False,
-                   qualification_receipt_path=str(fake_path), worker_slots=slots))
+
+
+def test_formal_eight_worker_refuses_a_legacy_passed_receipt_from_another_run(tmp_path):
+    """Before: a PASSED document under the current run root reached the old verifier and failed there as invalid evidence.
+    After: the same document in a sibling run of the registered root reaches the collection verifier and is refused there."""
+    from test_container_collection_admission import fixture
+    from so101_demo.runtime.container_campaign.paths import make_campaign_paths
+    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
+    legacy = make_campaign_paths(tmp_path, 'sibling')['host'] / "qualification-report.json"
+    _legacy_receipt(base, legacy)
+    formal = _formal_with_receipt(base, first_slot, legacy)
     try:
-        # the refusal now comes from the independent verifier itself (so101_demo.act.parallel_qualification_verifier):
-        # the self-declared document cites no re-derivable evidence, so it is refused as invalid evidence
-        # rather than as a missing verifier. The test's point is unchanged: the document is rejected and
-        # nothing is launched.
         with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"):
             service.start(formal)
         assert service.child_registry.launches() == ()
         assert service.slot_registry.slots() == ()
         assert service.arbiter.is_idle()
         assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert store.execution_generation(Domain.VALIDATION) == 0
+    finally:
+        store.close()
+
+
+def test_formal_eight_worker_refuses_any_receipt_under_the_current_run_root(tmp_path):
+    """The same legacy document where the old admission accepted it to read: under the current run root it is refused before it is read."""
+    from test_container_collection_admission import fixture
+    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
+    fake_path = paths['run'] / "qualification.json"
+    _legacy_receipt(base, fake_path)
+    formal = _formal_with_receipt(base, first_slot, fake_path)
+    try:
+        with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_MISMATCH"):
+            service.start(formal)
+        assert service.child_registry.launches() == ()
+        assert service.slot_registry.slots() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert store.execution_generation(Domain.VALIDATION) == 0
     finally:
         store.close()
 

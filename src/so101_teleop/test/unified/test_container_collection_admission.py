@@ -2,17 +2,28 @@
 
 from dataclasses import asdict, replace
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path
+import sys
+import time
 
 import pytest
+
+from teleop_paths import DEMO_TEST_IMPORT_PATH
+
+# the qualification world builder lives in the demo package's test/support, with the fixtures it imports
+for _candidate in DEMO_TEST_IMPORT_PATH:
+    if str(_candidate) not in sys.path:
+        sys.path.insert(0, str(_candidate))
 
 from test_act_campaign_admission import _write_policy, _start_spec, _service
 from test_act_diagnostic_episode_admission import _diagnostic_spec
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey
+from so101_teleop.unified.contracts import Domain, OperationSpec
 from so101_teleop.unified.intent_store import IntentStore
 from so101_teleop.unified.worker_slots import ActWorkerSlot
 
@@ -56,7 +67,7 @@ def fixture(tmp_path):
         controller_name='/act/campaign/w00/arm_controller')
     payload = {name:value for name,value in base.payload.items()
                if name not in {'children','preparation_receipt_path','preparation_receipt_sha256', *REMOVED_KEYS}}
-    payload.update(worker_slots=[asdict(slot)], qualification_mode=True, evidence_root=str(root),
+    payload.update(worker_slots=[asdict(slot)], qualification_mode=True, qualification_receipt_sha256=None, evidence_root=str(root),
         runtime_config_path=str(runtime), runtime_config_sha256=runtime_sha,
         registered_evidence_root=str(tmp_path), campaign_config_path=str(config_path),
         campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
@@ -332,5 +343,257 @@ def test_diagnostic_admission_unchanged(tmp_path):
     store = IntentStore.open(tmp_path/'state-ok')
     try:
         assert _service(store).start(_diagnostic_spec(tmp_path, tag='ok')).workload_kind == 'act_diagnostic_episode'
+    finally:
+        store.close()
+
+
+def test_only_the_collection_payload_carries_the_report_hash(tmp_path):
+    """Pinned before the formal-collection edit: pick-place validation and diagnostic keep their key sets; the hash is collection-only."""
+    from so101_teleop.unified import admission
+    key = 'qualification_receipt_sha256'
+    assert key in admission._COLLECTION_PAYLOAD_KEYS
+    for name in ('_ACT_PAYLOAD_KEYS', '_PICK_PLACE_VALIDATION_PAYLOAD_KEYS', '_DIAGNOSTIC_PAYLOAD_KEYS'):
+        assert key not in getattr(admission, name)
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    pick_place = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    cases = (('pick_place', pick_place), ('diagnostic', _diagnostic_spec(tmp_path, tag='keys')))
+    for name, spec in cases:
+        store = IntentStore.open(tmp_path/('state-'+name))
+        try:
+            service = _service(store)
+            with pytest.raises(ValueError, match='CAMPAIGN_START_SCHEMA'):
+                service.start(replace(spec, payload=dict(spec.payload, **{key: 'f'*64})))
+            assert service.child_registry.launches() == () and service.arbiter.is_idle()
+            assert store._query_one('SELECT * FROM gpu_workload_leases') is None
+        finally:
+            store.close()
+
+
+def test_qualification_mode_carrying_a_report_hash_or_path_is_refused(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        for change in (dict(qualification_receipt_sha256='f'*64), dict(qualification_receipt_path=str(tmp_path/'any.json'))):
+            with pytest.raises(ValueError, match='QUALIFICATION_RECEIPT_UNEXPECTED'):
+                workload.start(replace(spec, payload=dict(spec.payload, **change)), allow_existing=False)
+            assert_nothing_acquired(workload, store)
+            assert store.execution_generation(Domain.VALIDATION) == 0
+    finally:
+        store.close()
+
+
+# ---- formal collection: admission verifies an exact-eight qualification report built by the real builder --------------------
+#
+# REAL: the qualification run on disk (the world builder drives the production producers, see collection_qualification_world.py),
+# the report written by `build_collection_qualification_report`, the verifier `verify_collection_qualification` run by admission
+# itself, the campaign-config loader, `UnifiedWorkloadService.start()` with its SQLite store, slot registry and GPU arbiter.
+# CONTROLLED: what the world module labels controlled (episode bytes, the QC recomputation, Docker and provenance documents, the
+# frozen-inputs reader) and the TEST-ONLY synthetic rule files, whose pass counts are not approved values. None of it is physical,
+# Teacher, container or qualification evidence.
+
+REPORT_RUNS = itertools.count()
+
+
+@pytest.fixture(scope='module')
+def qualified_world(tmp_path_factory):
+    from collection_qualification_world import build_world, install_controlled_world
+    from so101_demo.act.parallel_qualification_verifier import build_collection_qualification_report
+
+    patch = pytest.MonkeyPatch()
+    install_controlled_world(patch)
+    try:
+        world = build_world(tmp_path_factory.mktemp('qualification-world'))
+        build_collection_qualification_report(world.run, contract=world.contract_path)
+    finally:
+        patch.undo()
+    return world
+
+
+def sha_of(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def formal_start(world, tmp_path, monkeypatch, *, config_edit=None, payload_edit=None, copy_report_into_run=False):
+    """A formal start spec over `world`'s report, with its own run under the same registered root and its own store.
+
+    The formal campaign config is the qualification world's with `qualification_contract` null (a formal campaign names no gate
+    contract); `config_edit` and `payload_edit` mutate the config dict and the payload dict before they are hashed/frozen."""
+    from collection_qualification_world import install_controlled_world
+
+    install_controlled_world(monkeypatch)
+    paths = make_campaign_paths(world.root, f'formal-{next(REPORT_RUNS)}')
+    inputs = tmp_path/'formal-inputs'
+    inputs.mkdir()
+    campaign = json.loads(world.campaign_path.read_bytes())
+    campaign['qualification_contract'] = None
+    if config_edit is not None:
+        config_edit(campaign, inputs)
+    config_path = inputs/'campaign.json'
+    config_path.write_text(json.dumps(campaign))
+    report = world.report_path
+    if copy_report_into_run:
+        report = paths['host']/'qualification-report.json'
+        report.write_bytes(world.report_path.read_bytes())
+    slots = [asdict(ActWorkerSlot(campaign_id='campaign-1', worker_id=f'w{index:02d}', execution_generation=1,
+        ros_domain_id=181+index, namespace=f'/act/campaign/w{index:02d}',
+        controller_name=f'/act/campaign/w{index:02d}/arm_controller')) for index in range(8)]
+    payload = dict(campaign_id='campaign-1', backend='mujoco', worker_count=8,
+        contact_policy_fingerprint=world.identity['contact_policy_fingerprint'], evidence_root=str(paths['run']),
+        service_epoch='epoch-1', resource_binding_id='binding-1', qualification_mode=False,
+        qualification_receipt_path=str(report), qualification_receipt_sha256=sha_of(report), worker_slots=slots,
+        registered_evidence_root=str(world.root), campaign_config_path=str(config_path),
+        campaign_config_sha256=sha_of(config_path))
+    for name, path in (('source', world.inputs/'source.tar'), ('manifest', world.formal), ('runtime_config', world.runtime),
+                       ('collection_config', world.collection)):
+        payload[name+'_path'], payload[name+'_sha256'] = str(path), sha_of(path)
+    if payload_edit is not None:
+        payload_edit(payload, inputs)
+    spec = OperationSpec(command_id='formal-1', domain=Domain.VALIDATION, kind='act_collection_start', payload=payload,
+        runtime_id='runtime-1', execution_generation=1, deadline_ns=time.monotonic_ns()+10**12)
+    store = IntentStore.open(tmp_path/'state')
+    workload = _service(store)
+    workload.visible_physical_uuids = (GPU,)
+    workload.root_registration = dict(path=str(world.root), uid=os.getuid(), gid=os.getgid())
+    return paths, spec, store, workload
+
+
+def test_formal_admits_after_exact_eight_qualification(qualified_world, tmp_path, monkeypatch):
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch)
+    try:
+        assert not qualified_world.run.is_relative_to(paths['run']) and not paths['run'].is_relative_to(qualified_world.run)
+        started = time.monotonic()
+        context = workload.start(spec, allow_existing=False)
+        print(f'ADMISSION_VERIFICATION_SECONDS={time.monotonic()-started:.1f}')
+        assert context.workload_kind == 'act_collection_start' and len(workload.slot_registry.slots()) == 8
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is not None
+        assert store.execution_generation(Domain.VALIDATION) == 1
+    finally:
+        store.close()
+
+
+def test_formal_admits_when_teacher_weights_and_instance_count_differ(qualified_world, tmp_path, monkeypatch):
+    """The Teacher's weights, classes, threshold and instance count are not part of the qualified identity (spec section 7)."""
+    def other_teacher(campaign, inputs):
+        weights = inputs/'other-teacher.pt'
+        weights.write_bytes(b'other-teacher-weights')
+        teacher = campaign['teacher_service']
+        teacher['model'] = dict(teacher['model'], model_id='other-model', score_threshold=.5,
+            weights=dict(path=str(weights), sha256=sha_of(weights)))
+        teacher['instances'] = 1
+        assert teacher['instances'] != qualified_world.service['instances']
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch, config_edit=other_teacher)
+    try:
+        assert workload.start(spec, allow_existing=False).workload_kind == 'act_collection_start'
+        assert len(workload.slot_registry.slots()) == 8
+    finally:
+        store.close()
+
+
+def assert_formal_refused(workload, store, spec, code):
+    with pytest.raises(ValueError, match=code) as raised:
+        workload.start(spec, allow_existing=False)
+    assert_nothing_acquired(workload, store)
+    assert store.execution_generation(Domain.VALIDATION) == 0
+    return raised
+
+
+def test_report_under_the_current_run_root_is_refused(qualified_world, tmp_path, monkeypatch):
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch, copy_report_into_run=True)
+    try:
+        assert Path(spec.payload['qualification_receipt_path']).is_relative_to(paths['run'])
+        assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_MISMATCH')
+    finally:
+        store.close()
+
+
+def test_report_hash_that_is_not_the_reports_is_refused(qualified_world, tmp_path, monkeypatch):
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch,
+        payload_edit=lambda payload, inputs: payload.update(qualification_receipt_sha256='f'*64))
+    try:
+        assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_MISMATCH')
+    finally:
+        store.close()
+
+
+def test_formal_scene_list_that_is_not_the_gates_is_refused(qualified_world, tmp_path, monkeypatch):
+    def other_list(payload, inputs):
+        scenes = inputs/'other-formal-scenes.json'
+        scenes.write_text(json.dumps({'scenarios': [{'scene_id': 'elsewhere-00', 'seed': 1, 'split': 'validation'}]}))
+        payload.update(manifest_path=str(scenes), manifest_sha256=sha_of(scenes))
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch, payload_edit=other_list)
+    try:
+        assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_MISMATCH')
+    finally:
+        store.close()
+
+
+def test_campaign_config_naming_a_gate_contract_is_refused(qualified_world, tmp_path, monkeypatch):
+    def names_gate(campaign, inputs):
+        campaign['qualification_contract'] = dict(path=str(qualified_world.contract_path),
+                                                  sha256=sha_of(qualified_world.contract_path))
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch, config_edit=names_gate)
+    try:
+        assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_MISMATCH')
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('missing', ['path', 'sha256'])
+def test_formal_without_report_path_or_hash_is_required(qualified_world, tmp_path, monkeypatch, missing):
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch,
+        payload_edit=lambda payload, inputs: payload.update({'qualification_receipt_'+missing: None}))
+    try:
+        assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_REQUIRED')
+    finally:
+        store.close()
+
+
+IDENTITY_CHANGES = ('source_sha256', 'runtime_config_sha256', 'collection_config_sha256', 'contact_policy_fingerprint',
+                    'inference_image', 'shard_image', 'gpu_uuid')
+
+
+@pytest.mark.parametrize('key', IDENTITY_CHANGES)
+def test_identity_that_differs_from_the_qualified_one_is_refused(qualified_world, tmp_path, monkeypatch, key):
+    """Each controlled-identity key, changed on the formal side only, refuses the same report; the run holds the originals."""
+    def different_file(name, suffix):
+        def edit(payload, inputs):
+            other = inputs/f'other-{name}{suffix}'
+            other.write_bytes(Path(payload[name+'_path']).read_bytes()+b'# another file\n')
+            payload.update({name+'_path': str(other), name+'_sha256': sha_of(other)})
+            if name == 'runtime_config':    # the campaign config binds the runtime file too
+                config = json.loads(Path(payload['campaign_config_path']).read_bytes())
+                config['controlled_runtime'] = dict(path=str(other), sha256=sha_of(other))
+                Path(payload['campaign_config_path']).write_text(json.dumps(config))
+                payload['campaign_config_sha256'] = sha_of(payload['campaign_config_path'])
+        return edit
+    payload_edit = config_edit = None
+    if key == 'source_sha256': payload_edit = different_file('source', '.tar')
+    elif key == 'runtime_config_sha256': payload_edit = different_file('runtime_config', '.yaml')
+    elif key == 'collection_config_sha256': payload_edit = different_file('collection_config', '.yaml')
+    elif key == 'contact_policy_fingerprint': payload_edit = lambda payload, inputs: payload.update(contact_policy_fingerprint='f'*64)
+    elif key == 'inference_image':
+        # the loader requires the Head's image to equal the Teacher's, so both change
+        config_edit = lambda campaign, inputs: [campaign[role]['image'].update(install_sha256='9'*64)
+                                                for role in ('head_service', 'teacher_service')]
+    elif key == 'shard_image':
+        config_edit = lambda campaign, inputs: campaign['shard_image'].update(digest='sha256:'+'9'*64)
+    else:
+        config_edit = lambda campaign, inputs: campaign.update(gpu_uuid='GPU-00000000-0000-0000-0000-000000000000')
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch, config_edit=config_edit,
+                                                payload_edit=payload_edit)
+    try:
+        raised = assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID')
+        assert 'COLLECTION_QUALIFICATION_IDENTITY_MISMATCH' in str(raised.value.__cause__)
+    finally:
+        store.close()
+
+
+def test_legacy_pass_receipt_in_a_sibling_run_is_refused_as_invalid_evidence(qualified_world, tmp_path, monkeypatch):
+    legacy = make_campaign_paths(qualified_world.root, f'legacy-{next(REPORT_RUNS)}')['host']/'qualification-report.json'
+    legacy.write_text(json.dumps(dict(status='PASSED', worker_count=8)))
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch, payload_edit=lambda payload, inputs:
+        payload.update(qualification_receipt_path=str(legacy), qualification_receipt_sha256=sha_of(legacy)))
+    try:
+        assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID')
     finally:
         store.close()

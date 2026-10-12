@@ -41,6 +41,8 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     compares and commits that allocation atomically with admission; a competing
     admission makes this proposal stale. No admitted context exists here.
 
+    `arguments.qualification_report` is the formal plane's container qualification report (a regular file whose sha256 the payload
+    carries; admission verifies it from the run it belongs to) and `None` for a qualification run.
     `contact_policy_fingerprint` is the explicit value the caller took from the campaign's frozen inputs
     (`case_inputs.campaign_binding`); no contact proposal, receipt or calibration report is named or read here.
     """
@@ -86,9 +88,9 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     if arguments.qualification:
         contract = (validate_qualification_contract(manifest) if arguments.worker_count == 8
                     else validate_functional_contract(manifest))
-        if contract['worker_count'] != arguments.worker_count or arguments.qualification_contract is not None:
+        if contract['worker_count'] != arguments.worker_count or arguments.qualification_report is not None:
             raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
-    elif arguments.qualification_contract is None:
+    elif arguments.qualification_report is None:
         raise ValueError('EIGHT_WORKER_QUALIFICATION_REQUIRED')
     with workload.arbiter.store._thread_lock:
         generation = workload.arbiter.store.execution_generation(Domain.VALIDATION)+1
@@ -102,8 +104,9 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
         contact_policy_fingerprint=fingerprint,evidence_root=str(root),
         service_epoch=workload.service_epoch,resource_binding_id=workload.resource_binding_id,
         qualification_mode=arguments.qualification,
-        qualification_receipt_path=str(arguments.qualification_contract)
-            if arguments.qualification_contract is not None else None,
+        qualification_receipt_path=str(arguments.qualification_report) if arguments.qualification_report is not None else None,
+        qualification_receipt_sha256=_digest(arguments.qualification_report)
+            if arguments.qualification_report is not None else None,
         worker_slots=slots,registered_evidence_root=str(registered),campaign_config_path=str(config_path),
         campaign_config_sha256=config_digest)
     for name,path in (('source',arguments.source),('manifest',arguments.manifest),

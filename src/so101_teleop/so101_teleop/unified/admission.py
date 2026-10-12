@@ -236,6 +236,16 @@ class AdmissionGateway:
         return self.arbiter.prepare_child(parent_id, child_id)
 
 
+def _collection_identity(payload: dict, campaign_config: dict) -> dict:
+    """The controlled identity a container collection start binds, the one definition both planes compare: the qualification
+    plane with its run contract, the formal plane with the qualification report's contract."""
+    identity = {name: payload[name] for name in ('source_sha256', 'runtime_config_sha256',
+                                                 'collection_config_sha256', 'contact_policy_fingerprint')}
+    identity.update(gpu_uuid=campaign_config['gpu_uuid'], image_source_install=dict(
+        inference=campaign_config['teacher_service']['image'], shard=campaign_config['shard_image']))
+    return identity
+
+
 _ACT_START_KINDS = frozenset({"pick_place_validation_phase", "pick_place_validation_full", "act_collection_start",
                               "act_diagnostic_episode"})
 _DIAGNOSTIC_START_KIND = "act_diagnostic_episode"
@@ -252,7 +262,8 @@ _ACT_PAYLOAD_KEYS = frozenset({
 _COLLECTION_EXCLUDED_KEYS = frozenset({
     'children', 'proposal_path', 'activation_receipt_path', 'calibration_report_path', 'calibration_report_sha256'})
 _COLLECTION_PAYLOAD_KEYS = (_ACT_PAYLOAD_KEYS - _COLLECTION_EXCLUDED_KEYS) | frozenset({
-    'worker_slots', 'registered_evidence_root', 'campaign_config_path', 'campaign_config_sha256'})
+    'worker_slots', 'registered_evidence_root', 'campaign_config_path', 'campaign_config_sha256',
+    'qualification_receipt_sha256'})
 
 # a pick-place validation payload additionally names its preparation receipt; a collection payload must not
 # (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
@@ -456,11 +467,8 @@ class UnifiedWorkloadService:
                 parse_constant=lambda name: (_ for _ in ()).throw(ValueError(name)))
             contract = (validate_functional_contract(manifest) if payload['worker_count'] in (1,2)
                         else validate_qualification_contract(manifest))
-            expected_identity = {name:payload[name] for name in ('source_sha256','runtime_config_sha256',
-                'collection_config_sha256','contact_policy_fingerprint')}
-            expected_identity.update(gpu_uuid=campaign_config['gpu_uuid'], image_source_install=dict(
-                inference=campaign_config['teacher_service']['image'], shard=campaign_config['shard_image']))
-            if contract['worker_count'] != payload['worker_count'] or contract['controlled_identity'] != expected_identity:
+            if (contract['worker_count'] != payload['worker_count']
+                    or contract['controlled_identity'] != _collection_identity(payload, campaign_config)):
                 raise ValueError('COLLECTION_RUN_CONTRACT_BINDING_MISMATCH')
             expected_ref = (dict(path=payload['manifest_path'],sha256=payload['manifest_sha256'])
                             if payload['worker_count'] == 8 else None)
@@ -528,39 +536,28 @@ class UnifiedWorkloadService:
                 raise ValueError("POLICY_NOT_ACTIVATED")
         if diagnostic:
             self._require_diagnostic_scope(payload, root)
-        if spec.kind.startswith("act_collection") and not payload["qualification_mode"]:
-            qualified_path = payload["qualification_receipt_path"]
-            if not isinstance(qualified_path, str):
-                raise ValueError("EIGHT_WORKER_QUALIFICATION_REQUIRED")
+        if container_collection and not payload['qualification_mode']:
+            # formal collection: a verified exact-eight qualification report of ANOTHER run of the registered root
+            path, digest = payload['qualification_receipt_path'], payload['qualification_receipt_sha256']
+            if type(path) is not str or type(digest) is not str:
+                raise ValueError('EIGHT_WORKER_QUALIFICATION_REQUIRED')
+            if Path(path).is_relative_to(root) or campaign_config['qualification_contract'] is not None:
+                raise ValueError('EIGHT_WORKER_QUALIFICATION_MISMATCH')
             try:
-                qualification = self._read_json(qualified_path, root)
-            except ValueError as error:
-                raise ValueError("EIGHT_WORKER_QUALIFICATION_REQUIRED") from error
-            required = {
-                "status": "PASSED", "worker_count": 8,
-                "source_sha256": payload["source_sha256"],
-                "runtime_config_sha256": payload["runtime_config_sha256"],
-                "collection_config_sha256": payload["collection_config_sha256"],
-                "contact_policy_fingerprint": payload["contact_policy_fingerprint"],
-            }
-            if any(qualification.get(key) != value for key, value in required.items()):
-                raise ValueError("EIGHT_WORKER_QUALIFICATION_MISMATCH")
-            # A self-declared PASSED document is not physical qualification.
-            # the collection qualification must provide an independent verifier of the frozen
-            # contract, two committed 20-scene waves and actual per-Worker
-            # terminal leases before formal admission can become reachable.
-            try:
-                from so101_demo.act.parallel_qualification_verifier import verify_eight_worker_qualification
+                from so101_demo.act.parallel_qualification_verifier import verify_collection_qualification
             except ImportError as error:
-                raise ValueError("EIGHT_WORKER_QUALIFICATION_VERIFIER_UNAVAILABLE") from error
+                raise ValueError('EIGHT_WORKER_QUALIFICATION_VERIFIER_UNAVAILABLE') from error
             try:
-                verified = verify_eight_worker_qualification(Path(qualified_path), payload)
+                proof = verify_collection_qualification(Path(path), registered_root=registered,
+                    expected_identity=_collection_identity(payload, campaign_config))
             except (OSError, KeyError, TypeError, ValueError) as error:
-                raise ValueError("EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID") from error
-            if verified is not True:
-                raise ValueError("EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID")
-        elif payload["qualification_receipt_path"] is not None:
-            raise ValueError("QUALIFICATION_RECEIPT_UNEXPECTED")
+                raise ValueError('EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID') from error
+            if (proof.get('status') != 'PASS' or proof['report_sha256'] != digest
+                    or proof['formal_split_manifest_sha256'] != payload['manifest_sha256']):
+                raise ValueError('EIGHT_WORKER_QUALIFICATION_MISMATCH')
+        elif payload['qualification_receipt_path'] is not None or (
+                container_collection and payload['qualification_receipt_sha256'] is not None):
+            raise ValueError('QUALIFICATION_RECEIPT_UNEXPECTED')
         if container_collection:
             documents = payload['worker_slots']
             if type(documents) is not list or len(documents) != payload['worker_count']:

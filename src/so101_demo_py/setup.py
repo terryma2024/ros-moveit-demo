@@ -131,6 +131,9 @@ setup(
             "act_sample = so101_demo.cli.act_sample:main",
             "act_collect = so101_demo.cli.act_collect:main",
             "act_collect_parallel = so101_demo.cli.act_collect_parallel:main",
+            "act_build_parallel_qualification_report = "
+            "so101_demo.cli.act_build_parallel_qualification_report:main",
+            "act_verify_parallel_qualification = so101_demo.cli.act_verify_parallel_qualification:main",
             "act_offline_evaluate = so101_demo.cli.act_offline_evaluate:main",
             "act_train = so101_demo.cli.act_train:main",
             "act_inference_worker = so101_demo.cli.act_inference_worker:main",

@@ -9,7 +9,8 @@ non-zero.
 Exit codes: 0 completed and settled; 2 refused before admission; 1 anything after admission (admission refusal, a run fault, an
 unproven stop, a refused settle). Planes: `--qualification` with `--worker-count` 1/2 (functional contract) or 8 (gate contract),
 otherwise formal (8 workers, `--manifest` is the scene list and `--qualification-report` the container qualification report,
-which formal admission verifies unchanged and currently cannot accept).
+a report built from another run of the registered evidence root, which formal admission recomputes and verifies in full). In the
+exact-eight qualification plane `--run-id` must be the gate contract's `qualification_run_id`.
 
 Environment (read by `compose_services`): SO101_UNIFIED_EVIDENCE_ROOT (the registered evidence root), SO101_ACT_GPU_SELECTOR,
 SO101_ACT_RESOURCE_BINDING_ID.
@@ -131,7 +132,7 @@ def _preflight(args):
     if not args.qualification and args.qualification_report is None:
         raise ValueError('EIGHT_WORKER_QUALIFICATION_REQUIRED')
     resolved = {name: _regular(getattr(args, name)) for name in _PATH_OPTIONS}
-    report = None if args.qualification_report is None else Path(args.qualification_report).resolve()
+    report = None if args.qualification_report is None else _regular(args.qualification_report)
     try:
         document = read_document(resolved['manifest'])
     except (OSError, ValueError, UnicodeError) as error:
@@ -141,6 +142,8 @@ def _preflight(args):
                     else validate_functional_contract(document))
         if contract['worker_count'] != args.worker_count:
             raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
+        if args.worker_count == 8 and args.run_id != contract['qualification_run_id']:
+            raise ValueError('QUALIFICATION_RUN_ID_MISMATCH')
         scenes = validate_file_ref(contract['scene_manifest'])
         scenes_sha = contract['scene_manifest']['sha256']
     else:
@@ -195,7 +198,7 @@ def main(argv=None, *, edges=None) -> int:
         arguments = SimpleNamespace(campaign_id=args.campaign_id, manifest=resolved['manifest'], source=resolved['source'],
             runtime_config=resolved['runtime_config'], collection_config=resolved['collection_config'],
             campaign_config=resolved['campaign_config'], root=run, qualification=bool(args.qualification),
-            qualification_contract=report, worker_count=args.worker_count)
+            qualification_report=report, worker_count=args.worker_count)
         spec = prepare_collection_operation(arguments, services=services,
                                             contact_policy_fingerprint=binding['contact_policy_fingerprint'])
         parallel_runtime = collection_parallel_runtime(resolved['collection_config'])

@@ -19,10 +19,12 @@ test_case_inputs.py), a recorder around `ContainerCampaignOwner`, a spy around `
 wave verifier's readback, because the scripted container writes no committed episode; one test runs the real verifier and asserts
 that it refuses exactly that.
 
-Planes: every test that reaches admission uses the QUALIFICATION plane (W1 with the functional contract; W8 with the gate
-contract), because formal admission is unreachable until the container qualification verifier exists; the formal plane is used
-only to prove it fails closed. All approvals, scenes and images are synthetic; none of this is container, physical or
-qualification evidence.
+Planes: the QUALIFICATION plane (W1 with the functional contract; W8 with the gate contract, whose `qualification_run_id` is the
+`--run-id`) and the FORMAL plane. The formal plane is run to completion once, over a report that the real builder wrote from a
+40-scene qualification run of the same registered evidence root (the world module of the qualification tests; its episode bytes,
+QC recomputation and frozen-input reader are controlled and its rule files are TEST-ONLY), and admission verifies that report with
+the real verifier; every other formal case fails closed. All approvals, scenes and images are synthetic; none of this is
+container, physical or qualification evidence.
 """
 
 import asyncio
@@ -53,7 +55,9 @@ from so101_demo.runtime.container_campaign.task_control import ContainerTaskCont
 from so101_demo.runtime.container_campaign.task_results import reserve_task_output, write_task_result
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
 from test_act_diagnostic_episode_scope import _write_registry
+from collection_qualification_world import build_world, install_controlled_world
 from collection_quality_rules import write_synthetic_rules
+from so101_demo.act.parallel_qualification_verifier import build_collection_qualification_report
 from test_case_inputs import bound_registry, policies
 from so101_teleop.unified.contracts import Domain
 
@@ -299,8 +303,11 @@ class World:
     pass
 
 
-def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1):
-    """A synthetic campaign for `plane` in ('W1', 'W8', 'FORMAL'); returns everything the CLI is given and the doubles."""
+def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, qualified=False):
+    """A synthetic campaign for `plane` in ('W1', 'W8', 'FORMAL'); returns everything the CLI is given and the doubles.
+
+    `qualified` (FORMAL only) replaces the synthetic report file by a real report of a qualification run built under the same
+    registered evidence root, with this world's controlled identity and this world's formal scene list as the gate's."""
     import ament_index_python.packages as packages
     from so101_demo.act import execution_snapshot
 
@@ -346,7 +353,7 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1):
         # TEST-ONLY synthetic rule files: the pass counts are not approved values (collection_quality_rules.py)
         rules = write_synthetic_rules(inputs)
         world.manifest = write_json(inputs / 'gate.json', dict(schema_version=1, kind='ACT_PARALLEL_COLLECTION_GATE',
-            qualification_run_id='gate-run', worker_count=8, scene_manifest=ref(world.scenes),
+            qualification_run_id='run-one', worker_count=8, scene_manifest=ref(world.scenes),
             functional_manifest=ref(functional), formal_split_manifest=ref(formal), controlled_identity=identity,
             quality_rules=rules))
         qualification_contract = ref(world.manifest)
@@ -355,6 +362,15 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1):
         world.scenes = world.manifest = write_json(inputs / 'formal-scenes.json', dict(scenarios=scene_rows('formal', 3, 300)))
         world.worker_count, world.qualification, world.scene_ids = 8, False, [row['scene_id'] for row in scene_rows('formal', 3, 300)]
     world.report = write_json(inputs / 'qualification-report.json', dict(status='SYNTHETIC_NOT_A_QUALIFICATION'))
+    if qualified:
+        assert plane == 'FORMAL'
+        install_controlled_world(monkeypatch)
+        (root / 'qualification').mkdir()
+        qualification = build_world(root / 'qualification', evidence_root=evidence, images=(shared.teacher_image, shared.shard_image),
+            source_bytes=world.source.read_bytes(), runtime_bytes=shared.runtime_bytes, collection_bytes=shared.collection_bytes,
+            fingerprint=shared.fingerprint, formal_scenes=world.scenes)
+        world.report = build_collection_qualification_report(qualification.run, contract=qualification.contract_path)
+        world.qualification_world = qualification
     world.campaign = dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN', evidence_root=str(evidence),
         controlled_runtime=ref(world.runtime), head_service=service, teacher_service=service,
         shard_image=dict(shared.shard_image), gpu_uuid=GPU, qualification_contract=qualification_contract)
@@ -563,6 +579,11 @@ BAD_INPUTS = [
     ('unfreezable_candidates', 'W1', lambda w: dict(input_candidates=corrupt(w.inputs / 'candidates.json')), 'CASE_INPUTS_FREEZE_REFUSED', True),
     ('unreadable_policy', 'W1', lambda w: dict(teacher_endpoint=str(w.inputs / 'absent.yaml')), 'FIXED_COLLECTION_INPUT_UNREADABLE', False),
     ('formal_without_report', 'FORMAL', lambda w: dict(qualification_report=None), 'EIGHT_WORKER_QUALIFICATION_REQUIRED', False),
+    ('formal_report_absent', 'FORMAL', lambda w: dict(qualification_report=str(w.inputs / 'absent-report.json')),
+     'FIXED_COLLECTION_INPUT_UNREADABLE', False),
+    ('formal_report_is_a_directory', 'FORMAL', lambda w: dict(qualification_report=str(w.inputs)),
+     'FIXED_COLLECTION_INPUT_UNREADABLE', False),
+    ('gate_names_another_run_id', 'W8', lambda w: dict(run_id='another-run'), 'QUALIFICATION_RUN_ID_MISMATCH', False),
     ('qualification_with_report', 'W1', lambda w: dict(qualification_report=str(w.report)), 'COLLECTION_RUN_CONTRACT_MISMATCH', False),
 ]
 
@@ -587,12 +608,42 @@ def test_bad_input_refused_before_any_spawn(tmp_path, shared, monkeypatch, capsy
     assert run_root.exists() is run_root_exists
 
 
-def test_formal_plane_fails_closed_at_admission(tmp_path, shared, monkeypatch, capsys):
-    """FORMAL plane: the receipt-shaped qualification check is passed through unchanged and nothing starts."""
+def test_formal_plane_refuses_a_report_that_is_not_a_run_report_at_admission(tmp_path, shared, monkeypatch, capsys):
+    """FORMAL plane: a file that is no run's qualification report is refused by the real verifier and nothing starts."""
     world = make_world(tmp_path, shared, monkeypatch, plane='FORMAL')
     spies = Spies(monkeypatch)
     code, out, err = run(world, capsys)
-    assert code == 1 and re.search(r'EIGHT_WORKER_QUALIFICATION_(REQUIRED|MISMATCH|EVIDENCE_INVALID)', err)
+    assert code == 1 and 'EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID' in err
+    assert world.docker.calls == [] and spies.owners == [] and spies.finishes == []
+    assert spies.lease() is None and spies.active_slots() == ()
+
+
+def test_formal_plane_runs_over_a_real_exact_eight_qualification(tmp_path, shared, monkeypatch, capsys):
+    """FORMAL plane through `main()`: admission verifies a report built by the real builder, then the formal campaign runs and settles."""
+    world = make_world(tmp_path, shared, monkeypatch, plane='FORMAL', qualified=True)
+    spies = Spies(monkeypatch)
+    controlled_verifier(monkeypatch)
+    assert world.report.is_relative_to(world.qualification_world.run) and world.report.parent.parent.name == 'run-1'
+    code, out, err = run(world, capsys)
+    assert code == 0, err
+    summary = json.loads(out.strip().splitlines()[-1])
+    assert summary['plane'] == 'formal' and summary['scene_count'] == 3
+    (owner,) = spies.owners
+    assert owner.qualification is False
+    assert len(world.docker.runs(shard=False)) == 1 and len(world.docker.runs(shard=True)) >= 1
+    assert len(spies.finishes) == 1 and spies.finishes[0][1] is True
+    assert spies.lease() is None and spies.active_slots() == ()
+    admitted = spies.finishes[0][0]
+    assert admitted.workload_kind == 'act_collection_start' and admitted.worker_count == 8
+
+
+def test_formal_plane_refuses_a_scene_list_that_is_not_the_gates(tmp_path, shared, monkeypatch, capsys):
+    """The real report is valid, but the formal list given to the CLI is not the gate's: refused at admission, nothing starts."""
+    world = make_world(tmp_path, shared, monkeypatch, plane='FORMAL', qualified=True)
+    spies = Spies(monkeypatch)
+    other = write_json(world.inputs / 'other-formal-scenes.json', dict(scenarios=scene_rows('elsewhere', 3, 400)))
+    code, out, err = run(world, capsys, manifest=str(other))
+    assert code == 1 and 'EIGHT_WORKER_QUALIFICATION_MISMATCH' in err
     assert world.docker.calls == [] and spies.owners == [] and spies.finishes == []
     assert spies.lease() is None and spies.active_slots() == ()
 

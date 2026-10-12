@@ -82,6 +82,19 @@ def write_json(path, document):
     return Path(path)
 
 
+def controlled_frozen_reader(path):
+    """The strict frozen-set reader is replaced by a read of the controlled manifest and its side file (see the module docstring)."""
+    return {**json.loads(path.read_bytes()), **json.loads((path.parent/'controlled-frozen-binding.json').read_bytes())}
+
+
+def install_controlled_world(patch):
+    """Everything a recomputation over a built world needs controlled: the QC recomputation and the frozen-inputs reader."""
+    from so101_demo.act import collection_qualification_recompute
+
+    install_controlled_qc(patch)
+    patch.setattr(collection_qualification_recompute, 'read_frozen_inputs', controlled_frozen_reader)
+
+
 def install_controlled_qc(patch):
     """The QC recomputation is replaced by the report the store published (the existing readback tests' double)."""
     def recompute(episode_root, **kwargs):
@@ -214,7 +227,8 @@ class World(SimpleNamespace):
 
 
 def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEACHER_FAILED, qc_failed=QC_FAILED,
-                loss_failed=(), reassign=None, surplus_early=()):
+                loss_failed=(), reassign=None, surplus_early=(), evidence_root=None, images=None, source_bytes=None,
+                runtime_bytes=None, collection_bytes=None, fingerprint='1'*64, formal_scenes=None):
     """Build the whole run under `base`; `install_controlled_qc` must already be active.
 
     The tuples are scene indexes of the controlled business outcomes (0-39): `no_pose` seals the manifest-free perception
@@ -222,11 +236,20 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
     a failing topic-loss gate. The defaults are the labelled synthetic default world; they are not measured results.
     `reassign` maps a scene to the worker that collected it instead of the planned one and `surplus_early` lists the waves whose
     surplus task is assigned before its worker's second reserved task; such a wave fails the real scheduling rule, so its
-    `wave-N-verified.json` (and the campaign result and index) are not written, exactly as the owner would not write them."""
+    `wave-N-verified.json` (and the campaign result and index) are not written, exactly as the owner would not write them.
+
+    A caller whose formal campaign must share this run's evidence root and controlled identity passes: `evidence_root` (an
+    existing registered root to build the run under instead of `base/'evidence'`), `images` (the inference and shard image
+    documents), the bytes of the source, runtime and collection files, the contact policy `fingerprint`, and `formal_scenes`
+    (an existing scene list file used as the gate's formal split manifest, so the formal campaign's own list hashes equal)."""
     scene_count = 40
     base = Path(base).resolve()
-    root = base/'evidence'
-    root.mkdir()
+    inference_image, shard_image = images if images is not None else (INFERENCE_IMAGE, SHARD_IMAGE)
+    if evidence_root is None:
+        root = base/'evidence'
+        root.mkdir()
+    else:
+        root = Path(evidence_root).resolve(strict=True)
     paths = make_campaign_paths(root, tag)
     run = paths['run']
     inputs = base/'inputs'
@@ -236,16 +259,17 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
     scene_file = write_json(inputs/'qualification-scenes.json', dict(scenarios=rows(scenes, 200)))
     functional = write_json(inputs/'functional-scenes.json',
         dict(scenarios=rows([f'functional-{i:02d}' for i in range(8)], 100)))
-    formal = write_json(inputs/'formal-scenes.json', dict(scenarios=rows([f'formal-{i:02d}' for i in range(3)], 300)))
+    formal = (Path(formal_scenes) if formal_scenes is not None
+              else write_json(inputs/'formal-scenes.json', dict(scenarios=rows([f'formal-{i:02d}' for i in range(3)], 300))))
     runtime = inputs/'runtime.yaml'
-    runtime.write_bytes(b'runtime: controlled\n')
+    runtime.write_bytes(runtime_bytes if runtime_bytes is not None else b'runtime: controlled\n')
     collection = inputs/'collection.yaml'
-    collection.write_bytes(b'collection: controlled\n')
+    collection.write_bytes(collection_bytes if collection_bytes is not None else b'collection: controlled\n')
     source = inputs/'source.tar'
-    source.write_bytes(b'source: controlled\n')
-    proposal = write_json(inputs/'contact-proposal.json', dict(policy_fingerprint='1'*64))
+    source.write_bytes(source_bytes if source_bytes is not None else b'source: controlled\n')
+    proposal = write_json(inputs/'contact-proposal.json', dict(policy_fingerprint=fingerprint))
     identity = dict(source_sha256=sha(source), runtime_config_sha256=sha(runtime), collection_config_sha256=sha(collection),
-        contact_policy_fingerprint='1'*64, gpu_uuid=GPU, image_source_install=dict(inference=INFERENCE_IMAGE, shard=SHARD_IMAGE))
+        contact_policy_fingerprint=fingerprint, gpu_uuid=GPU, image_source_install=dict(inference=inference_image, shard=shard_image))
     rule_refs = rules if rules is not None else write_synthetic_rules(inputs)
     contract_path = write_json(inputs/'gate.json', dict(schema_version=1, kind='ACT_PARALLEL_COLLECTION_GATE',
         qualification_run_id='gate-run', worker_count=8, scene_manifest=ref(scene_file), functional_manifest=ref(functional),
@@ -253,13 +277,13 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
     contract_raw = contract_path.read_bytes()
     weights = inputs/'teacher.pt'
     weights.write_bytes(b'teacher-weights')
-    service = dict(image=dict(INFERENCE_IMAGE), model=dict(model_id='teacher-model', weights=ref(weights),
+    service = dict(image=dict(inference_image), model=dict(model_id='teacher-model', weights=ref(weights),
         classes={'0': 'plastic_cup'}, score_threshold=.25), instances=3, torch_threads=1, torch_interop_threads=1,
         max_inflight_requests=8, max_frame_bytes=2**20, max_image_height=480, max_image_width=640, queue_timeout_s=.75,
         inference_timeout_s=1.25)
     campaign_path = write_json(inputs/'campaign.json', dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN',
         evidence_root=str(root), controlled_runtime=ref(runtime), head_service=service, teacher_service=service,
-        shard_image=dict(SHARD_IMAGE), gpu_uuid=GPU, qualification_contract=ref(contract_path)))
+        shard_image=dict(shard_image), gpu_uuid=GPU, qualification_contract=ref(contract_path)))
     config = load_campaign_config(campaign_path, roles=('teacher',))
     contract = validate_qualification_contract(json.loads(contract_raw), check_rules=rules is None)
     # ---- frozen inputs and per-scene scopes (controlled; see the module docstring) -----------------------------------------
@@ -288,18 +312,18 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
     registry = ContainerLaunchRegistry(run/'host'/'launches.sqlite3')
     process = read_process_owner(os.getpid())
     teacher_launch = ContainerLaunch(launch_id='teacher-g1', role='teacher', worker_id=None, wave_id=None, launch_generation=1,
-        container_name='so101-qualification-teacher', image_digest=INFERENCE_IMAGE['digest'], owned_root=str(paths['services']['teacher']))
-    teacher_owner = ContainerOwnerKey(hashlib.sha256(b'teacher').hexdigest(), STARTED, INFERENCE_IMAGE['digest'], 1)
+        container_name='so101-qualification-teacher', image_digest=inference_image['digest'], owned_root=str(paths['services']['teacher']))
+    teacher_owner = ContainerOwnerKey(hashlib.sha256(b'teacher').hexdigest(), STARTED, inference_image['digest'], 1)
     registry.register(teacher_launch)
     registry.bind_container('teacher-g1', teacher_owner)
     registry.prove_terminated('teacher-g1', inspect_document(teacher_owner))
     _write(run/'teacher-service.json', service)
     _write(run/'host'/'teacher-ready.json', dict(schema_version=1, kind='service_ready', request_id='ready-1',
-        service_generation=run.name+'-teacher-g1', image_digest=INFERENCE_IMAGE['digest'],
-        package_source_sha256=INFERENCE_IMAGE['package_source_sha256'], model_id='teacher-model',
+        service_generation=run.name+'-teacher-g1', image_digest=inference_image['digest'],
+        package_source_sha256=inference_image['package_source_sha256'], model_id='teacher-model',
         weights_sha256=service['model']['weights']['sha256'], service_config_sha256=hashlib.sha256(canonical_json(service)).hexdigest(),
         gpu_uuid=GPU, configured_instances=3, loaded_instances=3, ready=True))
-    _write(run/'host'/'teacher-provenance.json', provenance_document(teacher_owner, INFERENCE_IMAGE))
+    _write(run/'host'/'teacher-provenance.json', provenance_document(teacher_owner, inference_image))
     # ---- the plan, the shards and the forty tasks --------------------------------------------------------------------------
     waves = partition_waves(tuple(scenes), max_wave_size=20)
     plans = [dict(wave_index=index, scene_ids=list(wave), assignment=reserve_qualification_scenes(wave, WORKERS))
@@ -374,15 +398,15 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
             spec, owned = shard_specs[wave_id, worker], owners[wave_id, worker]
             launch = ContainerLaunch(launch_id=f'{wave_id}-{worker}-g{generation}', role='shard', worker_id=worker,
                 wave_id=wave_id, launch_generation=generation, container_name=f'so101-qualification-{worker}-g{generation}',
-                image_digest=SHARD_IMAGE['digest'], owned_root=str(owned), ros_namespace=spec['ros_namespace'],
+                image_digest=shard_image['digest'], owned_root=str(owned), ros_namespace=spec['ros_namespace'],
                 ros_domain_id=spec['ros_domain_id'], session_id=spec['simulation_session_id'])
             owner = ContainerOwnerKey(hashlib.sha256(launch.container_name.encode()).hexdigest(), STARTED,
-                                      SHARD_IMAGE['digest'], generation)
+                                      shard_image['digest'], generation)
             registry.register(launch)
             registry.bind_container(launch.launch_id, owner)
             registry.bind_child(launch.launch_id, ContainerChildBinding(owner, process, pid_namespace_inode(),
                                                                          str(owned/'control/normal.sock')))
-            _write(owned/'actual-container-provenance.json', provenance_document(owner, SHARD_IMAGE))
+            _write(owned/'actual-container-provenance.json', provenance_document(owner, shard_image))
             _write(owned/'runtime-ready.json', dict(schema_version=1, kind='ACT_SHARD_RUNTIME_READY', generation=generation,
                 process_owner=asdict(process), ros_namespace=spec['ros_namespace'], readiness_sha256='0'*64))
             stop_evidence(spec, owner, process)
