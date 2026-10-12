@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 110f1f88e90698be5688ebc8e49c39125e507f94
+current_commit: 3ec625e2d
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,28 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3603
-next_experiment: Codex stopped at user request; Claude may continue approved one-way Task3 using claude-handoff-20261012.md, preserving executor drafts and all original campaign gates.
+latest_checkpoint: CP-3605
+next_experiment: NONE (no runtime experiment planned); Sonnet executor implements task_builder stage 1 (input contract, roots, local identity, Teacher context) per R/one-way-task3-builder-design.md, then stage 2 (local flow, fault split, stop/cleanup); Opus reviews each before a scoped commit.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3605 — Executor core committed; task_builder design reviewed; user goal extends to the Docker collection
+
+- User goal (2026-10-12, mid-session): "完成当前one-way-control以后，继续完成docker版的数据采集功能". After the one-way plan, continue plan Tasks 4-7 and the original campaign gates through the committed training-ready manifest; all earlier prohibitions stand (no training, push, evidence deletion, threshold downgrade, hardware, dst, new worktree).
+- Executor core committed `3ec625e2d` (Task 3 stays in-progress). Sonnet fixed the four Opus findings of CP-3604. RED targeted.ZfzwTzi5 rc1 28 fail/2 pass reached only the constructor boundary; reviewer behavioural RED targeted.iiFH0cwI rc1 20 fail/10 pass ran the new tests against the pre-fix snapshot (claude-transfer-wz9eb_og) through a plugin outside the worktree: four hung-stage bounds, loop shutdown and restop-after-success failed. GREEN targeted.KCLcjOAd rc0 78 pass/0 skip (executor, task control, task output, teleop task contract). Review artifact: R/one-way-task3-executor-review.json/.patch. External execution and native retirement are controlled doubles; no Teacher/Recorder/QC/Docker/physical claim.
+- Read-only survey produced R/one-way-task3-builder-design.md (coordinator-reviewed). OBSERVED from source: the real store refuses an `ActPerceptionDecision` (act/result_store.py:430-435), so a perception terminal could never be sealed on the old container path either; QC rule violations and QC crashes share processor rc=3; lease clock bounds feed offline budget, seal time and a native QC rule; `task_id` may contain `.` and cannot be used in lease identifiers.
+- Decisions recorded (coordinator recommendation followed, reported to the user): perception terminal is an execution fault for now, no new sealed form (D6, human decision still open); two-phase local lease deadline so no bound is loosened (D4); fault classification defaults to fault with an explicit business allowlist (D5).
+- INFERRED open risk R2: `teleop_runtime.transactional_reset`/`current_evidence` use an un-remapped global `rclpy.init()`; reset/evidence may not reach a namespaced container stack. Not verifiable by unit tests; must be settled in the Task 5 real-container smoke before any freeze.
+- Retained all; archived none; new scratch dirs are deletion candidates only. Nothing deleted.
+
+## CP-3604 — Claude takeover on ai-station; Opus reviews, Sonnet executes
+
+- User launched Claude directly on ai-station with the handoff prompt, then instructed mid-turn: "审查用Opus模型，执行用Sonnet模型". This supersedes the handoff/plan wording "inline self review, no subagent": Claude Opus 5.5 coordinates, reviews and is sole ledger writer; implementation is done by Claude Sonnet 5.5 subagents, one writer at a time in the existing worktree. No dst, no Codex resume, no self SSH, no new worktree. Matches AGENTS.md "Claude coordinator executes plans with Sonnet 5.5 subagents".
+- Last trusted checkpoint: CP-3603. Confirmed: Task1 `4e50afec0` and Task2 `110f1f88e` committed with targeted GREEN only; Task3 executor core is an uncommitted draft (9 lifecycle tests, targeted.k3ALZvK7 rc0/57 pass). Disproven/abandoned: old Worker callback RPC, heartbeat channel, execution-identity or commit-proof chains for task attribution.
+- OBSERVED at takeover (2026-10-12 13:05 UTC): host ai-station; HEAD `02ab1707e` (docs-only handoff commit over `110f1f88e`); branch codex/so101-act-data-0917a; submodule bab9841; the eight dirty paths match R/claude-transfer-wz9eb_og/manifest.json SHA256 exactly with mtimes no later than 12:49 UTC; `docker ps` empty; no pytest/colcon/Recorder process. Preserved, not touched: tmux `claude` (PID 233375), tmux `codex-act-container-20261012` with Codex PID 564888 (goal paused, not writing).
+- Opus review of the executor draft before dispatch (to be fixed RED/GREEN, not yet done): builder/run/shutdown/retirement awaits are unbounded, so a hung helper prevents `wait_stopped` and process exit; a stale `_build_task` survives into the next assignment; a completed, already shut-down execution is stopped again at terminate; the constructor publishes READY without native readiness (binding belongs to Task5).
+- Next: no runtime experiment. Sonnet executor continues Task3; evidence stays under the registered root and dispatch subroot R. Retained all; archived none; nothing deleted.
 
 ## CP-3603 — User stopped Codex and requested Claude handoff; executor core draft GREEN
 
