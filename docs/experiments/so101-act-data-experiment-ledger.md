@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 5aba8df8fee1
+current_commit: fc4f72ae4a9100e1266af7ad5ebb71e99a0b53b5
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3616
+latest_checkpoint: CP-3617
 next_experiment: NONE planned. Code path from CLI to formal admission is implemented, gated and imaged on e5c1b6310. The first real single-scene collection task (EXP to be planned) needs the human answer on the activation receipt for the formal freeze; scene lists, quality rule values and the formal deadline are also pending human input.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3617 — Host package gates PASS on fc4f72ae4 (source equal to the current images)
+
+- R/gates/fc4f72ae4a91 through R/run-host-gates.zsh: fresh build of 14 packages rc 0; so101_demo_py with the installed package at xdist 8 rc 0, 12547 passed, 0 failed, 167 skipped, 416.6 s (demo-run.TtH4okHw); other 13 packages rc 0, 2345 tests, 0 errors, 0 failures, 60 skipped, 512 s. Worktree unchanged and clean after the run. HEAD fc4f72ae4 is a ledger-only commit above 5aba8df8f, the commit of the current shard image R/image-build-20261012T205921Z and inference image R/image-build-20261012T210156Z; src, scripts and third_party are identical.
+- State at this checkpoint: one-way plan Tasks 1-6 implemented; Task 7 gates, image freeze and real four-operation verification done without motion; no real collection task has run. Blocked on human input only: whether the existing r12 activation receipt may back a formal freeze, and seven further scene positions with a reachability treatment for the minimum eight-scene functional run; also pending are the two quality pass counts and the formal campaign deadline handling.
+- Preserved processes: tmux sessions claude and codex-act-container-20261012 untouched throughout. Owned processes: none running. No container running.
 
 ## CP-3616 — Simulator rendering moved from CPU (llvmpipe) to the NVIDIA GPU in the shard image; discovery rule aligned with the freeze
 
