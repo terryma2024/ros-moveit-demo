@@ -69,11 +69,61 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3618
-next_experiment: EXP-576 (to be planned from the read-only recipe): first real container collection, functional run of eight scenes with one worker through the production CLI, simulation only.
+latest_checkpoint: CP-3619
+next_experiment: EXP-576 (PLANNED): first real container collection, functional run of eight scenes with one worker through the production CLI, simulation only.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3619 — Correction of CP-3618 D-B; inputs authored and validated; EXP-576 planned
+
+- correction (2026-10-12T21:50Z) to CP-3618 D-B: the statement that config/act/pick-place-calibration-search-candidate.json holds an approved cup-position envelope was WRONG. OBSERVED: that file approves three anchors (default, left, forward, hash-bound to pick-place-live-anchors.yaml); its `candidate_safe_interval` is a neck command interval, not a cup region; it contains no xy bounds. Restated coordinator decision (not a human approval): the seven added positions are drawn inside the triangle whose vertices are the three approved anchor positions, at least 0.060 m from the Teacher place target (the code's refusal radius is 0.030 m) and at least 0.020 m apart, seed 576001. The triangle interior is not itself an approved region; it is the only region bounded entirely by approved positions. The left anchor is not used as a scene because it lies 0.033 m from the place target.
+- D-A inputs named for input discovery, relative to evidence_root: calibration/r12-decision-name-20261011/proposal.json and calibration/r12-decision-name-20261011/activation-receipt.json
+- Further coordinator choices for this run: `--source` identity file src/so101_demo_py/src/backends/mujoco/reset.py (the code defines only that it is a hashed regular file; precedent is the diagnostic source binding); all four runtime-config names resolve to the installed copy of config/mujoco/parallel_batch_act_offline.yaml (sha 5775cb3b…), the one consistent assignment; the launch interpreter imports so101_demo from the worktree because the installed-profile probe needs a repository around calibration.py.
+- Read-only recipe saved as R/one-way-first-real-w1-recipe.md (sha256 6c96029c2fa1d26da7646d2331dfdfe38780905b91d7fbcf0db4552ff47bf3f8). Inputs authored by a Sonnet subagent under the prep directory act-w1-inputs-20261012T214111Z of the registered root (README, generator, scene list, functional contract, campaign config with provenance, launch and discovery scripts, validation); 18 of 18 read-only validation items PASS, including contract acceptance, campaign-config load, identity equality with admission's own function, contact fingerprint cbd85126… equal on proposal and receipt, installed-profile probe, GPU selector resolution, image ids, and no symlink on mounted paths. A one-off listing in the shard image shows /act/install/bin/ros2 and /act/install/lib/so101_mujoco_support/act_scoped_bag_record present and executable (not run).
+- Scene list hash 54144421f0bb690e9ca9aef5b5d0d986c39be5ba568a96fcba6a305e4d72f409, generator hash 496facd93d31898b9d2988815d4d9e1409fac47950d89e0f723b804710f123d3, 56 attempts: default (0.02, -0.28), fn8-01 (-0.025471, -0.288698), fn8-02 (0.017204, -0.33097), fn8-03 (-0.004708, -0.298592), fn8-04 (-0.022761, -0.316567), fn8-05 (0.019697, -0.309895), fn8-06 (-0.044372, -0.302647), fn8-07 (-0.002225, -0.325453), all z 0.165.
+- Known property of the run: with one worker the first execution fault ends the campaign (no further scene, no wave verification, no frozen index). Whether a position the Teacher cannot plan ends as a business result or an execution fault cannot be predicted from the code. No retry and no replacement scene.
+
+```yaml
+experiment_id: EXP-576
+status: PLANNED
+prior_experiment: EXP-574, EXP-575, CP-3616 rendering check; Host diagnostic run experiments/nonhead-qualified-inputs.5S5NYiCT (single-worker full restart, about 346 s)
+hypothesis: On the images of source commit 5aba8df8f the production CLI, in the qualification plane with a one-worker functional contract, carries eight scenes through the complete task chain in a real container (reset, Teacher perception and motion, Recorder, offline 10 Hz processing, QC, seal, Host collection, wave verification, frozen index) and settles admission.
+prediction: CLI exit 0; eight collected task records; host/wave-0-verified.json with eight rows; collection-index.json with eight collected tasks and no committed episode; campaign-cleanup terminated true; the default scene gives a Teacher PASS with VALID data and QC PASS. This is the first execution of any real collection task in a container, so a failure at any stage of the first task is a likely and informative outcome.
+single_variable: The first execution of a real collection task in a container through the production entry. Confounded and stated - seven cup positions never tried by the Teacher, GPU rendering instead of the CPU path of all earlier container runs, the first creation of the unified admission store, coordinator-chosen inputs per CP-3618 and this checkpoint.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 5aba8df8f and clean; Host HEAD is ledger-only above it.
+  - No running container, no GPU compute process, no ROS or MuJoCo process; tmux sessions claude and codex-act-container-20261012 untouched.
+  - Disk above the 53687091200 byte floor; run root act-w1-20261012T214111Z absent; campaign id w1f-20261012T214111Z unused; unified store absent.
+  - Discovery output lists twelve roles READY with one candidate each.
+success_criteria:
+  - The structural facts of the prediction. Per-scene business results (Teacher FAILED, data INVALID, QC FAIL, perception no-pose) are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission (input, freeze or admission refusal); worktree source differing from 5aba8df8f; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 5aba8df8fee1 (images); Host HEAD ledger-only above it
+  install_overlay: /act/install in inference image sha256:5afcf36eb240d6a4d8a42d36410c85d73ab188b2093592a8abf98e0eb96060e8 and shard image sha256:a0bbb712f5c6c7b04f8bd8cd51feefc24293e6b3af881bde657b0e1ef3ab7c7b; Host R/gates/fc4f72ae4a91/install plus worktree import of so101_demo and so101_teleop
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261012T214111Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261012T214111Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3618 — Coordinator decisions to unblock the first real functional run; no human answer was received
 
