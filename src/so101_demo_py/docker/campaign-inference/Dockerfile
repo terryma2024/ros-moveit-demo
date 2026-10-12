@@ -1,6 +1,10 @@
 # This cached dependency base has the exact current CUDA/Head package versions.
 # All campaign code comes from the new common source snapshot and /act/install.
-FROM sha256:010dca70ce3ce995367793642c2e5515718986253cecacc032e9f7f7ec6c5457
+# The build coordinator checks this local tag's exact ID before and after build:
+# sha256:010dca70ce3ce995367793642c2e5515718986253cecacc032e9f7f7ec6c5457.
+# BuildKit interprets a bare image ID in FROM as a repository/tag, so use the
+# existing local tag and independently check the resulting layer ancestry.
+FROM so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 \
     HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 YOLO_OFFLINE=true \
