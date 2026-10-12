@@ -69,10 +69,10 @@ zsh "$ACT_RUN_ROOT/run-targeted-container.zsh" <本任务的测试路径> -q
 
 `InstanceStatus` 固定包含 instance_id、state、task、fault_reason、resources_released。`TaskStatus` 固定包含 task_id、state、fault_reason。实例状态和任务状态取值采用设计原文；未知任务明确拒绝，不返回另一任务的成功。`inputs_ref` 使用既有冻结输入引用，不另包执行身份或提交证明。没有输出路径、回调 endpoint、coordinator token 或 ACK 序号字段。
 
-- [ ] 写测试 `test_only_four_operations`、`test_assignment_rejects_output_and_callback_fields`、`test_unknown_task_cannot_return_previous_success`、`test_lost_assignment_reply_queries_without_resend`；断言额外字段、bool deadline、非有限/过期期限、路径分隔符 ID 和输入变化被拒绝。
-- [ ] 对上述两个测试文件运行定向 RED，记录真正合同或适配器边界的失败。
-- [ ] 实现封闭合同和单次控制 exchange；start/terminate 委托原有 owner；不引入 HTTP、额外服务或第五操作。
-- [ ] 对上述两个文件及已有 `test_control_client.py`、`test_unified_ipc.py` 运行定向 GREEN；检查通用 IPC 的旧支持范围未被容器改造覆盖。
+- [x] 写测试 `test_only_four_operations`、`test_assignment_rejects_output_and_callback_fields`、`test_unknown_task_cannot_return_previous_success`、`test_lost_assignment_reply_queries_without_resend`；断言额外字段、bool deadline、非有限/过期期限、路径分隔符 ID 和输入变化被拒绝。
+- [x] 对上述两个测试文件运行定向 RED，记录真正合同或适配器边界的失败。
+- [x] 实现封闭合同和单次控制 exchange；start/terminate 委托原有 owner；不引入 HTTP、额外服务或第五操作。
+- [x] 对上述两个文件及已有 `test_control_client.py`、`test_unified_ipc.py` 运行定向 GREEN；检查通用 IPC 的旧支持范围未被容器改造覆盖。
 - [ ] inline self review 并 scoped commit：`feat: add four-operation container task control`。
 
 ### Task 2: 固定输出和原始结果引用
@@ -162,4 +162,4 @@ Host 本地记录任务 ID、所属容器、固定目录映射和回收结果，
 
 自审确认新接口签名一致；任务归属只核对 task_id，没有改名保留执行身份或提交证明协议；原有本地执行安全条件与数据 QC保持。路径变化限制在实例 output 与其固定 mount；旧代码清理发生在完整门禁之前。所有步骤未执行，checkpoint 不宣称 GREEN。
 
-本计划已批准。执行前读回 native goal 仍为 paused；当前 native 工具无恢复接口，已请求恢复 goal 状态而非再次审批计划。恢复到 active 后继续沿用既定 Codex inline 执行方式，不能把 Markdown 状态当作 active goal。原有实施授权、禁止事项、批准快照及未完成的 campaign gates继续适用。
+本计划已批准，用户已恢复原生 goal，source 实现前通过 get_goal 确认 active，见 CP-3601。继续沿用既定 Codex inline 执行方式，不能把 Markdown 状态当作 active goal。原有实施授权、禁止事项、批准快照及未完成的 campaign gates继续适用。

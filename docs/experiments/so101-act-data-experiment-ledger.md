@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a36c1f1e5a0dd6f79e2deeba70191b836e7323d2
+current_commit: 61a013292
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3600
-next_experiment: Restore the existing native goal from paused to active, then execute the approved one-way plan Task 1; no further plan approval is required.
+latest_checkpoint: CP-3601
+next_experiment: Implement approved one-way plan Task 2 fixed /act/output mapping and task-result.json; integrate executor and real child afterward, remove old protocol before final freeze/gates.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3601 — Native goal ACTIVE; new task contract and Host adapter targeted GREEN
+
+- User restored the existing native goal; get_goal confirmed active for thread01a12d8d-d88c-7ea3-8054-9ae5fc5952c3 before source implementation. Same worktree/branch, baseline61a013292, preserved six interrupted drafts and all other sessions. No native goal replacement, selfSSH, agents or runtime launch.
+- Plan Task1 added closed TaskSpec/TaskStatus/InstanceStatus and only assign_task/get_status/terminate private messages; start remains Host Docker-owner operation. No output path, lease, callback endpoint or execution/commit proof fields. Host adapter records task intent before send, queries duplicate/lost-response task IDs without resending, rejects mismatched result IDs and refuses to treat remote resource-release claims as actual Host stop proof. Actual control client uses existing fd-based private socket with a bounded single exchange.
+- Initial intended REDtargeted.t8UkAylr rc1/32fail1.13s for missing new task decoder/adapter; GREENtargeted.Kyawi4cj rc0/32pass1.03s. Inline review identified expired campaign deadline incorrectly preventing terminate; targeted.TLxBmpnx rc1/1fail8pass0.24s reproduced at TaskRequest.check_deadline. Moved expired request failure inside the best-effort child termination path so Host owner cleanup still runs, with single-flight repeated terminate. Final targeted.sW9odQIE rc0/47pass1.61s wall1: new contract/adapter, actual control client, original unified IPC.
+- Real new Unix exchange reached production ContainerControlClient and task decoder with only task_id query payload; remote task execution and Docker readiness are controlled external ports. This proves messages and Host adapter, not a production child/task executor, physical Teacher/Recorder/QC pipeline, native collection CLI or qualification. Existing ContainerChildIpcServer still uses its old dispatch until Task3/5; old source/test cleanup remains mandatory Task6.
+- All exact interpreter/import/tempfile proof, unique NVMe scratch, argv/JUnit/rc/timing retained. Inline source/patch/test audit recorded at one-way-task1-review.json/.patch. No full package/benchmark gate. Native goal ACTIVE and no current human-choice blocker; continue Task2.
+- Retained all; archived none; scratch/socket infrastructure fixtures are deletion candidates only. No training/hardware/push/evidence deletion/threshold downgrade. Entire original campaign remains incomplete.
 
 ## CP-3600 — Plan execution approved; drafts preserved; native goal remains paused
 

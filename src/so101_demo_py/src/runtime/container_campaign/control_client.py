@@ -67,3 +67,25 @@ class ContainerControlClient:
             if writer is not None:
                 writer.close()
                 await writer.wait_closed()
+
+    async def call_task(self, packet):
+        """One Host-initiated task call over the existing owned private socket."""
+        from .task_contracts import TaskRequest
+
+        if (type(packet) is not TaskRequest
+                or packet.deadline_ns > int(self.context.deadline_monotonic_s*1e9)):
+            raise ValueError('CONTAINER_TASK_ENVELOPE_INVALID')
+        packet.check_deadline(time.monotonic_ns())
+        if not await asyncio.to_thread(self.ready_probe):
+            raise ValueError('CONTAINER_CONTROL_OWNER_NOT_READY')
+        remaining = (packet.deadline_ns-time.monotonic_ns())/1e9
+        if remaining <= 0:
+            raise ValueError('CONTAINER_CONTROL_DEADLINE_EXPIRED')
+        reply = await asyncio.wait_for(self._exchange(packet), remaining)
+        if not await asyncio.to_thread(self.ready_probe):
+            raise ValueError('CONTAINER_CONTROL_OWNER_CHANGED')
+        if time.monotonic_ns() >= packet.deadline_ns:
+            raise ValueError('CONTAINER_CONTROL_DEADLINE_EXPIRED')
+        if reply.accepted is not True or type(reply.result) is not dict:
+            raise ValueError('CONTAINER_TASK_REFUSED: '+reply.code)
+        return reply.result

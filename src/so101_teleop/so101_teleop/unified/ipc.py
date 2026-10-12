@@ -289,6 +289,16 @@ def decode_safety_packet(raw: bytes, *, max_bytes: int = DEFAULT_MAX_BYTES) -> S
         raise IpcProtocolError(f"IPC_SAFETY_SCHEMA_REJECTED: {error.errors()[:1]}") from error
 
 
+def decode_container_task(raw: bytes, *, max_bytes: int = DEFAULT_MAX_BYTES, now_ns=None):
+    """Decode the container task subset without legacy ACT tokens or callbacks."""
+    from so101_demo.runtime.container_campaign.task_contracts import decode_task_request
+
+    try:
+        return decode_task_request(raw, max_bytes=max_bytes, now_ns=now_ns)
+    except (ValueError, TypeError, UnicodeError) as error:
+        raise IpcProtocolError('CONTAINER_TASK_REJECTED: '+str(error)) from error
+
+
 def _reject_constant(name: str):
     raise IpcProtocolError(f"IPC_NOT_FINITE: {name}")
 
