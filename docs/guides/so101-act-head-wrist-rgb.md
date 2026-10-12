@@ -20,12 +20,49 @@ Manifests written this way carry a provenance sidecar recording
 `NOT_FROZEN_UNTIL_RUNTIME_PREFLIGHT`. Until the runtime preflight produces the real candidate source and
 reachability evidence, no manifest is frozen.
 
-`act_collect` runs a single-scenario collection and `act_collect_parallel` a fixed-wave one. The parallel
-command takes `--manifest`, `--calibration`, `--policy`, `--activation-receipt`, `--collection-config`,
-`--runtime-config`, `--root`, `--worker-count`, and optionally `--split-manifest`,
-`--qualification-contract` and `--resume`. Every refusal happens before a service exists, so a missing
-input or an inadmissible manifest costs nothing. A qualification run must be given a contract path that
-does not exist yet; the entry point creates it before anything can spawn, and refuses to reuse one.
+`act_collect` runs a single-scenario collection.
+
+`act_collect_parallel` admits and runs one container collection campaign. It first checks the arguments,
+the contract for the chosen plane and every input file. It then freezes one input set, bound to the scene
+list, in a new run directory under the registered evidence root. Everything that can be refused is refused
+at this point, before anything is spawned. Next it asks unified admission for the GPU lease and the worker
+slots. The owner starts the Teacher service once and one shard per slot per wave, and drives the scenes
+through the Host-initiated container task control (four operations). The command releases the lease and
+the slots only after every original container stop is proven. No real episode has been collected through
+this command yet.
+
+The required arguments are `--campaign-id`, `--run-id` (the name of the new run directory),
+`--worker-count`, `--manifest`, `--source`, `--collection-config`, `--runtime-config`, `--campaign-config`,
+`--input-candidates`, `--teacher-endpoint`, `--teacher-execution-policy`, `--episode-recorder-policy` and
+`--runtime-policy`. The flag `--qualification` and the option `--qualification-report` select the plane.
+The command reads `SO101_UNIFIED_EVIDENCE_ROOT`, `SO101_ACT_GPU_SELECTOR` and
+`SO101_ACT_RESOURCE_BINDING_ID` from the environment.
+
+There are two planes. With `--qualification`, `--worker-count` is 1 or 2 and `--manifest` is a functional
+contract, or `--worker-count` is 8 and `--manifest` is the gate contract; in the eight-worker case
+`--run-id` must equal the contract's `qualification_run_id`. Without `--qualification` the run is formal:
+`--worker-count` must be 8, `--manifest` is the scene list, and `--qualification-report` is required. That
+report must come from another run under the same registered evidence root, and formal admission recomputes
+and verifies it in full. Passing `--qualification-report` together with `--qualification` is refused.
+
+Exit code 0 means the campaign completed and settled, and the command prints one JSON line with
+`campaign_id`, `run`, `plane`, `scene_count` and `waves`. Exit code 2 means the command refused before
+admission. Exit code 1 covers everything after admission: an admission refusal, a run fault, an unproven
+stop or a refused settle. When a stop cannot be proven, the command exits 1 with
+`CAMPAIGN_CLEANUP_UNCONFIRMED` and leaves the lease and the worker slots held. The run directory's
+`host/campaign-cleanup.json` records the stop result.
+
+Two companion commands work on a finished exact-eight qualification run.
+`act_build_parallel_qualification_report` takes `--contract`, `--campaign-root` and `--registered-root`,
+recomputes the run from its originals and writes `host/qualification-report.json` in the run directory. It
+creates the report once and never overwrites it, so a re-test needs a new run id. It exits 0 for a
+`QUALIFIED` report, 3 when it wrote a `NOT_QUALIFIED` report, 2 when it refused and wrote nothing, and 1
+for anything unexpected. `act_verify_parallel_qualification` takes `--report` and `--registered-root`,
+recomputes the run, writes nothing and prints the proof as JSON. It also accepts `--campaign-config`,
+`--source`, `--runtime-config`, `--collection-config` and `--contact-policy-fingerprint`, which must be
+given all together or not at all; with them it also compares the report against the controlled identity
+that formal admission uses. It exits 0 when the report is verified, 3 when verification is refused, 2 for
+a usage or path refusal, and 1 for anything unexpected.
 
 `act_train` exports a dataset from the campaign index and runs one owned training job. It takes
 `--manifest`, `--campaign-index`, `--gpu-binding`, `--config`, `--output` and `--device`. Training starts
@@ -90,7 +127,7 @@ The parallel collection and gateway tests live in their own packages:
 
 ```zsh
 python -m pytest test/act/test_act_parallel_collection.py test/act/test_act_parallel_collection_recovery.py \
-  test/cli/test_act_parallel_collection_integration.py \
+  test/cli/test_container_task_campaign_integration.py test/cli/test_act_parallel_qualification_cli.py \
   test/adapters/act/test_act_gpu_workload_client.py test/act/test_act_collection.py -q
 ```
 
