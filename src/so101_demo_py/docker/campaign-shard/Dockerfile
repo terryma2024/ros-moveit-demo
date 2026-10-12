@@ -78,6 +78,12 @@ RUN mkdir -p /act/install/bin \
     && /act/venv/bin/python -c 'from pathlib import Path; source=Path("/opt/ros/jazzy/bin/ros2").read_bytes(); assert source.startswith(b"#!"); body=source.split(b"\n",1)[1]; Path("/act/install/bin/ros2").write_bytes(b"#!/act/venv/bin/python\n"+body)' \
     && chmod 0555 /act/install/bin/ros2
 
+# The NVIDIA container runtime injects libEGL_nvidia but not its glvnd vendor file; without it the simulator's EGL
+# display (camera_plugin.cpp) lands on Mesa llvmpipe, i.e. CPU rendering. Outside /act, so no provenance hash covers it.
+RUN mkdir -p /usr/share/glvnd/egl_vendor.d \
+    && printf '%s\n' '{"file_format_version":"1.0.0","ICD":{"library_path":"libEGL_nvidia.so.0"}}' > /usr/share/glvnd/egl_vendor.d/10_nvidia.json \
+    && chmod 0644 /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+
 ENV PATH=/act/venv/bin:/act/install/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     AMENT_PREFIX_PATH=/act/install:/opt/ros/jazzy
 COPY source/src/so101_demo_py/docker/campaign-inference/bootstrap.bash /act/bootstrap.bash

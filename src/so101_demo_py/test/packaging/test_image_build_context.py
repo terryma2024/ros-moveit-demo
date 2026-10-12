@@ -13,6 +13,7 @@ by a full image build.
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path, PurePosixPath
 from paths import REPOSITORY
@@ -297,6 +298,22 @@ def test_shard_dockerfile_has_deps_build_and_final_stages() -> None:
 
 def test_shard_dependency_stage_text_is_unchanged_apart_from_the_mujoco_pin() -> None:
     assert "\n".join(_shard_stages()["deps"][1:]) + "\n" == SHARD_DEPS_STAGE
+
+
+def test_shard_final_stage_registers_the_nvidia_egl_vendor_with_glvnd() -> None:
+    """The NVIDIA runtime injects libEGL_nvidia but not its glvnd vendor file, so the simulator's EGL call lands on Mesa
+    software rendering unless the image ships the file. It goes in the final stage; the dependency stage stays unchanged."""
+    runs = [item for item in _shard_stages()["final"]
+            if item.startswith("RUN") and "/usr/share/glvnd/egl_vendor.d/10_nvidia.json" in item]
+    assert len(runs) == 1
+    run = _flat(runs[0])
+    content = re.search(r"printf '%s\\n' '(\{.*?\})' > /usr/share/glvnd/egl_vendor.d/10_nvidia\.json", run)
+    assert content, run
+    assert json.loads(content.group(1)) == {"file_format_version": "1.0.0", "ICD": {"library_path": "libEGL_nvidia.so.0"}}
+    assert "mkdir -p /usr/share/glvnd/egl_vendor.d" in run
+    assert "chmod 0644 /usr/share/glvnd/egl_vendor.d/10_nvidia.json" in run
+    assert "glvnd" not in "\n".join(_shard_stages()["deps"])
+    assert "glvnd" not in "\n".join(_shard_stages()["build"])
 
 
 def test_shard_final_stage_carries_no_build_tree() -> None:
