@@ -163,7 +163,8 @@ def test_host_container_owner_binds_ready_without_comparing_host_and_inner_pids(
                   "Restarting": False, "Status": "running"}}
     owner = module.ContainerBridgeProcessOwner(container_owner=key, control_socket_root=tmp_path,
         runtime_id="runtime", service_epoch="epoch", campaign_id="campaign", worker_id="worker",
-        execution_generation=3, inspect_container=lambda _id: observed,
+        execution_generation=3, ros_namespace="/act/campaign/w00", session_id="session1", ros_domain_id=181,
+        inspect_container=lambda _id: observed,
         namespace_reader=lambda _pid: 200)
     ready = {"schema_version": 1, "kind": "container_child_ready", "generation": 7,
         "process_owner": {"pid": 1, "pgid": 1, "started_ticks": 99,
@@ -179,6 +180,39 @@ def test_host_container_owner_binds_ready_without_comparing_host_and_inner_pids(
     receipt = dict(schema_version=1, kind="shard_stop_receipt", generation=7,
         process_owner=ready["process_owner"], pid_namespace_inode=200, goals_stopped=True,
         controllers_stopped=True, ros_children_exited=True, ros_graph_empty=True, forced=False)
-    assert owner.stopped(receipt) is True
+    (tmp_path.parent / "shard-stop.json").write_text(json.dumps(receipt))
+    assert owner.stopped() is False
+    write_stop_originals(tmp_path.parent, receipt)
+    assert owner.stopped() is True
     observed["State"]["StartedAt"] = "2026-10-12T01:03:00Z"
-    assert owner.stopped(receipt) is False
+    assert owner.stopped() is False
+
+
+def write_stop_originals(root, receipt):
+    """Explicit external ROS/native I/O fixture; no physical success claim."""
+    import hashlib
+    from so101_demo.runtime.parallel_ipc.frames import canonical_json
+
+    namespace = "/act/campaign/w00"
+    endpoints = dict(arm="/arm_controller/follow_joint_trajectory/_action",
+        gripper="/gripper_controller/follow_joint_trajectory/_action",
+        neck="/neck_controller/follow_joint_trajectory/_action", moveit="/execute_trajectory/_action")
+    goals = canonical_json(dict(schema_version=1, kind="ACT_CONTROLLER_STOP_OBSERVATION",
+        ros_namespace=namespace, started_monotonic_ns=100, completed_monotonic_ns=150,
+        lanes={name:dict(action_prefix=namespace+prefix, cancel_sent_monotonic_ns=110,
+            cancel_received_monotonic_ns=120, cancel_return_code=0, goals_canceling=[],
+            status_received_monotonic_ns=130, statuses=[]) for name,prefix in endpoints.items()}))
+    native_owner = dict(pid=2, pgid=2, started_ticks=200, argv_sha256="a"*64, environment_sha256="b"*64)
+    native = canonical_json(dict(schema_version=1, leader_pid=2, pgid=2, started_ticks=200,
+        argv_sha256="a"*64, session_id="session1", ros_domain_id=181,
+        group_clear=True, graph_clear=True, physical_stop_confirmed=True,
+        parent_exited=False, term_sent=True, kill_sent=False, finished_at_monotonic_ns=160))
+    audit_root = root / "retirement"
+    audit_root.mkdir()
+    (audit_root / "controller-stop.json").write_bytes(goals)
+    (audit_root / "stack-stop.json").write_bytes(native)
+    (audit_root / "audit.json").write_bytes(canonical_json(dict(schema_version=1, kind="ACT_SHARD_STOP_AUDIT",
+        generation=receipt["generation"], process_owner=receipt["process_owner"],
+        pid_namespace_inode=receipt["pid_namespace_inode"], ros_namespace=namespace,
+        session_id="session1", ros_domain_id=181, native_owner=native_owner,
+        controller_stop_sha256=hashlib.sha256(goals).hexdigest(), native_stop_sha256=hashlib.sha256(native).hexdigest(), errors=[])))

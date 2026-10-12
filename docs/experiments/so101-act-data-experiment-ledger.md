@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: e73b2dc6eb675fe1c3d0fbb3477ab3269aea069e
+current_commit: baa341c64f85d25bfa80ef4cc47baf2c244d08c3
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3580
+latest_checkpoint: CP-3581
 next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3581 — Four-lane ACT retirement and original stop evidence Host readback GREEN
+
+- Added ACT-only controller stop observation for arm, gripper, neck and MoveIt in one explicit ROS namespace. Each lane requires its actual cancellation ACK and subsequent settled status; UUIDs/ROS stamps and local send/receive times are retained. Rejected cancellation, absent lane, active/unknown status, unmatched canceling UUID or stale status cannot prove stop. The immutable original observation has one closed format with four exact lanes; empty/missing/extra lanes, bool-as-int, future times and unknown fields/kind are rejected. Generic three-lane cancellation remains unchanged.
+- Added NativeShardRetirement over the existing actual ActStackProcessOwner. It requires a fenced caller and same live local process/namespace identity, performs one shared async retirement task, preserves original controller and native cleanup bytes plus hashes/scope, and publishes one generation/process-bound receipt. It still attempts owned native convergence when goal proof is unconfirmed, retains false facts rather than claiming success, preserves forced-kill facts, and never retries or overwrites that generation. Inline review's new drift test exposed missing post-stop process revalidation; fixed before receipt publication. A changed owner leaves no successful receipt.
+- Added independent read_shard_stop_evidence with fixed original artifact names, no-follow reads, original hashes, closed schemas, parent/native process keys, namespace/domain/session/generation, chronology, all four goal lanes, physical/native group/graph stop and no forced kill. ContainerBridgeProcessOwner now takes explicit frozen namespace/session/domain and its stopped() reads those originals before checking exact Docker container exit. It no longer accepts caller-supplied stop flags as release evidence. Existing generic Host bridge behavior is retained.
+- RED targeted.fZkZe4zf rc1,11 missing controller boundary failures; targeted.nTi91URE rc1,8 malformed observation acceptance failures/11 passed; targeted.RmjrOM8c rc1,12 missing retirement boundary failures/102 passed; targeted.eIYTiVht rc1,1 missing Host scope API/6 passed; targeted.CtxxwlF1 rc1,1 post-stop identity drift failure/114 passed. Earlier 106/114/142 passing controls retained. A failed apply_patch was corrected against actual lines before mutation/test; it ran no tests and is not RED.
+- Final exact argv: run-targeted-container.zsh `src/so101_demo_py/test/runtime/container_campaign src/so101_teleop/test/unified/test_container_child_ownership.py src/so101_teleop/test/unified/test_unified_bridge.py src/so101_teleop/test/unified/test_unified_bridge_cleanup.py src/so101_demo_py/test/runtime/test_parallel_ros_runtime_perception.py -q`; targeted.q054KoZw actual rc0,143 passed in18.33s, wall18s. Fresh NVMe interpreter/tempfile/import/argv/log/JUnit retained. ROS/native stack/Docker observations in these tests are explicitly external I/O fixtures; filesystem and parent process readback are real. No real controller stop or integrated shard-ready PASS claimed. No full/package/benchmark gate.
+- Inline self review inspected original evidence versus summary, type/identity/chronology guards, single-flight cancellation protection, failed/forced stop fencing and generic regressions. Actual campaign_shard entry and second native image remain unimplemented. Container ROS namespace must be reflected in actual launch/probes, not merely an environment label; complete that wiring before treating the new stop probe or readiness as integrated. Latest docker ps empty; other sessions, four historical and four task exited containers preserved. Goal ACTIVE; previous/current turns concrete progress, no genuine blocker. Retained all, archived none, scratch/socket/exited diagnostic containers deletion candidates only; no deletion/push/hardware/training/threshold downgrade.
 
 ## CP-3580 — Real CUDA shared-service image and binary RGB roundtrip GREEN
 
