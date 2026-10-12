@@ -62,8 +62,8 @@ def _file_sha256(path):
 
 
 #: Where the detector the broker runs sits inside the package that is mounted over the image's own (it is the freeze's
-#: own `yolo_seg.py`; the baked 09-24 file that was pinned earlier is gone, and rule R6 in the Worker's localizer takes the second
-#: candidate the corrected detector returns).
+#: own `yolo_seg.py`; the baked 09-24 file that was pinned earlier is gone. Cup geometry filtering in the Worker's
+#: localizer rejects the flat landing-ring candidate returned alongside the cup).
 DETECTOR_RELATIVE_PATH = Path('adapters') / 'perception' / 'yolo_seg.py'
 
 

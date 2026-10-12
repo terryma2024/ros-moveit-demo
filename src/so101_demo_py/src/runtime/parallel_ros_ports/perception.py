@@ -21,7 +21,7 @@ from so101_demo.runtime.parallel_ros_ports.isolated_node import (
 )
 from so101_demo.runtime.parallel_ros_ports.observations import (
     AdmittedPose,
-    BrokerMaskLocalizer,
+    CupCandidateLocalizer,
     PerceptionTerminal,
     _candidates_from_response,
 )
@@ -35,7 +35,7 @@ class PerceptionPorts:
         return _candidates_from_response(response)
 
     def _localize_response(self, response, **kwargs):
-        return BrokerMaskLocalizer().localize(response, **kwargs)
+        return CupCandidateLocalizer().localize(response, **kwargs)
 
     def _depth_timestamp(self, request, depth):
         return request.image_timestamp_s

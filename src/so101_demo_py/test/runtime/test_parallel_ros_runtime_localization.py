@@ -64,11 +64,11 @@ class _ByInstance:
 
 
 def _ring_candidate_localizer(outcomes, masks=None):
-    from so101_demo.runtime.parallel_ros_ports.observations import BrokerMaskLocalizer
+    from so101_demo.runtime.parallel_ros_ports.observations import CupCandidateLocalizer
 
     masks = masks or [[[0, 1, 1], [0, 0, 1]]] * len(outcomes)
     localizer = _ByInstance(outcomes)
-    return localizer, lambda: BrokerMaskLocalizer(localizer=localizer).localize(
+    return localizer, lambda: CupCandidateLocalizer(localizer=localizer).localize(
         _broker_response(masks), camera_info="camera", depth_message="depth", lookup_exact=lambda *a: a)
 
 
@@ -128,12 +128,12 @@ def test_the_survivors_pose_is_the_localizers_result_for_its_mask_unchanged():
 
 
 def test_a_qualified_response_without_candidates_is_still_ambiguous():
-    from so101_demo.runtime.parallel_ros_ports.observations import BrokerMaskLocalizer
+    from so101_demo.runtime.parallel_ros_ports.observations import CupCandidateLocalizer
 
     response = _broker_response([[[1, 0, 0], [0, 0, 0]]])
     response.candidate["candidates"].clear()
     with pytest.raises(RuntimeError, match="BROKER_CANDIDATE_AMBIGUOUS"):
-        BrokerMaskLocalizer(localizer=_ByInstance({})).localize(response, camera_info=None, depth_message=None,
+        CupCandidateLocalizer(localizer=_ByInstance({})).localize(response, camera_info=None, depth_message=None,
                                                                 lookup_exact=lambda *a: a)
 
 
@@ -162,7 +162,7 @@ def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
             seen["lookup"] = (target, frame, stamp, timeout_s)
             return "exact-transform"
 
-    monkeypatch.setattr(runtime_module_perception, "BrokerMaskLocalizer", lambda: Localizer())
+    monkeypatch.setattr(runtime_module_perception, "CupCandidateLocalizer", lambda: Localizer())
     camera = object()
     depth = SimpleNamespace(data=b"depth")
     ports = ParallelRosRuntimePorts(

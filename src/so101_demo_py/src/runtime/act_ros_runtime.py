@@ -11,7 +11,7 @@ from so101_demo.parallel_batch.act_perception import ActTeacherPerceptionPolicy
 from so101_demo.parallel_batch.contracts.common import ModelOutcome
 from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 from so101_demo.runtime.parallel_ros_ports.observations import (
-    BrokerMaskLocalizer, _candidates_from_batch,
+    CupCandidateLocalizer, _candidates_from_batch,
 )
 
 
@@ -48,7 +48,7 @@ class ActRosRuntimePorts(ParallelRosRuntimePorts):
         return _candidates_from_batch(response.candidate)
 
     def _localize_response(self, response, **kwargs):
-        return BrokerMaskLocalizer().localize_candidates(self._candidate_list(response), **kwargs)
+        return CupCandidateLocalizer().localize_candidates(self._candidate_list(response), **kwargs)
 
     def _depth_timestamp(self, request, depth):
         from so101_demo.cli.rgbd_point_cloud import message_stamp_ns

@@ -396,7 +396,7 @@ def _candidates_from_batch(batch) -> list[DetectionCandidate]:
     return candidates
 
 
-#: R6: a candidate is the cup only if it localizes as one (the xy circle fit of radius 0.04 +- 0.01 m succeeds) and its
+#: Cup geometry filtering: a candidate is the cup only if the xy circle fit of radius 0.04 +- 0.01 m succeeds and its
 #: points span at least this much height. The red landing ring is flat (a few millimetres), the cup is 0.09 m tall.
 MINIMUM_CUP_Z_EXTENT_M = 0.05
 
@@ -405,8 +405,8 @@ MINIMUM_CUP_Z_EXTENT_M = 0.05
 _CANDIDATE_LEVEL_FAILURES = frozenset({"GEOMETRY_REJECTED", "DEPTH_INVALID"})
 
 
-class BrokerMaskLocalizer:
-    """Feed the authenticated Broker masks to the reviewed RGB-D localizer and keep the one that is the cup (rule R6)."""
+class CupCandidateLocalizer:
+    """Localize candidate masks in RGB-D and select exactly one with valid cup geometry."""
 
     def __init__(self, *, localizer=None):
         self.localizer = localizer or RgbdLocalizer()
@@ -416,14 +416,14 @@ class BrokerMaskLocalizer:
 
         The survivor's pose is the localizer's own result for its mask, unchanged. More than one survivor is
         BROKER_CANDIDATE_AMBIGUOUS (the count is in the message); none is GEOMETRY_REJECTED (the policy then tries its next model)
-        unless the only candidate failed for a reason that is not geometry, which propagates as it did before R6.
+        unless the only candidate failed for a reason that is not geometry, which propagates unchanged.
         """
         candidates = _candidates_from_response(response)
         return self.localize_candidates(candidates, camera_info=camera_info,
             depth_message=depth_message, lookup_exact=lookup_exact)
 
     def localize_candidates(self, candidates, *, camera_info, depth_message, lookup_exact):
-        """Apply the unchanged R6 geometry rule to already validated raw candidates."""
+        """Select the cup by circle fit and vertical extent from validated raw candidates."""
         survivors, rejected, first_error = [], [], None
         for candidate in candidates:
             try:

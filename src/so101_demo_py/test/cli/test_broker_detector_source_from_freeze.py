@@ -2,7 +2,7 @@
 
 An earlier pin mounted the image's 09-24 `yolo_seg.py` over the freeze's package because the corrected detector (commit 828af7c91: the RGB
 frame reaches Ultralytics as BGR) returns a second candidate, the red landing ring (0.36), next to the cup (0.97) and the Worker wanted
-exactly one. Rule R6 in `BrokerMaskLocalizer` (tests in `test_parallel_ros_runtime_*.py`) keeps the candidate that localizes as a cup and
+exactly one. Cup geometry filtering in `CupCandidateLocalizer` (tests in `test_parallel_ros_runtime_*.py`) keeps the candidate that localizes as a cup and
 spans >= 0.05 m in z, so the pin is no longer needed. What stays: the freeze's package is mounted for contracts, IPC and runtime, its
 source hash is the container label, and the run records the hash of the detector it contains.
 """

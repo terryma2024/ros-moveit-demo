@@ -258,7 +258,7 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
     from so101_demo.parallel_batch.broker import BrokerResponse
     from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome
     from so101_demo.parallel_batch.contracts.identity import InferenceRequest
-    from so101_demo.runtime.parallel_ros_ports.observations import BrokerMaskLocalizer
+    from so101_demo.runtime.parallel_ros_ports.observations import CupCandidateLocalizer
 
     request = InferenceRequest(
         request_id="attempt-1-yolo",
@@ -337,7 +337,7 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
             )
             return SimpleNamespace(tag="localized-from-mask", points_world=np.array([[0.0, 0.0, 0.12], [0.0, 0.0, 0.21]]))
 
-    value = BrokerMaskLocalizer(localizer=Localizer()).localize(
+    value = CupCandidateLocalizer(localizer=Localizer()).localize(
         response,
         camera_info=camera,
         depth_message=depth,

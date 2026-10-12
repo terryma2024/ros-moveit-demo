@@ -34,7 +34,7 @@ class ActTeacherPerceptionPolicy(PerceptionPolicy):
 
     Initialization and decisions never construct a Grounded stage. Inherited
     request/result/admit methods preserve the checks around local authorization,
-    freshness, R6/geometry/quality, durable write and adjudication readback.
+    freshness, cup geometry and quality, durable write and adjudication readback.
     The generic PerceptionPolicy retains its own fallback behavior.
     """
 

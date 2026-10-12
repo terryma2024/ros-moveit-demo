@@ -1,4 +1,4 @@
-"""ACT memory capture and actual RGB-D/R6/admission production ports."""
+"""ACT memory capture and actual RGB-D/cup geometry/admission production ports."""
 
 import importlib
 import json
@@ -99,7 +99,7 @@ def run(h):
     return result
 
 
-def test_real_r6_and_durable_admission_accept_cup_without_staging_file(tmp_path):
+def test_real_cup_geometry_and_durable_admission_accept_cup_without_staging_file(tmp_path):
     from so101_demo.runtime.parallel_ros_ports.observations import AdmittedPose
     h = build_case(tmp_path)
     value = run(h)
@@ -116,7 +116,7 @@ def test_real_r6_and_durable_admission_accept_cup_without_staging_file(tmp_path)
 
 
 @pytest.mark.parametrize("changes", [{"radius": 0.07}, {"height": 0.02}])
-def test_real_r6_rejection_is_failed_and_never_selects_grounded(tmp_path, changes):
+def test_real_cup_geometry_rejection_is_failed_and_never_selects_grounded(tmp_path, changes):
     h = build_case(tmp_path, **changes)
     value = run(h)
     assert (value.disposition, value.reason) == ("FAILED", "PERCEPTION_NO_POSE")
@@ -211,7 +211,7 @@ def test_act_ports_refuse_request_for_another_memory_capture(tmp_path, field, va
 
 
 @pytest.mark.parametrize("generation_changed", [False, True])
-def test_cancelled_result_does_not_enter_r6_or_publish_pose(tmp_path, generation_changed):
+def test_cancelled_result_does_not_enter_cup_geometry_or_publish_pose(tmp_path, generation_changed):
     h = build_case(tmp_path)
     from so101_demo.parallel_batch.contracts.common import ExecutionKind
     # Authorization is bound before the request starts, so use a mutable external authority.
@@ -227,7 +227,7 @@ def test_cancelled_result_does_not_enter_r6_or_publish_pose(tmp_path, generation
     assert not (h.workspace.path / "pose_accepted.json").exists()
 
 
-def test_real_unix_teacher_adapter_to_actual_r6_and_durable_admission(tmp_path):
+def test_real_unix_teacher_adapter_to_actual_cup_geometry_and_durable_admission(tmp_path):
     from so101_demo.parallel_batch.contracts.common import ExecutionKind
     from so101_demo.runtime.act_teacher_client import ActTeacherClient
     from so101_demo.runtime.inference.client import InferenceClient

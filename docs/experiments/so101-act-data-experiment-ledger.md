@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 41626490a7cd31bf3b8a79ea2f5d5530ee1d2ca8
+current_commit: 30ecba387ee4f7af5b43cf1e99e453e5b82f7800
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3572
+latest_checkpoint: CP-3573
 next_experiment: ACT campaign Worker/result-writer terminal migration and shard composition; preserve FAILED versus INVALID before image/Host integration.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3573 — Business naming for cup candidate localization GREEN
+
+- Human steering asked what R6 means and required a business name. Renamed the current BrokerMaskLocalizer class and all source/test call sites to CupCandidateLocalizer. Current cup-localization comments, policy descriptions and test names use cup geometry filtering rather than the review-rule number. No alias retained. Unrelated rules with the same number, frozen approval snapshots and historical ledger/evidence remain unchanged.
+- Behavior and contracts are unchanged: RGB-D backprojection, exact TF, circle fit radius 0.04 +/- 0.01 m, vertical extent at least 0.05 m, one surviving cup candidate, source/lease/durable-admission/Stop gates, existing generic transport error codes. No threshold changed and no qualification reinterpreted.
+- Targeted argv: run-targeted.zsh `src/so101_demo_py/test/runtime/test_act_ros_runtime.py src/so101_demo_py/test/runtime/test_parallel_ros_runtime_gate.py src/so101_demo_py/test/runtime/test_parallel_ros_runtime_localization.py src/so101_demo_py/test/parallel_batch/test_act_teacher_perception.py src/so101_demo_py/test/cli/test_broker_detector_source_from_freeze.py -q`; targeted.G7EXWoiN actual rc 0, 68 passed in 1.21 s, wall 1 s. No new tests were written for this mechanical rename; existing affected tests were run with exact interpreter/import/tempfile proof and fresh NVMe scratch retained.
+- Inline self review inspected the exact rename/comment diff and current production imports/call sites, confirmed no old class or cup-rule R6 references remain in current production/runtime/CLI test source, and `git diff --check` passed. Exact scoped patch/hash retained as cup-candidate-naming.patch and .sha256. Existing installed/frozen artifacts are not rewritten or claimed current; final integration freeze will rebuild from this source.
+- Original campaign remains active. Next action is the open ACT Worker/result-writer terminal classification migration from CP-3572, then owning shard/image/Host composition. All evidence retained; archived none; scratch deletion candidates only, nothing deleted/pushed and no live runtime started.
 
 ## CP-3572 — ACT memory capture/request/Teacher/R6 port source boundary GREEN
 
