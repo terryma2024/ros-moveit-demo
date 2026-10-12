@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a3a918fde
+current_commit: 6e63a00c232e8e9facef141b249402815a348a5c
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,68 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3610
-next_experiment: NONE (no runtime experiment planned); Sonnet writer implements the Host per-scene input producer, then collection admission rule removal with a Teacher-only service set, per R/one-way-scope-admission-cli-design.md; then CLI composition, image rebuild and the first no-motion real-container start/status/terminate.
+latest_checkpoint: CP-3611
+next_experiment: EXP-574 (PLANNED): rebuild both campaign images from 6e63a00c2, then a no-motion real-container check of the one-way control path with R/run-one-way-no-motion-probe.zsh.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3611 — CLI composition, admission rulings and image restructure committed; EXP-574 planned
+
+- Commits since CP-3610, Sonnet-written and Opus-reviewed with independent reruns: `aa869e64c` Host per-scene input producer; `e928f6356` collection admission without calibration report or activation receipt and Teacher-only services (diff reviewed without whitespace; pick-place, calibration, live and diagnostic gates pinned and unchanged; formal qualification receipt check untouched); `f999e4044` real CLI composition with legacy spec builder, resume and factory seams removed; `bd50edf44` shard spec loader Teacher-only and six teleop unified test modules registered with CTest; `6e63a00c2` shard MuJoCo pin 3.12.0 and the user-approved image restructure. Reviewer reruns: targeted.Pzuh3avO 2273 pass/6 skip and targeted.M3f1j6Ki 159 pass after the admission change; targeted.0nwyFQXe 2325 pass/6 skip and targeted.eUMG7TZa 163 pass after the CLI change; writer run targeted.GxKEbWX2 648 pass after the Dockerfile change. All targeted, none a package gate.
+- Human instructions of 2026-10-13 (verbatim): image build speed "1 + 2 优化", approving exactly (1) layering by change frequency and (2) a multi-stage build that keeps the build tree out of the image. No cache mount, ccache, cmake argument, BUILD_TESTING or parallelism change was approved or made.
+- OBSERVED before the change: shard image 21 GB; last shard build 272 s of which colcon 185 s and layer export 68 s (R/image-build-20261012T075928Z/build.log). OBSERVED in source: the shard Dockerfile pinned Python mujoco 3.4.0 while setup.py declares 3.12.0; INFERRED from apt package evidence that the native simulator links libmujoco 3.12.0. The pin now follows setup.py with a drift test.
+- Known open items carried forward: owner build failure after admission cannot be settled because admission refuses an empty launch registry, so lease and slot stay held (fail-closed, reported); formal admission unreachable until a container qualification report replaces the receipt check; `FixedActCollectionCampaign`, `write_campaign_index`, `campaign_config_from` and the `_CollectionStart` packet now have test-only users and await a keep/remove decision; guide docs/guides/so101-act-head-wrist-rgb.md lines 24-28 still describe removed CLI arguments; four human inputs still requested (scene candidate source, use of the existing activation receipt for the formal freeze, formal campaign deadline, two quality rate thresholds).
+- Procedure saved as R/one-way-image-rebuild-and-no-motion-probe-procedure.md (sha256 c301fae77fd7b360482d9b8d6bda070c99cc5714310370d02915c76fd03aae56). Probe written, not yet run: R/run-one-way-no-motion-probe.py (sha256 d21c977b4359cf1de91bc547558a1ddaca025586ea1b4219d0e239e38f920fab) and .zsh (sha256 19d732c57f219bbeb7249f6877e71bebec494bcc03de825e22e5a5d1d34fa7fb). Its dry run created REG/act-nomotion-ac23dccf6080 (no Docker command issued); deletion candidate.
+- Retained all evidence; archived none; nothing deleted.
+
+```yaml
+experiment_id: EXP-574
+status: PLANNED
+prior_experiment: CP-3592 production-owner-probe-5053af846680 (two real no-motion instances through ContainerShardOwner on the heartbeat protocol, image 5ac6305e5)
+hypothesis: On commit 6e63a00c2 with rebuilt images, Host status polling alone keeps a real no_motion_readiness shard alive from STARTING through READY, and each of three stop causes (Host terminate, owner silence, SIGTERM through owner close) ends in a proven container exit with the correct recorded reason.
+prediction: First accepted Host status poll arrives inside the executor's 5.0 s owner-silence window; READY is never reported before runtime-ready.json and stack-readiness.json exist; 30 s of polling keeps READY; terminate yields instance-exit.json with the Host reason, native stop evidence, registry exit proof and resources_released true; a silent Host makes the container stop itself; owner close sends exactly one TERM. New information versus CP-3592 - the task-control path has never run in a real container, and the restructured multi-stage shard image and the MuJoCo 3.12.0 pin have never been built.
+single_variable: Control path (heartbeat and observe replaced by task control with status polling) together with the rebuilt images required to carry it. Launch argv shape, runtime YAML, slot w00, domain 181, GPU and base images stay as in CP-3592. The image restructure and MuJoCo pin are confounded with the control change in this run and are separated only by the build evidence and the in-container readbacks.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree clean at 6e63a00c232e8e9facef141b249402815a348a5c, submodule bab9841; no writer agent active.
+  - No running container, no GPU compute process, no ROS or MuJoCo process; tmux sessions claude and codex-act-container-20261012 preserved and untouched.
+  - /data free space above 53687091200 bytes (observed 1.2T).
+  - Both images built from this commit with result.json exit_code 0 and provenance git_commit equal to HEAD.
+success_criteria:
+  - Image builds - both exit 0; shard final image has no /act/build, /act/build-source, /act/build-log or /act/build-tools; provenance readback names this commit; layer ancestry extends the recorded base.
+  - Probe checks a, b, c, d_wire, e (instance A), f (instance B), g (instance C) and readback_clock all PASS as defined in the procedure section 5; effective in-container MuJoCo Python and native versions read back and equal.
+failure_criteria:
+  - Any check FAIL with the intended boundary reached, in particular a self-stop with "Coordinator status polling timed out" before READY (the flagged 5 s window risk), a READY before native readiness files, an unproven stop, or a wrong adopted fault reason.
+  - A shard image build failure inside the compile or stage-copy steps of the restructured Dockerfile.
+invalid_criteria:
+  - Tree dirty or HEAD changed between prepare, build and probe; image git_commit differs from Host HEAD; base image ID changed.
+  - Another container, stack or GPU compute process present at pre-flight or appearing during the run.
+  - A failure before the intended boundary ran (spec or mount refusal before docker run, missing apt or pip dependency, network failure during build); classified as harness or underlay, not product RED.
+  - A readback docker exec still running at terminate, or any signal applied to a container this run did not register.
+provenance:
+  source_commit: 6e63a00c232e8e9facef141b249402815a348a5c
+  install_overlay: image /act/install (install_sha256 recorded from the build); Host side runs worktree source through R/test-import with underlay /opt/ros/jazzy and dependency overlay /data/work/so101-evidence/act-data/20260924-fbc25063-resume/centering-convergence-20261012/gates/final/install
+  runtime_executable: /act/venv/bin/python -I -m so101_demo.cli.campaign_shard (container); R/container-test-venv/bin/python (Host probe)
+  ros_domain_id: 181
+  gz_partition: the per-instance simulation session id written into each shard spec
+commands:
+  - command: /usr/bin/python3 R/prepare-image-build.py --role inference ; /usr/bin/python3 R/image-build-<UTC>/build.py
+    exit_code: PENDING
+  - command: /usr/bin/python3 R/prepare-image-build.py --role shard ; /usr/bin/python3 R/image-build-<UTC>/build.py
+    exit_code: PENDING
+  - command: zsh R/run-one-way-no-motion-probe.zsh --shard-build-dir R/image-build-<UTC>
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3610 — Shard wiring, old-protocol cleanup, ROS scoping, perception ruling and formal scene scope committed
 
