@@ -124,6 +124,16 @@ class ContainerShardOwner:
             if (hashlib.sha256(self.entry.spec.read_bytes()).hexdigest() != self.spec_sha256
                     or load_spec(self.entry.spec)[0] != self.spec):
                 raise ValueError('SHARD_SPEC_CHANGED')
+            # A cached exit cannot authorize reuse after a manual restart or
+            # Docker identity change. Read the exact predecessor again before
+            # creating the next generation's durable intent.
+            for previous in self.registry.records():
+                item=previous['launch']
+                if item['role']=='shard' and item['worker_id']==self.launch.worker_id:
+                    if previous['owner'] is None:
+                        raise ValueError('LAUNCH_OWNER_UNKNOWN')
+                    observed=await asyncio.to_thread(self.inspect,previous['owner']['container_id'])
+                    self.registry.prove_terminated(item['launch_id'],observed)
             self.registry.register(self.launch)
             self._registered = True
             _write(self.root/'launch-argv.json',self.argv)

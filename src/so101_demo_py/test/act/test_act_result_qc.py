@@ -16,7 +16,8 @@ from test_act_seal_and_downgrade import lease, sealed_episode
 from paths import PACKAGE_ROOT
 
 
-def controlled_committed_result(tmp_path,monkeypatch,*,completed=False,teacher_outcome='FAILED',commit=True,qc='FAIL'):
+def controlled_committed_result(tmp_path,monkeypatch,*,completed=False,teacher_outcome='FAILED',commit=True,qc='FAIL',
+                                worker_root=None,run_root=None):
     """Actual Coordinator/durable result with an explicit failed-QC reader double.
 
     The attempt status is the Teacher's (`teacher_outcome`); the QC double grades the data `qc` (FAIL by default; PASS
@@ -39,7 +40,8 @@ def controlled_committed_result(tmp_path,monkeypatch,*,completed=False,teacher_o
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.journal import CoordinatorJournal
     from test_act_seal_and_downgrade import SCOPE,IDENTITY,PROVENANCE
-    run=tmp_path/'run';worker=run/'workers/w00'
+    run=tmp_path/'run' if run_root is None else Path(run_root)
+    worker=run/'workers/w00' if worker_root is None else Path(worker_root)
     journal=CoordinatorJournal.create(run/'coordinator','batch-1')
     scope=tmp_path/'scope.json';write_collection_scope(SCOPE,scope)
     inputs=tmp_path/'inputs-manifest.json';inputs.write_text(json.dumps(dict(inputs_sha256='a'*64,mode=SCOPE['mode'])))

@@ -885,7 +885,7 @@ def resolve_native_run(run_root):
         raise ValueError('RESULT_RUN_CONTEXT_INVALID') from error
 
 
-def verify_coordinator_commit(coordinator_root, *, location, scope, inputs_manifest):
+def verify_coordinator_commit(coordinator_root, *, location, scope, inputs_manifest, worker_roots=None):
     """Re-read the actual hash chain, projection, original phase leases and QC-bound receipt."""
     from copy import deepcopy
     from so101_demo.parallel_batch.journal import CoordinatorJournal,JournalCorruption
@@ -921,7 +921,19 @@ def verify_coordinator_commit(coordinator_root, *, location, scope, inputs_manif
                 or commit.coordinator_epoch!=final_lease.coordinator_epoch
                 or identity!={**_identity(final_lease),'location':str(location)}):
             raise ValueError('COMMIT_PHASE_MISMATCH')
-        worker_root=root.parent/'workers'/worker_id
+        if worker_roots is None:
+            worker_root=root.parent/'workers'/worker_id
+        else:
+            if type(worker_roots) is not dict or not worker_roots or worker_id not in worker_roots:
+                raise ValueError('COMMIT_WORKER_ROOT_MISSING')
+            mapped = {name:_safe(Path(value)) for name,value in worker_roots.items()}
+            if (any(not isinstance(name,str) or not name for name in mapped)
+                    or len(set(mapped.values())) != len(mapped)
+                    or any(not path.is_dir() or path.resolve(strict=True) != path for path in mapped.values())
+                    or any(a != b and (a.is_relative_to(b) or b.is_relative_to(a))
+                           for a in mapped.values() for b in mapped.values())):
+                raise ValueError('COMMIT_WORKER_ROOT_INVALID')
+            worker_root=mapped[worker_id]
         expected=_workspace(worker_root,final_lease)
         if location!=expected/'sealed' or _safe(Path(worker['workspace']))!=expected:
             raise ValueError('COMMIT_LOCATION_MISMATCH')
