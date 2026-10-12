@@ -29,6 +29,26 @@ def partition_waves(scene_ids, *, max_wave_size: int = 20) -> tuple:
     return tuple(ids[start:start + max_wave_size] for start in range(0, len(ids), max_wave_size))
 
 
+def reserve_qualification_scenes(scene_ids: tuple, worker_ids: tuple) -> dict:
+    """Freeze two adjacent cases per exact-W8 slot and four ordered surplus cases.
+
+    The owner must consume a slot's two reserved terminal leases before issuing
+    it surplus. A lost slot never transfers its reservation to a faster Worker.
+    """
+    from so101_demo.parallel_batch.contracts.common import _require_id
+    try:
+        if (type(scene_ids) is not tuple or len(scene_ids) != 20
+                or type(worker_ids) is not tuple or worker_ids != tuple(f'w{index:02d}' for index in range(8))
+                or len(set(scene_ids)) != 20):
+            raise ValueError('wave shape')
+        for scene_id in scene_ids:
+            _require_id('scene_id',scene_id)
+    except (ValueError, TypeError) as error:
+        raise ValueError('QUALIFICATION_RESERVATIONS_INVALID') from error
+    return dict(reserved_by_worker={worker:scene_ids[index*2:index*2+2]
+                for index,worker in enumerate(worker_ids)}, surplus=scene_ids[16:])
+
+
 QUALIFICATION_KINDS = frozenset({"SINGLE_WORKER", "TWO_WORKER", "EIGHT_WORKER"})
 _EIGHT_WORKER_SCENES = 40
 
