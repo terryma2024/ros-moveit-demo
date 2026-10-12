@@ -144,6 +144,9 @@ class HeadRgbDetector:
         self.reset()
 
     def reset(self):
+        reset_backend = getattr(self.detector, "reset", None)
+        if callable(reset_backend):
+            reset_backend()
         self.identity = None
         self.last_stamp_ns = None
         self.tracks = {}

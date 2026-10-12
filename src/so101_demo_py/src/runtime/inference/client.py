@@ -95,8 +95,10 @@ class InferenceClient:
                         request["image"]["source_stamp_ns"], request["image"]["source_frame_id"])):
                 raise ValueError("INFERENCE_RESPONSE_IDENTITY_MISMATCH")
             if response["batch"] is not None:
+                accepted_classes = ({"cup", "plastic_cup"} if request["query_class_id"] in {"cup", "plastic_cup"}
+                                    else {request["query_class_id"]})
                 if (response["batch"]["shape"] != request["image"]["shape"]
-                        or any(candidate["class_id"] != request["query_class_id"]
+                        or any(candidate["class_id"] not in accepted_classes
                                for candidate in response["batch"]["candidates"])):
                     raise ValueError("INFERENCE_RESPONSE_IDENTITY_MISMATCH")
             return response

@@ -248,12 +248,12 @@ class InferenceService:
                     validate_inference_response(probe)
             except (ModelRuntimeInfrastructureError, RuntimeError, OSError) as error:
                 outcome, reason, batch = "INFRA_ERROR", str(error), None
-                self._fault("INFERENCE_EXECUTOR_FAILED")
+                self._fault(f"INFERENCE_EXECUTOR_FAILED: {type(error).__name__}: {error}")
             except (DeterministicModelResultError, ValueError, KeyError, TypeError, IndexError, AttributeError) as error:
                 outcome, reason, batch = "MODEL_ERROR", str(error), None
             except Exception as error:
                 outcome, reason, batch = "INFRA_ERROR", str(error), None
-                self._fault("INFERENCE_EXECUTOR_FAILED")
+                self._fault(f"INFERENCE_EXECUTOR_FAILED: {type(error).__name__}: {error}")
             finally:
                 with self._lock:
                     ticket.compute_done = True

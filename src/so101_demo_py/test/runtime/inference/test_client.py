@@ -105,3 +105,26 @@ def test_real_queue_full_never_buffers_or_executes_rejected_rgb(tmp_path):
         gates["r"].set()
         if server is not None: server.close()
         service.close()
+
+
+@pytest.mark.parametrize("class_id,accepted", [("cup", True), ("plastic_cup", True), ("bottle", False)])
+def test_real_client_accepts_only_cup_semantics_for_cup_queries(tmp_path, class_id, accepted):
+    from test_contract import response_document
+    service, _, _, _, executors = service_fixture(tmp_path, classes={"0": class_id})
+    batch = response_document()["batch"]
+    batch["candidates"][0]["class_id"] = class_id
+    executors[0].batch = batch
+    server = None
+    try:
+        path, server = start_socket(tmp_path, service)
+        client = client_module().InferenceClient(socket_path=path, service_generation="g1", max_frame_bytes=2**20)
+        request = request_document() | {"request_id": client.new_request_id(),
+            "deadline_monotonic_ns": time.monotonic_ns() + 1_000_000_000}
+        if accepted:
+            assert client.infer(request, bytes(range(18)))["batch"]["candidates"][0]["class_id"] == class_id
+        else:
+            with pytest.raises(ValueError, match="INFERENCE_RESPONSE_IDENTITY_MISMATCH"):
+                client.infer(request, bytes(range(18)))
+    finally:
+        if server is not None: server.close()
+        service.close()

@@ -42,12 +42,14 @@ class EventExecutor:
         return True
 
 
-def service_fixture(tmp_path, *, instances=1, limit=8, inference_timeout_s=1):
+def service_fixture(tmp_path, *, instances=1, limit=8, inference_timeout_s=1, classes=None):
     config = campaign_fixture(tmp_path)["teacher_service"]
     config.update(instances=instances, max_inflight_requests=limit,
                   inference_timeout_s=inference_timeout_s, queue_timeout_s=1)
     config["model"]["model_id"] = "cup-model"
     config["model"]["weights"]["sha256"] = "a" * 64
+    if classes is not None:
+        config["model"]["classes"] = classes
     gates, started, calls, executors = {}, {}, [], []
     def factory(index, config):
         executor = EventExecutor(index, config, gates, started, calls)
@@ -177,7 +179,9 @@ def test_executor_death_is_permanent_service_fault_without_replacement(tmp_path)
         executors[1]._alive = False
         wait_until(lambda: service.query({"schema_version": 1, "kind": "service_health",
                                         "request_id": "q"})["available"] is False)
-        assert read(submit(service, "r"))["outcome"] == "INFRA_ERROR"
+        response = read(submit(service, "r"))
+        assert response["outcome"] == "INFRA_ERROR"
+        assert response["reason"] == "INFERENCE_EXECUTOR_EXITED"
         assert len(executors) == 3
     finally:
         service.close()
@@ -225,7 +229,9 @@ def test_infrastructure_exception_is_not_a_deterministic_model_failure(tmp_path)
     service, _, _, _, executors = service_fixture(tmp_path)
     try:
         executors[0].failure = ModelRuntimeInfrastructureError("CUDA_DEVICE_FAILED")
-        assert read(submit(service, "r"))["outcome"] == "INFRA_ERROR"
+        response = read(submit(service, "r"))
+        assert response["outcome"] == "INFRA_ERROR"
+        assert "CUDA_DEVICE_FAILED" in response["reason"]
         assert service.query({"schema_version": 1, "kind": "service_health", "request_id": "q"})["available"] is False
         assert len(executors) == 1
     finally:

@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 384e29f0338e106f73b53d75db2c556038a413c8
+current_commit: 1c6478e133dfe4e17bb9ed3a7e14274793f0c655
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3569
-next_experiment: Worker Head/Teacher IPC integration targeted RED -> GREEN; preserve local timing/search/R6 and generic Broker.
+latest_checkpoint: CP-3570
+next_experiment: Teacher YOLO-only policy and in-memory request/R6 port integration; no transport staging and no generic fallback regression.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3570 — Head IPC backend/local tracker source sub-boundary GREEN
+
+- Added HeadIpcDetector as a raw backend under the unchanged local HeadRgbDetector postprocessing/search. No local YOLO load, service tracks, neck state, transport image files or transport image hash. Explicit policy is required; budget starts before serialization, ends after response/mask decoding, and uses the earlier search deadline. Attempt/reset/lease/Worker generation/sequence and local reset fence reject stale results.
+- RED targeted.PaJKSxDl rc 1, 12 missing-backend testcase failures. targeted.oLHWFaPf rc 1, 2 failed/2 passed: local tracker reset did not fence the IPC backend, and client rejected the approved cup label for a plastic_cup query. Fixed reset delegation and preserved both approved cup strings without renaming/accepting foreign classes. Generic local models without reset retain existing behavior.
+- Real Unix 640x480 test uses captured 900027 masks through the actual codec/server/client/backend and existing local dedup/track code; two raw candidates remain intact, one high-confidence local track persists across two source stamps. A local detector factory that raises was installed as an external I/O guard and never called. One-pending-request test, source/class/mask preservation, 40 ms serialization inclusion, cross-context/reset/late rejection and missing-policy negatives passed.
+- targeted.2VEnFjh7 was an INVALID test-fixture run (missing DetectionBatch import inside the fake external model; no functional RED claim). Corrected the fixture. Its generic infra reason exposed a real diagnostic loss: targeted.yWrUXFwj rc 1 showed CUDA_DEVICE_FAILED missing from the service fault reason; now preserve exception type and original reason in permanent service faults.
+- Final targeted argv: run-targeted.zsh `src/so101_demo_py/test/adapters/act/test_head_ipc_detector.py src/so101_demo_py/test/adapters/act/test_act_head_detector_mask_deduplication.py src/so101_demo_py/test/act/test_act_head_inference_owner.py src/so101_demo_py/test/act/test_act_head_local_inference_binding.py src/so101_demo_py/test/runtime/inference -q`; targeted.E4VU9HdH rc 0, 233 passed in 3.06 s (wall 3 s). No full/package/benchmark gate.
+- Inline self review: original masks/pixels/source timestamps, raw versus local outputs, current containment dedup, local tracks/stop owner, strict-start lock hold implementation unchanged; real Unix pixel path, full wait budget and no candidate default substitution, local generation fences and configured class map validated. Exact patch/hash retained as head-ipc-backend.patch and .sha256. Existing production providers have not yet switched; no Head qualification/calibration/live/W8 claim.
+- Ruling: cup and plastic_cup are the design's two permitted semantic class strings, not protocol aliases. New ACT client accepts those semantics for cup queries; Head backend additionally restricts them to its frozen class map. Foreign classes remain rejected, and classes are not renamed before dedup, preserving distinct-class behavior. Cost if wrong: a newly approved target class needs explicit mapping, not an implicit rename.
+- Next owning boundary: ACT Teacher policy, in-memory capture/request identity and R6 consumption. Existing generic PoseAdmissionLatch/InferenceRequest still binds perception/input/rgb.npy; ACT must remove this transport-staging dependency with an explicitly scoped current local contract, preserving generic/Mac semantics and durable pose/freshness/adjudication checks. Do not fabricate a nonexistent rgb.npy reference to satisfy the old latch.
+- Retained all run/scratch/patch evidence. Archived none; scratch and stopped test socket inodes remain deletion candidates only. No owned live simulation/container processes; preserved sessions untouched. Visual N/A: headless captured-mask/IPC regressions, not a scene execution.
 
 ## CP-3569 — shared service/client/spawn/CLI source boundary GREEN; Worker integration next
 
