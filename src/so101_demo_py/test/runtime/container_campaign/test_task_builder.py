@@ -14,6 +14,8 @@ import importlib
 import json
 from pathlib import Path
 import shutil
+import signal
+import subprocess
 import sys
 from types import SimpleNamespace
 import threading
@@ -714,10 +716,19 @@ SERIAL=itertools.count(1)
 SLEEP=(sys.executable,'-c','import time\ntime.sleep(60)')
 
 
+def _popen_with_default_sigint(argv,**kwargs):
+    """A helper child starts with the default SIGINT disposition whatever the gate that runs this suite inherited.
+
+    A gate launched as a background job ignores SIGINT, and a child inherits that before Python could install its
+    interrupt handler; the stop path interrupts first and would then wait the whole interrupt timeout."""
+    return subprocess.Popen(argv,preexec_fn=lambda:signal.signal(signal.SIGINT,signal.SIG_DFL),**kwargs)
+
+
 class FlowGroup(WorkerOwnedProcessTree):
     """The real owned process tree; only the offline processor role is scripted (the processor CLI is not run)."""
 
     def __init__(self,processor,events,**options):
+        options.setdefault('popen',_popen_with_default_sigint)
         super().__init__(**options)
         self.processor,self.events=processor,events
 
