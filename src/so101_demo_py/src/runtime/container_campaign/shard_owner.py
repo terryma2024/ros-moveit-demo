@@ -211,6 +211,14 @@ class ContainerShardOwner:
             raise ValueError('SHARD_RUNTIME_NOT_READY')
         return True
 
+    def control_client(self):
+        from so101_demo.runtime.container_campaign.control_client import ContainerControlClient
+        if not self._runtime_ready or self.bridge is None or self.bridge.binding is None or self._closing:
+            raise ValueError('SHARD_RUNTIME_NOT_READY')
+        return ContainerControlClient(binding=self.bridge.binding,context=self.context,
+            runtime_id=self.spec['runtime_id'],service_token=self.token,max_bytes=self.max_bytes,
+            ready_probe=self.bridge.ready)
+
     async def close(self):
         self._closing = True
         if self._close_task is None:

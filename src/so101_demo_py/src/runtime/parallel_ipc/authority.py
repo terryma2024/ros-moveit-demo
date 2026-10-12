@@ -444,14 +444,17 @@ class AuthenticatedUnixServer:
         self._closed.set()
         self._socket.close()
 
-    def close(self) -> None:
+    def close(self, *, preserve_socket: bool = False) -> None:
+        if type(preserve_socket) is not bool:
+            raise IpcError('SOCKET_RETENTION_INVALID')
         self.stop_accept()
         try:
             if self._executor is not None:
                 self._executor.shutdown(wait=False)
         finally:
             try:
-                os.unlink(self.path.name, dir_fd=self._parent_fd)
+                if not preserve_socket:
+                    os.unlink(self.path.name, dir_fd=self._parent_fd)
             except FileNotFoundError:
                 pass
             try:
