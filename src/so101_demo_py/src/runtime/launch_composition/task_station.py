@@ -207,7 +207,7 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
     )
 
 
-def _configured_act_execution_stack_actions(context):
+def _configured_act_execution_stack_actions(context, *, controller_parameters_path=None, plugin_parameters_path=None):
     """ACT simulation only; the admitted unified child owns command authority."""
     if platform.system() != "Linux" or LaunchConfiguration("headless").perform(context) != "true":
         raise RuntimeError("ACT_STACK_HEADLESS_REQUIRED")
@@ -225,7 +225,8 @@ def _configured_act_execution_stack_actions(context):
     if not scene.is_absolute() or not scene.is_file():
         raise RuntimeError("ACT_STACK_SCENE_INVALID")
     share = Path(get_package_share_directory("so101_demo_py"))
-    stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
+    stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0,
+        controller_parameters_path=controller_parameters_path, plugin_parameters_path=plugin_parameters_path)
     return [
         SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
         SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),

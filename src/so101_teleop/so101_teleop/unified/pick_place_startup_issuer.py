@@ -76,6 +76,9 @@ class InstalledActStackReadinessProbe:
         argv = [str(self.executable), "--session-id", self.launch.session_id,
                 "--ros-domain-id", str(self.launch.ros_domain_id),
                 "--timeout-s", str(self.timeout_s)]
+        from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
+        if type(self.launch) is ContainerActStackLaunch:
+            argv.extend(["--ros-namespace", self.launch.ros_namespace])
         try:
             result = self.run(
                 argv, env=self.launch.process_environment(), shell=False,

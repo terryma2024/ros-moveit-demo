@@ -115,6 +115,8 @@ def _mujoco_stack_actions(
     *,
     sim_speed_factor: float = -1.0,
     plugin_config_filename: str = "mujoco_plugins.yaml",
+    controller_parameters_path: Path | None = None,
+    plugin_parameters_path: Path | None = None,
 ) -> _MujocoStackActions:
     if plugin_config_filename not in {
         "mujoco_plugins.yaml", "act_diagnostic_plugins.yaml", "act_camera_plugins.yaml",
@@ -145,11 +147,14 @@ def _mujoco_stack_actions(
         act_profile=act_profile,
     )
     config = share / ("config/mujoco/act" if act_profile else "config/mujoco")
-    controllers = str(config / "ros2_controllers.yaml")
+    for path in (controller_parameters_path, plugin_parameters_path):
+        if path is not None and (not path.is_absolute() or path.resolve(strict=True) != path or not path.is_file()):
+            raise ValueError("MUJOCO_PARAMETER_PATH_INVALID")
+    controllers = str(controller_parameters_path or config / "ros2_controllers.yaml")
     parameters = [
         {"use_sim_time": True, "robot_description": robot_description},
         ParameterFile(controllers, allow_substs=False),
-        ParameterFile(str(config / plugin_config_filename), allow_substs=False),
+        ParameterFile(str(plugin_parameters_path or config / plugin_config_filename), allow_substs=False),
         {"simulation_session_id": session_id},
     ]
     robot_state_publisher = Node(

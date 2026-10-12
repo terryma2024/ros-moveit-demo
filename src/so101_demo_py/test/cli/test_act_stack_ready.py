@@ -8,6 +8,18 @@ from so101_demo.cli.act_stack_ready import evaluate_act_stack_readiness
 NOW = 100.0
 
 
+def test_container_ready_requires_actual_graph_namespace():
+    from so101_demo.cli import act_stack_ready
+
+    scope = "/act/campaign/w00"
+    nodes = [(name, scope) for name in ("arm_controller", "gripper_controller", "neck_controller",
+        "joint_state_broadcaster", "move_group", "mujoco_ros2_control_node", "robot_state_publisher")]
+    assert act_stack_ready.graph_in_namespace(scope, nodes)
+    assert not act_stack_ready.graph_in_namespace(scope, nodes+[("foreign", "/")])
+    assert not act_stack_ready.graph_in_namespace(scope, [(name, "/") for name,_ in nodes])
+    assert not act_stack_ready.graph_in_namespace(scope, [])
+
+
 def observations():
     return {
         "session_id": "session-283", "ros_domain_id": 230, "now_s": NOW,

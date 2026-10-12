@@ -45,6 +45,18 @@ def _finite(value) -> bool:
     return type(value) in (int, float) and math.isfinite(value)
 
 
+def graph_in_namespace(namespace, nodes):
+    from so101_demo.runtime.container_campaign.ros_namespace import validate_container_namespace
+
+    validate_container_namespace(namespace)
+    required = {"arm_controller", "gripper_controller", "neck_controller", "joint_state_broadcaster",
+                "move_group", "mujoco_ros2_control_node", "robot_state_publisher"}
+    if not nodes or any(type(name) is not str or type(scope) is not str
+                        or not (scope == namespace or scope.startswith(namespace+"/")) for name,scope in nodes):
+        return False
+    return required.issubset({name for name,scope in nodes if scope == namespace})
+
+
 def _camera_ok(value, *, world_time: float, now_s: float) -> tuple[bool, bool]:
     if not isinstance(value, dict):
         return False, False
@@ -161,11 +173,16 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--ros-domain-id", type=int, required=True)
     parser.add_argument("--timeout-s", type=float, default=60.0)
     parser.add_argument("--stop-velocity-rad-s", type=float, default=0.01)
+    parser.add_argument("--ros-namespace", default="/")
     options = parser.parse_args(arguments)
     if not 0 < options.timeout_s <= 120:
         parser.error("--timeout-s must be in (0, 120]")
     if os.environ.get("ROS_DOMAIN_ID") != str(options.ros_domain_id):
         parser.error("--ros-domain-id must match ROS_DOMAIN_ID")
+    from so101_demo.runtime.container_campaign.ros_namespace import qualified_name, validate_container_namespace
+    if options.ros_namespace != "/":
+        validate_container_namespace(options.ros_namespace)
+    endpoint = lambda name: qualified_name(options.ros_namespace, name)
 
     import rclpy
     from control_msgs.action import FollowJointTrajectory
@@ -180,8 +197,8 @@ def main(arguments: list[str] | None = None) -> int:
     from so101_demo.backends.mujoco.observer import EvidenceStale, MujocoWorldObserver
 
     rclpy.init()
-    node = rclpy.create_node(f"act_stack_ready_{os.getpid()}")
-    world = MujocoWorldObserver(node, options.session_id, max_age_s=0.25)
+    node = rclpy.create_node(f"act_stack_ready_{os.getpid()}", namespace=options.ros_namespace)
+    world = MujocoWorldObserver(node, options.session_id, max_age_s=0.25, topic=endpoint("/so101/simulation/evidence"))
     worlds: deque[dict] = deque(maxlen=2)
     joints: deque[dict] = deque(maxlen=8)
     rgb: dict[str, dict] = {}
@@ -213,20 +230,20 @@ def main(arguments: list[str] | None = None) -> int:
         }
 
     subscriptions = [node.create_subscription(
-        JointState, "/joint_states", joint_callback, qos_profile_sensor_data,
+        JointState, endpoint("/joint_states"), joint_callback, qos_profile_sensor_data,
     )]
     for stream in ("head", "wrist"):
         subscriptions.append(node.create_subscription(
-            Image, f"/{stream}_camera/color",
+            Image, endpoint(f"/{stream}_camera/color"),
             lambda msg, stream=stream: camera_callback(msg, stream), RGB_QOS,
         ))
-    controller_client = node.create_client(ListControllers, "/controller_manager/list_controllers")
+    controller_client = node.create_client(ListControllers, endpoint("/controller_manager/list_controllers"))
     service_types = (ApplyPlanningScene, GetPlanningScene, GetMotionPlan)
-    service_clients = {name: node.create_client(kind, name)
+    service_clients = {name: node.create_client(kind, endpoint(name))
                        for name, kind in zip(_SERVICES, service_types, strict=True)}
     action_types = (ExecuteTrajectory, FollowJointTrajectory,
                     FollowJointTrajectory, FollowJointTrajectory)
-    action_clients = {name: ActionClient(node, kind, name)
+    action_clients = {name: ActionClient(node, kind, endpoint(name))
                       for name, kind in zip(_ACTIONS, action_types, strict=True)}
     controllers: dict[str, str] = {}
     pending = None
@@ -264,6 +281,9 @@ def main(arguments: list[str] | None = None) -> int:
                 stop_velocity_rad_s=options.stop_velocity_rad_s,
             )
             if latest.ready and not bad_input and world.rejected_count == 0:
+                if options.ros_namespace != "/" and not graph_in_namespace(options.ros_namespace, node.get_node_names_and_namespaces()):
+                    latest = ActStackReadiness(False, "ACT_STACK_NAMESPACE_MISMATCH", None, latest.checks)
+                    continue
                 print(json.dumps(latest.artifact, sort_keys=True), flush=True)
                 return 0
         failure = latest.failure_code
@@ -309,4 +329,3 @@ def verify_head_search_startup(*, environment) -> dict | None:
     if not config_path:
         return None
     return load_promoted_head_search(config_path, environment.get("SO101_HEAD_SEARCH_REPORT"))
-

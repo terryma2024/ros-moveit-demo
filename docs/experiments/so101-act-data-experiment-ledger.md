@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: baa341c64f85d25bfa80ef4cc47baf2c244d08c3
+current_commit: 2db7b26c4aa72df7f897d96b007e864cd7d98a50
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,21 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3581
+latest_checkpoint: CP-3582
 next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3582 — Namespaced native shard entry source GREEN; native image build next
+
+- Added actual ContainerActStackLaunch/so101_mujoco_container_shard.launch.py using the current ACT stack actions with PushRosNamespace and scoped absolute endpoint remaps. Controller/plugin YAML node selectors are derived into the owning stack directory; original parameter values, frame IDs and original source bytes remain unchanged, with original/derived hashes retained. Generic launches keep their prior defaults. No ROS namespace claim is based on an environment label alone.
+- ACT readiness now supports explicit namespace addressing for world evidence, seven-joint feedback, both RGB streams, controller services and MoveIt/JTC actions. Container readiness requires the actual observed node graph in the expected namespace, including the native/controller/MoveIt nodes; root/foreign/missing graph cannot satisfy that check. Generic root readiness and original seven-axis schema/thresholds remain unchanged. Installed container readiness/stop probes pass the namespace explicitly.
+- Added campaign_shard console/module entry and closed immutable spec reader. Its current supported workload is the required no_motion_readiness image gate only; collection/measurement/live handlers are still pending, with unknown kinds refused before ROS rather than routed to a generic/diagnostic Teacher. Same-path private generation/worker root, exact runtime file hash, explicit generation/domain/session/namespace/device/token identity and owner/startup budgets from the controlled runtime are checked. Actual entry requires PID1 and installed /act/venv interpreter, then builds a real native stack, actual container control/heartbeat, readiness and original retirement pipeline. Signal/owner loss fences the runtime. No-motion driver refuses all goal forwarding. Source tests do not yet prove this whole pipeline in a container.
+- Added CUDA driver/NVML exact UUID/device-count readback without Torch/YOLO imports in the shard. Added native campaign-shard image recipe with complete recursive package closure, current source-built controller_manager/MuJoCo/support/QuIK/Teleop/demo, BUILD_TESTING=ON, explicit build/install roots and installed byte/runtime freeze. Lodepng is retained pinned input; Bun/frozen frontend cache and Node24.18.1 are task-owned build inputs. Node archive SHA d6c664df3f3f61458e8c277585571328522d705166723a7c7823a9253a4d15a0 matched https://nodejs.org/dist/v24.18.1/SHASUMS256.txt and exact binary reports v24.18.1. No global Node/Bun/model configuration changed. Native image has not been built at this checkpoint.
+- RED targeted.ebjesEyq rc1,8 missing namespace helper failures; targeted.p7gRrVej rc1,5 missing container launch/graph checks,7 passed; targeted.8t2YdDFV rc1,10 missing entry failures; targeted.0fQAM0px rc1,5 missing CUDA driver boundary failures and Host guard blocked by that missing import,11 passed. GREEN controls include targeted.9xbZXhuX16pass/.27s, XT7wvEIn143pass/.57s,9gV42c9F10pass/.07s and WKwv5Nbs167pass/5.26s.
+- Final targeted.WvheEco2 actual rc0,174 passed in5.69s (wall6s): run-targeted-container.zsh `src/so101_demo_py/test/runtime/container_campaign src/so101_demo_py/test/cli/test_campaign_shard.py src/so101_demo_py/test/cli/test_act_stack_ready.py src/so101_demo_py/test/runtime/test_task_station_launch.py src/so101_teleop/test/pick_place_validation/test_pick_place_validation_startup_issuer.py src/so101_teleop/test/unified/test_container_child_ownership.py -q`. Fresh NVMe interpreter/tempfile/import/argv/log/JUnit retained; no full/package/benchmark gate. Source/external GPU/ROS I/O fixtures only; actual CUDA/native EGL/controller/RGB/namespace/stop integration remains next.
+- Inline review checked explicit namespace versus frame/parameter preservation, current thin launcher/provider selection, pre-runtime closed input refusals, no Host fallback/no-motion forwarding, owner heartbeat and single-flight original stop pipeline, exact Node input provenance and generic regressions. Current native code's actual node name source confirmed mujoco_system_interface.cpp:397, rather than inferred from executable name. No task container/ROS stack running, /data1.4T free and other sessions preserved. Goal ACTIVE; concrete progress, no genuine blocker. Retained all, archived none, completed scratch/socket/exited diagnostics deletion candidates only; no deletion/push/hardware/training/threshold downgrade.
 
 ## CP-3581 — Four-lane ACT retirement and original stop evidence Host readback GREEN
 
