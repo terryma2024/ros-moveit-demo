@@ -38,5 +38,22 @@ def test_remap_targets_do_not_reprefix_already_scoped_names():
     mod = module()
     mappings = dict(mod.namespace_remappings("/act/campaign/w00"))
     assert mappings["/clock"] == "/act/campaign/w00/clock"
-    assert mappings["/neck_controller/**"] == "/act/campaign/w00/neck_controller/\\1"
+    assert mappings["/neck_controller/follow_joint_trajectory/_action/cancel_goal"] == "/act/campaign/w00/neck_controller/follow_joint_trajectory/_action/cancel_goal"
+    assert mappings['/head_camera/color'] == '/act/campaign/w00/head_camera/color'
+    assert mappings['/so101/simulation/physics_step_chunks'] == '/act/campaign/w00/so101/simulation/physics_step_chunks'
+    assert all('*' not in source and '\\' not in target for source,target in mappings.items())
     assert all(not source.startswith("/act/campaign/w00/") for source in mappings)
+
+
+def test_current_rcl_parser_accepts_all_container_remaps_without_starting_node():
+    import rclpy.context
+    mappings = module().namespace_remappings('/act/campaign/w00')
+    args = ['--ros-args']
+    for source,target in mappings:
+        args.extend(['-r',source+':='+target])
+    context = rclpy.context.Context()
+    try:
+        context.init(args=args)
+    finally:
+        if context.ok():
+            context.shutdown()
