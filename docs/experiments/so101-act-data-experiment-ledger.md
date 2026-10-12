@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 6e63a00c232e8e9facef141b249402815a348a5c
+current_commit: 42acc787eacd9d8350b0f3ef4705c9ddd0df2eb2
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3611
-next_experiment: EXP-574 (PLANNED): rebuild both campaign images from 6e63a00c2, then a no-motion real-container check of the one-way control path with R/run-one-way-no-motion-probe.zsh.
+latest_checkpoint: CP-3612
+next_experiment: EXP-575 (to be planned): Teacher inference service start, ready and one synthetic round trip from the Host and from inside a readiness shard, no motion; then Host package gates on a fresh build of the frozen commit.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3612 — EXP-574 VALID: rebuilt images and real no-motion control path pass
+
+- EXP-574 ran on freeze commit 42acc787e (see the correction in its record). Both images built; the no-motion probe passed checks a, b, c, d_wire, e, f, g and the clock readback with the measured values recorded in the EXP-574 entry below. First real container on any commit after 5ac6305e5.
+- Not proven by this run: any task assignment that executes, reset, evidence, Teacher inference, Recorder, offline processing, QC, seal, Host collection, eight-way concurrency, GPU rendering path. A single readiness instance at a time on slot w00.
+- Evidence retained: the two image build directories, REG/act-nomotion-1fdada4b7b7e, the probe log. Deletion candidates, not deleted: REG/act-nomotion-ac23dccf6080 (dry run), older campaign images and exited containers, test scratch directories. Three exited probe containers remain as registered by the run; not removed.
+- No motion, no training, no push, no evidence deletion, no threshold change.
 
 ## CP-3611 — CLI composition, admission rulings and image restructure committed; EXP-574 planned
 
@@ -86,7 +93,7 @@ next_experiment: EXP-574 (PLANNED): rebuild both campaign images from 6e63a00c2,
 
 ```yaml
 experiment_id: EXP-574
-status: PLANNED
+status: VALID
 prior_experiment: CP-3592 production-owner-probe-5053af846680 (two real no-motion instances through ContainerShardOwner on the heartbeat protocol, image 5ac6305e5)
 hypothesis: On commit 6e63a00c2 with rebuilt images, Host status polling alone keeps a real no_motion_readiness shard alive from STARTING through READY, and each of three stop causes (Host terminate, owner silence, SIGTERM through owner close) ends in a proven container exit with the correct recorded reason.
 prediction: First accepted Host status poll arrives inside the executor's 5.0 s owner-silence window; READY is never reported before runtime-ready.json and stack-readiness.json exist; 30 s of polling keeps READY; terminate yields instance-exit.json with the Host reason, native stop evidence, registry exit proof and resources_released true; a silent Host makes the container stop itself; owner close sends exactly one TERM. New information versus CP-3592 - the task-control path has never run in a real container, and the restructured multi-stage shard image and the MuJoCo 3.12.0 pin have never been built.
@@ -115,21 +122,39 @@ provenance:
   ros_domain_id: 181
   gz_partition: the per-instance simulation session id written into each shard spec
 commands:
-  - command: /usr/bin/python3 R/prepare-image-build.py --role inference ; /usr/bin/python3 R/image-build-<UTC>/build.py
-    exit_code: PENDING
-  - command: /usr/bin/python3 R/prepare-image-build.py --role shard ; /usr/bin/python3 R/image-build-<UTC>/build.py
-    exit_code: PENDING
-  - command: zsh R/run-one-way-no-motion-probe.zsh --shard-build-dir R/image-build-<UTC>
-    exit_code: PENDING
+  - command: /usr/bin/python3 R/prepare-image-build.py --role inference ; /usr/bin/python3 R/image-build-20261012T171409Z/build.py
+    exit_code: 0
+  - command: /usr/bin/python3 R/prepare-image-build.py --role shard ; /usr/bin/python3 R/image-build-20261012T171518Z/build.py
+    exit_code: 0
+  - command: zsh R/run-one-way-no-motion-probe.zsh --shard-build-dir R/image-build-20261012T171518Z
+    exit_code: 0
+correction: 2026-10-12T17:14Z - the freeze commit is 42acc787eacd9d8350b0f3ef4705c9ddd0df2eb2, the ledger-only commit that recorded this PLANNED entry on top of 6e63a00c2. The image build context copies only src/, scripts/ and third_party/, which are identical in both commits, but stamps HEAD, so provenance names 42acc787e. PLANNED fields above are otherwise unchanged.
 observed:
-  - PENDING
+  - Inference image built in 53.5 s, id sha256:e912aca35fda0f6a67a331c11971aa6f0a550b42ecf0c4943077a1cef9b308ef, provenance git_commit 42acc787e, package_source_sha256 35da882af359e5537152d92e38b2b2456700a92c287777bdbb26615b6508cf7c, install_sha256 2e9c2dd992de2b72581b43ef609d9af44100dec27d09a80bccb60fd0a3e51180.
+  - Shard image, first real build of the multi-stage Dockerfile, 335.6 s, id sha256:b5558327b8f242da63af7b842ca0f1926a903fc34cf4cbf9492a6f0ba6dee4b6, same package_source_sha256, install_sha256 cc6860b64e219caa7e8476197ccf475af34522eceef303b762b3e55fca930c46. Steps - apt layers cached; pip layer 13.6 s; early native layer 168.2 s; code layer 114.1 s; provenance freeze 10.7 s; export 21.8 s (previous structure, R/image-build-20261012T075928Z - colcon 185.3 s, export 67.8 s, total 272 s with the pip layer cached). docker images reports 17.7 GB against 21 GB before; the inference image reports 13.1 GB against 11.2 GB before (cause not investigated).
+  - Final shard image /act holds only bootstrap.bash, image-role, install, provenance.json, source and venv; no build, build-source, build-log or build-tools. Base image layers are a prefix of the image layers.
+  - Probe run REG/act-nomotion-1fdada4b7b7e, status COMPLETE_ALL_PASS, Host HEAD and submodule unchanged at postflight, no container left running, three registry records with exit proof.
+  - Check a PASS - first accepted status reply 0.138 s after control/child-ready.json, state STARTING, margin 4.862 s inside the 5.0 s owner-silence window (one instance only). Start to READY 12.3 s.
+  - Check b PASS - first READY reply after both runtime-ready.json and stack-readiness.json, readiness hash and seven checks true, in-container provenance equal to the built identity.
+  - Check c PASS - 31 of 31 polls accepted in the 30 s window, maximum gap 1.044 s.
+  - Check d_wire PASS - an old observe request is refused with CONTAINER_OPERATION_NOT_ALLOWED and the next poll is still READY.
+  - Check e PASS - terminate gives TERMINATED with resources_released true, instance-exit.json fault_reason PROBE_TERMINATE and cleanup_confirmed true, exit code 0, shard-stop.json and retirement audit present, registry exit proof. The owner close also sent one docker kill --signal TERM to the same registered container; the recorded reason stayed the RPC reason. Terminate call to return 3.9 s.
+  - Check f PASS - with polling stopped the container stopped itself; controller-stop evidence 6.44 s after the last status request, container exit observed 9.72 s after it, no Host signal before exit, fault reason "Coordinator status polling timed out" adopted by the Host, exit code 0, cleanup confirmed.
+  - Check g PASS - owner close sent exactly one TERM 0.041 s after the last reply; instance-exit.json fault_reason SIGTERM, exit code 0, released, second close returned the same receipt.
+  - Readbacks - container and Host share the time namespace and the container CLOCK_MONOTONIC reading is bracketed by Host readings; Python mujoco module /act/venv/lib/python3.12/site-packages/mujoco, version and library 3.12.0; the native simulator resolves libmujoco.so.3.12.0 from /opt/ros/jazzy/opt/mujoco_vendor; GPU UUID GPU-28221cec-9d21-7753-fd5a-da645740df19; ROS_DOMAIN_ID 181, ROS_NAMESPACE /act/nomotion_1fdada4b7b7e/w00, MUJOCO_GL egl; namespace sudo fallback count 0.
+  - The simulator log reports "EGL: Vendor: Mesa Project" in all three instances; the earlier probe native-shard-probe-561524b4c710 logged the same vendor string.
+  - The ldd readback, run through a plain shell without the ROS environment, prints one mujoco_ros2_control_msgs generator library as not found although the file exists under /act/install/lib; the stack reached readiness, so this is a property of the readback command, not of the runtime.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The 5 s owner-silence window is not at risk for a single instance; eight concurrent instances remain unmeasured.
+  - Whether Mesa EGL means CPU rendering rather than the NVIDIA device was not determined; it is unchanged from the earlier image and may matter for eight-way throughput.
+conclusion: The one-way task control path works in a real container for start, status polling through STARTING and READY, refusal of non-task requests, Host terminate, owner-silence self-stop and SIGTERM, each with a proven exit and the correct recorded reason. The restructured shard image builds and runs, and the MuJoCo Python and native versions agree at 3.12.0. No goal was submitted and no Teacher, Recorder, reset or inference ran; this is not collection, physical or qualification evidence.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/image-build-20261012T171409Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/image-build-20261012T171518Z (final-image-readback.json, shard-image-inspect.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-nomotion-1fdada4b7b7e (host/probe-result.json, host/docker-calls.jsonl, host/polls-*.jsonl, host/readbacks-wave-0-w00-g1)
+  - /tmp/so101-debug-act-data-66c42e4c/nomotion-probe-20261012T172135Z.log
+decision: KEEP
+next_experiment: EXP-575
 ```
 
 ## CP-3610 — Shard wiring, old-protocol cleanup, ROS scoping, perception ruling and formal scene scope committed
