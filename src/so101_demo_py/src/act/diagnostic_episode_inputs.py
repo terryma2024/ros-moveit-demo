@@ -59,8 +59,13 @@ _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source
                                 "config_sha256", "evidence_root", "roles", "inputs_sha256"})
 #: the freezer binds the collection mode, the policies and the development runtime too, but a call that writes none of them
 #: keeps its contract - so they are allowed, not required
+#: `scene_manifest` binds the scene list of a formal campaign: `{path, sha256, bytes, scene_count}` of the frozen copy at
+#: `SCENE_MANIFEST_PATH`. It is a key, not a role, so a set without it keeps the exact role table and hash it always had.
 _MANIFEST_OPTIONAL = frozenset({"mode", "runtime_policy", "execution_snapshot",
-                                "teacher_endpoint", "teacher_execution_policy", "episode_recorder"})
+                                "teacher_endpoint", "teacher_execution_policy", "episode_recorder",
+                                "scene_manifest"})
+SCENE_MANIFEST_PATH = "scene_manifest/scenes.json"
+_SCENE_MANIFEST_FIELDS = frozenset({"path", "sha256", "bytes", "scene_count"})
 #: The policy bindings (Phase A4c): binding name -> the file
 #: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
 POLICY_BINDINGS = {
@@ -396,6 +401,102 @@ def verify_policy_bindings(document: dict, manifest_path: Path, snapshot: dict |
     return loaded
 
 
+def _scene_rows(payload: bytes, code: str) -> tuple[dict, ...]:
+    """The rows of a scene manifest (`scenarios[]`), or `ValueError(code)`: no duplicate JSON key or scene id, no NaN.
+
+    Each row needs the identity the collection scope is built from - a container-valid `scene_id`, a non-negative integer
+    `seed` (not a bool, string or float) - and a non-empty `split`, the same contract `scene_ids` reads. Other fields stay.
+    """
+    from so101_demo.parallel_batch.contracts.common import ContractError, _require_id
+
+    def pairs(items):
+        if len({key for key, _ in items}) != len(items):
+            raise ValueError(code)
+        return dict(items)
+
+    def constant(_name):
+        raise ValueError(code)
+
+    try:
+        document = json.loads(payload.decode("utf-8"), object_pairs_hook=pairs, parse_constant=constant)
+    except (UnicodeDecodeError, ValueError, RecursionError) as error:
+        raise ValueError(code) from error
+    rows = document.get("scenarios") if isinstance(document, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise ValueError(code)
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict) or type(row.get("seed")) is not int or row["seed"] < 0:
+            raise ValueError(code)
+        if not isinstance(row.get("split"), str) or not row["split"]:
+            raise ValueError(code)
+        try:
+            _require_id("scene_id", row.get("scene_id"))
+        except ContractError as error:
+            raise ValueError(code) from error
+        if row["scene_id"] in seen:
+            raise ValueError(code)
+        seen.add(row["scene_id"])
+    return tuple(rows)
+
+
+def _bound_scene_rows(document: dict, root: Path) -> tuple[dict, ...]:
+    """Re-read the bound scene manifest under `root` and return its rows; every fault is `INPUTS_SCENE_MANIFEST_INVALID`.
+
+    The key is legal only on a `formal` set. The binding is closed, the file is the one fixed path (no symlink, inside `root`)
+    and its size, hash and row count are the bound ones, so a replaced list cannot reach a scope check unnoticed.
+    """
+    code = "INPUTS_SCENE_MANIFEST_INVALID"
+    binding = document.get("scene_manifest")
+    if (document.get("mode") != "formal" or not isinstance(binding, dict) or set(binding) != _SCENE_MANIFEST_FIELDS
+            or binding["path"] != SCENE_MANIFEST_PATH or not isinstance(binding["sha256"], str)
+            or not _HEX64.fullmatch(binding["sha256"]) or type(binding["bytes"]) is not int or binding["bytes"] < 0
+            or type(binding["scene_count"]) is not int or binding["scene_count"] < 1):
+        raise ValueError(code)
+    path = Path(root) / binding["path"]
+    try:
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(Path(root).resolve()):
+            raise ValueError(code)
+        payload = path.read_bytes()
+    except OSError as error:
+        raise ValueError(code) from error
+    if len(payload) != binding["bytes"] or hashlib.sha256(payload).hexdigest() != binding["sha256"]:
+        raise ValueError(code)
+    rows = _scene_rows(payload, code)
+    if len(rows) != binding["scene_count"]:
+        raise ValueError(code)
+    return rows
+
+
+def frozen_scene_rows(frozen: dict, manifest_path: Path) -> tuple[dict, ...]:
+    """The rows of the scene manifest a frozen set binds, re-read and re-hashed now; refuses a set that binds none."""
+    if "scene_manifest" not in frozen:
+        raise ValueError("INPUTS_SCENE_MANIFEST_INVALID")
+    return _bound_scene_rows(frozen, Path(manifest_path).parent)
+
+
+def require_scope_for_inputs(document: dict, frozen: dict, manifest_path: Path) -> None:
+    """Refuse a collection scope that is not valid for the frozen input set; the one rule every site shares.
+
+    A set that binds no scene manifest (every diagnostic set, and a formal set that predates the binding) expects exactly the
+    anchor scope. A set that binds one (formal only) expects the scope of one of its rows: `formal`, that row's `scene_id` and
+    `seed`, and this set's `inputs_sha256`. The anchor scope is then valid only if `default` is itself a row.
+    Raises `EPISODE_SCOPE_INPUTS_MISMATCH`, or `INPUTS_SCENE_MANIFEST_INVALID` when the bound file no longer verifies.
+    """
+    from .collection_scope import build_collection_scope
+
+    if "scene_manifest" not in frozen:
+        anchor = frozen["roles"]["anchor_scene"]["identity"]
+        expected = [build_collection_scope(frozen["mode"], scene_id=anchor["scene_id"], seed=anchor["seed"],
+                                           inputs_sha256=frozen["inputs_sha256"])]
+    else:
+        expected = [build_collection_scope("formal", scene_id=row["scene_id"], seed=row["seed"],
+                                           inputs_sha256=frozen["inputs_sha256"])
+                    for row in frozen_scene_rows(frozen, manifest_path)]
+    if document not in expected:
+        raise ValueError("EPISODE_SCOPE_INPUTS_MISMATCH")
+
+
 def verify_frozen_inputs(manifest_path: Path) -> dict:
     """Read the manifest and verify every frozen file it names, not only its metadata.
 
@@ -445,6 +546,8 @@ def verify_frozen_inputs(manifest_path: Path) -> dict:
                 or document["roles"]["scene_model"]["sha256"] != identity.get("scene_sha256")):
             raise ValueError("INPUTS_EXECUTION_SNAPSHOT_IDENTITY_MISMATCH")
     verify_policy_bindings(document, manifest_path, snapshot if "execution_snapshot" in document else None)
+    if "scene_manifest" in document:
+        _bound_scene_rows(document, root)
     return document
 
 
@@ -578,11 +681,16 @@ def _verify_roles(registry: dict, *, mode=None) -> dict:
 def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = None,
                   runtime_policy: Path | None = None,
                   execution_inputs: bool = False, teacher_endpoint: Path | None = None,
-                  teacher_execution_policy: Path | None = None, episode_recorder_policy: Path | None = None) -> Path:
+                  teacher_execution_policy: Path | None = None, episode_recorder_policy: Path | None = None,
+                  scene_manifest: Path | None = None) -> Path:
     """Copy the uniquely verified candidates into a new directory and bind their bytes.
 
     The output directory must not exist: a freeze is a new immutable input set, never a merge into
     a previous one.
+
+    `scene_manifest` (formal mode only) binds a campaign's scene list: its bytes are copied to `scene_manifest/scenes.json`
+    and `{path, sha256, bytes, scene_count}` enters the inputs hash chain, so a collection scope may name any row of it. A
+    call without it writes the same manifest and digest it always did.
 
     The three keyword-only arguments are the amendment's additions and are optional, so every call that predates
     them keeps its exact behaviour and no caller silently acquires the new policy. When given, the endpoint policy
@@ -595,6 +703,18 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
     target = Path(output)
     if target.exists():
         raise ValueError("INPUT_OUTPUT_EXISTS")
+    scene_payload = None
+    if scene_manifest is not None:
+        if mode != "formal":
+            raise ValueError("INPUT_SCENE_MANIFEST_REQUIRES_FORMAL")
+        source = Path(scene_manifest)
+        try:
+            if source.is_symlink() or not source.is_file():
+                raise ValueError("INPUT_SCENE_MANIFEST_INVALID")
+            scene_payload = source.read_bytes()
+        except OSError as error:
+            raise ValueError("INPUT_SCENE_MANIFEST_INVALID") from error
+        scene_count = len(_scene_rows(scene_payload, "INPUT_SCENE_MANIFEST_INVALID"))
     payloads = _verify_roles(registry, mode=mode)
     roles = {}
     extra = {}
@@ -602,6 +722,9 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
         if mode not in ("formal", "preselected_target_diagnostic"):
             raise ValueError("INPUT_MODE_INVALID")
         extra["mode"] = mode
+    if scene_payload is not None:
+        extra["scene_manifest"] = {"path": SCENE_MANIFEST_PATH, "sha256": hashlib.sha256(scene_payload).hexdigest(),
+                                   "bytes": len(scene_payload), "scene_count": scene_count}
     policy_payloads = {}
     for name, source in (("teacher_endpoint", teacher_endpoint),
                          (EXECUTION_POLICY_BINDING, teacher_execution_policy),
@@ -628,6 +751,13 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
             destination.parent.mkdir(exist_ok=True)
             with open(destination, "xb") as stream:
                 stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+        if scene_payload is not None:
+            destination = target / SCENE_MANIFEST_PATH
+            destination.parent.mkdir(exist_ok=True)
+            with open(destination, "xb") as stream:
+                stream.write(scene_payload)
                 stream.flush()
                 os.fsync(stream.fileno())
         for role in INPUT_ROLES:

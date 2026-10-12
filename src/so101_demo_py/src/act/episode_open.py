@@ -26,11 +26,12 @@ def open_recorder_episode(options, *, offline: bool = False):
 
     from .collection_orchestration import FAULT_SANDBOX_COMPONENT
     from .episode_assembly import episode_audit_pair, open_point_episode
-    from .collection_scope import build_collection_scope, read_collection_scope
+    from .collection_scope import read_collection_scope
     from .contact_calibration import proposal_validation_mode, verify_disabled_proposal
     from .contact_policy import policy_fingerprint, spot_check_receipt_allowed, verify_activation
     from .execution_snapshot import verify_execution_snapshot
-    from .diagnostic_episode_inputs import POLICY_BINDINGS, verify_frozen_inputs, validate_execution_snapshot_binding
+    from .diagnostic_episode_inputs import (
+        POLICY_BINDINGS, require_scope_for_inputs, verify_frozen_inputs, validate_execution_snapshot_binding)
     from .collection_config import validate_recorder_policy
     from so101_demo.parallel_batch.contracts.common import ContractError
     from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
@@ -47,11 +48,7 @@ def open_recorder_episode(options, *, offline: bool = False):
     snapshot = verify_execution_snapshot(manifest_path.parent / binding["path"],
                                          expected_sha256=binding["sha256"])
     document = read_collection_scope(Path(scope_path))
-    anchor = frozen["roles"]["anchor_scene"]["identity"]
-    expected = build_collection_scope(frozen["mode"], scene_id=anchor["scene_id"], seed=anchor["seed"],
-                                      inputs_sha256=frozen["inputs_sha256"])
-    if document != expected:
-        raise ValueError("EPISODE_SCOPE_INPUTS_MISMATCH")
+    require_scope_for_inputs(document, frozen, manifest_path)
     lease_names = ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id",
                    "attempt_id", "lease_generation", "lease_issued_monotonic_s", "lease_deadline_monotonic_s")
     try:

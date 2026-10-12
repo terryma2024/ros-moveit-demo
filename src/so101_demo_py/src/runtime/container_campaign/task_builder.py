@@ -17,6 +17,7 @@ import time
 
 from so101_demo.act.collection_orchestration import CollectionOptions
 from so101_demo.act.collection_scope import read_collection_scope
+from so101_demo.act.diagnostic_episode_inputs import require_scope_for_inputs
 from so101_demo.act.frozen_runtime_inputs import load_teacher_frozen_inputs,load_recorder_frozen_policy
 from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 from so101_demo.act.parallel_collection_contracts import read_document,scene_ids
@@ -158,6 +159,11 @@ def load_task_input(task,shard_spec,*,clock=time.monotonic):
         expected_inputs_sha256=frozen['inputs_sha256'])
     if scope['scene_id']!=document['scene_id']:
         raise ValueError('COLLECTION_CASE_SCOPE_MISMATCH')
+    if 'scene_manifest' in frozen:
+        # the frozen set binds the scene list: the task must carry that very list, and its scope must be one of its rows
+        if document['scene_manifest']['sha256']!=frozen['scene_manifest']['sha256']:
+            raise ValueError('COLLECTION_CASE_SCENE_MANIFEST_MISMATCH')
+        require_scope_for_inputs(scope,frozen,Path(validate_file_ref(refs['inputs_manifest'])))
     for role in ('contact_proposal','contact_activation'):
         original=read_document(Path(refs['inputs_manifest']['path']).parent/frozen['roles'][role]['path'])
         if original.get('policy_fingerprint')!=identity['contact_policy_fingerprint']:

@@ -37,13 +37,16 @@ def test_missing_frozen_manifest_refuses_before_creating_recorder(tmp_path):
     assert not options.evidence_root.exists()
 
 
-def frozen_child_inputs(tmp_path):
-    """Synthetic approval/roles plus real frozen source/model for a Recorder boundary fixture."""
+def frozen_child_inputs(tmp_path, *, mode="preselected_target_diagnostic", scene_manifest=None, scope_scene=("default", 0)):
+    """Synthetic approval/roles plus real frozen source/model for a Recorder boundary fixture.
+
+    `scene_manifest` (a scenes file, formal `mode` only) is bound by the real `freeze_inputs`; `scope_scene` is the (scene_id, seed)
+    of the `scope.json` this writes. The default call is the unchanged diagnostic fixture."""
     from so101_demo.act.execution_snapshot import freeze_execution_snapshot
     from so101_demo.act.contact_policy import policy_fingerprint
     config = PACKAGE_ROOT / "config/act"
     manifest_path = freeze_inputs(_write_registry(tmp_path, _registry(tmp_path)), tmp_path / "inputs",
-                                 mode="preselected_target_diagnostic",
+                                 mode=mode, scene_manifest=scene_manifest,
                                  teacher_endpoint=config / "teacher_endpoint.yaml",
         teacher_execution_policy=config / "teacher_execution_policy.yaml",
         episode_recorder_policy=config / "episode_recorder.yaml",
@@ -76,11 +79,11 @@ def frozen_child_inputs(tmp_path):
     document["execution_snapshot"] = execution_snapshot_binding(snapshot, root / "execution")
     bindings = {**document["roles"], **{key: document[key] for key in
                 ("mode", "teacher_endpoint", "teacher_execution_policy",
-                 "episode_recorder", "runtime_policy", "execution_snapshot") if key in document}}
+                 "episode_recorder", "runtime_policy", "execution_snapshot", "scene_manifest") if key in document}}
     document["inputs_sha256"] = hashlib.sha256(json.dumps(bindings, sort_keys=True,
                                                            separators=(",", ":")).encode()).hexdigest()
     manifest_path.write_text(json.dumps(document))
-    write_collection_scope(build_collection_scope(document["mode"], scene_id="default", seed=0,
+    write_collection_scope(build_collection_scope(document["mode"], scene_id=scope_scene[0], seed=scope_scene[1],
                                                   inputs_sha256=document["inputs_sha256"]), tmp_path / "scope.json")
     return manifest_path, document, snapshot
 
@@ -201,3 +204,46 @@ def test_only_the_model_bound_execution_snapshot_binding_is_accepted(tmp_path):
         validate_execution_snapshot_binding(retired)
     with pytest.raises(ValueError, match="INPUTS_EXECUTION_SNAPSHOT_INVALID"):
         validate_execution_snapshot_binding({**binding, "schema_version": 3})
+
+
+def _scope_for(tmp_path, name, scene_id, seed, inputs_sha256, mode="formal"):
+    path = tmp_path / name
+    write_collection_scope(build_collection_scope(mode, scene_id=scene_id, seed=seed, inputs_sha256=inputs_sha256), path)
+    return path
+
+
+def test_two_scenes_reach_recorder_open(tmp_path):
+    """Two different non-`default` scenes of one bound scene manifest both pass the real scope check at Recorder open.
+
+    Real: `freeze_inputs` (binds the scene manifest), `verify_frozen_inputs`, the real `open_recorder_episode` and its audit
+    files. Controlled: the role candidates (synthetic approvals) and the scene rows (hand-written)."""
+    from test_act_formal_scene_scope import ROWS, scene_file
+    manifest_path, manifest, _ = frozen_child_inputs(tmp_path, mode="formal", scene_manifest=scene_file(tmp_path),
+                                                     scope_scene=("scene-a", 11))
+    assert "scene_manifest" in manifest and manifest["mode"] == "formal"
+    for row in ROWS:
+        scene = row["scene_id"]
+        working = tmp_path / "worker" / "attempts" / scene / "attempt" / "working"
+        options = _options(tmp_path, inputs=manifest_path, working=working)
+        options.point_id = scene
+        options.episode_scope = _scope_for(tmp_path, f"scope-{scene}.json", scene, row["seed"], manifest["inputs_sha256"])
+        episode = open_recorder_episode(options)
+        try:
+            identity = json.loads((working / "episode" / "audit" / "episode.json").read_bytes())
+            assert (identity["scene_id"], identity["seed"], identity["mode"]) == (scene, row["seed"], "formal")
+            assert json.loads((working / "episode" / "audit" / "inputs.json").read_bytes()) == manifest
+        finally:
+            episode.close()
+
+
+@pytest.mark.parametrize("scene,seed", [("default", 0), ("scene-c", 11), ("scene-a", 12), ("scene-b", 11)])
+def test_a_scope_outside_the_bound_scene_manifest_is_refused_at_recorder_open(tmp_path, scene, seed):
+    from test_act_formal_scene_scope import scene_file
+    manifest_path, manifest, _ = frozen_child_inputs(tmp_path, mode="formal", scene_manifest=scene_file(tmp_path),
+                                                     scope_scene=("scene-a", 11))
+    working = tmp_path / "worker" / "attempts" / "task_start" / "attempt" / "working"
+    options = _options(tmp_path, inputs=manifest_path, working=working)
+    options.episode_scope = _scope_for(tmp_path, "scope-outside.json", scene, seed, manifest["inputs_sha256"])
+    with pytest.raises(ValueError, match="EPISODE_SCOPE_INPUTS_MISMATCH"):
+        open_recorder_episode(options)
+    assert not working.exists()

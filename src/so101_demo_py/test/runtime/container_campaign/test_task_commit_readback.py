@@ -137,6 +137,34 @@ def test_qc_invalid_is_collected_but_cannot_export(world):
     assert index['collected_tasks'][0]['act_data_qc'] == 'FAIL' and index['committed_episodes'] == []
 
 
+def test_host_readback_refuses_scope_outside_bound_manifest(world, tmp_path):
+    """The Host's independent scope check against a bound scene manifest.
+
+    Real: `freeze_inputs` binding the scene manifest, `verify_container_task_registration` and `require_scope_for_inputs`.
+    Controlled: the sealed task in `world` was produced for a different (fake) inputs manifest, so a bound set can never pass
+    the later original-input binding. The test therefore asserts WHICH check refused through the cause: the scope check runs
+    first and names EPISODE_SCOPE_INPUTS_MISMATCH; a row of the bound manifest gets past it and fails only at that later binding.
+    """
+    from test_act_child_recorder_binding import _scope_for, frozen_child_inputs
+    from test_act_formal_scene_scope import scene_file
+
+    bound = tmp_path/'bound'
+    bound.mkdir()
+    manifest_path, manifest, _ = frozen_child_inputs(bound, mode='formal', scene_manifest=scene_file(bound),
+                                                     scope_scene=('scene-a', 11))
+
+    def refusal(scene, seed):
+        scope = _scope_for(bound, f'scope-{scene}-{seed}.json', scene, seed, manifest['inputs_sha256'])
+        with pytest.raises(ValueError, match=INVALID) as error:
+            verify_container_task_registration(world.registration, scope=scope, inputs_manifest=manifest_path)
+        return str(error.value.__cause__)
+
+    for scene, seed in (('scene-z', 11), ('default', 0), ('scene-a', 12), ('scene-b', 11)):
+        assert refusal(scene, seed) == 'EPISODE_SCOPE_INPUTS_MISMATCH', (scene, seed)
+    for scene, seed in (('scene-a', 11), ('scene-b', 12)):
+        assert refusal(scene, seed) == 'original input binding', (scene, seed)
+
+
 def test_perception_no_pose_task_passes_host_readback_and_cannot_export(tmp_path, monkeypatch):
     world = build_task(tmp_path, monkeypatch, perception_no_pose=True)
     assert not (world.location/'episode/seal.json').exists() and not (world.location/'dynamic').exists()

@@ -303,6 +303,9 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
 
     if scope is None:
         frozen = verify_frozen_inputs(inputs_manifest)
+        if "scene_manifest" in frozen:
+            # a set that binds a scene list has no single scene to derive: the caller names the scope of the row it ran
+            raise OfflineRefused("OFFLINE_SCOPE_REQUIRED")
         anchor = frozen["roles"]["anchor_scene"]["identity"]
         document = build_collection_scope(frozen["mode"], scene_id=anchor["scene_id"], seed=anchor["seed"],
                                           inputs_sha256=frozen["inputs_sha256"])

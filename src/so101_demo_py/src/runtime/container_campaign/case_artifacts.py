@@ -50,6 +50,10 @@ class CollectionCaseArtifacts:
             expected_inputs_sha256=inputs['inputs_sha256'])
         if scope['scene_id']!=scene or inputs.get('mode')!='formal':
             raise ValueError('COLLECTION_CASE_SCOPE_MISMATCH')
+        if 'scene_manifest' in inputs:
+            # a set that binds a scene list: the scope must be one of its rows, read from the hash-chained manifest
+            from so101_demo.act.diagnostic_episode_inputs import read_inputs_manifest,require_scope_for_inputs
+            require_scope_for_inputs(scope,read_inputs_manifest(paths['inputs_manifest']),paths['inputs_manifest'])
         for ref in refs.values():validate_file_ref(ref)
         return paths['scope'],paths['inputs_manifest']
 

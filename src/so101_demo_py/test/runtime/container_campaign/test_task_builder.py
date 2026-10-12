@@ -43,15 +43,28 @@ def ref(path):
     return dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
 
 
-def make_env(tmp_path,monkeypatch):
-    frozen_path,frozen,snapshot=frozen_child_inputs(tmp_path)
+BOUND_ROWS=[dict(scene_id='scene-a',seed=11,split='train',cup_position_world_m=[.2,.1,.165]),
+            dict(scene_id='scene-b',seed=12,split='validation',cup_position_world_m=[.25,-.05,.165])]
+
+
+def make_env(tmp_path,monkeypatch,*,bound_scene=None):
+    """`bound_scene` names a row of BOUND_ROWS: the frozen set then binds that scene list (real `freeze_inputs`) and the task
+    document points its scene manifest at the frozen copy; otherwise the unchanged `default` single-scene fixture."""
+    bound_rows=None if bound_scene is None else BOUND_ROWS
+    bound_row=None if bound_scene is None else next(row for row in BOUND_ROWS if row['scene_id']==bound_scene)
+    if bound_rows is None:
+        frozen_path,frozen,snapshot=frozen_child_inputs(tmp_path)
+    else:
+        source=tmp_path/'bound-scenes-source.json';source.write_text(json.dumps(dict(scenarios=bound_rows)))
+        frozen_path,frozen,snapshot=frozen_child_inputs(tmp_path,mode='formal',scene_manifest=source,
+            scope_scene=(bound_row['scene_id'],bound_row['seed']))
     # Synthetic approvals stay explicitly synthetic; current freeze/readback,
     # policies and execution snapshot are real. No admission/qualification claim.
     frozen['mode']='formal';rehash(frozen_path,frozen)
     frozen=json.loads(frozen_path.read_bytes())
     scope=tmp_path/'formal-scope.json'
-    write_collection_scope(build_collection_scope('formal',scene_id='default',seed=0,
-        inputs_sha256=frozen['inputs_sha256']),scope)
+    write_collection_scope(build_collection_scope('formal',scene_id='default' if bound_row is None else bound_row['scene_id'],
+        seed=0 if bound_row is None else bound_row['seed'],inputs_sha256=frozen['inputs_sha256']),scope)
     native_dir=tmp_path/'native';native_dir.mkdir()
     _,root,process,native,retirement,calls=native_fixture(native_dir,monkeypatch)
     stack=retirement.stack;old=stack.launch
@@ -69,9 +82,12 @@ def make_env(tmp_path,monkeypatch):
     identity=dict(manifest_sha256='a'*64,runtime_config_sha256=campaign['controlled_runtime']['sha256'],
         collection_config_sha256=frozen['roles']['collection_config']['sha256'],
         contact_policy_fingerprint=json.loads((frozen_path.parent/frozen['roles']['contact_proposal']['path']).read_bytes())['policy_fingerprint'])
-    scene_path=tmp_path/'scenes.json'
-    row=dict(scene_id='default',seed=0,split='qualification',cup_position_world_m=[.2,.1,.02])
-    scene_path.write_text(json.dumps(dict(scenarios=[row])))
+    if bound_row is None:
+        scene_path=tmp_path/'scenes.json'
+        row=dict(scene_id='default',seed=0,split='qualification',cup_position_world_m=[.2,.1,.02])
+        scene_path.write_text(json.dumps(dict(scenarios=[row])))
+    else:
+        row=bound_row;scene_path=frozen_path.parent/'scene_manifest'/'scenes.json'
     (root/'task-inputs').mkdir()
     output=tmp_path/'output';output.mkdir(mode=0o700)
     spec=dict(workload_kind='act_collection',campaign_id='campaign-1',worker_id='w00',launch_generation=1,
@@ -80,7 +96,7 @@ def make_env(tmp_path,monkeypatch):
         parallel_runtime=ref(runtime_path),campaign_config=ref(campaign_path),
         deadline_monotonic_s=time.monotonic()+3600,wave_id='wave-0',gpu_uuid=campaign['gpu_uuid'])
     document=dict(schema_version=1,kind='ACT_CONTAINER_COLLECTION_TASK',task_id='task-1',worker_id='w00',
-        launch_generation=1,wave_id='wave-0',scene_id='default',scene_manifest=ref(scene_path),
+        launch_generation=1,wave_id='wave-0',scene_id=row['scene_id'],scene_manifest=ref(scene_path),
         scope=ref(scope),inputs_manifest=ref(frozen_path))
     for role in ('head','teacher'):
         document[role]=dict(role=role,socket_path='/act/ipc/'+role+'/inference.sock',
@@ -132,6 +148,39 @@ def test_task_input_binds_task_instance_and_frozen_scene(env):
     assert loaded.config.yolo_model_id==env.runtime.yolo_model_id
     assert loaded.campaign['gpu_uuid']==env.spec['gpu_uuid']
     assert loaded.teacher_policy['execution_deadline_s']>0 and loaded.recorder_policy
+    assert not (env.output/'tasks').exists() and env.calls==[]
+
+
+@pytest.mark.parametrize('scene',['scene-a','scene-b'])
+def test_non_default_scene_of_a_bound_manifest_is_loaded(tmp_path,monkeypatch,scene):
+    """Real: `freeze_inputs` binding the scene list, `load_task_input`, the frozen-input readers. The scene row (and so the
+    cup position) comes from the frozen copy of the bound list; the approvals/roles are the synthetic fixture."""
+    env=make_env(tmp_path,monkeypatch,bound_scene=scene)
+    loaded=builder().load_task_input(make_task(env),env.spec)
+    row=next(row for row in BOUND_ROWS if row['scene_id']==scene)
+    assert loaded.scene_id==scene and loaded.row==row
+    assert env.document['scene_manifest']['path'].endswith('/scene_manifest/scenes.json')
+    assert loaded.refs['scope']==env.document['scope'] and not (env.output/'tasks').exists() and env.calls==[]
+
+
+@pytest.mark.parametrize('damage',['other_scene_manifest_hash','scope_seed_outside_bound_rows'])
+def test_bound_manifest_is_the_only_scene_authority(tmp_path,monkeypatch,damage):
+    env=make_env(tmp_path,monkeypatch,bound_scene='scene-a')
+    document=copy.deepcopy(env.document)
+    if damage=='other_scene_manifest_hash':
+        # same rows plus one extra row: a well-formed scene manifest, but not the bound one
+        other=tmp_path/'other-scenes.json'
+        other.write_text(json.dumps(dict(scenarios=BOUND_ROWS+[dict(scene_id='scene-c',seed=13,split='train',
+            cup_position_world_m=[.3,0.,.165])])))
+        document['scene_manifest']=ref(other)
+    else:
+        # the right scene id with a seed that is not its row's: the task document and the scope agree on the scene
+        scope=tmp_path/'seed-scope.json'
+        frozen=json.loads(env.frozen_path.read_bytes())
+        write_collection_scope(build_collection_scope('formal',scene_id='scene-a',seed=99,
+            inputs_sha256=frozen['inputs_sha256']),scope)
+        document['scope']=ref(scope)
+    with pytest.raises(ValueError):builder().load_task_input(make_task(env,document),env.spec)
     assert not (env.output/'tasks').exists() and env.calls==[]
 
 

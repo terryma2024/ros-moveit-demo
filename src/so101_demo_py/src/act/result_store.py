@@ -1152,6 +1152,12 @@ def verify_container_task_registration(registration_path, *, scope, inputs_manif
                 or stated['result']['path'] != (relative/'result.json').as_posix()):
             raise ValueError('sealed location')
         scope, inputs_manifest = _safe(Path(scope)), _safe(Path(inputs_manifest))
+        inputs_document = json.loads(_read_regular(inputs_manifest))
+        if type(inputs_document) is dict and 'scene_manifest' in inputs_document:
+            # a set that binds a scene list: the scope must be one of its rows (the Host's own check, not the container's)
+            from .collection_scope import read_collection_scope
+            from .diagnostic_episode_inputs import read_inputs_manifest, require_scope_for_inputs
+            require_scope_for_inputs(read_collection_scope(scope), read_inputs_manifest(inputs_manifest), inputs_manifest)
         if summary['inputs'] != {name: dict(path=str(source), sha256=hashlib.sha256(_read_regular(source)).hexdigest())
                                  for name, source in (('scope', scope), ('inputs_manifest', inputs_manifest))}:
             raise ValueError('original input binding')
