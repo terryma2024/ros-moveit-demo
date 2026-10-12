@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 70ffa0f0784df406da49f157ce8e38e87964fa447
+current_commit: 384e29f0338e106f73b53d75db2c556038a413c8
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,24 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3568
-next_experiment: Shared inference service/client targeted RED -> GREEN, with bounded spawn executors and real Unix transport.
+latest_checkpoint: CP-3569
+next_experiment: Worker Head/Teacher IPC integration targeted RED -> GREEN; preserve local timing/search/R6 and generic Broker.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3569 — shared service/client/spawn/CLI source boundary GREEN; Worker integration next
+
+- Added transient bounded inference scheduler, Unix server/client, spawn model owner and private campaign_inference entry/install rule. Parent has no Torch/CUDA initialization; child owns model/threads/dependency/weights/class/CUDA UUID checks. Role config is an extracted closed service block, not the full campaign/lease/index/report; Host will freeze it before launch. Head requires a pinned current descriptor; this does not authorize motion or promotion.
+- RED task execution: targeted.7VGqv98f rc 1 (7 missing service failures); targeted.myCBFKKb rc 1 (expired physical queue retained capacity); targeted.htpb1m46 rc 1 (infrastructure exception misclassified because ModelRuntimeInfrastructureError also subclasses ValueError); targeted.joCePpgx rc 1 (4 missing Unix server/client failures); targeted.MmMAgy9n rc 1 (full QUEUE_FULL reply incorrectly discarded on subsequent peer reset); targeted.WliGOWVt rc 1 (3 missing executor failures); targeted.OGCtlPvu rc 1 (3 missing CLI failures); targeted.jHbWqqyX rc 1 (unusable frame limit accepted; oversized result negative already passed). Each ran actual test call/setup, not a missing underlay; scratch proofs/logs/JUnit/argv retained.
+- Root fixes: remove expired queued ticket when its slot is released; catch infrastructure exceptions before ValueError; accept complete frame followed by reset while preserving truncated-read rejection; reject frame bounds that cannot encode readiness before loading any model. Oversized result returns explicit MODEL_ERROR with null batch, never truncated masks. A fallback error frame that itself cannot fit fails the ticket/connection rather than leaking a scheduler thread. targeted.UPFBnNJe rc 1 (1 oversize regression/214 pass after an incorrect patch location), corrected before commit.
+- Final exact targeted command in run-targeted.zsh: `src/so101_demo_py/test/runtime/inference src/so101_demo_py/test/runtime/container_campaign/test_paths.py src/so101_demo_py/test/cli/test_campaign_inference.py src/so101_demo_py/test/adapters/perception/test_yolo_seg_adapter.py src/so101_demo_py/test/adapters/perception/test_detector_factory.py src/so101_demo_py/test/runtime/test_parallel_ipc.py -q`; targeted.VQPrqZrC rc 0, 215 passed in 4.01 s (wall 4 s). No full/package/benchmark gate. Intermediate green runs retained, including real three-spawn readback targeted.NdB42XLD.
+- Inline self review: single execution per instance, all configured instances before ready, receiving/queued/running/pending slot accounting, no full-history IDs, no auto retry/restart/shrink/CPU fallback, queue/deadline expiry, retained running slot after timeout/disconnect, output bounds, strict source/service/client identity, current ready/health only, bad config/Head descriptor pre-spawn refusal, partial-frame disconnect cleanup, and preserved generic detector/IPC paths checked. Exact patch/hash in shared-inference.patch and .sha256. Actual CUDA/image/source/install provenance and full provider integration remain later mandatory gates; fake model I/O is not CUDA acceptance.
+- OBSERVED actual initial Teacher weight file `/data/work/models/so101-perception/yolo11n-seg-plastic-cup/best.pt` SHA256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781, matching approved source constant. No operational campaign config/freeze is fabricated before image identity exists.
+- Ruling: submit returns an internal transport ticket to track compute and reply delivery separately (the plan sketch annotated None). This does not change the wire contract or grant authority; the actual Unix handler consumes the ticket. Cost if wrong: internal caller adaptation, not a relaxed stop/quality gate.
+- Ruling: when all accepted RGB slots are occupied, one serial bounded metadata-only reader rejects overflow with QUEUE_FULL (or serves ready/health); it never buffers rejected RGB or creates an overflow thread queue. Accepted receiving+queued+running+pending stays at the frozen cap. Client reads one already-returned rejection after an early send reset, without retransmission. Cost if wrong: full-capacity metadata can delay acceptance up to the frozen receive budget; readiness and full-load behavior still require image/live evidence.
+- Ruling: private service entry adds explicit role/generation/GPU/startup deadline/receive budget and pinned Head descriptor arguments. These are Host-frozen local launch/model provenance, not lease/wave/resource authorization. The service reads only its model configuration; real unified admission remains the next Host/entry integration boundary.
+- Retained all original and new test/patch evidence; archived none; scratch and stopped test socket inodes are deletion candidates only. All newly spawned test model processes joined; no live simulation or campaign containers started. Preserved sessions/processes unchanged. Visual N/A: pure headless source/IPC/process tests, no simulated scene yet.
 
 ## CP-3568 — root/private mount builder GREEN; shared service next
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import socket
+import os
+from pathlib import Path
 import struct
 import time
 
@@ -69,8 +71,8 @@ def _receive_exact(connection, size, deadline_monotonic_ns):
     return bytes(buffer)
 
 
-def receive_inference_frame(connection, *, deadline_monotonic_ns, max_frame_bytes):
-    """Caller reserves an inflight slot before entering this bounded read."""
+def receive_inference_header(connection, *, deadline_monotonic_ns, max_frame_bytes):
+    """Read bounded metadata; never read or allocate an RGB payload here."""
     _limit(max_frame_bytes)
     if type(deadline_monotonic_ns) is not int or deadline_monotonic_ns <= 0:
         raise ValueError("INFERENCE_FRAME_INVALID: deadline")
@@ -92,6 +94,13 @@ def receive_inference_frame(connection, *, deadline_monotonic_ns, max_frame_byte
     expected = document["image"]["byte_length"] if document["kind"] == "inference_request" else 0
     if payload_size != expected:
         raise ValueError("INFERENCE_FRAME_INVALID: payload size")
+    return document, payload_size
+
+
+def receive_inference_frame(connection, *, deadline_monotonic_ns, max_frame_bytes):
+    """Caller reserves an inflight slot before entering this bounded read."""
+    document, payload_size = receive_inference_header(connection,
+        deadline_monotonic_ns=deadline_monotonic_ns, max_frame_bytes=max_frame_bytes)
     payload = _receive_exact(connection, payload_size, deadline_monotonic_ns)
     # Python's positive timeout polls before recv even with MSG_DONTWAIT.
     # The frame is complete; checking trailing bytes must not await peer EOF.
@@ -100,13 +109,37 @@ def receive_inference_frame(connection, *, deadline_monotonic_ns, max_frame_byte
         connection.setblocking(False)
         try:
             extra = connection.recv(1, socket.MSG_PEEK)
-        except BlockingIOError:
+        except (BlockingIOError, ConnectionResetError):
+            # A complete rejection reply may be followed by reset because the
+            # overloaded peer deliberately did not consume the rejected RGB.
+            # Prefix/header/payload truncation still fails in _receive_exact.
             extra = b""
     finally:
         connection.settimeout(previous_timeout)
     if extra:
         raise ValueError("INFERENCE_FRAME_INVALID: overlong")
     return document, payload
+
+
+def open_socket_parent(path):
+    """Pin the private socket directory, including all ancestor components."""
+    path = Path(path)
+    if not path.is_absolute() or ".." in path.parts or path.name in ("", ".", ".."):
+        raise ValueError("INFERENCE_SOCKET_PATH_INVALID")
+    descriptor = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        for component in path.parent.parts[1:]:
+            child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                            dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        metadata = os.fstat(descriptor)
+        if metadata.st_uid != os.getuid() or metadata.st_mode & 0o022:
+            raise ValueError("INFERENCE_SOCKET_OWNER_INVALID")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
 
 
 def pack_rgb(rgb, *, stamp_ns, frame_id):
