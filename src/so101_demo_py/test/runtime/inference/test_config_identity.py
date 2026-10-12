@@ -18,7 +18,7 @@ def file_ref(path, content):
 
 
 def campaign_fixture(tmp_path):
-    controlled = file_ref(tmp_path / "controlled.json", b'{"sampling_hz":10,"r6":"current"}\n')
+    controlled = file_ref(tmp_path / "controlled.json", b'{"sampling_hz":10,"cup_geometry_filter":"current"}\n')
     head_weights = file_ref(tmp_path / "head.pt", b"head-weights")
     teacher_weights = file_ref(tmp_path / "teacher.pt", b"teacher-weights")
     image = {"digest": "sha256:" + "a" * 64, "package_source_sha256": "b" * 64,
@@ -58,7 +58,7 @@ def test_teacher_operations_change_campaign_hash_not_controlled_runtime(tmp_path
     assert changed["teacher_service"]["image"] == original["teacher_service"]["image"]
     assert config_module().calibration_runtime_hash(tmp_path / "controlled.json") == runtime_hash
     assert hashlib.sha256(path.read_bytes()).digest() != hashlib.sha256(original_bytes).digest()
-    (tmp_path / "controlled.json").write_bytes(b'{"sampling_hz":10,"r6":"changed"}\n')
+    (tmp_path / "controlled.json").write_bytes(b'{"sampling_hz":10,"cup_geometry_filter":"changed"}\n')
     assert config_module().calibration_runtime_hash(tmp_path / "controlled.json") != runtime_hash
     with pytest.raises(ValueError, match="CAMPAIGN_CONFIG_INVALID"):
         config_module().load_campaign_config(path)

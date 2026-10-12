@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c8bfd1db07bb1a207f8f28fab61c9eb84e6b6c79
+current_commit: 5ac6305e52847438254ed29ffbbe4118cc3f82ab
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -70,10 +70,18 @@ open_hypotheses:
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
 latest_checkpoint: CP-3583
-next_experiment: Inspect the same live native shard image build, prove actual no-motion readiness and original stop readback, then implement Host lifecycle/registries and production workload ports; retain full final calibration/live/W8/formal goal.
+next_experiment: Connect real collection CLI/OperationSpec/container coordinator/Worker handlers and Recorder-offline-QC-seal-Host commit; actual immutable no-motion ready/stop gate passed, while final calibration/live/W1/W2/exact-W8/formal delivery remain required.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3591 — Immutable native shard readiness and original retirement PASS; cup naming follow-through
+
+- Rechecked preserved ownership: Claude pane %0 PID233376 and task Codex pane %1 PID564888 remain intact. Direct ai-station, existing worktree/branch, active native full goal, one writer with inline review. No agents, dst, resume, new worktree, hardware, training, push or deletion.
+- Fresh image-build-20261012T075928Z from source5ac6305e52847438254ed29ffbbe4118cc3f82ab completed actual Docker rc0/271.9722s; immutable digest sha256:22b5dbe5891521c0f4153a44347e4a5d604d934a85b5cb9119c550b431af145e. Eleven-package dependency closure, exact pytest preflight, source/install/runtime provenance and dependency inventories retained. This is a draft shard gate, not the final common two-image integration freeze or full package test gate.
+- Actual fresh native-shard-probe-561524b4c710/container09c60521384d7b9f3f44641be06bbd54866f25a7ea213749d2bdce2bd76954e1 succeeded rc0/27.8344s. Runtime ready true; independent original stop evidence true; exact immutable container exit proven/exit0, current Docker inspect exited/nonrunning/no restart/Pid0/OOMfalse. Selected GPU/private inner process/namespace/source-install readbacks, EGL/seven-axis/dual-RGB/native scoped readiness, persistent heartbeat and raw retirement retained. Original four action lanes each code0/empty goals_canceling; no initial statuses. Original native physical stop/group clear/graph clear true, kill false, chronological completion follows ACKs. These combined original facts close idle termination; standalone status proof remains false and no threshold was relaxed. Prior failed probes and their false flags remain unchanged.
+- The human's R6 business naming request was implemented at CP-3573 as CupCandidateLocalizer. Remaining controlled-runtime test fixture key now uses cup_geometry_filter in both original/changed documents; no production localization behavior, geometry criteria or thresholds changed. Targeted MVfmQWS1 actual rc0/16pass0.09s, fresh NVMe scratch/exact interpreter/tempfile proof/argv/JUnit retained. Inline exact patch and review hashes in cup-business-name-fixture.patch and cup-business-name-fixture-review.json; git diff --check passed. Unrelated numbered review rules and frozen/historical evidence retained.
+- Full objective remains ACTIVE. Real collection CLI/coordinator/Worker/data commit, independent forty-scene report/formal admission, production measurement/Head/live, final common freeze/full gates, fresh calibration/live, same-eight W1/W2, independent forty/two-twenty exactW8 and approved formal manifest remain required. No functional/qualification/formal PASS asserted by this no-motion gate. No genuine blocker. Retained all; archived none; scratch/socket/exited diagnostics are deletion candidates only and are not deleted.
 
 ## CP-3590 — Actual native readiness; idle stop composition and current run contracts GREEN
 
