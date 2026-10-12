@@ -52,8 +52,22 @@ def make_journal(run, owners, wave='wave-0', clock=None):
     return ContainerTaskJournal(run/'host'/wave/'task-journal', instances=instances, clock=clock or (lambda: 0.)), instances
 
 
-def build_task(tmp_path, monkeypatch, *, teacher_outcome='PASSED', qc='FAIL', assigned_offset=-1., deadline_offset=5.):
-    """One real sealed result under <owner>/output/tasks/<id>, its real summary, and the journal's collected record."""
+def seal_manifest_free_perception_result(task_dir, lease, scope, inputs):
+    """The real store's manifest-free form: no episode, no Teacher manifest, no QC (what a perception no-pose terminal seals)."""
+    from so101_demo.act.result_store import ActCollectionResultStore
+    workspace = task_dir/'attempts'/lease.point_id/lease.attempt_id
+    store = ActCollectionResultStore(workspace, lease, clock=lambda: lease.lease_issued_monotonic_s+.5,
+        audit_manifest=workspace/'working/episode/audit/audit-manifest.json', scope=scope, inputs_manifest=inputs)
+    return store.seal(store.episode_root/'seal.json', teacher=dict(execution_status='INDETERMINATE',
+        task_result='UNCONFIRMED', data_status='INVALID', data_reason='PERCEPTION_NO_POSE'))
+
+
+def build_task(tmp_path, monkeypatch, *, teacher_outcome='PASSED', qc='FAIL', assigned_offset=-1., deadline_offset=5.,
+               perception_no_pose=False):
+    """One real sealed result under <owner>/output/tasks/<id>, its real summary, and the journal's collected record.
+
+    With `perception_no_pose` the sealed result is the manifest-free perception form instead of a Teacher episode; the
+    episode fixture then only supplies the lease, scope and inputs and is written outside the task directory."""
     run = tmp_path/'run'
     owner = run/'wave-0/w00/g1'
     (owner/'output').mkdir(parents=True)
@@ -63,9 +77,12 @@ def build_task(tmp_path, monkeypatch, *, teacher_outcome='PASSED', qc='FAIL', as
     fixture = tmp_path/'fixture'
     fixture.mkdir()
     _, location, scope, inputs, _ = controlled_committed_result(fixture, monkeypatch, teacher_outcome=teacher_outcome,
-        commit=False, qc=qc, worker_root=task_dir, run_root=fixture/'unused-coordinator')
+        commit=False, qc=qc, worker_root=fixture/'unused-worker' if perception_no_pose else task_dir,
+        run_root=fixture/'unused-coordinator')
     audit = json.loads((location/'episode/audit/audit-manifest.json').read_text())
     lease = LeaseIdentity(**audit['identity']['lease'])
+    if perception_no_pose:
+        location = seal_manifest_free_perception_result(task_dir, lease, scope, inputs)
     summary = result_summary(task_input=SimpleNamespace(scene_id='point-1',
         refs=dict(scope=ref(scope), inputs_manifest=ref(inputs))), lease=lease,
         reset=SimpleNamespace(reset_epoch='reset-2', simulation_session_id='session-1'),
@@ -118,6 +135,23 @@ def test_qc_invalid_is_collected_but_cannot_export(world):
     index = build_frozen_index(campaign_id='campaign', qualification=False, scene_count=1, waves=[wave])
     assert [task['task_id'] for task in index['collected_tasks']] == [world.task_id]
     assert index['collected_tasks'][0]['act_data_qc'] == 'FAIL' and index['committed_episodes'] == []
+
+
+def test_perception_no_pose_task_passes_host_readback_and_cannot_export(tmp_path, monkeypatch):
+    world = build_task(tmp_path, monkeypatch, perception_no_pose=True)
+    assert not (world.location/'episode/seal.json').exists() and not (world.location/'dynamic').exists()
+    proof = verify(world)
+    assert proof['kind'] == 'ACT_CONTAINER_TASK_READBACK' and proof['status'] == 'PASS'
+    assert (proof['result_status'], proof['act_data_status'], proof['act_data_reason'], proof['act_data_qc']) == (
+        'INDETERMINATE', 'INVALID', 'PERCEPTION_NO_POSE', 'NOT_RUN')
+    assert proof['teacher_task_result'] == 'UNCONFIRMED' and proof['export_eligible'] is False
+    assert proof['episode_seal_sha256'] is None and proof['qc_report_sha256'] is None
+    wave = dict(case_results=[dict(scene_id='point-1', worker_id='w00', task_id=world.task_id, launch_id='wave-0-w00-g1',
+        location=str(world.task_dir), proof=proof, registration=str(world.registration), owner_root=str(world.owner),
+        scope_path=str(world.scope), inputs_manifest=str(world.inputs))])
+    index = build_frozen_index(campaign_id='campaign', qualification=False, scene_count=1, waves=[wave])
+    assert [task['task_id'] for task in index['collected_tasks']] == [world.task_id]
+    assert index['collected_tasks'][0]['act_data_qc'] == 'NOT_RUN' and index['committed_episodes'] == []
 
 
 @pytest.mark.parametrize('edit', ['task_result', 'sealed_result', 'sealed_qc'])

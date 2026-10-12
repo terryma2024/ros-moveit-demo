@@ -597,7 +597,7 @@ def test_classification_fails_closed_without_matching_facts(tmp_path):
     assert type(builder().classify_task_fault(object(),facts)) is str
 
 
-def perception_decision(disposition='FAILED',*,stopped=True):
+def perception_decision(disposition='FAILED',*,stopped=True,model_error=False):
     from so101_demo.parallel_batch.act_attempt import ActPerceptionDecision,ActPerceptionTerminal
     from so101_demo.parallel_batch.act_inference import ActInferenceRequest
     from so101_demo.parallel_batch.contracts.common import ExecutionKind
@@ -608,6 +608,7 @@ def perception_decision(disposition='FAILED',*,stopped=True):
         service_generation='service-teacher',deadline_monotonic_ns=2,attempt_id='default-lease-1')
     wire,reason={'FAILED':('NOT_DETECTED','PERCEPTION_NO_POSE'),'INVALID':('INFRA_ERROR','PERCEPTION_INFRA_ERROR'),
                  'CANCELLED':('INFRA_ERROR','PERCEPTION_CANCELLED')}[disposition]
+    if model_error:wire,reason='MODEL_ERROR','PERCEPTION_MODEL_ERROR'
     terminal=ActPerceptionTerminal(disposition=disposition,reason=reason,wire_outcome=wire,request=request,
         audit_relative_path='perception/inference/request-1.json',
         failure_type=None if disposition=='CANCELLED' else 'ActInferenceResponse.'+wire,
@@ -616,9 +617,12 @@ def perception_decision(disposition='FAILED',*,stopped=True):
         controllers_stopped=True,recorder_stopped=True))
 
 
-@pytest.mark.parametrize('disposition,stopped',[('FAILED',True),('INVALID',True),('CANCELLED',True),('FAILED',False)])
-def test_perception_terminal_is_execution_fault(disposition,stopped):
-    assert type(builder().classify_task_fault(perception_decision(disposition,stopped=stopped),None)) is str
+@pytest.mark.parametrize('disposition,stopped,model_error,business',[('FAILED',True,False,True),('INVALID',True,False,False),
+    ('CANCELLED',True,False,False),('FAILED',False,False,False),('FAILED',True,True,False)])
+def test_only_a_stopped_perception_no_pose_is_a_business_result(disposition,stopped,model_error,business):
+    classified=builder().classify_task_fault(perception_decision(disposition,stopped=stopped,model_error=model_error),None)
+    assert (classified is None) is business
+    assert business or classified=='ACT_PERCEPTION_TERMINAL_UNSEALABLE'
 
 
 @pytest.fixture(scope='module',autouse=True)
@@ -701,9 +705,9 @@ class Rig:
     """One task wired to the doubles above. `hooks` maps a stage name to a callable run when that stage is reached."""
 
     def __init__(self,flow,monkeypatch,*,teacher='FAILED',processor=None,manifest=True,perception='admit',cancel=True,
-                 confirm=True,hooks=None,tree=None,build=True,**seams):
+                 confirm=True,hooks=None,tree=None,build=True,terminal=('FAILED','PERCEPTION_NO_POSE','NOT_DETECTED'),**seams):
         self.flow,self.events,self.hooks=flow,[],dict(hooks or {})
-        self.teacher,self.manifest,self.perception_mode=teacher,manifest,perception
+        self.teacher,self.manifest,self.perception_mode,self.terminal=teacher,manifest,perception,terminal
         self.cancel_calls,self.confirm_calls,self.leases,self.groups=[],[],{},[]
         self.release=threading.Event()
         self.cancel=cancel if callable(cancel) else (lambda lease:cancel)
@@ -797,9 +801,11 @@ class Rig:
             attempt_id=lease.attempt_id)
         if self.perception_mode=='terminal':
             from so101_demo.parallel_batch.act_attempt import ActPerceptionTerminal
-            return ActPerceptionTerminal(disposition='FAILED',reason='PERCEPTION_NO_POSE',wire_outcome='NOT_DETECTED',
+            disposition,reason,wire=self.terminal
+            return ActPerceptionTerminal(disposition=disposition,reason=reason,wire_outcome=wire,
                 request=request,audit_relative_path='perception/inference/request-1.json',
-                failure_type='ActInferenceResponse.NOT_DETECTED',failure_message='NOT_DETECTED')
+                failure_type=None if disposition=='CANCELLED' else 'ActInferenceResponse.'+wire,
+                failure_message=None if disposition=='CANCELLED' else wire)
         localized=ActLocalizedPose(request=request,broker_generation=1,session_id=self.session,depth_timestamp_s=1.,
             depth_sha256='a'*64,tf_timestamp_s=1.,source_frame='camera',target_frame='world',position_xyz=(.1,.2,.3),
             orientation_xyzw=(0.,0.,0.,1.))
@@ -940,11 +946,82 @@ def test_data_regraded_at_seal_is_a_fault(flow,monkeypatch):
     assert json.loads((rig.sealed()/'result.json').read_bytes())['act_data_status']=='INVALID'
 
 
-def test_perception_terminal_in_flow_raises_without_sealing(flow,monkeypatch):
+def test_perception_no_pose_seals_manifest_free_business_result(flow,monkeypatch):
+    from so101_demo.runtime.container_campaign.task_results import read_task_result,write_task_result
     rig=Rig(flow,monkeypatch,perception='terminal')
+    summary=rig.execution.run()
+    assert ('execute',) not in rig.events and ('seal',) in rig.events
+    assert (summary['status'],summary['teacher_execution_status'],summary['teacher_task_result']) == (
+        'INDETERMINATE','INDETERMINATE','UNCONFIRMED')
+    assert (summary['act_data_status'],summary['act_data_reason'],summary['act_data_qc']) == (
+        'INVALID','PERCEPTION_NO_POSE','NOT_RUN')
+    assert summary['export_eligible'] is False and summary['episode_seal_sha256'] is None
+    assert summary['qc_report_sha256'] is None and summary['audit_manifest_sha256'] is None
+    document=json.loads((rig.sealed()/'result.json').read_bytes())
+    assert document['status']=='INDETERMINATE' and document['act_data_status']=='INVALID'
+    assert (document['teacher_execution_status'],document['teacher_task_result'])==('INDETERMINATE','UNCONFIRMED')
+    assert not (rig.sealed()/'dynamic').exists(), 'the manifest-free form carries no Teacher manifest'
+    write_task_result(flow.output,rig.task_id,summary)
+    assert read_task_result(flow.output,rig.task_id)['result']==summary
+    assert rig.execution.shutdown_owned() is True
+
+
+@pytest.mark.parametrize('terminal',[('INVALID','PERCEPTION_QUEUE_TIMEOUT','QUEUE_TIMEOUT'),
+                                     ('INVALID','PERCEPTION_INFERENCE_TIMEOUT','INFERENCE_TIMEOUT'),
+                                     ('INVALID','PERCEPTION_INFRA_ERROR','QUEUE_FULL'),
+                                     ('INVALID','PERCEPTION_INFRA_ERROR','INPUT_INVALID'),
+                                     ('INVALID','PERCEPTION_INFRA_ERROR','INFRA_ERROR'),
+                                     ('CANCELLED','PERCEPTION_CANCELLED','INFRA_ERROR'),
+                                     ('FAILED','PERCEPTION_MODEL_ERROR','MODEL_ERROR')])
+def test_perception_service_timeout_or_infra_is_execution_fault(flow,monkeypatch,terminal):
+    rig=Rig(flow,monkeypatch,perception='terminal',terminal=terminal)
     error=fault_of(rig)
     assert error.code=='ACT_PERCEPTION_TERMINAL_UNSEALABLE' and error.sealed_location is None
-    assert not rig.sealed().exists() and ('execute',) not in rig.events
+    assert not rig.sealed().exists() and ('execute',) not in rig.events and ('seal',) not in rig.events
+
+
+def test_next_task_runs_after_perception_no_pose(flow,monkeypatch):
+    import asyncio
+    from functools import partial
+    from so101_demo.runtime.container_campaign.task_executor import ContainerTaskExecutor
+    from so101_demo.runtime.container_campaign.task_results import read_task_result
+    rig=Rig(flow,monkeypatch,perception='terminal',build=False)
+    second=make_task(flow,dict(flow.document,task_id='e-second'),task_id='e-second')
+    class Retirement:
+        calls=0
+        async def retire(self,*,fenced):
+            Retirement.calls+=1
+            return dict(goals_stopped=True,controllers_stopped=True,ros_children_exited=True,ros_graph_empty=True,forced=False)
+    async def finished(executor,task_id):
+        async def wait():
+            while True:
+                status=await executor.get_status(task_id)
+                if status.task.state in ('SUCCEEDED','FAILED'):
+                    return status
+                await asyncio.sleep(.02)
+        return await asyncio.wait_for(wait(),120)
+    async def run():
+        executor=ContainerTaskExecutor(instance_id='instance-01',
+            builder=partial(builder().build_collection_task,**rig.build_kwargs),retirement=Retirement(),
+            output_root=flow.output,stop_timeout_s=10.,retire_timeout_s=10.,owner_timeout_s=120.)
+        try:
+            assert (await executor.assign_task(rig.task)).state=='ACCEPTED'
+            status=await finished(executor,rig.task.task_id)
+            assert status.task.state=='SUCCEEDED' and status.state=='READY', status.task.fault_reason
+            stored=read_task_result(flow.output,rig.task.task_id)
+            assert stored['task_id']==rig.task.task_id and stored['result']['status']=='INDETERMINATE'
+            assert stored['result']['act_data_status']=='INVALID' and stored['result']['act_data_reason']=='PERCEPTION_NO_POSE'
+            rig.perception_mode='admit'
+            assert (await executor.assign_task(second)).state=='ACCEPTED'
+            status=await finished(executor,'e-second')
+            assert status.task.state=='SUCCEEDED' and status.state=='READY', status.task.fault_reason
+            stored=read_task_result(flow.output,'e-second')
+            assert stored['result']['teacher_task_result']=='FAIL' and stored['result']['status']=='FAILED'
+            assert executor.cleanup_errors==[] and Retirement.calls==0
+        finally:
+            await executor.terminate('fixture end')
+    asyncio.run(run())
+    assert len(rig.groups)==2 and rig.groups[0] is not rig.groups[1]
 
 
 def test_unconfirmed_stop_before_motion_is_execution_fault(flow,monkeypatch):

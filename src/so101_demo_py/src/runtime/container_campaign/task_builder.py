@@ -308,6 +308,25 @@ def _sealable(decision):
             and decision.act_data_status is not None)
 
 
+def perception_business_decision(decision):
+    """The manifest-free sealable form of a perception terminal the model itself produced, else None.
+
+    Only a terminal whose disposition is FAILED with reason PERCEPTION_NO_POSE (the model answered: nothing detected, or a pose
+    that was rejected; a MODEL_ERROR is a service error and stays a fault) with every stop fact proven is a
+    business result: Teacher execution INDETERMINATE, task result UNCONFIRMED, data INVALID with the perception reason,
+    so the recorded attempt status is INDETERMINATE. This is the form the generic Worker commits for a pre-motion input
+    refusal (`_pre_motion_decision`); the store accepts it without a Teacher manifest. A service, queue, infrastructure or
+    input fault, a cancellation and an unconfirmed stop return None and stay execution faults."""
+    if (type(decision) is not ActPerceptionDecision or decision.perception.disposition!='FAILED'
+            or decision.perception.reason!='PERCEPTION_NO_POSE'
+            or decision.perception.wire_outcome not in ('NOT_DETECTED','DETECTED')
+            or not all(decision.stop_facts.values()) or decision.physical_action_proven_absent is not True):
+        return None
+    reason=decision.perception.reason
+    return RuntimeDecision(AttemptStatus.INDETERMINATE,reason,True,teacher_execution_status='INDETERMINATE',
+                           teacher_task_result='UNCONFIRMED',act_data_status='INVALID',act_data_reason=reason)
+
+
 class CollectionTaskExecution:
     """One task over its constructed parts: `run` is the local flow, `request_stop` and `shutdown_owned` end it.
 
@@ -529,9 +548,10 @@ class CollectionTaskExecution:
             self._revoke()
             raise
         location=None
-        if _sealable(decision) and not state.stop.is_set():
+        sealed_decision=perception_business_decision(decision) or decision
+        if _sealable(sealed_decision) and not state.stop.is_set():
             try:
-                location=self.artifacts.seal_attempt(lease,decision)
+                location=self.artifacts.seal_attempt(lease,sealed_decision)
             except Exception as error:
                 self._note(('RESULT_SEAL_FAILED: '+(str(error) or type(error).__name__))[:300])
                 raise self._fault('RESULT_SEAL_FAILED') from error
@@ -545,7 +565,7 @@ class CollectionTaskExecution:
         except Exception as error:
             raise self._fault(('RESULT_READBACK_FAILED: '+(str(error) or type(error).__name__))[:300],
                               sealed_location=location) from error
-        if decision.act_data_status=='VALID' and (summary['act_data_status'],summary['act_data_qc'])!=('VALID','PASS'):
+        if sealed_decision.act_data_status=='VALID' and (summary['act_data_status'],summary['act_data_qc'])!=('VALID','PASS'):
             raise self._fault('RESULT_DATA_REGRADED_AT_SEAL',sealed_location=location)
         return summary
 
@@ -619,9 +639,9 @@ def classify_task_fault(decision,facts):
     `facts` is the runtime's `collection_facts` pair. Only a valid datum, or an invalid one the processor itself
     judged (an engine verdict, a QC failure or a QC rule that raised), is business. Every other path -- a crashed or
     timed-out processor or QC process, a recorder that did not start or close, an unverifiable Teacher receipt -- is a
-    fault; so is a perception terminal, which the store cannot seal."""
+    fault; so is any perception terminal except the model's own no-pose result (`perception_business_decision`)."""
     if isinstance(decision,ActPerceptionDecision):
-        return 'ACT_PERCEPTION_TERMINAL_UNSEALABLE'
+        return None if perception_business_decision(decision) is not None else 'ACT_PERCEPTION_TERMINAL_UNSEALABLE'
     if (not isinstance(decision,RuntimeDecision) or decision.teacher_execution_status is None
             or decision.teacher_task_result is None or decision.act_data_status is None):
         return 'TASK_DECISION_NOT_A_TEACHER_RESULT'
