@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
     ros-jazzy-moveit ros-jazzy-moveit-configs-utils ros-jazzy-ros2-control ros-jazzy-ros2-controllers \
     ros-jazzy-control-toolbox ros-jazzy-mujoco-vendor ros-jazzy-backward-ros \
     ros-jazzy-ros-gz-interfaces ros-jazzy-tf2-geometry-msgs ros-jazzy-vision-msgs
+RUN apt-get install --yes --no-install-recommends \
+    ros-jazzy-ros2-control-cmake ros-jazzy-ros2-control-test-assets
 RUN python3 -m venv --system-site-packages /act/venv \
     && printf '%s\n' 'import sys; sys.path[:0] = ["/act/install/lib/python3.12/site-packages", "/act/install/local/lib/python3.12/dist-packages", "/opt/ros/jazzy/lib/python3.12/site-packages", "/opt/venv/lib/python3.12/site-packages"]' \
        > /act/venv/lib/python3.12/site-packages/act-runtime.pth \
