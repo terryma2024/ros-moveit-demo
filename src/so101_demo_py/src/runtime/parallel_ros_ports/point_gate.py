@@ -150,7 +150,11 @@ class PointGate:
     def _capture_aligned(self):
         factory = self.dependencies.get("rgbd_source", RosRgbdSnapshotSource)
         source = factory()
-        aligned = source.capture(15.0)
+        try:
+            aligned = source.capture(15.0)
+        except BaseException:
+            source.close()
+            raise
         return source, aligned, time.monotonic()
 
     def capture_rgb(self, path, boundary):

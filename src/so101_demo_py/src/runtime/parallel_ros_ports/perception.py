@@ -28,6 +28,45 @@ from so101_demo.runtime.parallel_ros_ports.observations import (
 
 
 class PerceptionPorts:
+    _latch_type = PoseAdmissionLatch
+    _localized_pose_type = LocalizedPose
+
+    def _candidate_list(self, response):
+        return _candidates_from_response(response)
+
+    def _localize_response(self, response, **kwargs):
+        return BrokerMaskLocalizer().localize(response, **kwargs)
+
+    def _depth_timestamp(self, request, depth):
+        return request.image_timestamp_s
+
+    def _perception_policy(self, latch):
+        from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID
+        return PerceptionPolicy(latch, yolo_model_id=self.config.yolo_model_id,
+                                grounded_model_id=GROUNDED_ID)
+
+    def _check_perception_input(self, lease, execution_kind, snapshot):
+        pass
+
+    def _check_perception_result(self, response):
+        pass
+
+    def _failure_identity(self, response):
+        return f"BrokerResponse.{response.outcome.value}", response.reason or response.outcome.value
+
+    def _has_failure_diagnostic(self, response):
+        return response.outcome in {ModelOutcome.INFRA_ERROR, ModelOutcome.QUEUE_TIMEOUT,
+                                    ModelOutcome.INFERENCE_TIMEOUT}
+
+    def _record_perception_response(self, workspace, response):
+        pass
+
+    def _start_perception_request(self, policy, request, snapshot, *, depth_timestamp_s, depth_sha256):
+        policy.start_request(request, depth_timestamp_s=depth_timestamp_s, depth_sha256=depth_sha256)
+
+    def _result_is_current(self, policy, response):
+        return True
+
     def localize(self, lease, broker_result):
         request = broker_result.request
         if broker_result.candidate.get("source_stamp_ns") != round(
@@ -40,7 +79,7 @@ class PerceptionPorts:
             ]
         except (AttributeError, KeyError) as error:
             raise RuntimeError("BROKER_RGBD_IDENTITY_MISSING") from error
-        localized = BrokerMaskLocalizer().localize(
+        localized = self._localize_response(
             broker_result,
             camera_info=camera,
             depth_message=depth,
@@ -49,11 +88,11 @@ class PerceptionPorts:
             ),
         )
         depth_hash = hashlib.sha256(bytes(depth.data)).hexdigest()
-        value = LocalizedPose(
+        value = self._localized_pose_type(
             request,
             broker_result.broker_generation,
             self.resources.session_id,
-            request.image_timestamp_s,
+            self._depth_timestamp(request, depth),
             depth_hash,
             request.image_timestamp_s,
             frame_id,
@@ -91,14 +130,14 @@ class PerceptionPorts:
     def run_perception_chain(
         self, lease, execution_kind, snapshot, broker_request
     ):
-        """Drive the reviewed two-model policy and durable admission latch."""
+        """Drive the business policy through the shared durable admission guards."""
 
         from so101_demo.cli.rgbd_point_cloud import message_stamp_ns
         from so101_demo.parallel_batch.contracts.common import ExecutionKind
-        from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID
 
         if execution_kind not in (ExecutionKind.ATTEMPT, ExecutionKind.VALIDATION):
             raise RuntimeError("PERCEPTION_EXECUTION_KIND")
+        self._check_perception_input(lease, execution_kind, snapshot)
         if type(self.broker_generation) is not int or self.broker_generation <= 0:
             raise RuntimeError("BROKER_GENERATION_AUTHORITY")
         reset = self._reset_receipts.get(lease.attempt_id)
@@ -143,9 +182,9 @@ class PerceptionPorts:
                 or response.candidate.get("model_id") != request.model_id
             ):
                 return False
-            return any(candidate.mask.any() for candidate in _candidates_from_response(response))
+            return any(candidate.mask.any() for candidate in self._candidate_list(response))
 
-        latch = PoseAdmissionLatch(
+        latch = self._latch_type(
             workspace_provider(lease),
             context,
             broker_generation=self.broker_generation,
@@ -154,11 +193,7 @@ class PerceptionPorts:
             geometry_gate=geometry_gate,
             quality_gate=quality_gate,
         )
-        policy = PerceptionPolicy(
-            latch,
-            yolo_model_id=self.config.yolo_model_id,
-            grounded_model_id=GROUNDED_ID,
-        )
+        policy = self._perception_policy(latch)
         decision = policy.decision
         source = self._rgbd[snapshot.source_stamp_ns][0]
         retain_source = False
@@ -167,22 +202,23 @@ class PerceptionPorts:
         try:
             while decision.next_model is not None:
                 response = broker_request(
-                decision.next_model,
-                before_send=lambda request: policy.start_request(
-                    request,
-                    depth_timestamp_s=depth_stamp_s,
-                    depth_sha256=depth_hash,
-                ),
+                    decision.next_model,
+                    before_send=lambda request: self._start_perception_request(
+                        policy, request, snapshot,
+                        depth_timestamp_s=depth_stamp_s,
+                        depth_sha256=depth_hash,
+                    ),
                 )
+                self._check_perception_result(response)
+                self._record_perception_response(latch.workspace, response)
+                if not self._result_is_current(policy, response):
+                    decision = policy.record_result(response.request, ModelOutcome.CANCELLED,
+                        broker_generation=response.broker_generation)
+                    continue
                 if response.broker_generation != self.broker_generation:
                     raise RuntimeError("BROKER_GENERATION_CHANGED")
-                if response.outcome in {
-                    ModelOutcome.INFRA_ERROR,
-                    ModelOutcome.QUEUE_TIMEOUT,
-                    ModelOutcome.INFERENCE_TIMEOUT,
-                }:
-                    failure_type = f"BrokerResponse.{response.outcome.value}"
-                    failure_message = response.reason or response.outcome.value
+                if self._has_failure_diagnostic(response):
+                    failure_type, failure_message = self._failure_identity(response)
                 if response.outcome is ModelOutcome.QUALIFIED:
                     self._admission_candidates[response.request.request_id] = response
                     try:
@@ -209,10 +245,10 @@ class PerceptionPorts:
                         return admitted
                 else:
                     decision = policy.record_result(
-                    response.request,
-                    response.outcome,
-                    broker_generation=response.broker_generation,
-                )
+                        response.request,
+                        response.outcome,
+                        broker_generation=response.broker_generation,
+                    )
             return PerceptionTerminal(
                 decision.disposition,
                 decision.reason or "PERCEPTION_TERMINAL",

@@ -341,6 +341,11 @@ def _candidates_from_response(response: BrokerResponse) -> list[DetectionCandida
     ):
         raise RuntimeError("BROKER_QUALIFIED_RESPONSE_REQUIRED")
     batch = response.candidate
+    return _candidates_from_batch(batch)
+
+
+def _candidates_from_batch(batch) -> list[DetectionCandidate]:
+    """Decode the common normalized batch after its caller checks response identity."""
     if set(batch) != {
         "model_id",
         "weights_sha256",
@@ -414,6 +419,11 @@ class BrokerMaskLocalizer:
         unless the only candidate failed for a reason that is not geometry, which propagates as it did before R6.
         """
         candidates = _candidates_from_response(response)
+        return self.localize_candidates(candidates, camera_info=camera_info,
+            depth_message=depth_message, lookup_exact=lookup_exact)
+
+    def localize_candidates(self, candidates, *, camera_info, depth_message, lookup_exact):
+        """Apply the unchanged R6 geometry rule to already validated raw candidates."""
         survivors, rejected, first_error = [], [], None
         for candidate in candidates:
             try:
