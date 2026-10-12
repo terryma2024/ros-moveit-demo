@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: fc4f72ae4a9100e1266af7ad5ebb71e99a0b53b5
+current_commit: 0529f342e637
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,58 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3620
-next_experiment: EXP-577 (to be planned after the fix): repeat of EXP-576 with a repeatable native readiness probe for task gates, on a rebuilt image, new run and campaign ids.
+latest_checkpoint: CP-3621
+next_experiment: EXP-577 (PLANNED): repeat of EXP-576 after the readiness check fix, rebuilt images, new run and campaign ids.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3621 — Readiness check fix committed and imaged; first admission read back as settled; EXP-577 planned
+
+- Commit `0529f342e` gives collection tasks a repeatable native readiness check (a fresh probe per gate from the same launch and installed observer; the start probe stays single-use; the task builder refuses to build without such a check). With the test rig tightened to borrow a stack whose real start probe is already consumed, 43 previously passing tests failed against the unfixed source with ACT_STACK_READINESS_PROBE_REUSED (R/scratch/targeted.PABtgo4Q); after the fix container_campaign 628 pass (targeted.xVlTJrhC), gate environment test/runtime, test/cli, test/repo 2390 pass (gateenv.Tlfu0blw), teleop files 60 pass. The full Host package gate has NOT been rerun on this commit.
+- Sweep for the same class of defect (single-use or start-only objects called per task) found no further definite case by code reading. Recorded risk, to be read from the run: the observer requires the simulation not to be paused; a task that ends at a perception terminal after the inference pause, without reaching the resume before execution, may leave physics paused and fail its post-task ready gate, which would turn a business result into TASK_CLEANUP_UNCONFIRMED.
+- Images rebuilt on 0529f342e: shard R/image-build-20261012T220047Z (152.8 s) sha256:9a699c8d32895f719253819ac21ae28998125394b4ed640785888f9149230783; inference R/image-build-20261012T220328Z (61.4 s) sha256:6e4741ae4cbcb2def2f4e23efda3b4d016ae280a8a8e2df9579417a9e60719da.
+- Unified admission store read back read-only (unified/intents.sqlite3 under the registered root): global state IDLE, no GPU lease, no open lease operation, the first campaign's parent COMPLETE at generation 1, its worker slot w00 inactive, validation generation 1. The first attempt's admission was settled; a new campaign id with slot w00 at generation 2 conflicts with no recorded row.
+- Inputs re-authored under the prep directory act-w1-inputs-20261012T220436Z (same scene list, hash 54144421…; new contract and campaign config for the new image identities; new run id act-w1-20261012T220436Z and campaign id w1f-20261012T220436Z); 18 of 18 read-only validation items PASS.
+
+```yaml
+experiment_id: EXP-577
+status: PLANNED
+prior_experiment: EXP-576 (VALID failure at the first task's ready gate, ACT_STACK_READINESS_PROBE_REUSED)
+hypothesis: With the repeatable readiness check, the production CLI carries eight scenes with one worker through the complete task chain in a real container and settles admission; same hypothesis as EXP-576 with its first blocking defect removed.
+prediction: The first task passes its ready gates and reaches reset. Further stages are unexercised; the first stage that fails, if any, is the new information. Structural success as in EXP-576 - exit 0, eight collected records, wave-0-verified with eight rows, a frozen index with eight collected tasks and no committed episode, cleanup terminated.
+single_variable: The readiness check fix (commit 0529f342e and its rebuilt images) relative to EXP-576. Same scene list, same decisions, same configuration values; new run and campaign ids. The confounds listed in EXP-576 remain.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 0529f342e and clean; no running container, GPU compute process, ROS or MuJoCo process; disk above the floor; run root act-w1-20261012T220436Z absent; unified store idle with no lease.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 0529f342e; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 0529f342e637 (images); Host HEAD ledger-only above it
+  install_overlay: /act/install in inference image sha256:6e4741ae4cbcb2def2f4e23efda3b4d016ae280a8a8e2df9579417a9e60719da and shard image sha256:9a699c8d32895f719253819ac21ae28998125394b4ed640785888f9149230783; Host R/gates/fc4f72ae4a91/install (assets and config identical, Python sources imported from the worktree)
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261012T220436Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261012T220436Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3620 — EXP-576 VALID failure: first real task stops at a reused single-use readiness probe
 
