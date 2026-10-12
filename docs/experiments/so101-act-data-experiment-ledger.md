@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: ea4cc4e161486fd1072235822381a9bab44957e6
+current_commit: e5c1b631079c3ad62d394ec5cfc3481042dd0286
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,21 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3614
-next_experiment: NONE planned; rebuild both images from the gated source (code-only rebuild, timing to be recorded), implement the container qualification report and verifier; the first real single-scene collection task waits for the human answer on the activation receipt.
+latest_checkpoint: CP-3615
+next_experiment: NONE planned. Code path from CLI to formal admission is implemented, gated and imaged on e5c1b6310. The first real single-scene collection task (EXP to be planned) needs the human answer on the activation receipt for the formal freeze; scene lists, quality rule values and the formal deadline are also pending human input.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3615 — Qualification report, verifier and formal admission committed; gates PASS and images rebuilt on e5c1b6310
+
+- Commits since CP-3614 (Sonnet-written, Opus-reviewed): `83c0372cb` container collection qualification report builder, independent read-only verifier, quality rule file contract, read-only registry and journal readers; `e5c1b6310` formal collection admission on a verified qualification report from another run of the registered root, report hash carried by the CLI and composition, exact-eight run id check, two new commands, old eight-worker verifier removed. Design: R/one-way-qualification-report-design.md. Coordinator rulings applied as fail-closed defaults, not as approvals of values: no rule file with real pass counts exists or was written (a missing or valueless rule refuses the gate contract and can never yield QUALIFIED); population is all frozen scenes for every gate and a scene without evidence is not a pass; a non-qualified run still gets a report with closed reason codes; formal list bound by hash equality with the gate contract; full recomputation at admission with no deadline change.
+- Host gates on e5c1b6310, R/gates/e5c1b631079c: fresh build rc 0; so101_demo_py rc 0, 12539 passed, 0 failed, 167 skipped, 435 s (demo-run.6Ouksylb); other 13 packages rc 0, 2345 tests, 0 errors, 0 failures, 60 skipped, 513 s. Worktree unchanged and clean after the run. PASSED.
+- Images rebuilt from e5c1b6310 (the gated commit): inference R/image-build-20261012T203500Z, 57.9 s, sha256:583a0390d292e035f7bc50e2bbb8cb624eee76ecfde1966a848d21ed173d3cb5; shard R/image-build-20261012T203607Z, 149.5 s code-only rebuild with the native layer cached (code layer 113.7 s, freeze 11.5 s, export 21.1 s; previous structure 272 s), sha256 recorded in shard.iid, provenance git_commit e5c1b6310, package_source_sha256 9900051d65c02d06520faf70a17761345c93241d60948113882c7e0efc92e92e, install_sha256 62493b33ab71466f2a922d1697ae80959d48d4f6ab003544751e41449eed9576, Python mujoco 3.12.0, base layers a prefix, final image without build trees.
+- Regression on the rebuilt images, same scripts and criteria as EXP-574 and EXP-575 (fixed-configuration repeats on a new commit and image; lifecycle ISOLATED_STACK; no motion): control path REG/act-nomotion-587fae66d712 COMPLETE_ALL_PASS (checks a, b, c, d_wire, e, f, g, clock; first accepted status reply 0.247 s after child-ready, margin 4.753 s in the 5.0 s window); Teacher service REG/act-teacher-probe-8da1081557f8 COMPLETE_ALL_PASS (ready in 9.71 s, Host round trip 60.0 ms, in-shard inference 10.9 ms, exits proven). No container left running. These repeats were launched without a prior PLANNED entry for the same worktree-cleanliness reason stated in CP-3613; criteria were those of the two recorded experiments.
+- Stated limits of what is proven: unit and wiring tests for the qualification code use a synthetic forty-scene world (zero-row episodes, stored QC reports, a controlled frozen-input reader, labelled test-only rule files); admission-time verification cost on real episodes is unmeasured (design estimate about 27 s per episode); no real collection task has run in a container; no reset, Teacher motion, Recorder, offline processing, QC, seal or Host collection has been exercised on real data in this phase.
+- Pending human input, unchanged and NOT assumed: scene candidate source and reachability handling; whether the existing activation receipt (text "diagnostic use") may back the formal freeze; handling of the 5400 s deadline for a 70-scene formal campaign; pass counts for the QC valid rate and Teacher physical success rate. Open observation: simulator EGL vendor string "Mesa Project" (CPU versus GPU rendering not determined).
+- Retained: gate directories, image build directories, the four probe run roots. Deletion candidates, not deleted: superseded campaign images (42acc787e and older tags), dry-run probe roots, exited probe containers, gate build and install trees of superseded commits, scratch directories.
 
 ## CP-3614 — Host package gates PASS on ea4cc4e16 after three runs; gate failure root causes recorded
 
