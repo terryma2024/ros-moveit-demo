@@ -73,7 +73,7 @@ def load_spec(path):
                     or not math.isfinite(document['deadline_monotonic_s'])
                     or document['deadline_monotonic_s']<=time.monotonic()):
                 raise ValueError('collection identity')
-            campaign=load_campaign_config(validate_file_ref(document['campaign_config']),
+            campaign=load_campaign_config(validate_file_ref(document['campaign_config']),roles=('teacher',),
                 expected_sha256=document['campaign_config']['sha256'])
             if (campaign['controlled_runtime']!=document['controlled_runtime']
                     or campaign['gpu_uuid']!=document['gpu_uuid']):

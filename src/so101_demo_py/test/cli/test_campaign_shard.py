@@ -97,6 +97,15 @@ def test_collection_spec_uses_original_controlled_json_and_builds_the_task_build
     assert not hasattr(mod,'build_shard_driver') and not hasattr(mod,'ChildRuntime')
 
 
+def test_collection_spec_loads_without_head_weights_on_disk(tmp_path):
+    """Collection is Teacher-only: a campaign config naming absent Head weights must still load."""
+    mod=importlib.import_module('so101_demo.cli.campaign_shard')
+    path,document=collection_fixture(tmp_path)
+    (tmp_path/'head.pt').rename(tmp_path/'head.pt.absent')
+    actual,_runtime=mod.load_spec(path)
+    assert actual==document
+
+
 def test_readiness_workload_builder_refuses_every_task(tmp_path):
     mod=importlib.import_module('so101_demo.cli.campaign_shard')
     path,_document=fixture(tmp_path)
