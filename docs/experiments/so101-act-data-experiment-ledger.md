@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 29cda62cb817f78e90e7caa165af0ba530583798
+current_commit: d98cebe133a835796a3f135cbd4a043e1e008bc2
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3576
+latest_checkpoint: CP-3577
 next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3577 — Fixed role launch and image-byte readback source GREEN
+
+- Added build_container_argv with closed typed inference/shard entries and the frozen three-role image map. Head and Teacher must share the same image identity; only the selected full GPU UUID is exposed. Non-root UID/GID, read-only rootfs, cap-drop ALL, no-new-privileges, private network/IPC and no automatic restart are fixed. No host PID mode, Docker socket, entrypoint override, broad Host journal mount, source/install override or arbitrary shell command. Paths use the existing same-absolute-path private mount contract; caches/temp/logs stay inside that role's owned writable root. Shard ROS domain/namespace/session are explicit, without guessed defaults.
+- Added source/install file inventory and runtime provenance readback. Both byte inventories and file modes/links are checked; escaping links are rejected. The embedded .image-git.json is itself in the source inventory and must match declared commit/submodule metadata. Actual runtime readback uses the image interpreter, installed module origins, dependency metadata and package prefixes. Host probes Docker inspect, executes only the fixed image probe and repeats inspect to refuse a restarted or changed container; labels/commit-only claims and duplicate JSON are rejected.
+- RED targeted.oOUjxsmd actual rc 1, 20 missing launch boundary failures; targeted.X5iEkprW actual rc 1, 20 missing provenance boundary failures. targeted.y1OmK7fp exposed the wrong canonical JSON-object decoder for Docker's ordinary array output; corrected the owning readback to strict duplicate/nonfinite JSON parsing. Inline review then added metadata-identity drift control: targeted.5Hrqz1sc rc 1, 1 failed/20 passed proved a valid-looking alternate commit was not tied to embedded bytes. Fixed physical metadata readback without weakening assertions.
+- Final exact argv: run-targeted-container.zsh `src/so101_demo_py/test/runtime/container_campaign src/so101_teleop/test/unified/test_container_child_ownership.py -q`. targeted.GVCtjFf0 actual rc 0, 81 passed in 2.53 s, wall 2 s. Fresh NVMe file fixtures, short registered socket-only root, exact interpreter/import/tempfile proof, argv/log/JUnit retained. No full/package/benchmark gate. Pure launch tests do not run containers; provenance tests use real temporary file trees and explicitly external runtime/Docker I/O fixtures. The real namespace probe remains CP-3576 evidence only.
+- Inline self review checked immutable role selection, path/entry validation, cache destinations, actual byte/link/origin checks and start-identity stability. These modules are not yet selected by the production Host/shard composition; no new image build, CUDA/EGL/controller ready, actual ROS stop or qualification PASS is claimed. Actual shard entry, two same-freeze role images and stop receipt producer remain the next boundary. Goal active; retained all, archived none, scratch/socket fixtures and the stopped namespace probe are deletion candidates only; no deletion/push/hardware/training.
 
 ## CP-3576 — Container identity and owner heartbeat boundary GREEN
 
