@@ -59,7 +59,7 @@ def fixture(tmp_path, response, *, generation=1):
     owner = module.ContainerShardOwner(admitted_context=context,launch=launch,entry=entry,
         images={role:image for role in ('head','teacher','shard')},paths=paths,registry=registry,
         approved_inputs=(),config_paths=(spec,),service_token='e'*64,startup_timeout_s=.1,
-        heartbeat_timeout_s=5.,max_frame_bytes=8388608,stop_timeout_s=.1,docker_runner=docker)
+        status_timeout_s=5.,max_frame_bytes=8388608,stop_timeout_s=.1,docker_runner=docker)
     return owner,registry,calls,root
 
 

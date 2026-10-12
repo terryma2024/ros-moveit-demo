@@ -84,7 +84,7 @@ class ContainerShardLauncher:
                 images=images,paths=self.paths,registry=self.registry,approved_inputs=self.approved_inputs,
                 config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path))),service_token=token,
                 startup_timeout_s=self.runtime.initializing_hard_timeout_s,
-                heartbeat_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
+                status_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
                 stop_timeout_s=self.runtime.worker_recovery_timeout_s))
         self._prepared[wave]=tuple(owners)
         self._next_wave+=1

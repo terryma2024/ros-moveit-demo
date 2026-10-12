@@ -40,7 +40,7 @@ def read_container_namespace(pid):
 class ContainerShardOwner:
     def __init__(self, *, admitted_context, launch, entry, images, paths, registry,
                  approved_inputs, config_paths, service_token, startup_timeout_s,
-                 heartbeat_timeout_s, max_frame_bytes, stop_timeout_s,
+                 status_timeout_s, max_frame_bytes, stop_timeout_s,
                  docker_runner=_docker, namespace_reader=read_container_namespace,
                  monotonic_ns=time.monotonic_ns):
         if (type(admitted_context) is not AdmittedCampaignContext
@@ -54,7 +54,7 @@ class ContainerShardOwner:
                 or type(service_token) is not str or re.fullmatch(r'[0-9a-f]{64}',service_token) is None
                 or type(max_frame_bytes) is not int or max_frame_bytes <= 0
                 or any(type(v) not in (int,float) or not math.isfinite(v) or v <= 0 for v in
-                       (startup_timeout_s,heartbeat_timeout_s,stop_timeout_s))):
+                       (startup_timeout_s,status_timeout_s,stop_timeout_s))):
             raise ValueError('SHARD_OWNER_CONFIG_INVALID')
         self.context,self.launch,self.entry,self.registry = admitted_context,launch,entry,registry
         self.root = Path(launch.owned_root)
@@ -88,7 +88,7 @@ class ContainerShardOwner:
             raise ValueError('SHARD_OWNER_CONFIG_INVALID')
         self.image = dict(images['shard'])
         self.token,self.startup_budget,self.status_budget,self.stop_budget = (
-            service_token,startup_timeout_s,heartbeat_timeout_s,stop_timeout_s)
+            service_token,startup_timeout_s,status_timeout_s,stop_timeout_s)
         self.max_bytes,self.docker,self.namespace_reader,self.clock = (
             max_frame_bytes,docker_runner,namespace_reader,monotonic_ns)
         self.owner,self.bridge = None,None

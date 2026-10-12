@@ -89,33 +89,6 @@ def load_spec(path):
         raise ValueError("CAMPAIGN_SHARD_SPEC_INVALID") from error
 
 
-class NoMotionReadinessDriver:
-    """The image gate never forwards a goal; loss still retires its real stack."""
-    def __init__(self, retirement):
-        self.retirement = retirement
-        self.start_task = None
-        self.stop_receipt = None
-
-    async def submit(self, *args):
-        raise ValueError("SHARD_READINESS_HAS_NO_MOTION_PORT")
-
-    async def cancel(self, *args):
-        raise ValueError("SHARD_READINESS_HAS_NO_MOTION_PORT")
-
-    async def terminal(self, *args):
-        raise ValueError("SHARD_READINESS_HAS_NO_MOTION_PORT")
-
-    async def stop_act(self, reason):
-        if self.start_task is not None:
-            try:
-                await asyncio.shield(self.start_task)
-            except Exception:
-                pass
-        self.stop_receipt = await self.retirement.retire(fenced=True)
-        return all(self.stop_receipt[name] for name in (
-            "goals_stopped", "controllers_stopped", "ros_children_exited", "ros_graph_empty")) and not self.stop_receipt["forced"]
-
-
 def _refuse_motion(_task):
     raise ValueError("SHARD_READINESS_HAS_NO_MOTION_PORT")
 

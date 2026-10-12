@@ -65,16 +65,6 @@ def test_shard_entry_cannot_start_host_ros(tmp_path):
         asyncio.run(mod.run_shard(spec,runtime))
 
 
-def test_no_motion_image_gate_cannot_forward_a_goal():
-    import asyncio
-
-    mod = importlib.import_module("so101_demo.cli.campaign_shard")
-    driver = mod.NoMotionReadinessDriver(None)
-    for operation in (driver.submit,driver.cancel,driver.terminal):
-        with pytest.raises(ValueError, match="SHARD_READINESS_HAS_NO_MOTION_PORT"):
-            asyncio.run(operation(object()))
-
-
 def collection_fixture(tmp_path):
     from test_config_identity import campaign_fixture,write_config
     path,document=fixture(tmp_path)
