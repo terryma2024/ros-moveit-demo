@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 30e9665efbba4a8bb863dbdecdf007a6836d2e04
+current_commit: 70ffa0f0784df406da49f157ce8e38e87964fa447
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3567
-next_experiment: Container private same-path mount/root boundary targeted RED -> GREEN, then shared service.
+latest_checkpoint: CP-3568
+next_experiment: Shared inference service/client targeted RED -> GREEN, with bounded spawn executors and real Unix transport.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3568 — root/private mount builder GREEN; shared service next
+
+- Inference/config sub-boundary committed locally as 70ffa0f07; no push. Added root registration comparison and owner checks, exclusive fresh run layout, generation-specific private shard/service directories, explicit same-path evidence/input mounts and short role/control socket targets. No resource reauthorization added internally.
+- RED: targeted.fS6pPrTK rc 1 (14 actual testcase failures for missing new path module). Review found a too-broad rejection of frozen config files inside the new run; targeted.bTeyHAiG rc 1, 1 failed/15 passed. Corrected that boundary while retaining host/private evidence/whole-root/source-override rejection.
+- GREEN: targeted.LUPRwK1q rc 0, 120 passed in 0.36 s (paths plus complete new inference tests); paths alone cover 16 cases. Exact interpreter/TMP/argv/log/JUnit retained under this run's scratch. git diff --check passed.
+- Inline self review: two machine ROOTs, immutable new run/no reuse, exact private paths, input byte/path preservation, unknown owner/symlink mismatch, read-only inputs, service-only own socket/log roots, cross-shard and Host journal rejection checked. Image-level mount permission and real existing artifact-reader/QC readback remain required at the image/Host boundaries; this static mount builder is not that runtime proof.
+- Source/diff evidence: private-mounts.patch and .sha256 in run root. No full/package/benchmark or simulation gate run. Native goal active; executor/worktree isolation unchanged.
+- Retained all scratch and snapshots; archived none; scratch readback trees deletion candidates only. No processes/containers launched or deleted. Next boundary: shared service/client and executor.
 
 ## CP-3567 — inference wire/config sub-boundary GREEN and inline review
 
