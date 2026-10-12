@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # This cached dependency base has the exact current CUDA/Head package versions.
 # All campaign code comes from the new common source snapshot and /act/install.
 FROM sha256:010dca70ce3ce995367793642c2e5515718986253cecacc032e9f7f7ec6c5457
