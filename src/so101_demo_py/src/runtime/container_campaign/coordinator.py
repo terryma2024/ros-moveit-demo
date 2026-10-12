@@ -1,169 +1,382 @@
-"""Concurrent container waves reuse the existing durable lease/commit engine."""
+"""Concurrent container waves: one Host-local loop per instance over four-operation task control.
+
+The Host assigns one task at a time, polls status (which is also the container's liveness signal),
+and registers a result only after a matching SUCCEEDED status. No lease, proof or replay protocol
+exists here; a lost reply is queried, never resent, and any fault ends that instance only.
+"""
 
 import asyncio
-from dataclasses import replace
+import hashlib
+from pathlib import Path
+import re
 import time
 
 from so101_demo.act.parallel_collection import reserve_qualification_scenes
-from so101_demo.act.result_store import ActCollectionResultVerifier
-from so101_demo.parallel_batch.contracts.common import RunMode
-from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind,BatchRequest,ParallelRuntimeConfigLinuxCuda
-from so101_demo.parallel_batch.coordinator import BatchCoordinator
-from so101_demo.parallel_batch.journal import CoordinatorJournal
+from so101_demo.runtime.container_campaign.paths import host_task_output
+from so101_demo.runtime.container_campaign.service_owner import _write
+from so101_demo.runtime.container_campaign.task_contracts import TASK_ID_PATTERN, InputRef, TaskSpec
+from so101_demo.runtime.container_campaign.task_control import ContainerTaskControl
+from so101_demo.runtime.container_campaign.task_journal import (
+    ContainerTaskJournal, read_container_task_result,
+)
+from so101_demo.parallel_batch.contracts.linux_cuda import ParallelRuntimeConfigLinuxCuda
 from so101_demo.runtime.inference.config import validate_file_ref
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
 from so101_teleop.unified.contracts import AdmittedCampaignContext
 
-
-class QualificationPointSelector:
-    def __init__(self,*,scene_ids,worker_ids):
-        self.assignment=reserve_qualification_scenes(scene_ids,worker_ids)
-        self.coordinator=None
-
-    def bind(self,coordinator):
-        if self.coordinator is not None or type(coordinator) is not BatchCoordinator:
-            raise ValueError('QUALIFICATION_COORDINATOR_BINDING_INVALID')
-        self.coordinator=coordinator
-
-    def choose(self,worker_id,eligible):
-        if self.coordinator is None or worker_id not in self.assignment['reserved_by_worker']:
-            raise ValueError('QUALIFICATION_COORDINATOR_BINDING_INVALID')
-        points=self.coordinator.snapshot().points
-        for scene in self.assignment['reserved_by_worker'][worker_id]:
-            if not points[scene].terminal:
-                return scene if scene in eligible else None
-        return next((scene for scene in self.assignment['surplus'] if scene in eligible),None)
+TASK_INPUT_KIND = 'ACT_CONTAINER_COLLECTION_TASK'
+PENDING, ASSIGNED, COLLECTED, FAULTED = 'PENDING', 'ASSIGNED', 'COLLECTED', 'FAULTED'
+_REFUSED = ('TASK_ID_UNKNOWN', 'TASK_ID_MISMATCH')
 
 
-class ContainerCaseResultVerifier(ActCollectionResultVerifier):
-    """Route each lease to its own original scope/input bindings, without mutation races."""
-    def __init__(self,worker_roots,*,case_inputs):
-        if type(case_inputs) is not dict or not case_inputs:
-            raise ValueError('CONTAINER_CASE_INPUTS_INVALID')
-        self.readers={}
-        self.references={}
-        for scene,refs in case_inputs.items():
-            if type(refs) is not dict or set(refs)!={'scope','inputs_manifest'}:
-                raise ValueError('CONTAINER_CASE_INPUTS_INVALID')
-            paths={name:validate_file_ref(ref) for name,ref in refs.items()}
-            self.references[scene]={name:dict(ref) for name,ref in refs.items()}
-            self.readers[scene]=ActCollectionResultVerifier(worker_roots,scope=paths['scope'],
-                inputs_manifest=paths['inputs_manifest'],trust_independent_qc_memo=True)
-        first=next(iter(self.readers.values()))
-        super().__init__(worker_roots,scope=first.scope,inputs_manifest=first.inputs_manifest)
+def task_id_for(wave_id, worker_id, scene_id):
+    return f'{wave_id}-{worker_id}-{scene_id}'
 
-    def bind_execution_journal(self,journal):
-        super().bind_execution_journal(journal)
-        for reader in self.readers.values():
-            reader.bind_execution_journal(journal)
 
-    def bind_read_only_execution_journal(self,root,batch_id,coordinator_epoch):
-        super().bind_read_only_execution_journal(root,batch_id,coordinator_epoch)
-        for reader in self.readers.values():
-            reader.bind_read_only_execution_journal(root,batch_id,coordinator_epoch)
+class WaveAssignment:
+    """Which scene a worker may take next. Reserved scenes come first, then surplus; nothing is retried."""
 
-    def _reader(self,lease):
-        for ref in self.references[lease.point_id].values():
-            validate_file_ref(ref)
-        return self.readers[lease.point_id]
+    def __init__(self, *, scene_ids, worker_ids, assignment=None):
+        scene_ids, worker_ids = tuple(scene_ids), tuple(worker_ids)
+        if not scene_ids or len(set(scene_ids)) != len(scene_ids) or not worker_ids:
+            raise ValueError('WAVE_ASSIGNMENT_INVALID')
+        self.scene_ids, self.worker_ids = scene_ids, worker_ids
+        self.states = {scene: PENDING for scene in scene_ids}
+        self.reserved = self.surplus = None
+        if assignment is not None:
+            try:
+                reserved = {worker: tuple(values) for worker, values in assignment['reserved_by_worker'].items()}
+                surplus = tuple(assignment['surplus'])
+                flat = [scene for values in reserved.values() for scene in values]+list(surplus)
+                if (set(reserved) != set(worker_ids) or sorted(flat) != sorted(scene_ids)):
+                    raise ValueError('coverage')
+            except (KeyError, TypeError, ValueError, AttributeError) as error:
+                raise ValueError('WAVE_ASSIGNMENT_INVALID') from error
+            self.reserved, self.surplus = reserved, surplus
 
-    def verify(self,lease,location,run_mode):
-        return self._reader(lease).verify(lease,location,run_mode)
+    def next_scene(self, worker_id):
+        """Claim the next scene for a worker (marking it ASSIGNED), or None."""
+        if worker_id not in self.worker_ids:
+            raise ValueError('WAVE_ASSIGNMENT_WORKER_UNKNOWN')
+        scene = self._choose(worker_id)
+        if scene is not None:
+            self.states[scene] = ASSIGNED
+        return scene
 
-    def discover(self,lease,workspace):
-        return self._reader(lease).discover(lease,workspace)
+    def _choose(self, worker_id):
+        if self.reserved is None:
+            return next((scene for scene in self.scene_ids if self.states[scene] == PENDING), None)
+        for scene in self.reserved[worker_id]:
+            if self.states[scene] != COLLECTED:
+                return scene if self.states[scene] == PENDING else None
+        return next((scene for scene in self.surplus if self.states[scene] == PENDING), None)
+
+    def _move(self, scene, state):
+        if self.states.get(scene) != ASSIGNED:
+            raise ValueError('WAVE_ASSIGNMENT_STATE_INVALID')
+        self.states[scene] = state
+
+    def mark_collected(self, scene):
+        self._move(scene, COLLECTED)
+
+    def mark_faulted(self, scene):
+        self._move(scene, FAULTED)
+
+
+class InstanceFault(RuntimeError):
+    pass
+
+
+class InstanceDispatch:
+    """The per-instance loop. `control` has the four-operation `ContainerTaskControl` shape."""
+
+    def __init__(self, *, control, shard, assignment, journal, endpoints, scene_manifest, case_inputs,
+                 config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep):
+        launch = shard.launch
+        self.control, self.shard, self.assignment, self.journal = control, shard, assignment, journal
+        self.endpoints, self.scene_manifest, self.case_inputs = endpoints, scene_manifest, case_inputs
+        self.config, self.context, self.dispatch_allowed = config, context, dispatch_allowed
+        self.clock, self.sleep = clock, sleep
+        self.launch_id, self.worker_id, self.wave_id = launch.launch_id, launch.worker_id, launch.wave_id
+        self.generation, self.owner_root = launch.launch_generation, Path(launch.owned_root)
+        self.status = self.fault = self.error = None
+        self.current = self.polling = None
+        self.collected = []
+        self._poller = None
+        self._pulse = asyncio.Event()
+
+    def task_id(self, scene_id):
+        return task_id_for(self.wave_id, self.worker_id, scene_id)
+
+    # Status polling doubles as the container's liveness signal: it runs from start to terminate.
+    async def _poll(self):
+        last_ok = None
+        interval, limit = self.config.heartbeat_interval_s, self.config.heartbeat_timeout_s
+        while True:
+            try:
+                status = await asyncio.wait_for(self.control.get_status(self.polling), limit)
+                last_ok = self.clock()
+                self.status = status
+                if status.state in ('STOPPING', 'TERMINATED') or status.fault_reason:
+                    self.fault = 'CONTAINER_INSTANCE_REPORTED_FAULT: '+str(status.fault_reason or status.state)
+            except Exception as error:
+                if self.polling is not None and any(code in str(error) for code in _REFUSED):
+                    self.fault = 'CONTAINER_STATUS_QUERY_REFUSED: '+str(error)[:200]
+                elif last_ok is not None and self.clock()-last_ok >= limit:
+                    self.fault = 'CONTAINER_INSTANCE_UNREACHABLE: '+(str(error) or type(error).__name__)[:200]
+            finally:
+                self._tick()
+            if self.fault is not None:
+                return
+            await self.sleep(interval)
+
+    def _tick(self):
+        pulse, self._pulse = self._pulse, asyncio.Event()
+        pulse.set()
+
+    async def _wait(self):
+        pulse = self._pulse
+        if self._poller.done():
+            await asyncio.sleep(0)
+        else:
+            await pulse.wait()
+
+    async def start(self):
+        """Start the instance and wait until a polled status says READY, within the initializing bound."""
+        began = self.clock()
+        self._poller = asyncio.create_task(self._poll())
+        starting = asyncio.create_task(self.control.start())
+        try:
+            while True:
+                if starting.done():
+                    starting.result()
+                    if self.fault is None and self.status is not None and self.status.state == 'READY':
+                        return
+                if self.fault is not None:
+                    raise InstanceFault(self.fault)
+                if self.clock()-began >= self.config.initializing_hard_timeout_s:
+                    raise InstanceFault('CONTAINER_INSTANCE_READY_TIMEOUT')
+                await self._wait()
+        finally:
+            if not starting.done():
+                starting.cancel()
+                await asyncio.gather(starting, return_exceptions=True)
+
+    def prepare_task(self, scene_id):
+        """Write the closed task input document with the durable primitive; return the TaskSpec."""
+        task_id = self.task_id(scene_id)
+        refs = self.case_inputs[scene_id]
+        document = dict(schema_version=1, kind=TASK_INPUT_KIND, task_id=task_id, worker_id=self.worker_id,
+            launch_generation=self.generation, wave_id=self.wave_id, scene_id=scene_id,
+            scene_manifest=dict(self.scene_manifest), scope=dict(refs['scope']),
+            inputs_manifest=dict(refs['inputs_manifest']))
+        for role in ('head', 'teacher'):
+            endpoint = self.endpoints[role]
+            document[role] = dict(role=role, socket_path='/act/ipc/'+role+'/inference.sock',
+                service_generation=endpoint.service_generation, max_frame_bytes=endpoint.max_frame_bytes)
+        config = self.config
+        now = self.clock()
+        deadline = min(now+config.initializing_hard_timeout_s+config.executing_hard_timeout_s
+                       +config.finalizing_hard_timeout_s+config.worker_recovery_timeout_s,
+                       self.context.deadline_monotonic_s)
+        if deadline <= now:
+            raise InstanceFault('CONTAINER_CAMPAIGN_DEADLINE_EXPIRED')
+        path = self.owner_root/'task-inputs'/(task_id+'.json')
+        _write(path, document)
+        digest = hashlib.sha256(canonical_json(document)+b'\n').hexdigest()
+        return TaskSpec(task_id=task_id, inputs_ref=InputRef(path=str(path), sha256=digest),
+                        deadline_monotonic_s=deadline)
+
+    async def _run_task(self, scene):
+        task = await asyncio.to_thread(self.prepare_task, scene)
+        output = host_task_output(self.owner_root, task.task_id)
+        await asyncio.to_thread(self.journal.assign, instance_id=self.launch_id, task=task, host_output=output)
+        self.current = (task, scene)
+        try:
+            await self.control.assign_task(task)
+        except Exception:
+            # An uncertain exchange is only ever queried, never repeated.
+            pass
+        self.polling = task.task_id
+        backstop = task.deadline_monotonic_s+self.config.heartbeat_timeout_s
+        while True:
+            if self.fault is not None:
+                raise InstanceFault(self.fault)
+            seen = self.status.task if self.status is not None else None
+            if seen is not None and seen.task_id == task.task_id:
+                if seen.state == 'FAILED':
+                    raise InstanceFault('CONTAINER_TASK_FAILED: '+str(seen.fault_reason))
+                if seen.state == 'SUCCEEDED':
+                    break
+            if self.clock() >= backstop:
+                raise InstanceFault('CONTAINER_TASK_DEADLINE_EXCEEDED')
+            await self._wait()
+        try:
+            result = await asyncio.to_thread(read_container_task_result, self.owner_root, task_id=task.task_id)
+            await asyncio.to_thread(self.journal.collect, task_id=task.task_id, result=result)
+        except ValueError as error:
+            raise InstanceFault('CONTAINER_TASK_RESULT_UNREGISTERED: '+str(error)) from error
+        self.assignment.mark_collected(scene)
+        self.collected.append(task.task_id)
+        self.current = None
+
+    async def run(self, stop_reason):
+        """Dispatch scenes until none remain, dispatch is fenced or the instance faults; then terminate it."""
+        reason = None
+        try:
+            while self.dispatch_allowed() and stop_reason() is None and self.fault is None:
+                scene = self.assignment.next_scene(self.worker_id)
+                if scene is None:
+                    break
+                try:
+                    await self._run_task(scene)
+                except Exception:
+                    self.assignment.mark_faulted(scene)
+                    raise
+            reason = self.fault
+        except InstanceFault as fault:
+            reason = str(fault)
+        except Exception as error:
+            reason = f'CONTAINER_TASK_DISPATCH_ERROR: {type(error).__name__}: {error}'
+        if reason is not None:
+            await self._record_fault(reason)
+        return await self.finish('WAVE_COMPLETE' if reason is None else reason)
+
+    async def _record_fault(self, reason):
+        self.error = dict(type='InstanceFault', reason=reason[:300], worker_id=self.worker_id,
+                          launch_id=self.launch_id, task_id=None if self.current is None else self.current[0].task_id)
+        if self.current is not None:
+            try:
+                await asyncio.to_thread(self.journal.fail, task_id=self.current[0].task_id, reason=reason)
+            except ValueError as error:
+                self.error['journal_error'] = str(error)[:200]
+
+    async def finish(self, reason):
+        """Stop polling, then terminate this instance and nothing else."""
+        if self._poller is not None:
+            self._poller.cancel()
+            await asyncio.gather(self._poller, return_exceptions=True)
+        try:
+            status = await self.control.terminate(reason[:300])
+        except Exception as error:
+            self.error = self.error or dict(type='InstanceFault', reason='CONTAINER_INSTANCE_TERMINATE_FAILED: '
+                +str(error)[:200], worker_id=self.worker_id, launch_id=self.launch_id, task_id=None)
+            return None
+        if not status.resources_released and self.error is None:
+            self.error = dict(type='InstanceFault', reason='CONTAINER_INSTANCE_STOP_UNCONFIRMED',
+                              worker_id=self.worker_id, launch_id=self.launch_id, task_id=None)
+        return status
 
 
 class ConcurrentCollectionCoordinator:
-    def __init__(self,*,context,config,case_inputs,run_worker,clock=time.monotonic):
-        if (type(context) is not AdmittedCampaignContext or context.workload_kind!='act_collection_start'
-                or type(config) is not ParallelRuntimeConfigLinuxCuda or not callable(run_worker)
-                or type(case_inputs) is not dict or not case_inputs):
+    def __init__(self, *, context, config, case_inputs, scene_manifest, control_factory=None,
+                 clock=time.monotonic, sleep=asyncio.sleep):
+        if (type(context) is not AdmittedCampaignContext or context.workload_kind != 'act_collection_start'
+                or type(config) is not ParallelRuntimeConfigLinuxCuda
+                or type(case_inputs) is not dict or not case_inputs or type(scene_manifest) is not dict
+                or not callable(clock) or not callable(sleep)
+                or (control_factory is not None and not callable(control_factory))):
             raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
-        self.context,self.config,self.case_inputs=context,config,case_inputs
-        self.run_worker,self.clock=run_worker,clock
-        self.active=None
-        self.stop_reason=None
-        self.waves={}
+        for refs in case_inputs.values():
+            if type(refs) is not dict or set(refs) != {'scope', 'inputs_manifest'}:
+                raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
+        self.context, self.config, self.case_inputs = context, config, case_inputs
+        self.scene_manifest = scene_manifest
+        self.control_factory = control_factory or (lambda shard: ContainerTaskControl(owner=shard))
+        self.clock, self.sleep = clock, sleep
+        self.active = None
+        self.stop_reason = None
+        self.waves = {}
 
-    def stop_dispatch(self,reason):
+    def stop_dispatch(self, reason):
         if type(reason) is not str or not reason:
             raise ValueError('CONTAINER_DISPATCH_STOP_REASON_INVALID')
         if self.stop_reason is None:
-            self.stop_reason=reason
-            if self.active is not None:
-                self.active.request_stop(reason=reason)
+            self.stop_reason = reason
 
-    async def run_wave(self,*,plan,shards,endpoints,dispatch_allowed):
+    async def run_wave(self, *, plan, shards, endpoints, dispatch_allowed):
         if self.stop_reason is not None or self.active is not None or not dispatch_allowed():
             raise ValueError('CONTAINER_WAVE_DISPATCH_FENCED')
-        if type(shards) is not tuple or len(shards)!=self.context.worker_count:
+        if type(shards) is not tuple or len(shards) != self.context.worker_count:
             raise ValueError('CONTAINER_WAVE_SHARD_COUNT_INVALID')
-        wave=plan['wave_index']
-        root=shards[0].root.parents[2]/'host'/('wave-'+str(wave))
-        if str(root.parents[1])!=self.context.evidence_root or wave in self.waves:
+        wave = plan['wave_index']
+        root = shards[0].root.parents[2]/'host'/('wave-'+str(wave))
+        if str(root.parents[1]) != self.context.evidence_root or wave in self.waves:
             raise ValueError('CONTAINER_WAVE_ROOT_INVALID')
-        await asyncio.gather(*(shard.check_health() for shard in shards))
-        scene_order=tuple(plan['scene_ids'])
-        roots={shard.launch.worker_id:shard.root for shard in shards}
-        inputs={scene:self.case_inputs[scene] for scene in scene_order}
-        verifier=ContainerCaseResultVerifier(roots,case_inputs=inputs)
-        remaining=self.context.deadline_monotonic_s-self.clock()
-        if remaining<=0:
+        scene_order = tuple(plan['scene_ids'])
+        worker_ids = tuple(shard.launch.worker_id for shard in shards)
+        if len(set(worker_ids)) != len(worker_ids) or any(scene not in self.case_inputs for scene in scene_order):
+            raise ValueError('CONTAINER_WAVE_INPUTS_INVALID')
+        # Every identifier is checked before the first launch.
+        for shard in shards:
+            for scene in scene_order:
+                if re.fullmatch(TASK_ID_PATTERN, task_id_for(shard.launch.wave_id, shard.launch.worker_id, scene)) is None:
+                    raise ValueError('CONTAINER_TASK_ID_INVALID')
+        if plan['assignment'] is not None and canonical_json(plan['assignment']) != canonical_json(
+                reserve_qualification_scenes(scene_order, worker_ids)):
+            raise ValueError('CONTAINER_WAVE_ASSIGNMENT_CHANGED')
+        for scene in scene_order:
+            for ref in (*self.case_inputs[scene].values(), self.scene_manifest):
+                validate_file_ref(ref)
+        if self.context.deadline_monotonic_s-self.clock() <= 0:
             raise ValueError('CONTAINER_CAMPAIGN_DEADLINE_EXPIRED')
-        config=replace(self.config,batch_hard_timeout_s=min(self.config.batch_hard_timeout_s,remaining))
-        request=BatchRequest(self.context.campaign_id+'-wave-'+str(wave),RunMode.EXECUTE,
-            scene_order,len(shards),root,BatchKind.FIRST_PASS)
-        if (root/'coordinator').exists():
+        if (root/'task-journal').exists():
             raise ValueError('CONTAINER_WAVE_NEW_JOURNAL_REQUIRED')
-        journal=CoordinatorJournal.create(root/'coordinator',request.batch_id)
+        journal = ContainerTaskJournal(root/'task-journal', clock=self.clock, instances={
+            shard.launch.launch_id: dict(owner_root=str(shard.launch.owned_root), worker_id=shard.launch.worker_id,
+                launch_generation=shard.launch.launch_generation, wave_id=shard.launch.wave_id)
+            for shard in shards})
+        assignment = WaveAssignment(scene_ids=scene_order, worker_ids=worker_ids, assignment=plan['assignment'])
+        dispatches = [InstanceDispatch(control=self.control_factory(shard), shard=shard, assignment=assignment,
+            journal=journal, endpoints=endpoints, scene_manifest=self.scene_manifest,
+            case_inputs=self.case_inputs, config=self.config, context=self.context,
+            dispatch_allowed=dispatch_allowed, clock=self.clock, sleep=self.sleep) for shard in shards]
+        self.active = dispatches
+        self.waves[wave] = journal
         try:
-            verifier.bind_execution_journal(journal)
-            selector=(QualificationPointSelector(scene_ids=scene_order,worker_ids=tuple(roots))
-                      if plan['assignment'] is not None else None)
-            if selector is not None and canonical_json(selector.assignment)!=canonical_json(plan['assignment']):
-                raise ValueError('CONTAINER_WAVE_ASSIGNMENT_CHANGED')
-            coordinator=BatchCoordinator(journal,request,config=config,result_port=verifier,
-                clock=self.clock,point_selector=None if selector is None else selector.choose)
-            if selector is not None:
-                selector.bind(coordinator)
-            self.active=coordinator
-            self.waves[wave]=(coordinator,journal)
-            for shard in shards:
-                coordinator.register_worker(shard.launch.worker_id,generation=shard.launch.launch_generation)
-            # The real transport runner uses each registered shard and borrows
-            # campaign endpoints. It owns neither inference service shutdown.
-            runs=await asyncio.gather(*(self.run_worker(coordinator=coordinator,journal=journal,
-                shard=shard,endpoints=endpoints,config=config,dispatch_allowed=dispatch_allowed)
-                for shard in shards),return_exceptions=True)
-            errors=[dict(type=type(value).__name__,reason=str(value)) for value in runs
-                    if isinstance(value,BaseException)]
+            await self._barrier(dispatches)
+            outcomes = await asyncio.gather(*(item.run(lambda: self.stop_reason) for item in dispatches),
+                                            return_exceptions=True)
+            errors = [item.error for item in dispatches if item.error is not None]
+            errors += [dict(type=type(value).__name__, reason=str(value)) for value in outcomes
+                       if isinstance(value, BaseException)]
             if errors:
-                self.stop_dispatch('CONTAINER_WORKER_INFRA_FAILURE')
-            commits=[event for event in journal.replay().events if event.type=='RESULT_COMMITTED']
-            rows=[dict(scene_id=event.payload['identity']['point_id'],
-                worker_id=event.payload['identity']['worker_id'],location=event.payload['identity']['location'])
-                for event in commits]
-            return dict(wave_index=wave,coordinator_root=str(root/'coordinator'),
-                        case_results=rows,infra_errors=errors)
-        except BaseException:
-            journal.close()
-            raise
+                self.stop_dispatch('CONTAINER_INSTANCE_EXECUTION_FAULT')
+            records = journal.records()
+            rows = {record['collected']['scene_id']: dict(scene_id=record['collected']['scene_id'],
+                worker_id=record['collected']['worker_id'], location=record['collected']['host_output'],
+                task_id=record['collected']['task_id'], launch_id=record['collected']['instance_id'])
+                for record in records.values() if record['collected'] is not None}
+            return dict(wave_index=wave, coordinator_root=str(root/'task-journal'),
+                        case_results=[rows[scene] for scene in scene_order if scene in rows],
+                        infra_errors=errors)
         finally:
-            self.active=None
+            self.active = None
 
-    def complete_wave_cleanup(self,plan,shards):
-        coordinator,journal=self.waves[plan['wave_index']]
+    async def _barrier(self, dispatches):
+        """Start every instance; no task is assigned until all report READY. Any failure ends the whole wave."""
+        starts = [asyncio.create_task(item.start()) for item in dispatches]
         try:
-            if any(shard._close_task is None or not shard._close_task.done()
-                   or shard._close_task.result()['terminated'] is not True for shard in shards):
-                raise ValueError('CONTAINER_WAVE_CLEANUP_UNCONFIRMED')
-            for shard in shards:
-                shard.registry.prove_terminated(shard.launch.launch_id,shard.inspect(shard.owner.container_id))
-            coordinator.complete_cleanup(owned_processes_stopped=True,controllers_stopped=True)
-        finally:
-            journal.close()
+            await asyncio.wait(starts, return_when=asyncio.FIRST_EXCEPTION)
+            failure = next((item.exception() for item in starts
+                            if item.done() and not item.cancelled() and item.exception() is not None), None)
+            if failure is None:
+                await asyncio.gather(*starts)
+                return
+        except BaseException as error:
+            failure = error
+        for item in starts:
+            item.cancel()
+        await asyncio.gather(*starts, return_exceptions=True)
+        await asyncio.gather(*(item.finish('WAVE_START_FAILED') for item in dispatches), return_exceptions=True)
+        raise failure
+
+    def complete_wave_cleanup(self, plan, shards):
+        if any(shard._close_task is None or not shard._close_task.done()
+               or shard._close_task.result()['terminated'] is not True for shard in shards):
+            raise ValueError('CONTAINER_WAVE_CLEANUP_UNCONFIRMED')
+        for shard in shards:
+            shard.registry.prove_terminated(shard.launch.launch_id, shard.inspect(shard.owner.container_id))
 
     def close(self):
-        for coordinator,journal in self.waves.values():
-            journal.close()
+        pass

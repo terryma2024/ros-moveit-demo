@@ -1092,3 +1092,87 @@ def _publish_readback_proof(proof,output):
     except OSError as error:
         raise ValueError('COMMIT_PROOF_UNWRITABLE') from error
     return hashlib.sha256(payload).hexdigest()
+
+
+_TASK_SUMMARY_KEYS = frozenset({'schema_version', 'kind', 'scene_id', 'worker_id', 'launch_generation', 'lease', 'reset',
+    'sealed', 'status', 'episode_seal_sha256', 'inputs', *_DATA_FIELDS, *(_QC_MANIFEST_KEYS - {'qc_report_path'})})
+_TASK_REGISTRATION_KEYS = frozenset({'schema_version', 'kind', 'task_id', 'instance_id', 'worker_id', 'launch_generation',
+    'wave_id', 'scene_id', 'owner_root', 'host_output', 'task_result_sha256', 'result', 'task', 'assigned_monotonic_s',
+    'collected_monotonic_s'})
+
+
+def _finite_number(value):
+    return type(value) in (int, float) and math.isfinite(value)
+
+
+def verify_container_task_registration(registration_path, *, scope, inputs_manifest, trust_independent_qc_memo=False):
+    """Data readback of one collected container task; attribution (task_id only) was settled when it was collected.
+
+    Re-reads `task-result.json` against the registered hash, checks the closed summary, the local lease identity and its window against
+    the Host's own record, then verifies the sealed result from its files with no journal bound.
+    """
+    from so101_demo.runtime.container_campaign.paths import host_task_output
+    from so101_demo.runtime.container_campaign.task_journal import COLLECTED_KIND, read_container_task_result
+
+    try:
+        path = _safe(Path(registration_path))
+        record = json.loads(_read_regular(path))
+        if (type(record) is not dict or set(record) != _TASK_REGISTRATION_KEYS or record['schema_version'] != 1
+                or record['kind'] != COLLECTED_KIND or path.name != 'collected.json'
+                or path.parent.name != record['task_id']):
+            raise ValueError('registration shape')
+        task_id, scene = record['task_id'], record['scene_id']
+        read = read_container_task_result(record['owner_root'], task_id=task_id)
+        task_dir = host_task_output(record['owner_root'], task_id)
+        if (read['task_result_sha256'] != record['task_result_sha256'] or read['result'] != record['result']
+                or read['task_dir'] != record['host_output'] or str(task_dir) != record['host_output']):
+            raise ValueError('registered task result changed')
+        summary = record['result']
+        if (set(summary) != _TASK_SUMMARY_KEYS or summary['schema_version'] != 1
+                or summary['kind'] != 'ACT_CONTAINER_COLLECTION_TASK_RESULT' or summary['scene_id'] != scene
+                or summary['worker_id'] != record['worker_id'] or type(summary['launch_generation']) is not int
+                or summary['launch_generation'] != record['launch_generation'] or type(summary['reset']) is not dict
+                or set(summary['reset']) != {'reset_epoch', 'simulation_session_id'}):
+            raise ValueError('summary shape')
+        lease = LeaseIdentity(**summary['lease'])
+        if (asdict(lease) != summary['lease'] or lease.worker_id != record['worker_id']
+                or lease.worker_generation != record['launch_generation'] or lease.point_id != scene
+                or lease.attempt_id != scene+'-lease-1' or lease.lease_generation != 1):
+            raise ValueError('lease identity')
+        deadline = record['task']['deadline_monotonic_s']
+        if (not all(_finite_number(value) for value in (record['assigned_monotonic_s'], deadline,
+                    lease.lease_issued_monotonic_s, lease.lease_deadline_monotonic_s))
+                or not (record['assigned_monotonic_s'] <= lease.lease_issued_monotonic_s
+                        < lease.lease_deadline_monotonic_s <= deadline)):
+            raise ValueError('lease window')
+        relative = Path('attempts')/scene/lease.attempt_id/'sealed'
+        sealed, stated = task_dir/relative, summary['sealed']
+        if (type(stated) is not dict or set(stated) != {'path', 'result'} or stated['path'] != relative.as_posix()
+                or type(stated['result']) is not dict or set(stated['result']) != {'path', 'sha256'}
+                or stated['result']['path'] != (relative/'result.json').as_posix()):
+            raise ValueError('sealed location')
+        scope, inputs_manifest = _safe(Path(scope)), _safe(Path(inputs_manifest))
+        if summary['inputs'] != {name: dict(path=str(source), sha256=hashlib.sha256(_read_regular(source)).hexdigest())
+                                 for name, source in (('scope', scope), ('inputs_manifest', inputs_manifest))}:
+            raise ValueError('original input binding')
+        verifier = ActCollectionResultVerifier({record['worker_id']: task_dir}, scope=scope, inputs_manifest=inputs_manifest,
+                                               trust_independent_qc_memo=trust_independent_qc_memo)
+        verdict = verifier.verify(lease, str(sealed), RunMode.EXECUTE)
+        binding = ('qc_report_sha256', 'inputs_sha256', 'scope_sha256', 'audit_manifest_sha256', 'collection_mode',
+                   'episode_seal_sha256')
+        if (verdict['sha256'] != stated['result']['sha256'] or verdict['status'] != summary['status']
+                or any(verdict[key] != summary[key] for key in (*_DATA_FIELDS, *binding))):
+            raise ValueError('summary differs from the verified result')
+        episode_root = sealed/'episode'
+        if (not trust_independent_qc_memo and verdict['act_data_status'] in ('VALID', 'PENDING_QC')
+                and verdict['episode_seal_sha256'] is not None
+                and json.loads(_read_regular(episode_root/'seal.json'))['status'] == 'PASSED'):
+            # The journal-bound verifier makes this call; without a journal it is made here for parity.
+            from .episode_qc import verify_episode_physical_audit
+            verify_episode_physical_audit(episode_root, episode_root/'audit'/'audit-manifest.json', scope)
+        return dict(kind='ACT_CONTAINER_TASK_READBACK', schema_version=1, status='PASS', result_schema_version=3,
+            result_status=verdict['status'], **{key: verdict[key] for key in (*_DATA_FIELDS, *binding)},
+            result_sha256=verdict['sha256'], task_result_sha256=record['task_result_sha256'], task_id=task_id,
+            scene_id=scene, worker_id=record['worker_id'], location=str(sealed))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, UnicodeError) as error:
+        raise ValueError('CONTAINER_TASK_READBACK_INVALID') from error

@@ -16,6 +16,8 @@ from pathlib import Path
 
 _EPISODE_KEYS = ("scene_id", "journal_sha256", "verifier_sha256")
 _COLLECTION_EVIDENCE_KEYS=frozenset({'coordinator_root','result_location','scope_path','inputs_manifest','receipt'})
+_TASK_EVIDENCE_KEYS=frozenset({'registration','owner_root','task_id','result_location','scope_path','inputs_manifest'})
+_FROZEN_INDEX_KIND='act_collection_frozen_index'
 
 
 def _verify_collection_for_export(episode):
@@ -31,6 +33,8 @@ def _verified_collection(episode):
     from .collection_scope import read_collection_scope
     from .result_store import verify_coordinator_commit,_safe
     evidence=episode.get('collection_evidence')
+    if episode.get('kind')=='ACT_COMMITTED_EPISODE' and episode.get('schema_version')==3:
+        return _verified_container_collection(episode)
     if (episode.get('kind')!='ACT_COMMITTED_EPISODE' or type(episode.get('schema_version')) is not int
             or episode['schema_version']!=2 or type(evidence) is not dict or set(evidence)!=_COLLECTION_EVIDENCE_KEYS):
         raise ValueError('EPISODE_COLLECTION_EVIDENCE_REQUIRED')
@@ -51,6 +55,40 @@ def _verified_collection(episode):
     if (episode['scene_id']!=scope['scene_id'] or proof['collection_mode']!=scope['mode']
             or ('collection_mode' in episode and episode['collection_mode']!=scope['mode'])):
         raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID')
+    return _export_gates(scope,proof,evidence)
+
+
+def _verified_container_collection(episode):
+    """(mode, readback proof) of a schema 3 episode from the frozen index: the registered container task is read back afresh."""
+    from .collection_scope import read_collection_scope
+    from .result_store import verify_container_task_registration,_safe
+    evidence=episode.get('collection_evidence')
+    if type(evidence) is not dict or set(evidence)!=_TASK_EVIDENCE_KEYS:
+        raise ValueError('EPISODE_COLLECTION_EVIDENCE_REQUIRED')
+    if any(not isinstance(episode.get(key),str) or _SHA256_HEX.fullmatch(episode[key]) is None
+           for key in ('verifier_sha256','task_result_sha256')):
+        raise ValueError('EPISODE_RECEIPT_INVALID')
+    try:
+        paths={key:_safe(Path(evidence[key])) for key in _TASK_EVIDENCE_KEYS-{'task_id'}}
+        scope=read_collection_scope(paths['scope_path'])
+        proof=verify_container_task_registration(paths['registration'],scope=paths['scope_path'],
+            inputs_manifest=paths['inputs_manifest'])
+        if (proof['task_id']!=evidence['task_id'] or paths['registration'].name!='collected.json'
+                or Path(proof['location'])!=paths['result_location']
+                or not paths['result_location'].is_relative_to(paths['owner_root'])):
+            raise ValueError('registration locator')
+    except (OSError,ValueError,TypeError,KeyError) as error:
+        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID') from error
+    if (episode.get('verifier_sha256')!=proof['result_sha256'] or episode.get('task_result_sha256')!=proof['task_result_sha256']):
+        raise ValueError('EPISODE_RECEIPT_CONFLICT')
+    if (episode['scene_id']!=scope['scene_id'] or proof['scene_id']!=scope['scene_id'] or proof['collection_mode']!=scope['mode']
+            or ('collection_mode' in episode and episode['collection_mode']!=scope['mode'])):
+        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID')
+    return _export_gates(scope,proof,evidence)
+
+
+def _export_gates(scope,proof,evidence):
+    """Collection mode, result status, data QC and oracle exclusion: the gates every exportable episode passes."""
     if scope['mode']=='preselected_target_diagnostic':
         raise ValueError('DIAGNOSTIC_EPISODE_NOT_TRAINABLE')
     if scope['mode']!='formal':
@@ -288,6 +326,9 @@ def _index(path) -> dict:
             raise ValueError('CAMPAIGN_INDEX_INVALID')
         if entry['scene_id'] in entries:
             raise ValueError('EPISODE_RECEIPT_CONFLICT')
+        if entry.get('schema_version')==3 and (document.get('kind')!=_FROZEN_INDEX_KIND or document.get('qualification') is not False):
+            # container task episodes come only from a frozen, non-qualification campaign index
+            raise ValueError('EPISODE_FROZEN_INDEX_REQUIRED')
         entries[entry['scene_id']]=entry
     return entries
 
@@ -322,6 +363,14 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
         mode=_verify_collection_for_export(entry)
         # carry the content locator through: a resolved episode that forgets where its content lives
         # forces the exporter to guess, and guessing is what this module exists to prevent
+        if entry.get('schema_version')==3:
+            resolved.append({"kind":'ACT_COMMITTED_EPISODE',"schema_version":3,
+                             "collection_evidence":entry['collection_evidence'],"collection_mode":mode,"status":'PASSED',
+                             "scene_id":episode["scene_id"],"split":episode.get("split"),
+                             "task_result_sha256":entry["task_result_sha256"],"verifier_sha256":entry["verifier_sha256"],
+                             **{key: entry[key] for key in ("content_path", "content_sha256")
+                                if isinstance(entry.get(key), str)}})
+            continue
         resolved.append({"kind":'ACT_COMMITTED_EPISODE',"schema_version":2,
                          "collection_evidence":entry['collection_evidence'],"collection_mode":mode,"status":'PASSED',
                          "scene_id": episode["scene_id"],

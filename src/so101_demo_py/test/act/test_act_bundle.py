@@ -222,3 +222,122 @@ def test_export_needs_a_teacher_pass_and_a_passing_data_qc_on_a_schema_3_result(
     with pytest.raises(ValueError, match=code):
         resolve_committed_episodes(manifest={"episodes": [{"scene_id": scene, "status": "PASSED"}]},
                                    campaign_index=index)
+
+
+# ---- schema 3: container task episodes come only from a frozen, non-qualification index ----------------------------------------
+# Controlled: the per-task readback (`verify_container_task_registration`) is replaced by the proof the schema 2 export fixture
+# builds, over a real synthetic sealed episode directory. The real readback is covered in test_task_commit_readback.py.
+
+
+def schema3_entries(tmp_path, monkeypatch, scene_ids=('001',), **kwargs):
+    from pathlib import Path
+    from act_export_fixture import complete_export_entries
+    from so101_demo.act import result_store
+    legacy_entries = complete_export_entries(tmp_path, monkeypatch, scene_ids, **kwargs)
+    legacy = result_store.verify_coordinator_commit
+    entries, coordinators = [], {}
+    for entry in legacy_entries:
+        evidence = entry['collection_evidence']
+        location = Path(evidence['result_location'])
+        task_id = 'task-'+entry['scene_id']
+        registration = location.parent/'journal'/task_id/'collected.json'
+        coordinators[str(registration)] = (evidence['coordinator_root'], entry['scene_id'])
+        entries.append(dict(kind='ACT_COMMITTED_EPISODE', schema_version=3, scene_id=entry['scene_id'],
+            verifier_sha256=entry['verifier_sha256'], task_result_sha256='e'*64,
+            collection_evidence=dict(registration=str(registration), owner_root=str(location.parent), task_id=task_id,
+                result_location=str(location), scope_path=evidence['scope_path'], inputs_manifest=evidence['inputs_manifest'])))
+    calls = []
+
+    def reader(registration, *, scope, inputs_manifest, trust_independent_qc_memo=False):
+        coordinator, scene = coordinators[str(registration)]
+        evidence = next(item for item in entries if item['scene_id'] == scene)['collection_evidence']
+        calls.append(str(registration))
+        proof = legacy(Path(coordinator), location=Path(evidence['result_location']), scope=scope, inputs_manifest=inputs_manifest)
+        return dict(proof, task_id=evidence['task_id'], scene_id=scene, task_result_sha256='e'*64,
+                    location=evidence['result_location'])
+    monkeypatch.setattr(result_store, 'verify_container_task_registration', reader)
+    return entries, calls
+
+
+def frozen_index(path, entries, *, qualification=False, kind='act_collection_frozen_index'):
+    path.write_text(json.dumps({"schema_version": 1, "kind": kind, "qualification": qualification,
+                                "committed_episodes": entries}))
+    return path
+
+
+def test_export_reads_frozen_index_not_directory(tmp_path, monkeypatch):
+    from so101_demo.act.bundle import export_dataset
+    from so101_demo.act.training import attach_episode_content
+    entries, calls = schema3_entries(tmp_path, monkeypatch, ('001', '002'))
+    manifest = {"episodes": [{"scene_id": "001", "status": "PASSED"}, {"scene_id": "002", "status": "PASSED"}]}
+    # both sealed directories exist, but only the index decides what is committed
+    index = frozen_index(tmp_path/'collection-index.json', [entries[0]])
+    resolved = resolve_committed_episodes(manifest=manifest, campaign_index=index)
+    assert [item['scene_id'] for item in resolved] == ['001'] and resolved[0]['schema_version'] == 3
+    assert calls == [entries[0]['collection_evidence']['registration']]
+    assert resolve_committed_episodes(manifest=manifest, campaign_index=frozen_index(tmp_path/'empty.json', [])) == ()
+    exported = export_dataset(attach_episode_content(resolved, root=tmp_path), tmp_path/'dataset',
+                              source_manifest_sha256='a'*64, campaign_index_sha256='b'*64)
+    assert exported['scene_count'] == 1
+
+
+@pytest.mark.parametrize('problem', ['qualification_index', 'not_a_frozen_index'])
+def test_qualification_index_never_exports(tmp_path, monkeypatch, problem):
+    entries, calls = schema3_entries(tmp_path, monkeypatch)
+    index = frozen_index(tmp_path/'collection-index.json', entries, qualification=problem == 'qualification_index',
+                         kind='act_collection_frozen_index' if problem == 'qualification_index' else 'campaign')
+    with pytest.raises(ValueError, match='EPISODE_FROZEN_INDEX_REQUIRED'):
+        resolve_committed_episodes(manifest={"episodes": [{"scene_id": "001", "status": "PASSED"}]}, campaign_index=index)
+    assert calls == []
+
+
+@pytest.mark.parametrize('problem,match', [
+    ('verifier_conflict', 'EPISODE_RECEIPT_CONFLICT'), ('task_result_conflict', 'EPISODE_RECEIPT_CONFLICT'),
+    ('registration_name', 'EPISODE_COLLECTION_IDENTITY_INVALID'), ('foreign_location', 'EPISODE_COLLECTION_IDENTITY_INVALID'),
+    ('extra_evidence', 'EPISODE_COLLECTION_EVIDENCE_REQUIRED'), ('bad_hash', 'EPISODE_RECEIPT_INVALID')])
+def test_schema3_entries_are_closed_and_cross_checked(tmp_path, monkeypatch, problem, match):
+    entries, _ = schema3_entries(tmp_path, monkeypatch)
+    entry = entries[0]
+    if problem == 'verifier_conflict':
+        entry['verifier_sha256'] = 'b'*64
+    elif problem == 'task_result_conflict':
+        entry['task_result_sha256'] = 'b'*64
+    elif problem == 'registration_name':
+        entry['collection_evidence']['registration'] = entry['collection_evidence']['registration'].replace('collected', 'other')
+    elif problem == 'foreign_location':
+        entry['collection_evidence']['owner_root'] = str(tmp_path/'elsewhere')
+    elif problem == 'extra_evidence':
+        entry['collection_evidence']['coordinator_root'] = '/x'
+    else:
+        entry['task_result_sha256'] = 'short'
+    index = frozen_index(tmp_path/'collection-index.json', [entry])
+    with pytest.raises(ValueError, match=match):
+        resolve_committed_episodes(manifest={"episodes": [{"scene_id": "001", "status": "PASSED"}]}, campaign_index=index)
+
+
+@pytest.mark.parametrize('override,match', [({'export_eligible': False}, 'EXPORT_EPISODE_DATA_QC_NOT_PASSED'),
+    ({'act_data_qc': 'FAIL'}, 'EXPORT_EPISODE_DATA_QC_NOT_PASSED'), ({'result_status': 'FAILED'}, 'EXPORT_EPISODE_NOT_PASSED'),
+    ({'collection_mode': 'preselected_target_diagnostic'}, 'EPISODE_COLLECTION_IDENTITY_INVALID')])
+def test_schema3_keeps_every_export_gate(tmp_path, monkeypatch, override, match):
+    entries, _ = schema3_entries(tmp_path, monkeypatch, proof_overrides={'001': override})
+    index = frozen_index(tmp_path/'collection-index.json', entries)
+    with pytest.raises(ValueError, match=match):
+        resolve_committed_episodes(manifest={"episodes": [{"scene_id": "001", "status": "PASSED"}]}, campaign_index=index)
+
+
+def test_schema2_export_path_unchanged(tmp_path, monkeypatch):
+    from act_export_fixture import complete_export_entries
+    from so101_demo.act import result_store
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('the schema 2 path must not use the container readback')
+    monkeypatch.setattr(result_store, 'verify_container_task_registration', forbidden)
+    entry = complete_export_entries(tmp_path, monkeypatch, ('001',))[0]
+    index = tmp_path/"campaign-index.json"
+    index.write_text(json.dumps({"schema_version": 2, "committed_episodes": [entry]}))
+    resolved, = resolve_committed_episodes(manifest={"episodes": [{"scene_id": "001", "status": "PASSED"}]}, campaign_index=index)
+    assert resolved['schema_version'] == 2 and resolved['journal_sha256'] == 'd'*64 and resolved['verifier_sha256'] == 'c'*64
+    # a schema 2 entry is not accepted by the frozen-index rule, and a frozen index may still carry no schema 2 entries by accident
+    frozen = frozen_index(tmp_path/'frozen.json', [entry])
+    assert resolve_committed_episodes(manifest={"episodes": [{"scene_id": "001", "status": "PASSED"}]},
+                                      campaign_index=frozen)[0]['schema_version'] == 2

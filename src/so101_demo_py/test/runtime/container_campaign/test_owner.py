@@ -88,3 +88,123 @@ def test_disk_floor_fences_dispatch_before_services_without_lowering_floor(tmp_p
         asyncio.run(run())
     finally:
         registry.close()
+
+
+# ---- waves: instance faults, release fences and the frozen index ---------------------------------------------------
+# Controlled doubles: the shard owner (`FakeShard`, substituted for `ContainerShardOwner` in the owner module), the wave
+# coordinator and the wave verifier. The service owner, registry, Docker double and campaign owner are the real ones.
+
+
+class FakeShard:
+    def __init__(self, owner, wave, *, release=True):
+        slot = owner.slots[0]
+        self.context, self.registry, self.release = owner.context, owner.registry, release
+        self.launch = SimpleNamespace(worker_id=slot.worker_id, ros_domain_id=slot.ros_domain_id,
+            ros_namespace=slot.namespace, wave_id='wave-'+str(wave), launch_id=f'wave-{wave}-w00-g1')
+        self.closes = self.health_checks = 0
+
+    async def check_health(self):
+        self.health_checks += 1
+        raise AssertionError('instance health is polled by the wave coordinator, not by the campaign monitor')
+
+    async def close(self):
+        self.closes += 1
+        return dict(terminated=self.release, launch_id=self.launch.launch_id, errors=[])
+
+
+def wave_owner(tmp_path, monkeypatch, *, scene_count, releases=(True, True), verify=None):
+    owner, service, registry, calls, containers, manifest, stopped = fixture(tmp_path)
+    module = importlib.import_module('so101_demo.runtime.container_campaign.owner')
+    monkeypatch.setattr(module, 'ContainerShardOwner', FakeShard)
+    manifest = {'scenarios': [dict(scene_id=f'scene-{i:02d}', split='validation') for i in range(scene_count)]}
+    owner.manifest_path.write_text(json.dumps(manifest))
+    context = replace(owner.context, manifest_sha256=hashlib.sha256(owner.manifest_path.read_bytes()).hexdigest())
+    owner.context = service.context = context
+    owner.qualification = False
+    made, waves = [], []
+
+    def launcher(*, plan, endpoints, slots):
+        shard = FakeShard(owner, plan['wave_index'], release=releases[min(plan['wave_index'], len(releases)-1)])
+        made.append(shard)
+        return (shard,)
+
+    async def run_wave(*, plan, shards, endpoints, dispatch_allowed):
+        waves.append(plan['wave_index'])
+        await asyncio.sleep(.05)    # lets the campaign monitor run its first pass during the wave
+        return dict(wave_index=plan['wave_index'], coordinator_root='x', case_results=[], infra_errors=[])
+
+    owner.launcher = launcher
+    owner.coordinator = SimpleNamespace(stop_dispatch=lambda reason: stopped.append(reason), run_wave=run_wave,
+        complete_wave_cleanup=lambda plan, shards: None)
+    owner.verifier = SimpleNamespace(verify_wave=verify or (lambda plan, outcome, shards: dict(wave_index=plan['wave_index'],
+        scene_count=len(plan['scene_ids']), coordinator_root='x', case_results=[])))
+    return SimpleNamespace(owner=owner, service=service, registry=registry, calls=calls, containers=containers,
+        manifest=manifest, stopped=stopped, made=made, waves=waves)
+
+
+def test_shard_fault_preserves_shared_service(tmp_path, monkeypatch):
+    def refuse(plan, outcome, shards):
+        raise ValueError('CONTAINER_WAVE_COMMIT_READBACK_INVALID')
+    world = wave_owner(tmp_path, monkeypatch, scene_count=8, verify=refuse)
+    owner = world.owner
+
+    async def run():
+        with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+            await owner.run(world.manifest)
+        # the wave failed, but neither the campaign nor the shared services were stopped by it
+        assert owner.stop_reason == 'CAMPAIGN_RUN_INTERRUPTED'
+        assert owner.stop_reason != 'CAMPAIGN_RESOURCE_OR_SERVICE_FAULT'
+        assert [c for c in world.calls if c[:2] == ['docker', 'kill']] == []
+        assert all(item['State']['Running'] for item in world.containers.values())
+        assert world.made[0].closes == 1 and world.made[0].health_checks == 0
+        result = await owner.close()
+        assert result['terminated'] is True and not any(item['State']['Running'] for item in world.containers.values())
+    try:
+        asyncio.run(run())
+    finally:
+        world.registry.close()
+
+
+def test_unreleased_instance_blocks_next_wave(tmp_path, monkeypatch):
+    world = wave_owner(tmp_path, monkeypatch, scene_count=21, releases=(False,))
+    owner = world.owner
+
+    async def run():
+        with pytest.raises(ValueError, match='CAMPAIGN_SHARD_STOP_UNCONFIRMED'):
+            await owner.run(world.manifest)
+        assert world.waves == [0] and len(world.made) == 1 and owner.stop_reason == 'CAMPAIGN_SHARD_STOP_UNCONFIRMED'
+        assert not (owner.root/'collection-index.json').exists()
+        assert (await owner.close())['terminated'] is False
+    try:
+        asyncio.run(run())
+    finally:
+        world.registry.close()
+
+
+def test_frozen_index_is_written_once_after_the_last_wave(tmp_path, monkeypatch):
+    def verified(plan, outcome, shards):
+        rows = []
+        for scene in plan['scene_ids']:
+            task = 'wave-'+str(plan['wave_index'])+'-w00-'+scene
+            proof = dict(result_status='PASSED', teacher_execution_status='COMPLETED', teacher_task_result='PASS',
+                act_data_status='VALID', act_data_reason=None, act_data_qc='PASS', export_eligible=scene.endswith('0'),
+                result_sha256='a'*64, task_result_sha256='b'*64, location='/loc/'+task)
+            rows.append(dict(scene_id=scene, worker_id='w00', task_id=task, launch_id='l', location='/out/'+task, proof=proof,
+                registration='/host/'+task+'/collected.json', owner_root='/owner', scope_path='/scope', inputs_manifest='/inputs'))
+        return dict(wave_index=plan['wave_index'], scene_count=len(rows), coordinator_root='x', case_results=rows)
+    world = wave_owner(tmp_path, monkeypatch, scene_count=21, verify=verified)
+    owner = world.owner
+
+    async def run():
+        result = await owner.run(world.manifest)
+        assert world.waves == [0, 1] and len(result['waves']) == 2
+        index = json.loads((owner.root/'collection-index.json').read_text())
+        assert index['kind'] == 'act_collection_frozen_index' and index['qualification'] is False and index['scene_count'] == 21
+        assert len(index['collected_tasks']) == 21
+        assert [item['scene_id'] for item in index['committed_episodes']] == ['scene-00', 'scene-10', 'scene-20']
+        assert all(item['schema_version'] == 3 for item in index['committed_episodes'])
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        world.registry.close()

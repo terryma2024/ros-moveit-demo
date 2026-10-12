@@ -19,6 +19,7 @@ from so101_demo.act.parallel_collection_contracts import (
 from so101_demo.runtime.container_campaign.resource_log import (
     append_resource_log,check_disk_dispatch_guard,read_disk_free_bytes,
 )
+from so101_demo.runtime.container_campaign.result_verifier import build_frozen_index
 from so101_demo.runtime.container_campaign.service_owner import ContainerServiceOwner,_write
 from so101_demo.runtime.container_campaign.shard_owner import ContainerShardOwner
 from so101_demo.runtime.inference.config import load_campaign_config
@@ -64,7 +65,6 @@ class ContainerCampaignOwner:
         self._started=self._closing=False
         self._run_done=asyncio.Event()
         self._run_task=self._close_task=None
-        self._active_shards=()
 
     def stop_dispatch(self,reason):
         if type(reason) is not str or not reason:
@@ -90,7 +90,6 @@ class ContainerCampaignOwner:
             while self.dispatch_allowed():
                 self._disk_guard()
                 await self.services.check_health()
-                await asyncio.gather(*(shard.check_health() for shard in self._active_shards))
                 await asyncio.sleep(1.)
             if not self.dispatch_stopped and not self._closing:
                 self.stop_dispatch('CAMPAIGN_DEADLINE_EXPIRED')
@@ -153,19 +152,11 @@ class ContainerCampaignOwner:
                             or shard.launch.wave_id!='wave-'+str(plan['wave_index'])):
                         raise ValueError('CAMPAIGN_SHARD_SLOT_MISMATCH')
                 self.shards.extend(prepared)
-                starts=await asyncio.gather(*(shard.start() for shard in prepared),return_exceptions=True)
-                failure=next((value for value in starts if isinstance(value,BaseException)),None)
-                if failure is not None:
-                    raise failure
-                self._active_shards=prepared
-                await asyncio.gather(*(shard.check_health() for shard in prepared))
                 if not self.dispatch_allowed():
                     raise ValueError(self.stop_reason or 'CAMPAIGN_DISPATCH_FENCED')
-                # No lease exists before the complete ready barrier. The wave
-                # coordinator owns leases and independent Host result commits.
+                # The wave coordinator starts every instance and holds the ready barrier.
                 outcome=await self.coordinator.run_wave(plan=plan,shards=prepared,endpoints=endpoints,
                     dispatch_allowed=self.dispatch_allowed)
-                self._active_shards=()
                 cleanup=await asyncio.gather(*(shard.close() for shard in prepared))
                 if any(value['terminated'] is not True for value in cleanup):
                     self.stop_dispatch('CAMPAIGN_SHARD_STOP_UNCONFIRMED')
@@ -176,6 +167,8 @@ class ContainerCampaignOwner:
                 completed.append(verified)
             result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed)
             _write(self.root/'host/campaign-result.json',result)
+            _write(self.root/'collection-index.json',build_frozen_index(campaign_id=self.context.campaign_id,
+                qualification=self.qualification,scene_count=len(ids),waves=completed))
             return result
         finally:
             if monitor is not None:
