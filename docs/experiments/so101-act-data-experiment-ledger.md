@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3621
-next_experiment: EXP-577 (PLANNED): repeat of EXP-576 after the readiness check fix, rebuilt images, new run and campaign ids.
+latest_checkpoint: CP-3622
+next_experiment: NONE planned. The unified admission store holds the EXP-577 lease and slot after an unproven shard stop; no further real run can be admitted until that is resolved. Root-cause work on the two EXP-577 defects continues offline.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3622 — EXP-577 VALID failure: namespaced node inventory at the initial gate; unproven stop holds the admission lease
+
+- Second real attempt. The readiness fix worked; the first task reached reset and the initial gate and failed there (node inventory under the container namespace). After the fault neither the task's revocation nor the native retirement could confirm the stop, the container exited with code 1, and the Host kept the shard launch unterminated; the unified admission store therefore still holds the GPU lease and worker slot of campaign w1f-20261012T220436Z. Per the standing rule nothing was forced, killed or released; the two exited containers remain as registered.
+- Consequence: no further real collection run can be admitted until the held state is resolved. Resolving it is not something the coordinator will do by lowering the stop proof; options and the evidence that the container is gone are reported to the user.
+- Not retried. Retained: run root, prep directory, logs. Nothing deleted.
 
 ## CP-3621 — Readiness check fix committed and imaged; first admission read back as settled; EXP-577 planned
 
@@ -85,7 +91,7 @@ next_experiment: EXP-577 (PLANNED): repeat of EXP-576 after the readiness check 
 
 ```yaml
 experiment_id: EXP-577
-status: PLANNED
+status: VALID
 prior_experiment: EXP-576 (VALID failure at the first task's ready gate, ACT_STACK_READINESS_PROBE_REUSED)
 hypothesis: With the repeatable readiness check, the production CLI carries eight scenes with one worker through the complete task chain in a real container and settles admission; same hypothesis as EXP-576 with its first blocking defect removed.
 prediction: The first task passes its ready gates and reaches reset. Further stages are unexercised; the first stage that fails, if any, is the new information. Structural success as in EXP-576 - exit 0, eight collected records, wave-0-verified with eight rows, a frozen index with eight collected tasks and no committed episode, cleanup terminated.
@@ -108,17 +114,25 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261012T220436Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261012T220436Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Discovery twelve roles READY. Freeze, admission (slot w00 generation 2), Teacher service and shard start as in EXP-576; READY reached.
+  - The readiness fix held - the first task wave-0-w00-default passed its ready gates and went further than in EXP-576. Its task directory now holds attempts/default/default-lease-1/working/workspace_identity.json, so reset_point and the workspace reservation ran in the namespaced stack.
+  - Defect 1, first failing stage - the initial gate refused the observation. Fault reason POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes with an `unexpected` list that begins with /act/campaign_w1f_20261012T220436Z/w00/controller_manager and /act/campaign_w1f_20261012T220436Z/w00/move_group_private_… (reason text truncated at 300 characters; `missing` and `duplicates` empty). The gate's node inventory does not accept the namespaced node names of the container stack. No Recorder, inference or Teacher step ran.
+  - Defect 2, the stop after the fault was not proven. The task's own revocation recorded CANCEL_REQUESTED and, 10.03 s later, CONTROLLER_CANCEL_RESULT with motion_stopped false and controllers_confirmed false (broker_fenced true). Native retirement then sent cancels on the four namespaced action prefixes with return code 0 and empty goals_canceling, but retirement/audit.json records `native_stop` MutationError STOP_NOT_CONFIRMED with native_stop_sha256 null; shard-stop.json has goals_stopped, controllers_stopped, ros_children_exited and ros_graph_empty all false. instance-exit.json has cleanup_confirmed false; the container exited with code 1 (final-inspect Running false, not OOM killed), 54 s after it started.
+  - Host side - host-cleanup.json and campaign-cleanup.json record the shard as terminated false with LAUNCH_STOP_UNCONFIRMED; the Teacher service terminated true. The CLI reported CAMPAIGN_RUN_FAILED: CAMPAIGN_SHARD_STOP_UNCONFIRMED and CAMPAIGN_CLEANUP_UNCONFIRMED "lease and worker slots stay held", exit 1. No container is running (both exited). The owned process manifest of the task is empty.
+  - In EXP-574, EXP-575 and EXP-576 the same native retirement was confirmed on a stack that had not been reset; here it followed a reset and a failed gate.
 inferred:
-  - NONE
-conclusion: PENDING
+  - HYPOTHESIS, not tested - the native stop observer could not confirm the stop because of the state the stack was left in after the reset and failed gate (for example simulation paused), not because anything kept moving; the container did exit.
+  - The GPU lease and slot w00 are held in the unified store by design after an unproven stop; a new collection start will be refused until that state is resolved.
+conclusion: VALID failure. The readiness fix is confirmed on a real run. Two further real integration defects are exposed - the initial gate's node inventory under the container namespace, and an unconfirmed native stop after a reset, which leaves the admission lease and slot fenced. No episode was collected.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261012T220436Z (host/campaign-cleanup.json, host/wave-0/task-journal/wave-0-w00-default, wave-0/w00/g1/instance-exit.json, shard-stop.json, retirement/audit.json, retirement/controller-stop.json, output/tasks/wave-0-w00-default/revocation-events.jsonl)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261012T220436Z
+  - /tmp/so101-debug-act-data-66c42e4c/w1-20261012T220436Z.log and /tmp/so101-debug-act-data-66c42e4c/exp577-logs (container stdout and stderr captured with docker logs)
+decision: KEEP
 next_experiment: NONE
 ```
 
