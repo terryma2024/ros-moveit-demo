@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 83075e656 (source; gates not yet run on it)
+current_commit: 4b187eee19c1e68aaa944d70be8d323dd3b479cf
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,59 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3642
-next_experiment: NONE planned yet; next real runs are a container regression on the restructured instance program and two concurrent containers on the fixed identity.
+latest_checkpoint: CP-3643
+next_experiment: EXP-587 (PLANNED): two concurrent containers on the fixed identity, eight scenes.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3643 — Coverage fix committed; branch pushed by human instruction; fast gate first runs (teleop parallelism kills the gate, disabled); gate PASS on 4b187eee1; EXP-587 planned
+
+- Commit `4b187eee1` (Sonnet-written, Opus-reviewed): formal coverage clauses T4 and T5 judge attach and detach by the apply request's simulation clock; a row without it fails; nothing else changed. On read-only copies of the sixteen sealed audits of EXP-584 and EXP-586 the new rule accepts all sixteen and the previous version refuses only EXP-586 fn8-05.
+- Push, by human instruction of 2026-10-14. To the coordinator's note that the Mac mini needs the branch through a remote, the human said "可以push到分支"; asked which branch the simulator submodule's two local commits should go to, the human answered "codex/so101-act-data-0917a". Both pushes were fast-forwards, verified before pushing, nothing forced: submodule origin (gitee zjumty/mujoco_ros2_control) codex/so101-act-data-0917a from 498472a to 220e47d; repository origin (gitee zjumty/ros-moveit-demo) codex/so101-act-data-0917a from 30e9665ef to 4b187eee1. Not touched: main, the github remote, the Mac mini. At push time the last three commits had no full gate; the gate below passed afterwards on the pushed head.
+- The human also said macOS verification can be done over ssh on the Mac mini ("mac的验证可以ssh mac-mini上验证"); a read-only connectivity check found the host reachable with the repository and the macOS evidence root present; nothing else was done there.
+- Fast gate (R/fast-gate), first real runs on 4b187eee1. Runs 1 and 2 (kept as R/gates/4b187eee19c1.fast-run1-killed and .fast-run2-killed): build rc 0, then the whole gate process group was killed (wrapper exit 144, no result file) about 50 s after the test stages started - both times just after the serial so101_teleop group finished (49.8 s) and its parallel group (ctest -j 6) began, with three Expert Validation end-to-end test files running. Cause not established; one of those tests starts child sessions and signals process groups. Run 3 with --teleop-jobs 1, R/gates/4b187eee19c1: build rc 0, 190 s; so101_demo_py rc 0, 12715 passed, 0 failed, 167 skipped, 456 s; colcon stage rc 0, test-result summary 2101 tests, 0 errors, 0 failures, 60 skipped, 314 s, with the tests of controller_manager and hardware_interface_testing skipped by the baseline rule (third_party/ros2_control tree and the ros-jazzy package set unchanged since gate 74db37fb4676, where they ran green); the two test stages ran concurrently; total 646 s against about 1055 s for the old gate. Worktree unchanged and clean. PASSED. This gate covers the three commits after 74db37fb4 (66e288b4a, 83075e656, 4b187eee1). Of the three human-approved speed-ups two are in effect; so101_teleop test parallelism is disabled until the kill is understood.
+- Images on 4b187eee1: shard R/image-build-20261013T165351Z (155.6 s), inference R/image-build-20261013T165355Z (59.8 s).
+- Inputs under the prep directory act-w2-inputs-20261013T165700Z, authored by a Sonnet agent from the current code. Validation 46 PASS, 3 informational, 1 pending (the candidates file). OBSERVED there by calling the real launcher and registry code without Docker: both shards get ROS_DOMAIN_ID=181, no ROS_NAMESPACE, --network none, --ipc private, with distinct container names, launch ids, owned roots, session ids, runtime ids and tokens and disjoint writable mounts; the registry accepted both launches; no rule in the registry, slot registry, launcher, owner, coordinator or admission mentions a ROS domain or namespace.
+
+```yaml
+experiment_id: EXP-587
+status: PLANNED
+prior_experiment: EXP-584 (VALID; one container on the fixed identity) and EXP-582 (VALID; two containers on the old per-worker-domain topology)
+hypothesis: Two shard containers with the same ROS domain 181 and identical names, isolated only by private network and IPC namespaces, collect the eight scenes concurrently without seeing each other, with the same outcome as two containers on separate domains.
+prediction: Both shards READY; each shard's node inventory, stack readiness and stop audit show only its own stack (a foreign node would fail the inventory or the graph-empty stop fact); every episode's evidence carries only its own shard's simulation session id; distinct PID namespace inodes in the two stop receipts; eight scenes split first-come; wave verified; both stops proven; both slots released. Collection in about half the one-container time. This is also the first real container run of the restructured instance program (commit 7b2d6c902 and later) and of the corrected coverage clauses. Per-scene results are reported, not gated.
+single_variable: Two containers instead of one on the fixed identity, relative to EXP-584 - with the code changes since 983c1d7b5 as an acknowledged second difference (instance program restructuring, native launcher, coverage T4/T5, removal of the old native ACT path). Same scene list, decisions and configuration values.
+lifecycle: ISOLATED_STACK (two containers)
+preconditions:
+  - Enforced by the run script - run root, log and exit record absent; src, scripts and third_party with no diff against 4b187eee1 and not dirty; gate green at that commit; no container running; no ROS, simulator or ACT process on the Host; no GPU compute process; unified store schema 2, IDLE, no lease, no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576 with two shards - both launched, both stopped with proof, slots w00 and w01 released - and no evidence of cross-talk as defined in the prediction.
+failure_criteria:
+  - Any execution fault with its stage reached; any foreign node, session id or sample in a shard's evidence; a wave verification refusal; an unproven stop of either shard; a refused settle.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 4b187eee1; a competing container; the Host CLI process interrupted.
+provenance:
+  source_commit: 4b187eee19c1e68aaa944d70be8d323dd3b479cf (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:5683d382a67edc010aa79733f5cb8d8607cf9f6a2ae806fd898deb87caf3ccf5 and shard image sha256:68376d5d8ec84027aae76c336c838b893cf96970f8d29c2816ab04e353311e12; Host R/gates/4b187eee19c1/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181 in both containers
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w2-inputs-20261013T165700Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w2-inputs-20261013T165700Z/run-w2.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3642 — fn8-05 cause (coverage clause compared the wrong time); hash-equality rule and old native ACT path removed; native multi-worker removal plan confirmed
 
