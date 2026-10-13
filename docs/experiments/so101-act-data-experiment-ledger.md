@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3630
-next_experiment: EXP-581 (PLANNED): sixth real functional run, eight scenes with one worker, images of 64aca49d5.
+latest_checkpoint: CP-3631
+next_experiment: EXP-582 (to be planned): the same eight scenes with two workers (functional W2), the first run with more than one shard.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3631 — EXP-581 VALID: first complete real container collection, eight of eight scenes VALID with QC PASS, wave verified
+
+- Sixth real attempt, functional plane, one worker, eight scenes on one long-lived stack. Every scene Teacher PASS, data VALID, QC PASS; the Host verified the wave and the CLI exited 0; stop proven and admission settled by design. The one-way control path and the Docker collection chain are now exercised end to end with real data for a single shard.
+- Not yet shown: more than one shard, the eight-way qualification, formal collection, export. The EXP-580 first-scene burst loss is unexplained and did not recur here. The functional plane never lists committed episodes for export.
+- Retained: run root (18 GB), prep directory, logs, exited containers. Nothing deleted.
 
 ## CP-3630 — EXP-580 causes established and fixed (simulation time off the step grid; stale-join allowance too narrow); gates PASS, images rebuilt on 64aca49d5; EXP-581 planned
 
@@ -87,7 +93,7 @@ next_experiment: EXP-581 (PLANNED): sixth real functional run, eight scenes with
 
 ```yaml
 experiment_id: EXP-581
-status: PLANNED
+status: VALID
 prior_experiment: EXP-580 (VALID failure; one valid episode of five, sixth reset rejected)
 hypothesis: With simulation time on the exact step grid and the wider stale-join allowance, the production CLI carries eight scenes with one worker on one stack, every completed scene's data is judged on real content only, the wave verifies and admission settles.
 prediction: All eight scenes pass their reset. No episode shows a 1999999 ns interval, so scenes three and later are no longer INVALID for the EXP-580 reason. Whether the first-scene burst loss recurs is unknown and is the main thing to learn; any INVALID episode is reported with its cause, not gated. New stages if all eight finish - Host wave verification and commit of a wave with valid episodes.
@@ -110,18 +116,28 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261013T035415Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261013T035415Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Discovery twelve roles READY; freeze, admission, Teacher service and shard start, READY.
+  - All eight scenes returned business results on one stack (host journal collected.json for default and fn8-01 to fn8-07) - each status PASSED, teacher_execution_status COMPLETED, teacher_task_result PASS, act_data_status VALID, act_data_reason null, act_data_qc PASS, export_eligible true.
+  - No PAUSE_SNAPSHOT_FAILURE line in the shard log; all eight resets passed.
+  - Instance exit - fault_reason WAVE_COMPLETE, last task SUCCEEDED, cleanup_confirmed true; shard-stop.json all four facts true; container exit code 0; host-cleanup.json and campaign-cleanup.json terminated true with no error, stop_reason CAMPAIGN_CLOSING.
+  - Host wave verification passed - host/wave-0-verified.json and host/campaign-result.json written; the CLI printed the campaign summary (plane qualification, scene_count 8, waves 1) and exited 0.
+  - Unified store after the run, read-only - IDLE, no owner, no lease, settled by the designed path. No container running.
+  - Timing from file times - Teacher ready 11:56:10, first result 12:01:48, eighth result 12:40:19, instance exit 12:40:24, wave verified 12:58:30 (local). About 44 minutes of collection for eight scenes and about 18 minutes of Host readback. Run root size 18 GB.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The step-grid fix and the wider stale-join allowance hold on a real multi-scene stack (simulation time passed the range where EXP-580 failed, with no episode INVALID).
+  - The first-scene burst loss of EXP-580 did not recur in this run; with one occurrence in three first scenes its cause and rate remain unknown.
+  - Host readback costs roughly two minutes per scene, serially, after the shard has exited.
+conclusion: VALID, all success criteria met. First complete real container collection - eight of eight scenes VALID with QC PASS, wave verified, clean stop and designed settle. This is the functional plane with one worker; it is not qualification and says nothing yet about more than one shard.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261013T035415Z (host/campaign-result.json, host/wave-0-verified.json, host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261013T035415Z
+  - /tmp/so101-debug-act-data-66c42e4c/w1-20261013T035415Z.log and /tmp/so101-debug-act-data-66c42e4c/exp581-logs
+decision: KEEP
+next_experiment: EXP-582
 ```
 
 ## CP-3629 — EXP-580 VALID failure: first valid container episode (QC PASS); four episodes INVALID on loss or continuity; sixth reset rejected; stop and settle by design
