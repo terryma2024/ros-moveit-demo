@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7b2d6c9024f725bdf3c6efb54654ffe12c8d7abe
+current_commit: 74db37fb4676d04781bb3eecddd16d99c1cb8236
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,61 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3639
-next_experiment: NONE until the native stop observation rule and the INPUT_TIMESTAMP_FUTURE findings of EXP-585 are resolved.
+latest_checkpoint: CP-3640
+next_experiment: EXP-586 (PLANNED): second native single-worker run, with headless rendering and the corrected stop observation.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3640 — EXP-585 causes: stop observation tripped by a same-user non-dumpable process; native rendered through GLFW on the desktop; fixes, gates PASS; EXP-586 planned
+
+- Commit `74db37fb4` (Sonnet-written, Opus-reviewed). Correction to CP-3639: the stop observation already skipped other users' processes. PROVEN by a read-only rescan against the instance's start time: the only same-user process started after the instance whose environment is unreadable is the non-dumpable privilege-separation child of the coordinator's own ssh session (sshd: user@notty), started during the run. Other short-lived processes at the observation instant cannot be reconstructed. Corrected rule: such a process is cleared only when its live parent lineage shows the instance did not create it (a parent of another user; a parent older than the instance that is not init, the launcher or an ancestor of the launcher; a readable parent without the marker); it stays a survivor when the lineage reaches init or a possible adopter, a marker carrier, or a vanished or unreadable parent. Stated limits, unchanged: a descendant that scrubbed its environment and left its group is not seen by the marker scan; an unrelated unreadable process adopted by init or the user's service manager still fails the proof.
+- INPUT_TIMESTAMP_FUTURE, PROVEN from the bags of fn8-04 and fn8-05: the 500 Hz topics (/clock, robot_contacts, the three controller states) stop arriving for 572 ms and 662 ms while /joint_states and the cameras continue, then resume with consecutive values - delayed, not lost; joint state stamps lead /clock by up to 568 ms and 658 ms, beyond the replay's 50 ms hold; a transport loss line on each controller state topic marks the start of each stall, which is also fn8-05's source gap. The collection window is cut at the stall. The data has a real timing fault; the verdicts are correct and no rule is changed. This is the same delivery stall as before, now seen through a different check.
+- The stall is far more frequent natively - joint states ahead of /clock in 6 of 8 episodes of EXP-585 against 1 of 8 in EXP-583 and 2 of 8 in EXP-584 (there outside the windows). HYPOTHESIS, strongly indicated: the native instance inherited DISPLAY from the desktop session and the simulator rendered through a GLFW window on the X server (instance log "Initializing rendering for cameras (using GLFW)") where a container falls back to headless EGL on the NVIDIA vendor. Fix: the native instance no longer inherits DISPLAY, WAYLAND_DISPLAY or XAUTHORITY. Whether that removes the excess stalls is for the next run.
+- Other comparisons from the same analysis: contact publisher median 491.8 messages per second in EXP-583, 455.1 in EXP-584 and 453.9 in EXP-585, so the real-time factor fell from about 0.98 to about 0.91 between EXP-583 and EXP-584 on the container and the native run matches the later value. The fall coincides with the deeper /clock and camera writers and the namespace removal of that step; the cause is NOT established and is open. Transport losses per episode 119, 104 and 54; controller state holes in 7, 4 and 8 of 8 episodes.
+- Host package gates on 74db37fb4, R/gates/74db37fb4676, first run: build rc 0, 189 s; so101_demo_py rc 0, 12731 passed, 0 failed, 167 skipped, 357 s; other 13 packages rc 0, 2399 tests, 0 errors, 0 failures, 60 skipped, 510 s. Worktree unchanged and clean. PASSED.
+- Images on 74db37fb4: inference R/image-build-20261013T144154Z (54.4 s), shard R/image-build-20261013T144357Z (221.4 s). The shard image is not started by a native run; it was rebuilt because the contract requires the two images' package source hashes to be equal. The human has since said that rule can be removed ("合同校验要求 shard 镜像和推理镜像的源码包哈希一致 这个规则可以去掉"); the code change is scheduled after this run.
+- Gate timing, measured on this gate for the human's question: the 510 s of the colcon test stage are set by controller_manager's upstream tests (6 min 21 s, serial) followed by mujoco_ros2_control_tests (1 min 41 s); so101_teleop takes 4 min in parallel. Options were put to the human; nothing changed.
+- Inputs under the prep directory act-native-inputs-20261013T144822Z; validation 38 PASS, 4 informational, 1 pending (the candidates file). The launcher's environment builder was called with the run script's real environment, which contains DISPLAY and XAUTHORITY, and returned none of the three display variables.
+
+```yaml
+experiment_id: EXP-586
+status: PLANNED
+prior_experiment: EXP-585 (VALID failure; native stop unconfirmed, two episodes INVALID on stalls)
+hypothesis: With the display variables not inherited the native simulator renders through headless EGL as in a container and the excess delivery stalls disappear; with the corrected observation the native stop is confirmed while the coordinator's ssh session is up; the run then verifies its wave and settles admission.
+prediction: Instance log says rendering uses EGL with the NVIDIA vendor, not GLFW. Episodes with joint states ahead of /clock fall to about the container rate of one or two in eight, none inside a window. final-exit.json has marker_survivors empty; the stop is confirmed; the Host verifies the wave; CLI exit 0; slot and lease released by the designed path. Contact publisher rate stays near 454 per second. Per-scene results are reported, not gated; eight scenes cannot establish a rate.
+single_variable: Two changes relative to EXP-585 - the display variables and the stop observation rule; they act on different parts of the run and are read separately. Same scene list, decisions and configuration values.
+lifecycle: ISOLATED_STACK (a Host process group owned by the campaign; no other ROS participant on domain 181 on the Host)
+preconditions:
+  - Enforced by the run script - run root, log and exit record absent; src, scripts and third_party with no diff against 74db37fb4 and not dirty; gate green at that commit; no container running; no ROS, simulator or ACT process and no process carrying domain 181 or the instance marker; an empty node list on domain 181; no GPU compute process; unified store schema 2, IDLE, no lease, no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-585.
+failure_criteria:
+  - As EXP-585.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 74db37fb4; another participant on domain 181 on the Host during the run; the Host CLI process interrupted.
+provenance:
+  source_commit: 74db37fb4676d04781bb3eecddd16d99c1cb8236
+  install_overlay: instance code from Host R/gates/74db37fb4676/install; Host CLI from the worktree import; inference image of R/image-build-20261013T144154Z
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python -m so101_demo.cli.act_instance_native for the instance; the same interpreter running so101_demo.cli.act_collect_parallel on the Host; container entrypoint campaign_inference for the Teacher service
+  ros_domain_id: 181 on the Host
+  gz_partition: the instance's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-native-inputs-20261013T144822Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-native-inputs-20261013T144822Z/run-native.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3639 — EXP-585 VALID failure: native instance collects eight scenes, six VALID; native stop unconfirmed by the Host observation; lease released under the standing authorisation
 
