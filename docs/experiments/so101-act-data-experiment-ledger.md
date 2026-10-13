@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 64aca49d5a3f427245e3b61f28cad5f2d6a28ceb
+current_commit: 7a809c86ad57838ed3ddd151a661e2f7c395da47
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,59 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3633
-next_experiment: NONE until the fixed-identity design change reaches its checkpoint A; then a container one-worker eight-scene run on the new topology.
+latest_checkpoint: CP-3634
+next_experiment: EXP-583 (PLANNED): checkpoint A, one worker and eight scenes in a container on the fixed-identity topology.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3634 — Fixed identity tasks 1 to 3 implemented; host reboot with driver and kernel upgrade; store migrated to schema 2; gates PASS; EXP-583 planned
+
+- Commits `ebe2f11ae` (Sonnet-written, Opus-reviewed) and `7a809c86a` (registration of the new migration test with the package gate). A shard now starts on fixed ROS domain 181 with no namespace and launches the plain ACT execution stack; spec, launch registry, runtime-ready record, controller-stop observation and retirement audit are schema 2 without per-worker domain or namespace; the recorder uses the stock bag recorder on logical topic names with no topic map; an explicit instance marker carries the private rclpy context, the signal handler option and the bag-root decision; worker slots are (campaign, worker, generation); the unified store is schema 2 with an in-place migration. The launch argv keeps --network none and --ipc private, pinned by a test. The runtime YAML is unchanged (sha256 5775cb3b…). The namespace code is still on disk and unused until plan task 4.
+- Host change, OBSERVED from dpkg and login records: on 2026-10-13 at 14:07 local the NVIDIA driver packages were upgraded from 595.91.07 to 595.99.02, and the host rebooted at 14:18 from kernel 7.0.0-34 into 7.0.0-38. Not done by the coordinator. /tmp was cleared - the low-rate logs under /tmp/so101-debug-act-data-66c42e4c cited as evidence by EXP-574 to EXP-582 (CLI logs, captured container stdout, gate console logs) no longer exist; the run roots, prep directories, gate directories, images, exited containers and the unified store are intact. The pytest temp plugin under that directory was restored by the writer from its source. All evidence from EXP-583 on is on the new driver and kernel; comparisons with EXP-581 and EXP-582 carry that confound.
+- Host package gates: first run on ebe2f11ae, R/gates/ebe2f11ae52f, FAILED - build rc 0; so101_demo_py 1 failed of 12679 (test_act_head_local_runtime watchdog stall); other packages 4 failures of 2356 (the unregistered migration test module, and an Expert Validation retry-owner test). The gate ran while both images were being rebuilt. The registration gap was a real defect and is fixed in 7a809c86a; the watchdog test passes alone (31 passed). Second run on 7a809c86a with no concurrent load, R/gates/7a809c86ad57 - build rc 0, 201 s; so101_demo_py rc 0, 12679 passed, 0 failed, 167 skipped, 388 s; other 13 packages rc 0, 2364 tests, 0 errors, 0 failures, 60 skipped. Worktree unchanged and clean. PASSED. The two timing failures are attributed to load on the evidence of the clean rerun, not separately root-caused.
+- Images rebuilt on 7a809c86a: shard R/image-build-20261013T070952Z (167.1 s), inference R/image-build-20261013T071247Z (76.8 s). Readback in the shard image: stock ros2 bag record runs through the image bootstrap and lists the mcap storage; no RMW_IMPLEMENTATION is set and the installed middleware is rmw_fastrtps_cpp.
+- Unified store migration applied once by R/store-migrate-v2-20261013.zsh with the code of 7a809c86a after the gates passed: no container running; byte copies of every store file with matching sha256 under R/store-migrate-v2-20261013/before; then the project's own IntentStore.open, whose migration requires an idle store with no active slot and no GPU lease. Read back: schema_version 1 to 2, the three per-slot unique indexes gone, the eight historical slot rows kept in act_worker_slots_v1, the new act_worker_slots empty, global state IDLE. Record in R/store-migrate-v2-20261013/migration-record.json. Authorised by the human confirmation recorded in CP-3633.
+- Inputs under the prep directory act-w1-inputs-20261013T071452Z; validation 26 PASS, 1 informational, none failed or blocked.
+
+```yaml
+experiment_id: EXP-583
+status: PLANNED
+prior_experiment: EXP-581 (VALID; eight of eight with one worker on the per-worker domain and namespace topology)
+hypothesis: A shard on fixed ROS domain 181 with no namespace, running the plain ACT execution stack and the stock bag recorder inside a container isolated by a private network and private IPC, collects eight scenes with one worker through the production CLI with the same outcome as EXP-581.
+prediction: Shard READY with ROS_DOMAIN_ID 181 and no ROS_NAMESPACE; un-namespaced node inventory accepted by the gate; the stock recorder starts, records logical topic names with no topic map and closes with its loss count reported; eight of eight VALID with QC PASS as in EXP-581; schema 2 stop audit accepted by the Host; wave verified; slot released in the schema 2 store. First stages never run - the un-namespaced stack and the stock recorder inside a container, the migrated store under a real admission. Any failure is reported with its stage.
+single_variable: The fixed-identity topology of commits ebe2f11ae and 7a809c86a relative to EXP-581. Same scene list, decisions and configuration values. Confounds - the host NVIDIA driver and kernel changed between the two runs; the confounds listed in EXP-576 remain.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 7a809c86a and clean; no running container, GPU compute process, ROS or MuJoCo process on the host (a host participant on domain 181 would not be seen by the container but is excluded anyway); disk above the floor; run root act-w1-20261013T071452Z absent; unified store schema 2, IDLE, no lease, no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576, on the fixed identity. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 7a809c86a; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 7a809c86ad57838ed3ddd151a661e2f7c395da47 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:fd5547d1da46ebfb7cf134f1ed849b4bf6433c13bc818cde5d220eb132115466 and shard image sha256:09c39d523799cee74b6290086a805059144d4fd1117bc69adf5e9b2cf2417e50; Host R/gates/7a809c86ad57/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181 (fixed, inside the container only)
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261013T071452Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261013T071452Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3633 — EXP-582 VALID (two shards, eight of eight); human design change to a fixed in-container identity, plan confirmed
 
