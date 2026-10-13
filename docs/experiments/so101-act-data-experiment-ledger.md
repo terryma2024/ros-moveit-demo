@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 833ae09666116211e5e49792d669971670c3282e
+current_commit: 64aca49d5a3f427245e3b61f28cad5f2d6a28ceb
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,60 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3629
-next_experiment: EXP-581 (to be planned after the fixes): repeat with the stale-join allowance widened and the data loss causes established.
+latest_checkpoint: CP-3630
+next_experiment: EXP-581 (PLANNED): sixth real functional run, eight scenes with one worker, images of 64aca49d5.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3630 — EXP-580 causes established and fixed (simulation time off the step grid; stale-join allowance too narrow); gates PASS, images rebuilt on 64aca49d5; EXP-581 planned
+
+- Commit `64aca49d5` (Sonnet-written, Opus-reviewed) with simulator submodule commit "fix(clock): keep simulation time on the exact step grid" (local, not pushed; the parent now points at an unpushed submodule commit).
+- PROVEN, episodes fn8-02, fn8-03 and fn8-04 of EXP-580: nothing was missing. Publisher sequences, raw chunk sequences and physics steps are contiguous; the bags hold two intervals of 1999999 ns each (for example simulation time 563.448 to 563.450 and 605.738 to 605.740 in fn8-02), which the offline grid, clock and raw continuity checks cannot tell from a loss; the controller state stream jumps 3999999 ns at each, a skipped controller update. Cause: mj_step accumulates 0.002 in a double; a pure computation of that accumulation reproduces the observed transition times (about one nanosecond of drift every 42 s above 512 s). Simulation time is not reset between scenes, so the third and later scenes on one stack each cross two transitions; fn8-01 passed because its window fell between two. Fix at the source: after each step the simulator snaps its time to the correctly rounded tick count times timestep when within a thousandth of a step. No offline judgement, tolerance or threshold changed. This also changes the native simulator's time values at the nanosecond level.
+- PROVEN from code, stale join: the evidence publisher keeps 256 transient-local samples and the one-shot reader has depth 1, so several samples of the previous epoch can be accepted before the first of the new one; the allowance of 5066b983a required exactly one. The one-shot read now re-baselines once on the first newer epoch regardless of how many older samples preceded it. Continuous observers unchanged.
+- NOT established, scene default of EXP-580: a real loss. About 86 consecutive 2 ms ticks are absent from every topic the simulator node publishes, starting 184 ms after the end of the 7.4 s perception pause, at the very start of the window; rosbag2 reports 384 messages lost on the transport; raw physics chunk steps stay contiguous and the depth-256 evidence topic survived. HYPOTHESIS only: a burst of steps after the resume overwrote shallow writer histories. Not addressed; no window shift or other masking applied. EXP-579's first scene did not show it. The Docker launch has no CPU or memory limit and a default 64 MB shared memory segment; not examined as a cause.
+- Host package gates on 64aca49d5, R/gates/64aca49d5a3f: fresh build rc 0, 194 s (simulator compiled); so101_demo_py rc 0, 12666 passed, 0 failed, 167 skipped, 399 s (demo-run.baKWHGmt); other 13 packages rc 0, 2354 tests, 0 errors, 0 failures, 60 skipped, 522 s (test-run.VaMemPKj), including the new simulator test with 5 tests and 0 failures. Worktree unchanged and clean. PASSED.
+- Images rebuilt on 64aca49d5: shard R/image-build-20261013T034555Z (365.7 s, simulator rebuilt), inference R/image-build-20261013T035211Z (77.8 s). Inputs under the prep directory act-w1-inputs-20261013T035415Z; validation 20 PASS and the gate item pending at authoring time.
+- Retained: all run roots, prep directories, logs, gate, image and scratch directories. Nothing deleted.
+
+```yaml
+experiment_id: EXP-581
+status: PLANNED
+prior_experiment: EXP-580 (VALID failure; one valid episode of five, sixth reset rejected)
+hypothesis: With simulation time on the exact step grid and the wider stale-join allowance, the production CLI carries eight scenes with one worker on one stack, every completed scene's data is judged on real content only, the wave verifies and admission settles.
+prediction: All eight scenes pass their reset. No episode shows a 1999999 ns interval, so scenes three and later are no longer INVALID for the EXP-580 reason. Whether the first-scene burst loss recurs is unknown and is the main thing to learn; any INVALID episode is reported with its cause, not gated. New stages if all eight finish - Host wave verification and commit of a wave with valid episodes.
+single_variable: Commit 64aca49d5 and its rebuilt images relative to EXP-580. Same scene list, decisions and configuration values; new run and campaign ids. The confounds listed in EXP-576 remain.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 64aca49d5 and clean; no running container, GPU compute process, ROS or MuJoCo process; disk above the floor; run root act-w1-20261013T035415Z absent; unified store IDLE with no lease and no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 64aca49d5; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 64aca49d5a3f427245e3b61f28cad5f2d6a28ceb (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:5583b43e7ee3bc6b1015a7646063271c4b06e431b8cbb975d5e426a6fb99f53d and shard image sha256:ad3374ba2498299f57137f8375f94323fd1fa55fffe3c99d8f46efa5affb3a48; Host R/gates/64aca49d5a3f/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261013T035415Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261013T035415Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3629 — EXP-580 VALID failure: first valid container episode (QC PASS); four episodes INVALID on loss or continuity; sixth reset rejected; stop and settle by design
 
