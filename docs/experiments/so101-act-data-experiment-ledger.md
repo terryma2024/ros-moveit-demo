@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3632
-next_experiment: EXP-582 (PLANNED): first two-worker real functional run, the same eight scenes.
+latest_checkpoint: CP-3633
+next_experiment: NONE until the fixed-identity design change reaches its checkpoint A; then a container one-worker eight-scene run on the new topology.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3633 — EXP-582 VALID (two shards, eight of eight); human design change to a fixed in-container identity, plan confirmed
+
+- EXP-582: first two-worker real run, eight of eight scenes VALID with QC PASS, wave verified, both stops proven, admission settled. Collection about 23 minutes against 44 with one worker; Host readback about 18 minutes, unchanged.
+- Human design change of 2026-10-13, verbatim: "设计变更：1. 改成：“容器内域号和名字都固定、只靠容器隔离” 2. 同时。保持容器内运行和非容器单worker运行，teacher示教采集的逻辑代码相同。即非容器单worker，效果相当于在容器内。 3. 非容器运行不在支持多worker的方案。" It followed the coordinator's answer that the approved design (2026-09-30 design, section 2) gives each shard its own ROS Domain and namespace in addition to a private network namespace, and that the launch already uses --network none and --ipc private.
+- Investigation and plan draft saved as R/fixed-instance-identity-design-and-plan.md; amendment committed as docs/superpowers/specs/2026-10-13-so101-act-fixed-instance-identity-amendment.md.
+- Human answers through the question prompt (verbatim option labels): scope of item 3 - "非 ACT 的也一并删除" (the coordinator had recommended ACT only and had stated that removing the non-ACT native batch affects Web Expert Validation and the macOS two-worker campaign and needs its own plan); shape of the non-container single worker - "同一主机流程，换启动器"; the old native ACT command act_diagnostic_episode run - "新路径验证后删除"; execution - "确认执行", which also confirmed fixed domain 181 with the runtime YAML unchanged, in-place migration of the unified store after a hashed backup with the old slot rows kept, and that the raw bags of EXP-576 to EXP-582 are re-readable only at commit 64aca49d5.
+- Consequences recorded: under the 2026-09-30 design a controlled topology change means the one-worker and two-worker runs are redone in new run roots; EXP-581 and EXP-582 remain history and are not counted for the new topology. Eight-way qualification and formal collection wait for the change. The removal of the non-ACT native multi-worker batch is a separate phase to be planned and confirmed after the ACT change is verified; it is not started.
+- Retained: all run roots, prep directories, logs, images. Nothing deleted.
 
 ## CP-3632 — Two-worker functional inputs authored; EXP-582 planned
 
@@ -82,7 +91,7 @@ next_experiment: EXP-582 (PLANNED): first two-worker real functional run, the sa
 
 ```yaml
 experiment_id: EXP-582
-status: PLANNED
+status: VALID
 prior_experiment: EXP-581 (VALID; eight of eight with one worker)
 hypothesis: Two shard containers on separate ROS domains and namespaces, sharing one Teacher service and one GPU, collect the eight scenes concurrently through the production CLI with every completed scene's data judged VALID, the wave verified and admission settled.
 prediction: Both shards reach READY and pull scenes; no cross-talk between domains 181 and 182; wall time for collection is roughly half of EXP-581's 44 minutes if the host carries two simulators at real time. Unknown and to be learned - data loss or real-time-factor shortfall under two-way load, Teacher service queueing, Host verification of results from two shards. Any INVALID episode is reported with its cause, not gated.
@@ -105,17 +114,24 @@ provenance:
   gz_partition: each shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w2-inputs-20261013T050034Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w2-inputs-20261013T050034Z/run-w2.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Both shards launched and reached READY on domains 181 and 182; one Teacher service.
+  - All eight scenes returned business results - each teacher_task_result PASS, act_data_status VALID, act_data_qc PASS, no reason. Split by first-come - w00 ran default, fn8-03, fn8-04, fn8-07; w01 ran fn8-01, fn8-02, fn8-05, fn8-06.
+  - Both instance exits - fault_reason WAVE_COMPLETE, last task SUCCEEDED, cleanup_confirmed true; both shard-stop.json with all four facts true; campaign-cleanup.json terminated true for the service and both shards, stop_reason CAMPAIGN_CLOSING.
+  - Host wave verification passed (host/wave-0-verified.json, host/campaign-result.json); the CLI printed the campaign summary and exited 0. Unified store IDLE with no lease afterwards; no container running.
+  - Timing from file times - Teacher ready 13:03:41, shard exits 13:25:52 and 13:26:23, wave verified 13:44:26 (local). About 23 minutes of collection and about 18 minutes of Host readback.
 inferred:
-  - NONE
-conclusion: PENDING
+  - Two concurrent shards on one GPU with one Teacher service halve the collection time of EXP-581 (44 to 23 minutes) with no data loss in this run.
+  - Host readback did not get faster with two workers; it is serial and now takes almost as long as the collection.
+conclusion: VALID, all success criteria met. First two-shard real collection - eight of eight VALID with QC PASS, wave verified, both stops proven, designed settle. Functional plane on the per-worker domain and namespace topology, which the human has since replaced; it stays as history and as a load baseline and does not count for the new topology.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w2-20261013T050034Z (host/campaign-result.json, host/wave-0-verified.json, host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1, wave-0/w01/g1)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w2-inputs-20261013T050034Z
+  - /tmp/so101-debug-act-data-66c42e4c/w2-20261013T050034Z.log
+decision: KEEP
 next_experiment: NONE
 ```
 
