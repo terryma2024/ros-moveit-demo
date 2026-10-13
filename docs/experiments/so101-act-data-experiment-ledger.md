@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 983c1d7b56ae58261adb04fd89a7b964b4d55a74
+current_commit: 7b2d6c9024f725bdf3c6efb54654ffe12c8d7abe
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,57 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3637
-next_experiment: NONE until plan tasks 5 and 6 (instance program, native launcher) are implemented; then checkpoint B, a native single-worker run.
+latest_checkpoint: CP-3638
+next_experiment: EXP-585 (PLANNED): checkpoint B, the first real non-container single-worker run of the instance program, eight scenes.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3638 — Plan tasks 5 and 6 implemented (one instance program, container and native shells, native launcher); gates PASS; EXP-585 planned
+
+- Commit `7b2d6c902` (Sonnet-written, Opus-reviewed). The collection logic of an instance is one program taking an instance layout; the container entry and a new native entry are thin shells; a test asserts no container-only branch inside the program. The Host campaign flow can start one native instance with --instance-launcher native: same spec, control protocol, journal, wave verifier and output layout; the Teacher service stays in its container. Admission: native only with one worker; a native instance is exclusive on the host (no other ACT slot, no native pick-place child, no container campaign while a native one holds a slot). Native stop proof: the instance's own unchanged stop receipt plus a Host observation - registered leader gone, no live process group member, no process still carrying the instance marker, empty node list on domain 181 (probe with a 3 s spin, because the default spin missed a live node in five of five trials on an isolated domain); the Host signals only the registered leader with SIGTERM after an identity re-check; leftovers are terminated, recorded and make the stop unconfirmed for good.
+- Host package gates on 7b2d6c902, R/gates/7b2d6c9024f7, first run: build rc 0; so101_demo_py rc 0, 12726 passed, 0 failed, 167 skipped; other 13 packages rc 0, 2399 tests, 0 errors, 0 failures, 60 skipped. Worktree unchanged and clean. PASSED. The writer reports two further intermittent failures under 8-way load in its own runs (a test_task_builder perception fault case with a KeyboardInterrupt in the pytest worker, and a 1000 Hz rate test), neither reproduced alone; together with the one of CP-3636 these are open and not root-caused.
+- Images rebuilt on 7b2d6c902: shard R/image-build-20261013T125701Z (674.1 s), inference R/image-build-20261013T130826Z (70.5 s). The container path changed again in this commit (it now receives the layout) and has not been run for real on it.
+- Inputs under the prep directory act-native-inputs-20261013T132000Z, authored by a Sonnet agent from the code. Validation 36 PASS, 4 informational, 1 pending (the candidates file, written by the inspection step). OBSERVED from code by that agent and accepted by the coordinator: the instance runs installed code from the gate install under the grounded-sam interpreter and inherits the launch environment; the Host CLI still imports the worktree source as in every container run, because the admission's calibration identity probe needs a git checkout next to its module and the CLI does not expose that probe - the alternative is a code change, not made. The Host ros2 and installed stack-ready entry run under the system Python; the full stack under it is unverified until this run. The launcher sets MUJOCO_GL=egl and CUDA_VISIBLE_DEVICES and no EGL vendor override; the Host has the NVIDIA EGL vendor file; no override is added. Graphics-only GPU processes (Xorg, gnome-shell) are present and are not compute processes.
+
+```yaml
+experiment_id: EXP-585
+status: PLANNED
+prior_experiment: EXP-584 (VALID; container, fixed identity, eight of eight)
+hypothesis: The same instance program, started on the Host as one process group with the fixed identity instead of inside a container, collects the eight scenes through the same Host campaign flow with the same artifacts, and its stop is proven by the native proof.
+prediction: Admission accepts instance_launcher native with one worker; the native instance reaches READY on domain 181 on the Host; the stack starts with the Host ros2 and renders through NVIDIA EGL; scenes run and are judged by the same code; the output layout under wave-0/w00/g1 matches the container's; the wave verifies; final-exit.json shows the leader absent or zombie, no group member, no marker survivor, graph clear; no native-leftovers.json; slot and lease released. First-time stages - everything about a Host stack under this launcher. The first stage that fails, if any, is the new information.
+single_variable: The launcher (native instead of container) relative to EXP-584, on commit 7b2d6c902 which also restructured the instance program. Same scene list, decisions and configuration values. Confound - the Host process has no container isolation and shares the Host with the desktop session.
+lifecycle: ISOLATED_STACK (a Host process group owned by the campaign; no other ROS participant on domain 181 on the Host)
+preconditions:
+  - Enforced by the run script - run root, log and exit record absent; worktree src, scripts and third_party equal to 7b2d6c902; gate green at that commit; no container running; no ROS, simulator or ACT process and no process carrying domain 181 or the instance marker; an empty node list on domain 181; no GPU compute process; unified store schema 2, IDLE, no lease, no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - Admission, native READY, eight task results through the journal, wave verification, CLI exit 0, native stop proven with no leftovers, slot and lease released. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven native stop or any leftover process; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 7b2d6c902; another participant on domain 181 on the Host during the run; the Host CLI process interrupted.
+provenance:
+  source_commit: 7b2d6c9024f725bdf3c6efb54654ffe12c8d7abe
+  install_overlay: instance code from Host R/gates/7b2d6c9024f7/install; Host CLI from the worktree import; inference image sha of R/image-build-20261013T130826Z
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python -m so101_demo.cli.act_instance_native for the instance; the same interpreter running so101_demo.cli.act_collect_parallel on the Host; container entrypoint campaign_inference for the Teacher service
+  ros_domain_id: 181 on the Host
+  gz_partition: the instance's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-native-inputs-20261013T132000Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-native-inputs-20261013T132000Z/run-native.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3637 — EXP-584 VALID: fixed identity with the namespace code removed, eight of eight VALID; deep writers hold in two burst episodes
 
