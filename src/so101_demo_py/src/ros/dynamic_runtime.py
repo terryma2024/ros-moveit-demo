@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
-from ..runtime.container_campaign.ros_namespace import container_ros_init_options
 
 from ..application.dynamic_plan_only import (
     DynamicPlanningOptions,
@@ -307,7 +306,7 @@ def run_dynamic_plan_only(options) -> int:
         print(status_line("ERROR", failure=_failure_code(error), message=error))
         return 1
     installed_prefix = options.installed_prefix or str(share_dir.parents[1])
-    rclpy.init(**container_ros_init_options())
+    rclpy.init()
     node = rclpy.create_node(
         "so101_dynamic_cup_pick_place",
         parameter_overrides=[Parameter("use_sim_time", value=True)],
@@ -733,8 +732,7 @@ def run_dynamic_execute(
         if threading.current_thread() is threading.main_thread():
             restore_signals = stop_flags.install_signal_handlers()
         init_options = getattr(runtime, "signal_handler_options_no", None)
-        runtime.rclpy.init(**container_ros_init_options(),
-            **({} if init_options is None else {"signal_handler_options": init_options}))
+        runtime.rclpy.init(**({} if init_options is None else {"signal_handler_options": init_options}))
         initialized_here = True
         node = runtime.rclpy.create_node(
             "so101_dynamic_cup_pick_place",

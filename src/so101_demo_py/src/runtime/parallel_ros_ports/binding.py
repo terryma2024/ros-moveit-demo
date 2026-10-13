@@ -40,12 +40,8 @@ class RuntimeBinding:
         )
 
     @classmethod
-    def worker_node_inventory_rules(cls, *, teacher_profile=False, namespace=None):
-        """The required, fixed internal and generated node names of one worker, relative to its namespace.
-
-        A container stack runs every node under one `__ns` rule, and that rule replaces a namespace the node asked for
-        itself. MoveIt creates its node as `moveit` in `/move_group`, so in a container stack it is `<namespace>/moveit`
-        and there is no `<namespace>/move_group/moveit`; the unnamespaced stack keeps `/move_group/moveit`."""
+    def worker_node_inventory_rules(cls, *, teacher_profile=False):
+        """The required, fixed internal and generated node names of one worker."""
         required = set(cls.expected_worker_nodes())
         if teacher_profile:
             required.add("/neck_controller")
@@ -55,9 +51,6 @@ class RuntimeBinding:
             "/moveit_simple_controller_manager",
             "/robotsystem",
         }
-        if namespace is not None:
-            fixed_internal.discard("/move_group/moveit")
-            fixed_internal.add("/moveit")
         generated = (
             re.compile(r"/move_group_private_[0-9]+"),
             re.compile(r"/moveit_[0-9]+"),
@@ -66,21 +59,7 @@ class RuntimeBinding:
         return required, fixed_internal, generated
 
     @classmethod
-    def _scoped_worker_nodes(cls, nodes, namespace):
-        """The node names relative to the stack namespace, or None when any node is outside it."""
-        from so101_demo.runtime.container_campaign.ros_namespace import validate_container_namespace
-        validate_container_namespace(namespace)
-        if (type(nodes) is not tuple or any(type(node) is not str
-                or not node.startswith(namespace+'/') for node in nodes)):
-            return None
-        return tuple(node[len(namespace):] for node in nodes)
-
-    @classmethod
-    def worker_node_inventory_matches(cls, nodes, *, teacher_profile=False,namespace=None):
-        if namespace is not None:
-            nodes = cls._scoped_worker_nodes(nodes, namespace)
-            if nodes is None:
-                return False
+    def worker_node_inventory_matches(cls, nodes, *, teacher_profile=False):
         if (
             type(nodes) is not tuple
             or any(not isinstance(node, str) for node in nodes)
@@ -88,8 +67,7 @@ class RuntimeBinding:
             or len(set(nodes)) != len(nodes)
         ):
             return False
-        required, fixed_internal, generated = cls.worker_node_inventory_rules(
-            teacher_profile=teacher_profile, namespace=namespace)
+        required, fixed_internal, generated = cls.worker_node_inventory_rules(teacher_profile=teacher_profile)
         category_counts = [0] * len(generated)
         for node in nodes:
             if node in required or node in fixed_internal:
@@ -108,19 +86,11 @@ class RuntimeBinding:
         )
 
     @classmethod
-    def worker_node_inventory_report(cls, nodes, *, teacher_profile=False, namespace=None):
+    def worker_node_inventory_report(cls, nodes, *, teacher_profile=False):
         """Every way an observed node list differs from the inventory, complete and unbounded: for an evidence file."""
         observed = tuple(nodes)
-        scoped = observed
-        outside = []
-        if namespace is not None:
-            scoped = tuple(node[len(namespace):] if isinstance(node, str) and node.startswith(namespace+'/') else node
-                           for node in observed)
-            outside = sorted(node for node in observed
-                             if not isinstance(node, str) or not node.startswith(namespace+'/'))
-        required, fixed_internal, generated = cls.worker_node_inventory_rules(
-            teacher_profile=teacher_profile, namespace=namespace)
-        names = [node for node in scoped if isinstance(node, str)]
+        required, fixed_internal, generated = cls.worker_node_inventory_rules(teacher_profile=teacher_profile)
+        names = [node for node in observed if isinstance(node, str)]
         counts = {}
         for node in names:
             counts[node] = counts.get(node, 0) + 1
@@ -128,10 +98,8 @@ class RuntimeBinding:
         unknown = sorted(node for node in set(names) if node not in required and node not in fixed_internal
                          and not any(pattern.fullmatch(node) for pattern in generated))
         return {
-            "namespace": namespace,
             "teacher_profile": bool(teacher_profile),
             "observed_count": len(observed),
-            "outside_namespace": outside,
             "missing_required": sorted(required - set(names)),
             "missing_internal": sorted(fixed_internal - set(names)),
             "unknown": unknown,
@@ -141,13 +109,6 @@ class RuntimeBinding:
             "sorted": tuple(observed) == tuple(sorted(str(node) for node in observed)),
             "observed": [node if isinstance(node, str) else repr(node) for node in observed],
         }
-
-    def worker_ros_namespace(self):
-        from so101_demo.runtime.container_campaign.ros_namespace import container_ros_namespace
-        namespace=container_ros_namespace()
-        if namespace is not None and namespace!=self.resources.controller_namespace:
-            raise ValueError('CONTAINER_ROS_NAMESPACE_DRIFT')
-        return namespace
 
     def rebind_resources(self, resources):
         if (

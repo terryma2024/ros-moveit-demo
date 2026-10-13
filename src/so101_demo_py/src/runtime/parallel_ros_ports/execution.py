@@ -13,7 +13,6 @@ import stat
 import time
 
 from so101_demo.parallel_batch.contracts.common import AttemptStatus
-from so101_demo.runtime.container_campaign.ros_namespace import container_ros_init_options
 from so101_demo.parallel_batch.start_guard_probe import read_process_identity
 from so101_demo.runtime.parallel_worker_parts.plan_prefix import RosDynamicPlanPrefixAdapter
 from so101_demo.runtime.parallel_worker_parts.receipts import (
@@ -39,7 +38,7 @@ class ExecutionPorts:
         from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
 
         context = rclpy.context.Context()
-        rclpy.init(context=context,**container_ros_init_options())
+        rclpy.init(context=context)
         node = rclpy.create_node(
             "so101_parallel_planner",
             context=context,
@@ -175,8 +174,7 @@ class ExecutionPorts:
             return call(child)
 
         deadline = time.monotonic() + 20.0
-        # the container consumer runs under the stack namespace: its graph name is `<namespace>/so101_dynamic_cup_pick_place`
-        consumer_name = (self.worker_ros_namespace() or "") + "/so101_dynamic_cup_pick_place"
+        consumer_name = "/so101_dynamic_cup_pick_place"
         try:
             owner, publisher = self._prime_pose_publisher()
         except Exception:

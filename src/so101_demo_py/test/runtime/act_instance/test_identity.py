@@ -73,19 +73,3 @@ def test_an_instance_process_owns_its_signals_and_adds_no_namespace_arguments(tm
 def test_a_generic_process_keeps_the_bare_init():
     assert process_init.global_init_options(environment={}) == {}
     assert process_init.global_init_options(environment={'ROS_DOMAIN_ID': '181'}) == {}
-
-
-def test_nothing_on_the_container_path_sets_the_retired_namespace_marker():
-    """The marker is only read (by the code Task 4 deletes); no entry, launch or recorder may set it."""
-    import pathlib
-
-    import so101_demo
-    import so101_teleop
-
-    holders = set()
-    for package in (so101_demo, so101_teleop):
-        root = pathlib.Path(package.__file__).parent
-        for path in root.rglob('*.py'):
-            if 'SO101_ACT_CONTAINER_NAMESPACE' in path.read_text(errors='ignore'):
-                holders.add(path.relative_to(root).as_posix())
-    assert holders == {'runtime/container_campaign/ros_namespace.py'}

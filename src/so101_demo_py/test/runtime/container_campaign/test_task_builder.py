@@ -121,7 +121,6 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
         document[role]=dict(role=role,socket_path='/act/ipc/'+role+'/inference.sock',
             service_generation='service-'+role,max_frame_bytes=campaign[role+'_service']['max_frame_bytes'])
     monkeypatch.delenv('ROS_NAMESPACE',raising=False)
-    monkeypatch.delenv('SO101_ACT_CONTAINER_NAMESPACE',raising=False)
     for name,value in dict(ROS_DOMAIN_ID='181',SO101_ACT_INSTANCE_ROOT=str(root),ROS_LOCALHOST_ONLY='1',
         ROS_AUTOMATIC_DISCOVERY_RANGE='LOCALHOST',
         SO101_MUJOCO_SESSION_ID=old.session_id,MUJOCO_GL='egl').items():monkeypatch.setenv(name,value)

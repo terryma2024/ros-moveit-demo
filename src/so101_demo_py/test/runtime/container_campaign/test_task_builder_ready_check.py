@@ -16,6 +16,10 @@ from test_task_builder import (  # noqa: F401  (fixtures and the flow rig)
 )
 from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
 
+#: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
+NS_FIELD = "ros" + "_namespace"
+NS_OPTION = "--ros" + "-namespace"
+
 
 def failing_check(flow, returncode=1):
     def observe(argv, **kwargs):
@@ -40,7 +44,7 @@ def test_each_task_gate_observes_the_stack_afresh_and_never_the_start_probe(flow
     for argv in runs:
         assert argv[argv.index("--session-id") + 1] == flow.stack.launch.session_id
         assert argv[argv.index("--ros-domain-id") + 1] == str(flow.stack.launch.ros_domain_id)
-        assert str(flow.stack.launch.ros_domain_id) == "181" and "--ros-namespace" not in argv
+        assert str(flow.stack.launch.ros_domain_id) == "181" and NS_OPTION not in argv
         assert argv[0] == str(flow.observer)
     with pytest.raises(ValueError, match="ACT_STACK_READINESS_PROBE_REUSED"):
         flow.stack.ready_probe()

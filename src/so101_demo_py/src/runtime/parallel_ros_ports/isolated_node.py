@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import stat
 import threading
-from so101_demo.runtime.container_campaign.ros_namespace import container_ros_init_options
 
 _RESET_JOINTS = (0.0,) * 6
 
@@ -155,7 +154,7 @@ def _open_isolated_ros_node(rclpy, name, **node_options):
     from rclpy.executors import SingleThreadedExecutor
 
     context = rclpy.context.Context()
-    rclpy.init(context=context,**container_ros_init_options())
+    rclpy.init(context=context)
     try:
         node = rclpy.create_node(name, context=context, **node_options)
     except Exception:

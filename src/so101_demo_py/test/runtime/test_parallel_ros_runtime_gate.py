@@ -350,16 +350,13 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
     assert seen["transform"] == ("world", "task_camera_frame", 12_000_000_000)
 
 
-def _rejected_namespaced_gate(tmp_path, monkeypatch, *, observed, attempt_root=True):
+def _rejected_gate(tmp_path, *, observed, attempt_root=True):
     from so101_demo.runtime.parallel_ros_ports.observations import (
         InitialGateObservation,
         ResetBoundaryReceipt,
     )
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
-    namespace = "/act/campaign_w1f_20261012T220436Z/w00"
-    monkeypatch.setenv("SO101_ACT_CONTAINER_NAMESPACE", namespace)
-    monkeypatch.setenv("ROS_NAMESPACE", namespace)
     reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
     observation = InitialGateObservation(
         reset_epoch="reset-2", simulation_session_id="session-1",
@@ -367,7 +364,7 @@ def _rejected_namespaced_gate(tmp_path, monkeypatch, *, observed, attempt_root=T
         active_controller_goal_ids=(), moveit_attached_object_ids=(),
         has_contact=False, worker_node_fqns=tuple(sorted(observed)), node_graph_stable=True,
     )
-    resources = SimpleNamespace(session_id="session-1", controller_namespace=namespace)
+    resources = SimpleNamespace(session_id="session-1", controller_namespace="/")
     if attempt_root:
         resources.worker_root = tmp_path
     ports = ParallelRosRuntimePorts(
@@ -377,22 +374,21 @@ def _rejected_namespaced_gate(tmp_path, monkeypatch, *, observed, attempt_root=T
     )
     with pytest.raises(RuntimeError) as rejected:
         ports.initial_gate(_lease(), reset)
-    return namespace, str(rejected.value)
+    return str(rejected.value)
 
 
-def test_a_rejected_worker_inventory_keeps_the_full_observation_in_a_file(tmp_path, monkeypatch):
+def test_a_rejected_worker_inventory_keeps_the_full_observation_in_a_file(tmp_path):
     """The 300 character fault reason cut off the node list; the whole observation goes to the task directory."""
-    namespace = "/act/campaign_w1f_20261012T220436Z/w00"
-    required = tuple(namespace + name for name in (
+    required = (
         "/arm_controller", "/gripper_controller", "/neck_controller", "/joint_state_broadcaster", "/move_group",
         "/mujoco_ros2_control_node", "/robot_state_publisher", "/so101_base_to_camera_link",
         "/so101_camera_link_to_task_camera_frame", "/controller_manager",
         "/move_group_private_94319910618432", "/moveit_simple_controller_manager", "/robotsystem",
-        "/transform_listener_impl_abcdef"))
-    stray = tuple(f"{namespace}/stray_node_{index:02d}" for index in range(20))
+        "/transform_listener_impl_abcdef")
+    stray = tuple(f"/stray_node_{index:02d}" for index in range(20))
     observed = (*required, *stray)
 
-    _namespace, message = _rejected_namespaced_gate(tmp_path, monkeypatch, observed=observed)
+    message = _rejected_gate(tmp_path, observed=observed)
 
     assert message.startswith("POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes;worker_nodes=")
     assert len(message) <= 300
@@ -401,14 +397,12 @@ def test_a_rejected_worker_inventory_keeps_the_full_observation_in_a_file(tmp_pa
     document = json.loads((tmp_path / name).read_text())
     assert document["failures"] == ["worker_nodes"]
     assert document["worker_nodes"]["observed"] == sorted(observed)
-    assert document["worker_nodes"]["unknown"] == sorted(node.removeprefix(namespace) for node in stray)
-    assert "/moveit" in document["worker_nodes"]["missing_internal"]
-    assert document["worker_nodes"]["namespace"] == namespace
+    assert document["worker_nodes"]["unknown"] == sorted(stray)
+    assert "/move_group/moveit" in document["worker_nodes"]["missing_internal"]
 
 
-def test_a_rejected_worker_inventory_without_a_task_directory_keeps_the_original_message(tmp_path, monkeypatch):
-    _namespace, message = _rejected_namespaced_gate(
-        tmp_path, monkeypatch, observed=("/act/campaign_w1f_20261012T220436Z/w00/move_group",), attempt_root=False)
+def test_a_rejected_worker_inventory_without_a_task_directory_keeps_the_original_message(tmp_path):
+    message = _rejected_gate(tmp_path, observed=("/move_group",), attempt_root=False)
 
     assert message.startswith("POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes;worker_nodes=")
     assert ";observation=" not in message

@@ -130,7 +130,6 @@ def test_a_bag_under_the_owned_root_is_accepted_and_traversal_stays_refused(tmp_
 
 def run_recorder(tmp_path, monkeypatch, bag, *, container):
     raw_recorder = importlib.import_module('so101_demo.act.offline.raw_recorder')
-    monkeypatch.delenv('SO101_ACT_CONTAINER_NAMESPACE', raising=False)
     monkeypatch.delenv('ROS_NAMESPACE', raising=False)
     if container:
         monkeypatch.setenv('SO101_ACT_INSTANCE_ROOT', str(tmp_path / 'w00/g1'))
@@ -148,7 +147,6 @@ def test_the_recorders_ready_record_carries_the_bag_location_decision_for_the_in
     elsewhere.mkdir()
 
     code, ready = run_recorder(tmp_path, monkeypatch, bag_under(elsewhere), container=True)
-    assert not (elsewhere / 'tasks/task-1/attempts/default/lease/working/raw/bag-topic-map.json').exists()
 
     assert code == 3 and ready['state'] == 'FAILED' and 'CONTAINER_BAG_ROOT_MISMATCH' in ready['error']
     decision = ready['bag_root']

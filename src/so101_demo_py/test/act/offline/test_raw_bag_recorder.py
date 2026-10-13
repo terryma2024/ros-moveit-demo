@@ -3,9 +3,7 @@ only once its recording node subscribes, and reads the bag back at stop."""
 import threading
 import time
 import os
-import json
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -86,10 +84,9 @@ def test_the_bag_records_everything_published_after_recording_and_closes_with_it
     assert stats["anchor_start"]["system_ns"] - 1_000_000_000 <= stamps[0] <= stats["anchor_end"]["system_ns"]
 
 
-def test_an_instance_without_a_namespace_records_with_the_stock_recorder_and_writes_no_topic_map(
+def test_an_instance_records_with_the_stock_recorder_and_writes_no_topic_map(
         tmp_path, monkeypatch, isolated_ros_domain):
     """The instance marker alone decides the bag root; the recorder is `ros2 bag record` on the logical names."""
-    monkeypatch.delenv("SO101_ACT_CONTAINER_NAMESPACE", raising=False)
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     root = tmp_path / "w00" / "g1"
     root.mkdir(parents=True)
@@ -114,7 +111,7 @@ def test_an_instance_without_a_namespace_records_with_the_stock_recorder_and_wri
         recorder.start()
         argv = recorder._recorder.args
         assert argv[:3] == [sys.executable, "-m", "so101_demo.act.offline.bag_record_entry"] and "--log-level" not in argv
-        assert not any("__ns" in str(item) or "act_scoped_bag_record" in str(item) for item in argv)
+        assert not any("__ns" in str(item) for item in argv)
         okay, state = recorder.wait_recording(20.0)
         assert okay, state
         assert recorder._probe.get_namespace() == "/"
@@ -127,65 +124,8 @@ def test_an_instance_without_a_namespace_records_with_the_stock_recorder_and_wri
         node.destroy_node()
     assert stats["closed"] and not stats["failure"] and stats["missing_core_topics"] == [], stats
     assert set(stats["bag"]["topics"]) == set(names)
-    assert recorder.topic_map == {name: name for name in names}
     assert _bag_root_evidence(recorder)["bag_root"]["location"] == "owned_root"
     assert not (recorder.bag_dir.parent / (recorder.bag_dir.name + "-topic-map.json")).exists()
-
-
-@pytest.mark.skipif(sys.platform=='darwin',reason='container-only native recorder')
-def test_native_scoped_recorder_keeps_logical_readback_and_original_namespace(tmp_path,monkeypatch,isolated_ros_domain):
-    from ament_index_python.packages import get_package_prefix
-    from so101_demo.runtime.container_campaign.ros_namespace import container_ros_init_options
-    # A fresh source/SDK installation may be selected by this test harness.
-    # Production always resolves the installed support package, with no override.
-    prefix=Path(os.environ.get('SO101_TEST_SCOPED_RECORDER_PREFIX') or get_package_prefix('so101_mujoco_support'))
-    binary=prefix/'lib/so101_mujoco_support/act_scoped_bag_record'
-    assert binary.is_file() and os.access(binary,os.X_OK), 'fresh native recorder installation required'
-    original=get_package_prefix
-    monkeypatch.setattr('ament_index_python.packages.get_package_prefix',
-        lambda name:str(prefix) if name=='so101_mujoco_support' else original(name))
-    root=tmp_path/'w00/g1';root.mkdir(parents=True)
-    namespace='/act/recorder_test/w00'
-    # Controlled external native readiness identity; all Recorder/ROS/MCAP I/O is real.
-    (root/'runtime-ready.json').write_text(json.dumps(dict(schema_version=1,kind='ACT_SHARD_RUNTIME_READY',
-        generation=1,ros_namespace=namespace)))
-    monkeypatch.setenv('SO101_ACT_CONTAINER_NAMESPACE',namespace)
-    monkeypatch.setenv('ROS_NAMESPACE',namespace)
-    monkeypatch.setenv('SO101_ACT_CONTAINER_OWNED_ROOT',str(root))
-    rclpy.init(**container_ros_init_options())
-    node=rclpy.create_node('scoped_recorder_source')
-    names=('/head_camera/color','/so101/teacher/events')
-    publishers={name:node.create_publisher(String,name,100) for name in names}
-    recorder=RawRecorder(root/'attempts/scene/attempt/working/raw/bag',topics=names,core_topics=names)
-    stop=threading.Event()
-    def publish():
-        while not stop.is_set():
-            for name,publisher in publishers.items():publisher.publish(String(data=name))
-            time.sleep(.005)
-    thread=threading.Thread(target=publish,daemon=True);thread.start()
-    try:
-        recorder.start()
-        okay,state=recorder.wait_recording(10.)
-        assert okay,state
-        assert recorder._probe.get_namespace()==namespace
-        for name in names:
-            matches=[info for info in recorder._probe.get_subscriptions_info_by_topic(namespace+name)
-                     if info.node_name==recorder.node_name]
-            assert len(matches)==1 and matches[0].node_namespace==namespace
-        time.sleep(.2)
-    finally:
-        stop.set();thread.join();time.sleep(.05)
-        stats=recorder.stop()
-        node.destroy_node()
-    from so101_demo.act.offline.raw_recorder import _atomic_json
-    _atomic_json(recorder.bag_dir.parent/'record-stats.json',stats)
-    assert stats['closed'] and not stats['failure'] and stats['bag_process_rc']==0,stats
-    assert stats['transport_lost']==0 and stats['transport_lost_by_topic']=={},stats
-    assert set(stats['bag']['topics'])==set(names)
-    assert stats['missing_core_topics']==[]
-    assert all(stats['bag']['topics'][name]['count']>20 for name in names)
-    assert set(row[0] for row in read_messages(recorder.bag_dir))==set(names)
-    assert (recorder.bag_dir.parent/'bag-topic-map.json').is_file()
 
 
 def test_a_core_topic_without_a_publisher_is_not_recording_and_the_wait_is_bounded(tmp_path, isolated_ros_domain):

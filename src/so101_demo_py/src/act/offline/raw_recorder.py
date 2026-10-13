@@ -26,12 +26,8 @@ import sys
 import threading
 import time
 from pathlib import Path
-from so101_demo.runtime.container_campaign.ros_namespace import (
-    container_ros_namespace,container_ros_init_options,
-)
 from so101_demo.runtime.act_instance.identity import instance_root
 from .bag_root import bag_root_decision
-from .container_bag_topics import write_topic_map
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
 STATS_SCHEMA = "SO101_RAW_RECORD_STATS"
@@ -145,11 +141,9 @@ def build_options(bag_dir: Path, topics=TOPICS, node_name=NODE_NAME):
     return storage, options
 
 
-def qos_overrides_for(topics, topic_map=None) -> dict:
-    """{topic as the recorder sees it: QoS profile} for the deep reliable queues of the recorded topics (the profile the scoped
-    recorder accepted: keep_last, reliable, volatile, depth > 0)."""
-    names = topic_map or {}
-    return {names.get(topic, topic): {"history": "keep_last", "depth": depth, "reliability": "reliable", "durability": "volatile"}
+def qos_overrides_for(topics) -> dict:
+    """{topic: QoS profile} for the deep reliable queues of the recorded topics (keep_last, reliable, volatile, depth > 0)."""
+    return {topic: {"history": "keep_last", "depth": depth, "reliability": "reliable", "durability": "volatile"}
             for topic, depth in DEEP_RELIABLE.items() if topic in topics}
 
 
@@ -287,8 +281,7 @@ class RawRecorder:
         self._spin_thread = None
         self._recording_ready = False
         self._matched_counts = {}
-        self.topic_map={topic:topic for topic in self.topics}
-        self.bag_root=None   # container mode: where the bag may live and the directory identities that decided it
+        self.bag_root=None   # instance mode: where the bag may live and the directory identities that decided it
 
     def start(self) -> None:
         import rclpy
@@ -298,22 +291,14 @@ class RawRecorder:
         if self.bag_dir.exists():
             raise FileExistsError(f"RAW_BAG_EXISTS: {self.bag_dir}")
         self.bag_dir.parent.mkdir(parents=True, exist_ok=True)
-        namespace=container_ros_namespace()
         root=instance_root()
-        if root is None and namespace is not None:   # the retired per-worker namespace marker carried its own root
-            root=os.environ.get('SO101_ACT_CONTAINER_OWNED_ROOT')
-            if root is None:raise ValueError('CONTAINER_BAG_OWNED_ROOT_REQUIRED')
         if root is not None:
             self.bag_root=bag_root_decision(self.bag_dir,Path(root))
             if self.bag_root['code'] is not None:raise ValueError(self.bag_root['code'])
-        if namespace is not None:
-            self.topic_map=write_topic_map(self.bag_dir,owned_root=Path(root),namespace=namespace,topics=self.topics)
         if not rclpy.ok():
-            rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO,**container_ros_init_options())
+            rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO)
         self._probe = rclpy.create_node(self.node_name + "_probe",
                                         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)])
-        if namespace is not None and self._probe.get_namespace()!=namespace:
-            raise ValueError('CONTAINER_BAG_NAMESPACE_DRIFT')
         self._executor = SingleThreadedExecutor()
         self._executor.add_node(self._probe)
         self._spin_thread = threading.Thread(target=self._executor.spin, name="so101-raw-probe-spin", daemon=True)
@@ -321,17 +306,10 @@ class RawRecorder:
         import yaml
 
         qos_path = self.bag_dir.parent / (self.bag_dir.name + "-qos.yaml")
-        overrides = qos_overrides_for(self.topics, self.topic_map)
+        overrides = qos_overrides_for(self.topics)
         qos_path.write_text(yaml.safe_dump(overrides))
         self._log = open(self.bag_dir.parent / (self.bag_dir.name + "-record.log"), "xb")
         argv=record_argv(self.bag_dir, qos_path, self.node_name, self.topics)
-        if namespace is not None:
-            from ament_index_python.packages import get_package_prefix
-            native=Path(get_package_prefix('so101_mujoco_support'))/'lib/so101_mujoco_support/act_scoped_bag_record'
-            if not native.is_file() or not os.access(native,os.X_OK):
-                raise RuntimeError('SCOPED_BAG_INSTALLED_EXECUTABLE_UNAVAILABLE')
-            argv=[str(native),str(self.bag_dir),str(qos_path),self.node_name,
-                *self.topic_map.values(),*container_ros_init_options()['args']]
         self._recorder = subprocess.Popen(argv,
                                          stdout=self._log, stderr=subprocess.STDOUT, start_new_session=True,
                                          env=dict(os.environ, ROS_DOMAIN_ID=str(self._probe.context.get_domain_id())))
@@ -343,8 +321,7 @@ class RawRecorder:
         """{topic: {"publishers": n, "recording": bool}} from the graph: is the bag's node among the subscribers?"""
         state = {}
         for topic in self.topics:
-            physical=self.topic_map[topic]
-            infos = self._probe.get_publishers_info_by_topic(physical)
+            infos = self._probe.get_publishers_info_by_topic(topic)
             publishers = len(infos)
             if infos and topic not in self._subscriptions:
                 from rosidl_runtime_py.utilities import get_message
@@ -356,11 +333,10 @@ class RawRecorder:
                 def received(_message, name=topic):
                     self._received[name] = self._received.get(name, 0) + 1
 
-                self._subscriptions[topic] = self._probe.create_subscription(get_message(infos[0].topic_type), physical,
+                self._subscriptions[topic] = self._probe.create_subscription(get_message(infos[0].topic_type), topic,
                                                                             received, profile, raw=True)
-            recording = any(info.node_name == self.node_name and (
-                container_ros_namespace() is None or info.node_namespace==self._probe.get_namespace())
-                for info in self._probe.get_subscriptions_info_by_topic(physical))
+            recording = any(info.node_name == self.node_name
+                            for info in self._probe.get_subscriptions_info_by_topic(topic))
             if recording and topic == SCENE_READS_TOPIC and self._sidecar is not None:
                 self._sidecar.enable_publishing()       # the bag has matched: reads are published from now on
             count = self._received.get(topic, 0)
@@ -459,11 +435,6 @@ class RawRecorder:
                 stats["transport_lost"] = transport_lost_from_log(log_text)
                 stats["transport_lost_by_topic"] = transport_lost_by_topic_from_log(log_text)
                 stats["transport_lost_events"] = transport_lost_events_from_log(log_text)
-                reverse={physical:logical for logical,physical in self.topic_map.items()}
-                stats['transport_lost_by_topic']={reverse.get(topic,topic):count
-                    for topic,count in stats['transport_lost_by_topic'].items()}
-                stats['transport_lost_events']=[event|dict(topic=reverse.get(event['topic'],event['topic']))
-                    for event in stats['transport_lost_events']]
             except OSError:
                 stats["transport_lost"] = None
             self.anchor_end = clock_anchor()

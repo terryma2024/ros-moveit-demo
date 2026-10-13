@@ -434,7 +434,7 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(
     assert owner.closed is True
 
 
-def _consumer_graph_rig(monkeypatch, *, nodes, namespace):
+def _consumer_graph_rig(monkeypatch, *, nodes):
     """`consumer_ready` over a fake graph listing `nodes`; the receipt fence is a double, every graph name is checked."""
     from so101_demo.runtime.parallel_ros_ports import observations as runtime_module_observations
     from so101_demo.runtime.parallel_ros_ports import perception as runtime_module_perception
@@ -476,12 +476,7 @@ def _consumer_graph_rig(monkeypatch, *, nodes, namespace):
     for module in (runtime_module_observations, runtime_module_perception):
         monkeypatch.setattr(module, "_open_isolated_ros_node", lambda *_args, **_kwargs: Owner())
     monkeypatch.setattr(ParallelRosRuntimePorts, "_consumer_ready_fence", lambda self, child: 100_000_000)
-    if namespace is not None:
-        monkeypatch.setenv("SO101_ACT_CONTAINER_NAMESPACE", namespace)
-        monkeypatch.setenv("ROS_NAMESPACE", namespace)
-    else:
-        monkeypatch.delenv("SO101_ACT_CONTAINER_NAMESPACE", raising=False)
-    resources = SimpleNamespace(session_id="session-1", worker_root=None, controller_namespace=namespace)
+    resources = SimpleNamespace(session_id="session-1", worker_root=None, controller_namespace="/")
     return ParallelRosRuntimePorts(resources, catalog={}), SimpleNamespace(pid=os.getpid())
 
 
@@ -494,37 +489,24 @@ def _stepping_clock(monkeypatch):
     monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
 
 
-def test_consumer_readiness_finds_the_consumer_in_the_container_namespace(monkeypatch):
-    """The container consumer's node is `<namespace>/so101_dynamic_cup_pick_place`, not the unnamespaced name."""
-    namespace = "/act/campaign_w1f_20261012T220436Z/w00"
-    ports, child = _consumer_graph_rig(monkeypatch, namespace=namespace, nodes=[
-        ("so101_parallel_pose_publisher", namespace), ("so101_dynamic_cup_pick_place", namespace)])
+def test_consumer_readiness_finds_the_one_unnamespaced_consumer(monkeypatch):
+    ports, child = _consumer_graph_rig(monkeypatch, nodes=[
+        ("so101_parallel_pose_publisher", "/"), ("so101_dynamic_cup_pick_place", "/")])
     _stepping_clock(monkeypatch)
 
     assert ports.consumer_ready(child) is True
 
 
-def test_consumer_readiness_refuses_a_consumer_outside_the_container_namespace(monkeypatch):
-    namespace = "/act/campaign_w1f_20261012T220436Z/w00"
+def test_consumer_readiness_refuses_a_missing_foreign_or_duplicate_consumer(monkeypatch):
     for nodes in (
-        [("so101_dynamic_cup_pick_place", "/")],
-        [("so101_dynamic_cup_pick_place", "/act/campaign_w1f_other/w00")],
-        [("so101_dynamic_cup_pick_place", namespace), ("so101_dynamic_cup_pick_place", "/")],
-        [("so101_dynamic_cup_pick_place", namespace), ("so101_dynamic_cup_pick_place", namespace)],
+        [("so101_dynamic_cup_pick_place", "/foreign")],
+        [("so101_dynamic_cup_pick_place", "/"), ("so101_dynamic_cup_pick_place", "/foreign")],
+        [("so101_dynamic_cup_pick_place", "/"), ("so101_dynamic_cup_pick_place", "/")],
         [],
     ):
-        ports, child = _consumer_graph_rig(monkeypatch, namespace=namespace, nodes=nodes)
+        ports, child = _consumer_graph_rig(monkeypatch, nodes=nodes)
         _stepping_clock(monkeypatch)
         assert ports.consumer_ready(child) is False
-
-
-def test_consumer_readiness_without_a_container_namespace_is_unchanged(monkeypatch):
-    ports, child = _consumer_graph_rig(monkeypatch, namespace=None, nodes=[("so101_dynamic_cup_pick_place", "/")])
-    _stepping_clock(monkeypatch)
-    assert ports.consumer_ready(child) is True
-    ports, child = _consumer_graph_rig(monkeypatch, namespace=None, nodes=[("so101_dynamic_cup_pick_place", "/foreign")])
-    _stepping_clock(monkeypatch)
-    assert ports.consumer_ready(child) is False
 
 
 def test_pose_publication_fails_closed_when_sim_clock_cannot_reach_source(monkeypatch):

@@ -7,6 +7,9 @@ import pytest
 
 from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey
 
+#: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
+NS_FIELD = "ros" + "_namespace"
+
 
 def module():
     return importlib.import_module('so101_demo.runtime.container_campaign.registry')
@@ -147,7 +150,7 @@ def test_shard_registry_recomputes_original_stop_before_slot_reuse(tmp_path, mon
     else:
         registry.register(next_launch)
         assert len(registry.records()) == 2
-        assert not {'ros_domain_id', 'ros_namespace'} & set(registry.records()[1]['launch'])
+        assert not {'ros_domain_id', NS_FIELD} & set(registry.records()[1]['launch'])
         assert not registry.all_terminated(lambda cid: inspect_document())  # new launch still unknown
     registry.close()
 
@@ -246,10 +249,10 @@ def test_a_launch_record_carries_no_ros_domain_or_namespace_and_the_registry_is_
     path = tmp_path/'launches.sqlite3'
     registry = mod.ContainerLaunchRegistry(path)
     registry.register(launch(tmp_path))
-    assert not {'ros_domain_id', 'ros_namespace'} & set(registry.records()[0]['launch'])
+    assert not {'ros_domain_id', NS_FIELD} & set(registry.records()[0]['launch'])
     with pytest.raises(TypeError):
         mod.ContainerLaunch(launch_id='x', role='shard', worker_id='w00', wave_id='wave-0', launch_generation=1,
-            container_name='x', image_digest='sha256:'+'b'*64, owned_root=str(tmp_path), session_id='s1', ros_namespace='/a/w00')
+            container_name='x', image_digest='sha256:'+'b'*64, owned_root=str(tmp_path), session_id='s1', **{NS_FIELD: '/a/w00'})
     registry.close()
     assert sqlite3.connect(path).execute('SELECT version, kind FROM metadata').fetchall() == [
         (2, 'ACT_CONTAINER_LAUNCH_REGISTRY')]

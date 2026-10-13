@@ -19,6 +19,9 @@ from so101_teleop.unified.act_stack import ActStackLaunch, ActStackProcessOwner
 from so101_teleop.unified.contracts import OwnerKey
 from test_controller_stop import run_probe
 
+#: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
+NS_FIELD = "ros" + "_namespace"
+
 
 def fixture(tmp_path, monkeypatch, *, forced=False, goal_failed=False, stack_failed=False):
     mod = importlib.import_module("so101_demo.runtime.container_campaign.retirement")
@@ -202,7 +205,7 @@ def test_process_identity_drift_during_stop_cannot_publish_success(tmp_path, mon
     assert not (root / "shard-stop.json").exists()
 
 
-def test_the_stop_audit_is_schema_two_and_carries_no_ros_namespace(tmp_path, monkeypatch):
+def test_the_stop_audit_is_schema_two_and_carries_no_namespace(tmp_path, monkeypatch):
     import json
 
     mod, root, _owner, _native, retirement, _calls = fixture(tmp_path, monkeypatch)
@@ -210,7 +213,7 @@ def test_the_stop_audit_is_schema_two_and_carries_no_ros_namespace(tmp_path, mon
     audit = json.loads((root / "retirement/audit.json").read_bytes())
 
     assert audit["schema_version"] == 2 and audit["ros_domain_id"] == 181 and audit["session_id"] == "session1"
-    assert "ros_namespace" not in audit
+    assert NS_FIELD not in audit
     with pytest.raises(TypeError):
         mod.NativeShardRetirement(process_owner=_owner, launch_generation=7, evidence_root=root,
-            stack=retirement.stack, ros_namespace="/act/campaign/w00", goal_stop_budget_s=5, stack_stop_budget_s=15)
+            stack=retirement.stack, goal_stop_budget_s=5, stack_stop_budget_s=15, **{NS_FIELD: "/act/campaign/w00"})

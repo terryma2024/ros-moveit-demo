@@ -13,7 +13,6 @@ def container_environment(monkeypatch, tmp_path):
     """The instance marker alone: no ROS namespace, the fixed identity's root namespace."""
     import rclpy
 
-    monkeypatch.delenv("SO101_ACT_CONTAINER_NAMESPACE", raising=False)
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(tmp_path))
     monkeypatch.setenv("ROS_DOMAIN_ID", "231")
@@ -100,7 +99,6 @@ def test_without_the_instance_marker_the_default_context_is_still_used(monkeypat
     import rclpy
     from so101_demo.backends.mujoco import teleop_runtime
 
-    monkeypatch.delenv("SO101_ACT_CONTAINER_NAMESPACE", raising=False)
     monkeypatch.delenv("SO101_ACT_INSTANCE_ROOT", raising=False)
     monkeypatch.setenv("ROS_DOMAIN_ID", "231")
     rclpy.try_shutdown()

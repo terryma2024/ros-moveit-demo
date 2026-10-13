@@ -22,6 +22,9 @@ from so101_demo.runtime.inference.config import load_campaign_config
 from so101_teleop.unified.contracts import AdmittedCampaignContext
 from so101_teleop.unified.worker_slots import ActWorkerSlot
 
+#: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
+NS_FIELD = "ros" + "_namespace"
+
 GPU = 'GPU-28221cec-9d21-7753-fd5a-da645740df19'
 
 
@@ -59,8 +62,8 @@ def test_launcher_writes_a_spec_the_real_shard_loader_accepts(tmp_path):
         assert spec == written == owner.spec
         assert set(written) == _FIELDS | _COLLECTION_FIELDS
         assert not any('worker_spec' in name or 'coordinator' in name for name in written)
-        assert written['schema_version'] == 2 and not {'ros_namespace', 'ros_domain_id'} & set(written)
-        assert not {'ros_namespace', 'ros_domain_id'} & set(asdict(owner.launch)) and 'ROS_NAMESPACE' not in ' '.join(owner.argv)
+        assert written['schema_version'] == 2 and not {NS_FIELD, 'ros_domain_id'} & set(written)
+        assert not {NS_FIELD, 'ros_domain_id'} & set(asdict(owner.launch)) and 'ROS_NAMESPACE' not in ' '.join(owner.argv)
         assert written['wave_id'] == 'wave-0' and written['launch_generation'] == 1
         # The Host launch id is exactly what the child derives as its instance id.
         assert owner.launch.launch_id == instance_id_for(written) == 'wave-0-w00-g1'

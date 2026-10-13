@@ -13,7 +13,6 @@ from ..application.scene_setup import execute_task_scene_operation
 from ..control.planning_scene.task_scene import RosTaskScenePort
 from ..core.task_geometry import GeometryContractError, load_task_geometry
 from ..ports.planning_scene import SceneCommandReceipt
-from ..runtime.container_campaign.ros_namespace import container_ros_init_options
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +41,7 @@ def execute_scene_operation(backend: str, operation: str) -> SceneCommandReceipt
             "SCENE_MANIFEST_INVALID",
             {"message": str(error)},
         )
-    rclpy.init(**container_ros_init_options())
+    rclpy.init()
     node = rclpy.create_node(f"so101_{backend}_scene_setup")
     try:
         timeout_s = float(node.declare_parameter("readiness_timeout_s", 30.0).value)

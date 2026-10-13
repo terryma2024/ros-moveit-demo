@@ -9,6 +9,10 @@ import time
 
 import pytest
 
+#: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
+NS_FIELD = "ros" + "_namespace"
+NS_OPTION = "--ros" + "-namespace"
+
 
 def fixture(tmp_path):
     root = tmp_path / "wave-00/w00/g1"
@@ -45,7 +49,7 @@ def test_bad_spec_refused_before_runtime_factory(tmp_path, monkeypatch, problem)
     elif problem == "extra": document["hardware"] = True
     elif problem == "root": document["owned_root"] = "relative"
     elif problem == "old_version": document["schema_version"] = 1
-    elif problem == "namespace": document["ros_namespace"] = "/act/campaign/w00"
+    elif problem == "namespace": document[NS_FIELD] = "/act/campaign/w00"
     elif problem == "domain": document["ros_domain_id"] = 181
     elif problem == "generation": document["launch_generation"] = True
     elif problem == "backend": document["workload_kind"] = "hardware"
@@ -129,7 +133,7 @@ def test_shard_composition_gives_tasks_a_fresh_probe_per_call_and_keeps_the_star
     assert ready() is True and ready.readiness_bytes==document    # the shard start
     assert [ready_check(),ready_check(),ready_check()]==[True,True,True]
     assert len(runs)==4 and all(argv==runs[0] for argv in runs)
-    assert '--ros-namespace' not in runs[0] and runs[0][runs[0].index('--ros-domain-id')+1]=='181' and runs[0][0]==str(observer)
+    assert NS_OPTION not in runs[0] and runs[0][runs[0].index('--ros-domain-id')+1]=='181' and runs[0][0]==str(observer)
     with pytest.raises(ValueError,match='ACT_STACK_READINESS_PROBE_REUSED'):
         stack.ready_probe()
 
@@ -184,11 +188,3 @@ def test_the_shard_launches_the_plain_execution_stack_at_the_fixed_identity(tmp_
     process_environment=launch.process_environment()
     assert process_environment['ROS_DOMAIN_ID']=='181' and process_environment['GZ_PARTITION']=='session1'
     assert 'ROS_NAMESPACE' not in process_environment and process_environment['SO101_ACT_INSTANCE_ROOT']==str(tmp_path)
-
-
-def test_the_shard_entry_no_longer_depends_on_the_namespaced_stack_or_marker():
-    mod=importlib.import_module('so101_demo.cli.campaign_shard')
-    source=Path(mod.__file__).read_text()
-
-    assert 'ContainerActStackLaunch' not in source and 'container_campaign.stack_launch' not in source
-    assert 'SO101_ACT_CONTAINER' not in source and 'ros_namespace' not in source

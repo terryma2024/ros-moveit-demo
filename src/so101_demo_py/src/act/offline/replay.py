@@ -181,19 +181,15 @@ class BagStream:
         import rosbag2_py
 
         from .bag_io import STORAGE_ID
-        from .container_bag_topics import logical_channel_map
 
         self.map = clock_map
         self._reader = rosbag2_py.SequentialReader()
         self._reader.open(rosbag2_py.StorageOptions(uri=str(uri), storage_id=STORAGE_ID),
                           rosbag2_py.ConverterOptions("", ""))
         self.types = {item.name: item.type for item in self._reader.get_all_topics_and_types()}
-        # a container bag stores the shard-scoped channel names; the replay (like bag_info/read_messages) speaks the logical ones,
-        # so a subscription made on a logical topic is matched. A bag without a topic map maps every name to itself.
-        self.names = logical_channel_map(uri, self.types)
         if topics is not None:
             wanted = set(topics)
-            self._reader.set_filter(rosbag2_py.StorageFilter(topics=[p for p, logical in self.names.items() if logical in wanted]))
+            self._reader.set_filter(rosbag2_py.StorageFilter(topics=[name for name in self.types if name in wanted]))
         self._next = None
         self._index = 0
         self._last_stamp = None
@@ -211,7 +207,7 @@ class BagStream:
         if self._last_stamp is not None and stamp < self._last_stamp:
             raise ValueError("OFFLINE_BAG_NOT_TIME_ORDERED")
         self._last_stamp = stamp
-        self._next = BagMessage(self._index, self.names[topic], self.types[topic], stamp, self.map.monotonic_ns(stamp), bytes(data))
+        self._next = BagMessage(self._index, topic, self.types[topic], stamp, self.map.monotonic_ns(stamp), bytes(data))
         self._index += 1
 
     def peek(self):

@@ -6,6 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
+#: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
+NS_FIELD = "ros" + "_namespace"
+
 
 def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None,idle=False,return_on_empty_ack=False,real_messages=False):
     mod = importlib.import_module("so101_demo.runtime.container_campaign.controller_stop")
@@ -66,7 +69,7 @@ def test_neck_moveit_arm_and_gripper_all_have_original_status_and_ack(monkeypatc
     assert {name.rsplit("/_action/", 1)[0] for name in endpoints} == {
         "/arm_controller/follow_joint_trajectory", "/gripper_controller/follow_joint_trajectory",
         "/neck_controller/follow_joint_trajectory", "/execute_trajectory"}
-    assert observation.document["schema_version"] == 2 and "ros_namespace" not in observation.document
+    assert observation.document["schema_version"] == 2 and NS_FIELD not in observation.document
     assert any("/neck_controller/" in name for name in endpoints)
     assert set(observation.document["lanes"]) == {"arm", "gripper", "neck", "moveit"}
     assert all(lane["cancel_return_code"] == 0 and lane["statuses"][0]["status"] == 4

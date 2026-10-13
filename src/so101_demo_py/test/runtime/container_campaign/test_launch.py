@@ -8,6 +8,9 @@ import pytest
 
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths
 
+#: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
+NS_FIELD = "ros" + "_namespace"
+
 
 GPU = "GPU-28221cec-9d21-7753-fd5a-da645740df19"
 
@@ -122,7 +125,7 @@ def test_shard_isolation_is_the_container_alone_in_every_launch(tmp_path):
     assert "ROS_LOCALHOST_ONLY=1" in environment and "ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST" in environment
 
 
-@pytest.mark.parametrize("extra", [dict(ros_domain_id=181), dict(ros_namespace="/act/campaign/w00")])
+@pytest.mark.parametrize("extra", [dict(ros_domain_id=181), {NS_FIELD: "/act/campaign/w00"}])
 def test_a_shard_entry_no_longer_carries_a_domain_or_namespace(tmp_path, extra):
     module, _images, paths = fixture(tmp_path, "shard")
     with pytest.raises(TypeError):

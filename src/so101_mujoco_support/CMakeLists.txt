@@ -26,20 +26,6 @@ find_package(std_msgs REQUIRED)
 find_package(Threads REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
-if(NOT APPLE)
-  find_package(rosbag2_cpp REQUIRED)
-  find_package(rosbag2_storage REQUIRED)
-  find_package(rosbag2_transport REQUIRED)
-  find_package(yaml_cpp_vendor REQUIRED)
-  find_package(yaml-cpp REQUIRED)
-  add_executable(act_scoped_bag_record src/act_scoped_bag_record.cpp)
-  target_compile_features(act_scoped_bag_record PRIVATE cxx_std_17)
-  ament_target_dependencies(act_scoped_bag_record rclcpp rcutils rosbag2_cpp
-    rosbag2_storage rosbag2_transport)
-  target_link_libraries(act_scoped_bag_record yaml-cpp Threads::Threads)
-  install(TARGETS act_scoped_bag_record RUNTIME DESTINATION lib/${PROJECT_NAME})
-endif()
-
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ContactSample.msg"
   "msg/PhysicsCancellationAck.msg"
