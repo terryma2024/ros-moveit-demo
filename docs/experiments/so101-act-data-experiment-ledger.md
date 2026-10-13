@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3634
-next_experiment: EXP-583 (PLANNED): checkpoint A, one worker and eight scenes in a container on the fixed-identity topology.
+latest_checkpoint: CP-3635
+next_experiment: NONE until the cause of the two lossy episodes of EXP-583 is established.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3635 — EXP-583 VALID: fixed-identity topology works for one shard; six of eight VALID, two INVALID on loss, cause open
+
+- Checkpoint A of the design change. The shard ran on domain 181 with no namespace under a private network and private IPC, with the stock recorder and schema 2 records and store; wave verified, stop proven, settle by design. Two episodes lost data (one controller state gap, one with three reported camera frame losses on each camera), which did not happen in the sixteen episodes of EXP-581 and EXP-582. Cause not established; plan task 4 waits for it. Root-cause work assigned to a Sonnet writer with no judgement to be loosened.
+- Retained: run root, prep directory, logs, exited containers. Nothing deleted.
 
 ## CP-3634 — Fixed identity tasks 1 to 3 implemented; host reboot with driver and kernel upgrade; store migrated to schema 2; gates PASS; EXP-583 planned
 
@@ -86,7 +91,7 @@ next_experiment: EXP-583 (PLANNED): checkpoint A, one worker and eight scenes in
 
 ```yaml
 experiment_id: EXP-583
-status: PLANNED
+status: VALID
 prior_experiment: EXP-581 (VALID; eight of eight with one worker on the per-worker domain and namespace topology)
 hypothesis: A shard on fixed ROS domain 181 with no namespace, running the plain ACT execution stack and the stock bag recorder inside a container isolated by a private network and private IPC, collects eight scenes with one worker through the production CLI with the same outcome as EXP-581.
 prediction: Shard READY with ROS_DOMAIN_ID 181 and no ROS_NAMESPACE; un-namespaced node inventory accepted by the gate; the stock recorder starts, records logical topic names with no topic map and closes with its loss count reported; eight of eight VALID with QC PASS as in EXP-581; schema 2 stop audit accepted by the Host; wave verified; slot released in the schema 2 store. First stages never run - the un-namespaced stack and the stock recorder inside a container, the migrated store under a real admission. Any failure is reported with its stage.
@@ -110,17 +115,26 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261013T071452Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261013T071452Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Shard launch argv carries ROS_DOMAIN_ID=181, no ROS_NAMESPACE, --network none, --ipc private. Shard READY; all eight resets and initial gates passed on the un-namespaced stack; admission took and released slot w00 in the schema 2 store.
+  - All eight scenes returned business results, each teacher_task_result PASS. Six are act_data_status VALID with act_data_qc PASS (default, fn8-01, fn8-02, fn8-04, fn8-05, fn8-07).
+  - fn8-03 INVALID, "OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_SOURCE_GAP: /gripper_controller/controller_state gaps=1", QC NOT_RUN.
+  - fn8-06 INVALID, "OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_TOPIC_LOSS:/head_camera/color reported_in_window=3 detected=0; OFFLINE_TOPIC_LOSS:/wrist_camera/color reported_in_window=3 detected=0", QC NOT_RUN.
+  - Instance exit WAVE_COMPLETE with cleanup_confirmed true; shard-stop.json all four facts true (schema 2 audit accepted); campaign-cleanup.json terminated true, stop_reason CAMPAIGN_CLOSING. Host wave verification passed; the CLI exited 0. Store IDLE with no lease afterwards; no container running.
+  - Timing from file times - Teacher ready 15:16:49, results from 15:22:15 to 15:59:27, instance exit 15:59:33, wave verified 16:15:33 (local). About 43 minutes of collection and 16 minutes of Host readback.
+  - The remote desktop GPU process noted before launch was left running throughout.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The fixed-identity topology works end to end for one shard - un-namespaced stack, stock recorder, schema 2 records and store.
+  - Two of eight episodes lost data, against none of eight in EXP-581 and none of eight in EXP-582. Candidate causes, none established - the stock bag recorder replacing the scoped recorder (subscription settings may differ), the remote desktop GPU process, the driver and kernel upgrade, or chance.
+conclusion: VALID. Structural success criteria met on the new topology; six of eight episodes VALID with QC PASS and two INVALID on real loss findings. The loss rate is worse than on the old topology and its cause is open; no loss judgement was changed.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261013T071452Z (host/campaign-result.json, host/wave-0-verified.json, host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261013T071452Z
+  - /tmp/so101-debug-act-data-66c42e4c/w1-20261013T071452Z.log
+decision: KEEP
 next_experiment: NONE
 ```
 
