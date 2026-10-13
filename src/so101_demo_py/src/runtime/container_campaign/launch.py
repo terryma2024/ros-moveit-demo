@@ -67,6 +67,19 @@ class ShardLaunchArgs:
             raise ValueError("CONTAINER_LAUNCH_INVALID") from error
 
 
+def instance_private_environment(owned):
+    """The temp, cache and log locations every instance gets inside its own owned root, container or native alike."""
+    temporary = owned / "tmp"
+    return ["NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics",
+        "TMPDIR="+str(temporary), "TMP="+str(temporary), "TEMP="+str(temporary),
+        "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1",
+        "YOLO_CONFIG_DIR="+str(temporary / "ultralytics"),
+        "TORCH_HOME="+str(temporary / "torch"), "HF_HOME="+str(temporary / "huggingface"),
+        "XDG_CACHE_HOME="+str(temporary / "cache"), "XDG_CONFIG_HOME="+str(temporary / "config"),
+        "MPLCONFIGDIR="+str(temporary / "matplotlib"), "ROS_HOME="+str(temporary / "ros-home"),
+        "ROS_LOG_DIR="+str(owned / "ros-logs")]
+
+
 def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, uid, gid):
     try:
         _require(role in ("head", "teacher", "shard"))
@@ -99,14 +112,7 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
         for mount in mounts:
             _require(not any(character in str(path) for path in (mount.source, mount.target)
                              for character in (",", "\n", "\r")))
-        environment = ["NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics",
-            "TMPDIR="+str(temporary), "TMP="+str(temporary), "TEMP="+str(temporary),
-            "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1",
-            "YOLO_CONFIG_DIR="+str(temporary / "ultralytics"),
-            "TORCH_HOME="+str(temporary / "torch"), "HF_HOME="+str(temporary / "huggingface"),
-            "XDG_CACHE_HOME="+str(temporary / "cache"), "XDG_CONFIG_HOME="+str(temporary / "config"),
-            "MPLCONFIGDIR="+str(temporary / "matplotlib"), "ROS_HOME="+str(temporary / "ros-home"),
-            "ROS_LOG_DIR="+str(owned / "ros-logs")]
+        environment = instance_private_environment(owned)
         if role == "shard":
             _require(type(entry) is ShardLaunchArgs)
             _require(entry.spec in host_paths["config_paths"])

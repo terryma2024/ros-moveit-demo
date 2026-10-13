@@ -11,7 +11,7 @@ import subprocess
 import pytest
 
 from test_task_builder import (  # noqa: F401  (fixtures and the flow rig)
-    OBSERVER_NOW_NS, Rig, builder, env, fault_of, flow, make_task, shared_env,
+    OBSERVER_NOW_NS, Rig, TEACHER_SOCKET, builder, env, fault_of, flow, make_task, shared_env,
     verified_inputs_are_remembered_per_file_signature,
 )
 from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
@@ -106,5 +106,6 @@ def test_build_refuses_without_a_repeatable_ready_check(env, supplied):
         kwargs["ready_check"] = env.stack.ready_probe
     with pytest.raises(ValueError, match="COLLECTION_READY_CHECK_REQUIRED"):
         builder().build_collection_task(
-            make_task(env), stack=env.stack, shard_spec=env.spec, output_root=env.output, **kwargs)
+            make_task(env), stack=env.stack, shard_spec=env.spec, output_root=env.output,
+            teacher_socket=TEACHER_SOCKET, **kwargs)
     assert not (env.output / "tasks").exists()

@@ -153,6 +153,7 @@ setup(
             "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",
             "campaign_inference = so101_demo.cli.campaign_inference:main",
             "campaign_shard = so101_demo.cli.campaign_shard:main",
+            "act_instance_native = so101_demo.cli.act_instance_native:main",
             "so101_measure_parallel_resources = so101_demo.cli.measure_parallel_resources:main",
             "so101_debug_provenance = so101_demo.cli.debug_provenance:main",
             "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",

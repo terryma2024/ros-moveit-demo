@@ -61,17 +61,24 @@ class RepeatableActStackReadyProbe:
 
 
 class RosGraphClearProbe:
-    """Require no ROS nodes in this stack's exact domain after group retirement."""
+    """Require no ROS nodes in this stack's exact domain after group retirement.
+
+    `spin_time_s` is how long the probe's own participant discovers before it lists. With localhost-only discovery the
+    default (`ros2 node list --no-daemon` without the option) misses a live node on repeated short calls, so a caller that
+    needs a clear graph to mean no node (the Host's proof for a native instance) passes it explicitly."""
 
     def __init__(self, launch: ActStackLaunch, *, run=subprocess.run,
-                 timeout_s: float = 8.0) -> None:
+                 timeout_s: float = 8.0, spin_time_s: float | None = None) -> None:
         if (not isinstance(launch, ActStackLaunch) or not callable(run)
-                or not 0 < timeout_s <= 10):
+                or not 0 < timeout_s <= 10
+                or spin_time_s is not None and not 0 < spin_time_s < timeout_s):
             raise ValueError("ACT_STACK_GRAPH_PROBE_CONFIG_INVALID")
-        self.launch, self.run, self.timeout_s = launch, run, timeout_s
+        self.launch, self.run, self.timeout_s, self.spin_time_s = launch, run, timeout_s, spin_time_s
 
     def __call__(self) -> bool:
         argv = [str(self.launch.ros2_executable), "node", "list", "--no-daemon"]
+        if self.spin_time_s is not None:
+            argv += ["--spin-time", f"{self.spin_time_s:g}"]
         try:
             result = self.run(
                 argv, env=self.launch.process_environment(), shell=False,

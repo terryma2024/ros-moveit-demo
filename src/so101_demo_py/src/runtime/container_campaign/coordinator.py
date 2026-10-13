@@ -172,7 +172,7 @@ class InstanceDispatch:
             inputs_manifest=dict(refs['inputs_manifest']))
         for role in ('teacher',):
             endpoint = self.endpoints[role]
-            document[role] = dict(role=role, socket_path='/act/ipc/'+role+'/inference.sock',
+            document[role] = dict(role=role, socket_path=str(self.shard.teacher_socket),
                 service_generation=endpoint.service_generation, max_frame_bytes=endpoint.max_frame_bytes)
         config = self.config
         now = self.clock()
@@ -376,7 +376,7 @@ class ConcurrentCollectionCoordinator:
                or shard._close_task.result()['terminated'] is not True for shard in shards):
             raise ValueError('CONTAINER_WAVE_CLEANUP_UNCONFIRMED')
         for shard in shards:
-            shard.registry.prove_terminated(shard.launch.launch_id, shard.inspect(shard.owner.container_id))
+            shard.registry.prove_terminated(shard.launch.launch_id, shard.observe_exit())
 
     def close(self):
         pass

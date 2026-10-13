@@ -10,6 +10,7 @@ writes the decision and both directories' `st_dev`/`st_ino` into its ready recor
 import importlib
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -119,7 +120,7 @@ def test_a_bag_under_neither_root_is_refused_even_when_the_mount_is_proven(tmp_p
 def test_a_bag_under_the_owned_root_is_accepted_and_traversal_stays_refused(tmp_path):
     root = instance(tmp_path)
 
-    accepted = bag_root().bag_root_decision(bag_under(root), root)
+    accepted = bag_root().bag_root_decision(bag_under(root), root, output_mount=root / 'output')
     assert accepted['code'] is None and accepted['location'] == 'owned_root'
     mount = tmp_path / 'mount'
     mount.mkdir()
@@ -128,13 +129,15 @@ def test_a_bag_under_the_owned_root_is_accepted_and_traversal_stays_refused(tmp_
     assert decision['code'] == 'CONTAINER_BAG_ROOT_MISMATCH' and decision['location'] is None
 
 
-def run_recorder(tmp_path, monkeypatch, bag, *, container):
+def run_recorder(tmp_path, monkeypatch, bag, *, container, output=None):
     raw_recorder = importlib.import_module('so101_demo.act.offline.raw_recorder')
     monkeypatch.delenv('ROS_NAMESPACE', raising=False)
     if container:
         monkeypatch.setenv('SO101_ACT_INSTANCE_ROOT', str(tmp_path / 'w00/g1'))
+        monkeypatch.setenv('SO101_ACT_INSTANCE_OUTPUT', str(output or Path('/act/output')))
     else:
         monkeypatch.delenv('SO101_ACT_INSTANCE_ROOT', raising=False)
+        monkeypatch.delenv('SO101_ACT_INSTANCE_OUTPUT', raising=False)
     ready, stats = tmp_path / 'ready.json', tmp_path / 'stats.json'
     code = raw_recorder.main(['--bag-dir', str(bag), '--scene-reads', str(tmp_path / 'scene.jsonl'),
                               '--ready-file', str(ready), '--stats-file', str(stats)])
@@ -178,3 +181,48 @@ def test_the_decision_carries_the_readback_whether_or_not_it_accepts(tmp_path):
     assert refused['output_identity']['mount']['st_ino'] is not None
     assert refused['output_identity']['owned_output']['st_ino'] is not None
     assert accepted['code'] is None and accepted['location'] == 'task_output'
+
+
+def test_a_native_output_is_the_owned_roots_own_output_and_the_proof_is_still_the_real_readback(tmp_path):
+    """A native instance has no bind mount: its output mount is `<owned_root>/output` itself, and the decision still reads
+    both directories back instead of skipping the proof."""
+    root = instance(tmp_path)
+    native_mount = root / 'output'
+    bag = bag_under(native_mount)
+
+    decision = bag_root().bag_root_decision(bag, root, output_mount=native_mount)
+
+    assert decision['code'] is None and decision['location'] == 'task_output'
+    identity = decision['output_identity']
+    info = os.lstat(native_mount)
+    assert identity['same'] is True
+    for label in ('mount', 'owned_output'):
+        assert identity[label] == dict(path=str(native_mount), directory=True, st_dev=info.st_dev, st_ino=info.st_ino)
+    # a symlinked output is not the instance's output, whichever way it is reached
+    other = tmp_path / 'other-output'
+    other.mkdir()
+    link = tmp_path / 'link-output'
+    link.symlink_to(other)
+    refused = bag_root().bag_root_decision(link / 'tasks/t/raw/bag', root, output_mount=link)
+    assert refused['code'] in ('CONTAINER_BAG_OUTPUT_NOT_INSTANCE', 'CONTAINER_BAG_ROOT_MISMATCH')
+    assert refused['location'] is None
+
+
+def test_the_recorder_takes_the_output_mount_from_the_instance_marker_and_refuses_a_marker_without_it(tmp_path, monkeypatch):
+    instance(tmp_path)
+    elsewhere = tmp_path / 'elsewhere'
+    elsewhere.mkdir()
+    native_output = tmp_path / 'w00/g1/output'
+
+    code, ready = run_recorder(tmp_path, monkeypatch, bag_under(elsewhere), container=True, output=native_output)
+    assert code == 3 and ready['bag_root']['output_mount'] == str(native_output)
+
+    raw_recorder = importlib.import_module('so101_demo.act.offline.raw_recorder')
+    monkeypatch.setenv('SO101_ACT_INSTANCE_ROOT', str(tmp_path / 'w00/g1'))
+    monkeypatch.delenv('SO101_ACT_INSTANCE_OUTPUT', raising=False)
+    ready_file = tmp_path / 'ready2.json'
+    second = tmp_path / 'elsewhere2'
+    second.mkdir()
+    code = raw_recorder.main(['--bag-dir', str(bag_under(second)), '--scene-reads', str(tmp_path / 'scene.jsonl'),
+                              '--ready-file', str(ready_file), '--stats-file', str(tmp_path / 'stats2.json')])
+    assert code == 3 and 'ACT_INSTANCE_OUTPUT_UNSET' in json.loads(ready_file.read_text())['error']

@@ -67,6 +67,7 @@ def fixture(tmp_path):
     payload = {name:value for name,value in base.payload.items()
                if name not in {'children','preparation_receipt_path','preparation_receipt_sha256', *REMOVED_KEYS}}
     payload.update(worker_slots=[asdict(slot)], qualification_mode=True, qualification_receipt_sha256=None, evidence_root=str(root),
+        instance_launcher='container',
         runtime_config_path=str(runtime), runtime_config_sha256=runtime_sha,
         registered_evidence_root=str(tmp_path), campaign_config_path=str(config_path),
         campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
@@ -440,7 +441,7 @@ def formal_start(world, tmp_path, monkeypatch, *, config_edit=None, payload_edit
         service_epoch='epoch-1', resource_binding_id='binding-1', qualification_mode=False,
         qualification_receipt_path=str(report), qualification_receipt_sha256=sha_of(report), worker_slots=slots,
         registered_evidence_root=str(world.root), campaign_config_path=str(config_path),
-        campaign_config_sha256=sha_of(config_path))
+        campaign_config_sha256=sha_of(config_path), instance_launcher='container')
     for name, path in (('source', world.inputs/'source.tar'), ('manifest', world.formal), ('runtime_config', world.runtime),
                        ('collection_config', world.collection)):
         payload[name+'_path'], payload[name+'_sha256'] = str(path), sha_of(path)

@@ -1,7 +1,6 @@
 """Host ownership of one private shard, with durable intent and original stop proof."""
 
 import asyncio
-from dataclasses import asdict
 import hashlib
 import json
 import math
@@ -12,7 +11,10 @@ import subprocess
 import time
 
 from so101_demo.act.parallel_collection_contracts import read_document
+from so101_demo.runtime.container_campaign.instance_owner_common import (
+    check_runtime_ready, load_instance_spec, read_instance_exit)
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs, build_container_argv
+from so101_demo.runtime.container_campaign.paths import CONTAINER_TEACHER_SOCKET
 from so101_demo.runtime.container_campaign.process_identity import container_key_from_inspect
 from so101_demo.runtime.container_campaign.provenance import read_container_provenance
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
@@ -57,26 +59,8 @@ class ContainerShardOwner:
             raise ValueError('SHARD_OWNER_CONFIG_INVALID')
         self.context,self.launch,self.entry,self.registry = admitted_context,launch,entry,registry
         self.root = Path(launch.owned_root)
-        from so101_demo.cli.campaign_shard import load_spec
-        self.spec,_runtime = load_spec(entry.spec)
-        expected = dict(campaign_id=admitted_context.campaign_id,worker_id=launch.worker_id,
-            execution_generation=admitted_context.execution_generation,service_epoch=admitted_context.service_epoch,
-            launch_generation=launch.launch_generation,owned_root=str(self.root),
-            simulation_session_id=launch.session_id,gpu_uuid=admitted_context.physical_gpu_uuid,
+        self.spec = load_instance_spec(entry.spec,admitted_context=admitted_context,launch=launch,
             service_token=service_token)
-        if (any(self.spec.get(name) != value or type(self.spec.get(name)) is not type(value)
-                for name,value in expected.items())
-                or type(self.spec.get('runtime_id')) is not str or not self.spec['runtime_id']):
-            raise ValueError('SHARD_SPEC_CONTEXT_MISMATCH')
-        if self.spec['workload_kind']=='act_collection':
-            identity={name:getattr(admitted_context,name) for name in (
-                'manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint')}
-            if (self.spec['business_identity']!=identity
-                    or self.spec['campaign_config']!=dict(path=admitted_context.campaign_config_path,
-                        sha256=admitted_context.campaign_config_sha256)
-                    or self.spec['deadline_monotonic_s']!=admitted_context.deadline_monotonic_s
-                    or self.spec['wave_id']!=launch.wave_id):
-                raise ValueError('SHARD_SPEC_CONTEXT_MISMATCH')
         self.spec_sha256 = hashlib.sha256(entry.spec.read_bytes()).hexdigest()
         self.argv = build_container_argv(role='shard',image=images,gpu_uuid=admitted_context.physical_gpu_uuid,
             host_paths=dict(owned_root=self.root,approved_inputs=approved_inputs,config_paths=config_paths,
@@ -93,6 +77,15 @@ class ContainerShardOwner:
         self._registered,self._closing,self._runtime_ready = False,False,False
         self._start_task = self._close_task = None
         self._startup_done = asyncio.Event()
+
+    @property
+    def teacher_socket(self):
+        """The Teacher socket as the instance reaches it: the fixed mount `build_role_mounts` gives every shard."""
+        return CONTAINER_TEACHER_SOCKET
+
+    def observe_exit(self):
+        """One fresh reading of the registered container, the exit document `registry.prove_terminated` judges."""
+        return self.inspect(self.owner.container_id)
 
     def inspect(self,container_id):
         result = self.docker(['docker','inspect',container_id])
@@ -127,7 +120,7 @@ class ContainerShardOwner:
                            int(self.context.deadline_monotonic_s*1e9))
             if self.clock() >= deadline:
                 raise ValueError('SHARD_START_DEADLINE_EXPIRED')
-            from so101_demo.cli.campaign_shard import load_spec
+            from so101_demo.runtime.act_instance.spec import load_spec
             if (hashlib.sha256(self.entry.spec.read_bytes()).hexdigest() != self.spec_sha256
                     or load_spec(self.entry.spec)[0] != self.spec):
                 raise ValueError('SHARD_SPEC_CHANGED')
@@ -168,15 +161,7 @@ class ContainerShardOwner:
             self.registry.bind_child(self.launch.launch_id,binding)
             await self._wait_file(self.root/'runtime-ready.json',deadline)
             await self._wait_file(self.root/'stack-readiness.json',deadline)
-            ready = read_document(self.root/'runtime-ready.json')
-            expected_ready = dict(schema_version=2,kind='ACT_SHARD_RUNTIME_READY',
-                generation=self.launch.launch_generation,process_owner=asdict(binding.process))
-            if (set(ready) != set(expected_ready)|{'readiness_sha256'}
-                    or any(ready[name] != value or type(ready[name]) is not type(value)
-                           for name,value in expected_ready.items())
-                    or hashlib.sha256((self.root/'stack-readiness.json').read_bytes()).hexdigest()
-                       != ready['readiness_sha256']):
-                raise ValueError('SHARD_RUNTIME_READINESS_INVALID')
+            check_runtime_ready(self.root,generation=self.launch.launch_generation,process=binding.process)
             actual = await asyncio.to_thread(read_container_provenance,cid,docker_runner=self.docker)
             if (actual['image_digest'] != self.image['digest'] or any(
                     actual['provenance'][name] != self.image[name]
@@ -275,16 +260,4 @@ class ContainerShardOwner:
 
     def instance_exit(self):
         """The child's own exit record, or None when it is absent or not a closed, valid record."""
-        try:
-            record = read_document(self.root/'instance-exit.json')
-            if (type(record) is not dict or set(record) != {'schema_version','kind','state','fault_reason','task',
-                    'cleanup_confirmed','cleanup_errors'} or type(record['schema_version']) is not int
-                    or record['schema_version'] != 1 or record['kind'] != 'ACT_SHARD_INSTANCE_EXIT'
-                    or record['fault_reason'] is not None and (type(record['fault_reason']) is not str
-                        or not 0 < len(record['fault_reason']) <= 300)
-                    or type(record['cleanup_confirmed']) is not bool or type(record['cleanup_errors']) is not list
-                    or record['task'] is not None and type(record['task']) is not dict):
-                return None
-            return record
-        except (OSError,ValueError,TypeError,KeyError):
-            return None
+        return read_instance_exit(self.root)

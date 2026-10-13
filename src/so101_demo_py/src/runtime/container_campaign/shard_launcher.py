@@ -4,7 +4,8 @@ import hashlib
 from pathlib import Path
 import secrets
 
-from so101_demo.cli.campaign_shard import SPEC_SCHEMA_VERSION,instance_id_for,load_spec
+from so101_demo.runtime.act_instance.program import instance_id_for
+from so101_demo.runtime.act_instance.spec import SPEC_SCHEMA_VERSION,load_spec
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch,ContainerLaunchRegistry
@@ -32,6 +33,21 @@ class ContainerShardLauncher:
         self.docker_runner,self.namespace_reader=docker_runner,namespace_reader
         self._next_wave=0
         self._prepared={}
+
+    def _launch(self,*,slot,wave_id,generation,short,root,session):
+        return ContainerLaunch(launch_id=wave_id+'-'+slot.worker_id+'-g'+str(generation),role='shard',
+            worker_id=slot.worker_id,wave_id=wave_id,launch_generation=generation,
+            container_name='so101-act-'+short+'-'+slot.worker_id+'-g'+str(generation),
+            image_digest=self.config['shard_image']['digest'],owned_root=str(root),session_id=session)
+
+    def _owner(self,*,launch,entry,spec_path,token,images,endpoints):
+        return ContainerShardOwner(admitted_context=self.context,launch=launch,entry=entry,
+            images=images,paths=self.paths,registry=self.registry,approved_inputs=self.approved_inputs,
+            config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path))),service_token=token,
+            startup_timeout_s=self.runtime.initializing_hard_timeout_s,
+            status_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
+            stop_timeout_s=self.runtime.worker_recovery_timeout_s,
+            docker_runner=self.docker_runner,namespace_reader=self.namespace_reader)
 
     def __call__(self,*,plan,endpoints,slots):
         wave=plan['wave_index']
@@ -75,19 +91,11 @@ class ContainerShardLauncher:
             spec_path=self.paths['run']/('shard-'+wave_id+'-'+slot.worker_id+'-g'+str(generation)+'.json')
             _write(spec_path,spec)
             if load_spec(spec_path)[0]!=spec:raise ValueError('COLLECTION_SHARD_SPEC_DRIFT')
-            launch=ContainerLaunch(launch_id=wave_id+'-'+slot.worker_id+'-g'+str(generation),role='shard',
-                worker_id=slot.worker_id,wave_id=wave_id,launch_generation=generation,
-                container_name='so101-act-'+short+'-'+slot.worker_id+'-g'+str(generation),
-                image_digest=config['shard_image']['digest'],owned_root=str(root),session_id=session)
+            launch=self._launch(slot=slot,wave_id=wave_id,generation=generation,short=short,root=root,session=session)
             if launch.launch_id!=instance_id_for(spec):raise ValueError('COLLECTION_SHARD_INSTANCE_ID_DRIFT')
             entry=ShardLaunchArgs(spec=spec_path,mujoco_session_id=session)
-            owners.append(ContainerShardOwner(admitted_context=self.context,launch=launch,entry=entry,
-                images=images,paths=self.paths,registry=self.registry,approved_inputs=self.approved_inputs,
-                config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path))),service_token=token,
-                startup_timeout_s=self.runtime.initializing_hard_timeout_s,
-                status_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
-                stop_timeout_s=self.runtime.worker_recovery_timeout_s,
-                docker_runner=self.docker_runner,namespace_reader=self.namespace_reader))
+            owners.append(self._owner(launch=launch,entry=entry,spec_path=spec_path,token=token,images=images,
+                endpoints=endpoints))
         self._prepared[wave]=tuple(owners)
         self._next_wave+=1
         return tuple(owners)

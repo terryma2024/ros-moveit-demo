@@ -5,6 +5,9 @@ from dataclasses import asdict, dataclass
 import json
 import re
 
+#: How an instance of a slot runs; only `native` has no isolation and so needs the host to itself.
+LAUNCHERS = ('container', 'native')
+
 
 @dataclass(frozen=True)
 class ActWorkerSlot:
@@ -42,9 +45,40 @@ class ActWorkerSlotRegistry:
                                         'ORDER BY campaign_id, execution_generation, worker_id', (int(active),))
             return tuple(ActWorkerSlot(**json.loads(row['slot_json'])) for row in rows)
 
-    def validate(self, slots):
+    def native_campaign_ids(self):
+        """Campaign ids that are admitted with the native instance launcher (their admitted payload says so)."""
+        with self.store._thread_lock:
+            rows = self.store._query_all('SELECT c.campaign_id AS campaign_id, p.payload_json AS payload '
+                'FROM act_campaign_contexts c JOIN parents p ON p.operation_id = c.operation_id')
+        native = set()
+        for row in rows:
+            try:
+                if json.loads(row['payload']).get('instance_launcher') == 'native':
+                    native.add(row['campaign_id'])
+            except (TypeError, ValueError, AttributeError):
+                continue
+        return native
+
+    def _require_launcher_exclusivity(self, slots, launcher):
+        """A native instance has no isolation and shares the fixed ROS domain with nothing else on the host.
+
+        A native instance therefore needs a host with no other ACT instance and no native pick-place child; and while one is
+        admitted no container instance may start either. Only the ACT tables are read."""
+        if launcher not in LAUNCHERS:
+            raise ValueError('WORKER_SLOT_INVALID')
+        active = self.slots()
+        if launcher == 'native':
+            if len(slots) != 1:
+                raise ValueError('NATIVE_INSTANCE_SINGLE_WORKER_ONLY')
+            if active or (self.child_registry is not None and self.child_registry.launches()):
+                raise ValueError('NATIVE_INSTANCE_EXCLUSIVE')
+        elif active and {slot.campaign_id for slot in active} & self.native_campaign_ids():
+            raise ValueError('NATIVE_INSTANCE_EXCLUSIVE')
+
+    def validate(self, slots, *, launcher='container'):
         if type(slots) is not tuple or not slots or any(type(slot) is not ActWorkerSlot for slot in slots):
             raise ValueError('WORKER_SLOT_INVALID')
+        self._require_launcher_exclusivity(slots, launcher)
         existing = list(self.slots())
         if self.child_registry is not None:
             existing.extend(self.child_registry.launches())
@@ -56,12 +90,12 @@ class ActWorkerSlotRegistry:
             existing.append(slot)
 
     @contextlib.contextmanager
-    def reserve_many(self, slots):
+    def reserve_many(self, slots, *, launcher='container'):
         # Commit the complete logical reservation before any GPU lease or spawn.
         # Holding this store's lock across admission prevents resource races.
         with self.store._thread_lock:
             with self.store.immediate_transaction():
-                self.validate(slots)
+                self.validate(slots, launcher=launcher)
                 for slot in slots:
                     self.store._connection.execute('INSERT INTO act_worker_slots VALUES (?,?,?,?,1)',
                         (slot.campaign_id, slot.worker_id, slot.execution_generation, _canonical(slot)))

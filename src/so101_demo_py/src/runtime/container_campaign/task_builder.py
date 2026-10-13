@@ -97,7 +97,7 @@ def _check_spec(spec):
     return spec
 
 
-def load_task_input(task,shard_spec,*,clock=time.monotonic):
+def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     """Validate the assignment against the shard and the frozen originals; creates nothing."""
     if type(task) is not TaskSpec:
         raise ValueError('COLLECTION_TASK_SPEC_INVALID')
@@ -138,7 +138,7 @@ def load_task_input(task,shard_spec,*,clock=time.monotonic):
     for role in ('teacher',):
         endpoint=document[role]
         if (type(endpoint) is not dict or set(endpoint)!=_ENDPOINT
-                or endpoint['role']!=role or endpoint['socket_path']!='/act/ipc/'+role+'/inference.sock'
+                or endpoint['role']!=role or endpoint['socket_path']!=str(teacher_socket)
                 or type(endpoint['service_generation']) is not str or not endpoint['service_generation']
                 or type(endpoint['max_frame_bytes']) is not int
                 or endpoint['max_frame_bytes']!=campaign[role+'_service']['max_frame_bytes']):
@@ -677,7 +677,7 @@ def _stack_ready(ports,ready_check):
     return False
 
 
-def build_collection_task(task,*,stack,shard_spec,output_root,ready_check=None,evidence=None,
+def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,ready_check=None,evidence=None,
                           inference_client_factory=InferenceClient,dependencies=None,clock=time.monotonic,
                           runtime_overrides=None,perception_runner=None,teacher_bound_s=None,recovery_timeout_s=None,
                           process_group_factory=None):
@@ -692,7 +692,7 @@ def build_collection_task(task,*,stack,shard_spec,output_root,ready_check=None,e
     single-use start probe, consumed by the shard start, so it is never a fallback."""
     if not callable(ready_check) or ready_check is getattr(stack,'ready_probe',None):
         raise ValueError('COLLECTION_READY_CHECK_REQUIRED')
-    loaded=load_task_input(task,shard_spec,clock=clock)
+    loaded=load_task_input(task,shard_spec,teacher_socket=teacher_socket,clock=clock)
     _check_stack(stack,shard_spec,loaded.root,output_root)
     state=LocalTaskState(clock)
     scene=loaded.scene_id

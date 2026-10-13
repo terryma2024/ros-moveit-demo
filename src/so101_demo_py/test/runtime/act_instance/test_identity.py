@@ -43,14 +43,21 @@ def test_a_fixed_environment_verifies_and_every_drift_is_refused():
 def test_the_marker_is_absent_by_default_and_names_the_owned_root_once_set(tmp_path):
     values = {}
     assert identity.instance_root(environment=values) is None
-    identity.mark_instance(tmp_path, environment=values)
-    assert values == {identity.INSTANCE_ROOT_ENV: str(tmp_path)}
+    assert identity.instance_output(environment=values) is None
+    identity.mark_instance(tmp_path, tmp_path / 'output', environment=values)
+    assert values == {identity.INSTANCE_ROOT_ENV: str(tmp_path), identity.INSTANCE_OUTPUT_ENV: str(tmp_path / 'output')}
     assert identity.instance_root(environment=values) == str(tmp_path)
+    assert identity.instance_output(environment=values) == str(tmp_path / 'output')
     for bad in ('relative/root', str(tmp_path) + '/../x', ''):
         with pytest.raises(ValueError, match='^ACT_INSTANCE_ROOT_INVALID$'):
             identity.instance_root(environment={identity.INSTANCE_ROOT_ENV: bad})
     with pytest.raises(ValueError, match='^ACT_INSTANCE_ROOT_INVALID$'):
-        identity.mark_instance('relative', environment={})
+        identity.mark_instance('relative', '/abs/output', environment={})
+    for bad in ('relative/output', '/abs/../output', ''):
+        with pytest.raises(ValueError, match='^ACT_INSTANCE_OUTPUT_INVALID$'):
+            identity.mark_instance(tmp_path, bad, environment={})
+        with pytest.raises(ValueError, match='^ACT_INSTANCE_OUTPUT_INVALID$'):
+            identity.instance_output(environment={identity.INSTANCE_OUTPUT_ENV: bad})
 
 
 def test_the_marker_is_not_the_namespace_marker(tmp_path):

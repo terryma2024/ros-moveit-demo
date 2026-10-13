@@ -12,8 +12,15 @@ import stat
 from so101_demo.runtime.inference.config import _open_regular
 
 
-#: Where a shard container sees its own `<owned_root>/output` (the one fixed output mount, see `build_role_mounts`).
+#: Where a shard container sees its own directories, installed code and interpreter (the fixed mounts of `build_role_mounts`).
+#: Only the container launcher and the container shell use them; the instance program takes every path from its layout.
 TASK_OUTPUT_MOUNT = Path('/act/output')
+CONTAINER_CONTROL_ROOT = Path('/act/control')
+CONTAINER_IPC_ROOT = Path('/act/ipc')
+CONTAINER_TEACHER_SOCKET = CONTAINER_IPC_ROOT/'teacher'/'inference.sock'
+CONTAINER_INSTALL_PREFIX = Path('/act/install')
+CONTAINER_ROS2 = CONTAINER_INSTALL_PREFIX/'bin'/'ros2'
+CONTAINER_INTERPRETER = Path('/act/venv/bin/python')
 
 
 @dataclass(frozen=True)
@@ -170,19 +177,29 @@ def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config
             source = _path(socket_roots[service_role], directory=True)
             if source != run / "ipc" / service_role:
                 raise ValueError("service socket owner")
-            target = Path("/act/ipc") / service_role if role == "shard" else Path("/act/ipc")
+            target = CONTAINER_IPC_ROOT / service_role if role == "shard" else CONTAINER_IPC_ROOT
             mounts.append(RoleMount(source, target, role == "shard", "ipc"))
         if role == "shard":
             control = _path(socket_roots["control"], directory=True)
             if control != owned / "control":
                 raise ValueError("control socket owner")
-            mounts.append(RoleMount(control, Path("/act/control"), False, "control"))
+            mounts.append(RoleMount(control, CONTAINER_CONTROL_ROOT, False, "control"))
         targets = [mount.target for mount in mounts]
         if len(targets) != len(set(targets)):
             raise ValueError("duplicate mount target")
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise ValueError("ROLE_MOUNT_INVALID") from error
     return tuple(mounts)
+
+
+def campaign_run_root(owned_root):
+    """The run directory (the one holding `.campaign-layout.json`) of an instance's owned root."""
+    return _layout(Path(owned_root))
+
+
+def host_teacher_socket(run):
+    """The Teacher service socket as the Host sees it: the directory `build_role_mounts` mounts at `/act/ipc/teacher`."""
+    return Path(run)/'ipc'/'teacher'/'inference.sock'
 
 
 def task_output_path(output_root, task_id):

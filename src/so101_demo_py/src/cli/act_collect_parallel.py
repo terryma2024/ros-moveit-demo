@@ -1,4 +1,4 @@
-"""CLI: admit and run one container-based ACT collection campaign (Teacher service, shard waves, four-operation task control).
+"""CLI: admit and run one ACT collection campaign (Teacher service, instance waves, four-operation task control).
 
 Everything that can be refused is refused before admission, and nothing is spawned before it: the arguments, the plane's
 contract, every input file and the frozen per-scene inputs are checked first, in a new run root that only holds files. Admission
@@ -11,6 +11,11 @@ unproven stop, a refused settle). Planes: `--qualification` with `--worker-count
 otherwise formal (8 workers, `--manifest` is the scene list and `--qualification-report` the container qualification report,
 a report built from another run of the registered evidence root, which formal admission recomputes and verifies in full). In the
 exact-eight qualification plane `--run-id` must be the gate contract's `qualification_run_id`.
+
+`--instance-launcher` chooses how an instance runs: `container` (default, one Docker container per worker) or `native` (one
+Host process group, exactly one worker). Both run the same instance program from the same spec; the Teacher service is a
+container either way. A native instance has no isolation, so admission refuses it unless it is the only ACT instance on the
+host, and the Host ROS domain 181 must be free of other participants while it runs.
 
 Environment (read by `compose_services`): SO101_UNIFIED_EVIDENCE_ROOT (the registered evidence root), SO101_ACT_GPU_SELECTOR,
 SO101_ACT_RESOURCE_BINDING_ID.
@@ -62,6 +67,9 @@ class CollectionEdges:
     service_query            Teacher socket query (default: the real `InferenceClient`)
     namespace_reader         container PID namespace reader (default: `/proc` with the documented sudo fallback)
     control_factory          container control channel per shard owner (default: `ContainerTaskControl` over the private socket)
+    install_prefix           native launcher only: the installed prefix the instance runs (default: the `so101_demo_py` prefix)
+    native_edges             native launcher only: `command`, `base_environment`, `popen`, `graph_probe_factory` of
+                             `NativeInstanceLauncher` (default: the production ones)
     None of these reaches admission, the owner, the coordinator's decisions or the wave verifier.
     """
 
@@ -73,6 +81,8 @@ class CollectionEdges:
     service_query: Callable | None = None
     namespace_reader: Callable | None = None
     control_factory: Callable | None = None
+    install_prefix: Path | None = None
+    native_edges: Mapping[str, object] | None = None
 
 
 def _parser():
@@ -82,6 +92,9 @@ def _parser():
     parser.add_argument('--run-id', required=True, help='name of the new run directory under the registered evidence root')
     parser.add_argument('--worker-count', type=int, required=True)
     parser.add_argument('--qualification', action='store_true')
+    parser.add_argument('--instance-launcher', choices=('container', 'native'), default='container',
+                        help='how each instance runs: one Docker container per worker, or one native Host process group '
+                             '(exactly one worker)')
     parser.add_argument('--manifest', type=Path, required=True,
                         help='functional contract (1/2 workers), gate contract (8), or the formal scene list')
     parser.add_argument('--qualification-report', type=Path, help='formal plane only')
@@ -127,6 +140,8 @@ def _preflight(args):
         raise ValueError('CAMPAIGN_RUN_ID_INVALID')
     if args.worker_count not in ((1, 2, 8) if args.qualification else (8,)):
         raise ValueError('COLLECTION_WORKER_COUNT_INVALID')
+    if args.instance_launcher == 'native' and args.worker_count != 1:
+        raise ValueError('COLLECTION_NATIVE_SINGLE_WORKER_ONLY')
     if args.qualification and args.qualification_report is not None:
         raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
     if not args.qualification and args.qualification_report is None:
@@ -151,6 +166,21 @@ def _preflight(args):
         if type(document.get('scenarios')) is not list or not document['scenarios']:
             raise ValueError('COLLECTION_MANIFEST_INVALID')
     return resolved, report, scenes, scenes_sha
+
+
+def _native_edges(edges, args):
+    """What the native launcher needs from the Host: the installed prefix it runs and its base environment."""
+    if args.instance_launcher != 'native':
+        return None
+    prefix = edges.install_prefix
+    if prefix is None:
+        from ament_index_python.packages import get_package_prefix
+        prefix = Path(get_package_prefix('so101_demo_py'))
+    native = dict(install_prefix=prefix)
+    if edges.environment is not None:
+        native['base_environment'] = dict(edges.environment)
+    native.update(edges.native_edges or {})
+    return native
 
 
 def _describe(error):
@@ -198,7 +228,7 @@ def main(argv=None, *, edges=None) -> int:
         arguments = SimpleNamespace(campaign_id=args.campaign_id, manifest=resolved['manifest'], source=resolved['source'],
             runtime_config=resolved['runtime_config'], collection_config=resolved['collection_config'],
             campaign_config=resolved['campaign_config'], root=run, qualification=bool(args.qualification),
-            qualification_report=report, worker_count=args.worker_count)
+            qualification_report=report, worker_count=args.worker_count, instance_launcher=args.instance_launcher)
         spec = prepare_collection_operation(arguments, services=services,
                                             contact_policy_fingerprint=binding['contact_policy_fingerprint'])
         parallel_runtime = collection_parallel_runtime(resolved['collection_config'])
@@ -217,7 +247,8 @@ def main(argv=None, *, edges=None) -> int:
             parallel_runtime=parallel_runtime, approved_inputs=approved, qualification=bool(args.qualification),
             approved_disk_floor_bytes=binding['disk_floor_bytes'], docker_runner=edges.docker_runner,
             service_query=edges.service_query, namespace_reader=edges.namespace_reader,
-            control_factory=edges.control_factory)
+            control_factory=edges.control_factory, instance_launcher=args.instance_launcher,
+            native=_native_edges(edges, args))
     except Exception as error:  # noqa: BLE001 - admitted but not built: nothing was launched, so ask admission to settle
         return _settle_unbuilt(workload, context, run, error)
     cleanup = []

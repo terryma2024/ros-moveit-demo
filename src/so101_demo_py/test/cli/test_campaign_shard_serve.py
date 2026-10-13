@@ -13,7 +13,7 @@ import signal
 import threading
 import time
 
-from test_campaign_shard import fixture
+from test_campaign_shard import fixture, layout_for
 
 
 class StackDouble:
@@ -51,14 +51,14 @@ class RetirementDouble:
 
 def shard_parts(tmp_path, **retirement):
     from so101_demo.runtime.container_campaign.process_identity import read_process_owner
-    mod = importlib.import_module('so101_demo.cli.campaign_shard')
+    mod = importlib.import_module('so101_demo.runtime.act_instance.program')
     path, _document = fixture(tmp_path)
-    spec, runtime = mod.load_spec(path)
+    spec, runtime = importlib.import_module('so101_demo.runtime.act_instance.spec').load_spec(path)
     (Path(spec['owned_root'])/'tmp').mkdir()
     stack = StackDouble()
     arguments = dict(process=read_process_owner(os.getpid()), stack=stack, ready=ReadyDouble(),
-        retirement=RetirementDouble(stack, **retirement), socket_root=Path(spec['owned_root'])/'control')
-    return mod, spec, runtime, stack, arguments
+        retirement=RetirementDouble(stack, **retirement))
+    return mod, spec, runtime, stack, arguments, layout_for(spec, tmp_path)
 
 
 async def control_call(root, operation, payload):
@@ -87,10 +87,10 @@ async def wait_for(condition):
 
 
 def test_status_is_starting_until_native_readiness(tmp_path):
-    mod, spec, runtime, stack, arguments = shard_parts(tmp_path)
+    mod, spec, runtime, stack, arguments, layout = shard_parts(tmp_path)
     root = Path(spec['owned_root'])
     async def run():
-        shard = asyncio.create_task(mod.serve_shard(spec, runtime, install_signals=False, **arguments))
+        shard = asyncio.create_task(mod.serve_instance(spec, runtime, layout, install_signals=False, **arguments))
         await wait_for(lambda: (root/'control/child-ready.json').exists() and stack.timeouts)
         starting = await control_call(root, 'get_status', dict(task_id=None))
         assert starting['accepted'] is True and starting['result']['state'] == 'STARTING'
@@ -118,7 +118,7 @@ def test_status_is_starting_until_native_readiness(tmp_path):
 
 
 def test_serve_hands_the_repeatable_ready_check_to_the_task_builder(tmp_path, monkeypatch):
-    mod, spec, runtime, stack, arguments = shard_parts(tmp_path)
+    mod, spec, runtime, stack, arguments, layout = shard_parts(tmp_path)
     root = Path(spec['owned_root'])
     stack.release.set()
     seen = {}
@@ -129,7 +129,7 @@ def test_serve_hands_the_repeatable_ready_check_to_the_task_builder(tmp_path, mo
     monkeypatch.setattr(mod, 'shard_builder', spy)
     check = lambda: True
     async def run():
-        shard = asyncio.create_task(mod.serve_shard(spec, runtime, install_signals=False, ready_check=check, **arguments))
+        shard = asyncio.create_task(mod.serve_instance(spec, runtime, layout, install_signals=False, ready_check=check, **arguments))
         await wait_for(lambda: (root/'stack-readiness.json').exists())
         await control_call(root, 'terminate', dict(reason='test end'))
         return await asyncio.wait_for(shard, 5)
@@ -139,19 +139,20 @@ def test_serve_hands_the_repeatable_ready_check_to_the_task_builder(tmp_path, mo
 
 
 def test_main_exits_after_executor_stop(tmp_path, monkeypatch):
-    mod, spec, runtime, stack, arguments = shard_parts(tmp_path)
+    mod, spec, runtime, stack, arguments, layout = shard_parts(tmp_path)
     root = Path(spec['owned_root'])
     stack.release.set()
+    shell = importlib.import_module('so101_demo.cli.campaign_shard')
     async def fake_run_shard(loaded_spec, loaded_runtime):
-        return await mod.serve_shard(loaded_spec, loaded_runtime, install_signals=False, **arguments)
-    monkeypatch.setattr(mod, 'run_shard', fake_run_shard)
+        return await mod.serve_instance(loaded_spec, loaded_runtime, layout, install_signals=False, **arguments)
+    monkeypatch.setattr(shell, 'run_shard', fake_run_shard)
     async def stop_it():
         await wait_for(lambda: (root/'stack-readiness.json').exists())
         return await control_call(root, 'terminate', dict(reason='finished'))
     holder = {}
     thread = threading.Thread(target=lambda: holder.update(reply=asyncio.run(stop_it())))
     thread.start()
-    assert mod.main(['--spec', str(tmp_path/'shard.json')]) == 0
+    assert shell.main(['--spec', str(tmp_path/'shard.json')]) == 0
     thread.join(5)
     assert holder['reply']['accepted'] is True
     assert json.loads((root/'instance-exit.json').read_text()) == dict(schema_version=1,
@@ -160,11 +161,11 @@ def test_main_exits_after_executor_stop(tmp_path, monkeypatch):
 
 
 def test_forced_retirement_exits_nonzero_and_records_unconfirmed_cleanup(tmp_path):
-    mod, spec, runtime, stack, arguments = shard_parts(tmp_path, forced=True)
+    mod, spec, runtime, stack, arguments, layout = shard_parts(tmp_path, forced=True)
     root = Path(spec['owned_root'])
     stack.release.set()
     async def run():
-        shard = asyncio.create_task(mod.serve_shard(spec, runtime, install_signals=False, **arguments))
+        shard = asyncio.create_task(mod.serve_instance(spec, runtime, layout, install_signals=False, **arguments))
         await wait_for(lambda: (root/'stack-readiness.json').exists())
         await control_call(root, 'terminate', dict(reason='finished'))
         return await asyncio.wait_for(shard, 5)
@@ -173,11 +174,11 @@ def test_forced_retirement_exits_nonzero_and_records_unconfirmed_cleanup(tmp_pat
 
 
 def test_sigterm_terminates_executor_and_writes_instance_exit(tmp_path):
-    mod, spec, runtime, stack, arguments = shard_parts(tmp_path)
+    mod, spec, runtime, stack, arguments, layout = shard_parts(tmp_path)
     root = Path(spec['owned_root'])
     retirement = arguments['retirement']
     async def run():
-        shard = asyncio.create_task(mod.serve_shard(spec, runtime, **arguments))
+        shard = asyncio.create_task(mod.serve_instance(spec, runtime, layout, **arguments))
         await wait_for(lambda: stack.timeouts)
         os.kill(os.getpid(), signal.SIGTERM)
         await asyncio.sleep(.2)
@@ -202,11 +203,11 @@ def test_executor_budgets_come_from_frozen_runtime_config(tmp_path, monkeypatch)
             seen.update(arguments)
             super().__init__(**arguments)
     monkeypatch.setattr(task_executor, 'ContainerTaskExecutor', Recording)
-    mod, spec, runtime, stack, arguments = shard_parts(tmp_path)
+    mod, spec, runtime, stack, arguments, layout = shard_parts(tmp_path)
     root = Path(spec['owned_root'])
     stack.release.set()
     async def run():
-        shard = asyncio.create_task(mod.serve_shard(spec, runtime, install_signals=False, **arguments))
+        shard = asyncio.create_task(mod.serve_instance(spec, runtime, layout, install_signals=False, **arguments))
         await wait_for(lambda: (root/'stack-readiness.json').exists())
         await control_call(root, 'terminate', dict(reason='finished'))
         await asyncio.wait_for(shard, 5)

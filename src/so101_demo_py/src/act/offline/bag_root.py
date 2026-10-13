@@ -2,15 +2,17 @@
 
 from pathlib import Path
 
-from so101_demo.runtime.container_campaign.paths import TASK_OUTPUT_MOUNT, task_output_identity
+from so101_demo.runtime.container_campaign.paths import task_output_identity
 
 
-def bag_root_decision(uri,owned_root,*,output_mount=TASK_OUTPUT_MOUNT,output_identity=task_output_identity):
+def bag_root_decision(uri,owned_root,*,output_mount,output_identity=task_output_identity):
     """Where a bag may live in an instance, with the readback that justifies it.
 
-    Exactly two places: under this instance's owned root, or under the fixed output mount - and the mount only when
-    it is proven to be `<owned_root>/output` itself (same device and inode, no symlink), so a path that merely has that name
-    never counts. `code` is None when accepted: `CONTAINER_BAG_ROOT_MISMATCH` for a bag under neither,
+    Exactly two places: under the instance's output mount - and the mount only when it is proven to be
+    `<owned_root>/output` itself (same device and inode, no symlink), so a path that merely has that name never counts - or
+    elsewhere under this instance's owned root. `output_mount` is the output directory as the instance sees it: a bind mount
+    in a container, `<owned_root>/output` itself in a native instance, where the proof is the same real readback of one
+    directory twice. `code` is None when accepted: `CONTAINER_BAG_ROOT_MISMATCH` for a bag under neither,
     `CONTAINER_BAG_OUTPUT_NOT_INSTANCE` for a bag under the mount when the mount is not this instance's output."""
     root=Path(owned_root)
     bag=Path(uri)
@@ -24,10 +26,10 @@ def bag_root_decision(uri,owned_root,*,output_mount=TASK_OUTPUT_MOUNT,output_ide
             return decision
     except (OSError,RuntimeError):
         return decision
-    if bag.is_relative_to(root):
-        return dict(decision,location='owned_root',code=None)
     if bag.is_relative_to(Path(output_mount)):
         if identity.get('same') is True:
             return dict(decision,location='task_output',code=None)
         return dict(decision,code='CONTAINER_BAG_OUTPUT_NOT_INSTANCE')
+    if bag.is_relative_to(root):
+        return dict(decision,location='owned_root',code=None)
     return decision

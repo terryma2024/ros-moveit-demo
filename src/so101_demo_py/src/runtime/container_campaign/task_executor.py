@@ -2,7 +2,6 @@
 
 import asyncio
 import math
-from pathlib import Path
 import threading
 import time
 
@@ -43,7 +42,7 @@ class CleanupUnconfirmed(RuntimeError):
 
 
 class ContainerTaskExecutor:
-    def __init__(self, *, instance_id, builder, retirement, output_root=Path('/act/output'),
+    def __init__(self, *, instance_id, builder, retirement, output_root,
                  owner_timeout_s, stop_timeout_s, retire_timeout_s, clock=time.monotonic, ready=True):
         if type(ready) is not bool:
             raise ValueError('TASK_EXECUTOR_CONFIG_INVALID')

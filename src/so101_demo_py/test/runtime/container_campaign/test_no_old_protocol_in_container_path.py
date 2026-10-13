@@ -25,6 +25,7 @@ FORBIDDEN=('worker_transport','worker_runner','collection_worker','collection_dr
 def scanned_files():
     files=sorted(CONTAINER_CAMPAIGN.rglob('*.py'))
     files+=[PACKAGE/'cli/campaign_shard.py']
+    files+=sorted((PACKAGE/'runtime/act_instance').glob('*.py'))
     files+=[TELEOP/'unified'/name for name in ('child_runtime.py','bridge.py','ros_child.py')]
     return files
 
@@ -32,7 +33,7 @@ def scanned_files():
 def test_scan_covers_the_container_path_modules():
     files=scanned_files()
     assert all(path.is_file() for path in files)
-    assert {path.name for path in files}>={'task_builder.py','task_executor.py','shard_owner.py','campaign_shard.py',
+    assert {path.name for path in files}>={'task_builder.py','task_executor.py','shard_owner.py','campaign_shard.py','program.py','spec.py','layout.py',
                                            'child_runtime.py','bridge.py','ros_child.py'}
 
 

@@ -10,6 +10,7 @@ from so101_demo.runtime.container_campaign.owner import ContainerCampaignOwner
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.result_verifier import ContainerWaveResultVerifier
 from so101_demo.runtime.container_campaign.service_owner import ContainerServiceOwner
+from so101_demo.runtime.container_campaign.native_launcher import NativeInstanceLauncher
 from so101_demo.runtime.container_campaign.shard_launcher import ContainerShardLauncher
 from so101_demo.runtime.inference.config import validate_file_ref
 
@@ -79,6 +80,11 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     if type(campaign_id) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*',campaign_id) is None:
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
     runtime = _collection_runtime(arguments.collection_config)
+    launcher = getattr(arguments, 'instance_launcher', 'container')
+    if launcher not in ('container', 'native'):
+        raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
+    if launcher == 'native' and arguments.worker_count != 1:
+        raise ValueError('COLLECTION_NATIVE_SINGLE_WORKER_ONLY')
     if arguments.worker_count > runtime.max_worker_count:
         raise ValueError('COLLECTION_RUNTIME_WORKER_COUNT_INVALID')
     fingerprint = contact_policy_fingerprint
@@ -100,7 +106,7 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     payload = dict(campaign_id=campaign_id,backend='mujoco',worker_count=arguments.worker_count,
         contact_policy_fingerprint=fingerprint,evidence_root=str(root),
         service_epoch=workload.service_epoch,resource_binding_id=workload.resource_binding_id,
-        qualification_mode=arguments.qualification,
+        qualification_mode=arguments.qualification,instance_launcher=launcher,
         qualification_receipt_path=str(arguments.qualification_report) if arguments.qualification_report is not None else None,
         qualification_receipt_sha256=_digest(arguments.qualification_report)
             if arguments.qualification_report is not None else None,
@@ -127,7 +133,8 @@ def _digest(path) -> str:
 
 def build_container_campaign_owner(context, *, config, paths, slots, manifest_path, scene_manifest, case_inputs,
                                    parallel_runtime, approved_inputs, qualification, approved_disk_floor_bytes,
-                                   docker_runner=None, service_query=None, namespace_reader=None, control_factory=None):
+                                   docker_runner=None, service_query=None, namespace_reader=None, control_factory=None,
+                                   instance_launcher='container', native=None):
     """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
 
     Order: the launch registry first (admission's `finish` opens it with `create=False`, so a construction failure below can
@@ -141,6 +148,11 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
     `approved_disk_floor_bytes` is the caller's value from the frozen inputs. `docker_runner`, `service_query`,
     `namespace_reader` and `control_factory` are the external edges (Docker, the Teacher socket, `/proc`, the container's control
     channel); `None` keeps each owner's production default.
+
+    `instance_launcher` is `container` (one Docker container per slot) or `native` (one Host process group, one worker);
+    admission has already refused `native` for anything else. Both run the same instance program, and the Teacher service
+    is a container either way. `native` is a mapping of the native launcher's edges (`install_prefix` is required; `command`,
+    `base_environment`, `popen` and `graph_probe_factory` default to production).
     """
     from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 
@@ -156,10 +168,16 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
             receive_budget_s=teacher['queue_timeout_s']+teacher['inference_timeout_s'],
             stop_timeout_s=runtime.worker_recovery_timeout_s,
             **given(docker_runner=docker_runner, query=service_query))
-        launcher = ContainerShardLauncher(context=context, config=config, paths=paths, registry=registry,
+        shard_arguments = dict(context=context, config=config, paths=paths, registry=registry,
             parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
             config_paths=(Path(context.campaign_config_path),),
             **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
+        if instance_launcher == 'native':
+            launcher = NativeInstanceLauncher(**(native or {}), **shard_arguments)
+        elif instance_launcher == 'container':
+            launcher = ContainerShardLauncher(**shard_arguments)
+        else:
+            raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
         coordinator = ConcurrentCollectionCoordinator(context=context, config=runtime, case_inputs=case_inputs,
             scene_manifest=scene_manifest, **given(control_factory=control_factory))
         verifier = ContainerWaveResultVerifier(root=paths['run'], registry=registry, case_inputs=case_inputs,

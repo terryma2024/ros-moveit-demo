@@ -36,6 +36,8 @@ from test_act_policy_freeze import rehash
 from test_config_identity import campaign_fixture, write_config
 from paths import PACKAGE_ROOT, REPOSITORY
 
+TEACHER_SOCKET = Path('/act/ipc/teacher/inference.sock')
+
 CONFIG = PACKAGE_ROOT / 'config/act'
 RUNTIME_YAML = PACKAGE_ROOT / 'config/mujoco/parallel_batch_act_offline.yaml'
 DISK_FLOOR = 53687091200
@@ -214,7 +216,7 @@ def test_case_inputs_are_mountable_and_hash_bound(world, tmp_path, monkeypatch):
     # the real container loader accepts the Host-shaped task of two different non-default scenes
     for row in ROWS:
         task, spec = task_for(world, tmp_path, monkeypatch, row['scene_id'])
-        loaded = task_builder.load_task_input(task, spec)
+        loaded = task_builder.load_task_input(task, spec,teacher_socket=TEACHER_SOCKET)
         assert loaded.scene_id == row['scene_id'] and loaded.row == row
         assert loaded.refs['scope'] == scopes[row['scene_id']]['scope']
         assert loaded.refs['inputs_manifest'] == manifest

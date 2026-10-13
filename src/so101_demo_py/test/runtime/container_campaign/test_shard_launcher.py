@@ -14,7 +14,8 @@ import time
 import pytest
 
 from test_config_identity import campaign_fixture, write_config
-from so101_demo.cli.campaign_shard import _COLLECTION_FIELDS, _FIELDS, instance_id_for, load_spec
+from so101_demo.runtime.act_instance.program import instance_id_for
+from so101_demo.runtime.act_instance.spec import _COLLECTION_FIELDS, _FIELDS, load_spec
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.shard_launcher import ContainerShardLauncher

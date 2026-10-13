@@ -35,7 +35,7 @@ from .contracts import (
 from .bridge import ActChildLaunch, ActChildRegistry
 from .gpu_workload import ActGpuWorkloadArbiter, GpuLeaseRequest, resolve_physical_gpu
 from .instances import InstanceRegistry
-from .worker_slots import ActWorkerSlot, ActWorkerSlotRegistry
+from .worker_slots import LAUNCHERS, ActWorkerSlot, ActWorkerSlotRegistry
 
 DEFAULT_DEADLINE_NS = 1 << 62
 
@@ -263,7 +263,7 @@ _COLLECTION_EXCLUDED_KEYS = frozenset({
     'children', 'proposal_path', 'activation_receipt_path', 'calibration_report_path', 'calibration_report_sha256'})
 _COLLECTION_PAYLOAD_KEYS = (_ACT_PAYLOAD_KEYS - _COLLECTION_EXCLUDED_KEYS) | frozenset({
     'worker_slots', 'registered_evidence_root', 'campaign_config_path', 'campaign_config_sha256',
-    'qualification_receipt_sha256'})
+    'qualification_receipt_sha256', 'instance_launcher'})
 
 # a pick-place validation payload additionally names its preparation receipt; a collection payload must not
 # (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
@@ -404,6 +404,12 @@ class UnifiedWorkloadService:
             raise ValueError("CAMPAIGN_WORKER_COUNT_INVALID")
         if type(payload["qualification_mode"]) is not bool:
             raise ValueError("QUALIFICATION_MODE_INVALID")
+        if container_collection:
+            # `native` runs the instance as a Host process group with no isolation: exactly one worker, refused before anything else
+            if payload['instance_launcher'] not in LAUNCHERS:
+                raise ValueError('INSTANCE_LAUNCHER_INVALID')
+            if payload['instance_launcher'] == 'native' and payload['worker_count'] != 1:
+                raise ValueError('NATIVE_INSTANCE_SINGLE_WORKER_ONLY')
         if diagnostic:
             # one Worker, no resume and no qualification claim: the diagnostic scope replaces the
             # Head Search prerequisite only, so it must not borrow the qualification lane either
@@ -572,7 +578,7 @@ class UnifiedWorkloadService:
                     raise ValueError('WORKER_SLOT_CAMPAIGN_MISMATCH')
                 children.append(slot)
             children = tuple(children)
-            self.slot_registry.validate(children)
+            self.slot_registry.validate(children, launcher=payload['instance_launcher'])
         else:
             if not isinstance(payload["children"], list) or len(payload["children"]) != payload["worker_count"]:
                 raise ValueError("CHILD_COUNT_MISMATCH")
@@ -703,7 +709,8 @@ class UnifiedWorkloadService:
             # Another registry user cannot create a collision between validation and
             # persistence, and a failed database/lease step rolls this map back.
             reservation_registry = self.slot_registry if spec.kind == 'act_collection_start' else self.child_registry
-            with reservation_registry.reserve_many(children):
+            with (reservation_registry.reserve_many(children, launcher=payload['instance_launcher'])
+                  if spec.kind == 'act_collection_start' else reservation_registry.reserve_many(children)):
                 operation_id = uuid.uuid4().hex
                 lease = GpuLeaseRequest(
                     stable_host_id=self.stable_host_id, physical_gpu_uuid=physical_uuid,
@@ -825,6 +832,19 @@ class UnifiedWorkloadService:
                 self.child_registry.release_many(launches)
             return outcome.projection
 
+    @staticmethod
+    def _observe_native_exit(record):
+        """A native instance's exit read again from the Host now; its ROS graph reading is the one its owner stored.
+
+        The leader, its process group and every process still carrying its instance marker are read live. The graph needs
+        the instance's ROS installation, so it is taken from the owner's own stored observation."""
+        from so101_demo.runtime.container_campaign.native_stop import observe_native_exit
+        from so101_demo.runtime.container_campaign.process_identity import NativeOwnerKey
+
+        stored = record['exit_inspect']
+        return observe_native_exit(NativeOwnerKey(**record['owner']), record['launch']['owned_root'],
+            graph_probe=lambda: type(stored) is dict and stored.get('graph_clear') is True)
+
     def _verify_container_cleanup(self, context, slots):
         import sqlite3
         from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
@@ -846,7 +866,7 @@ class UnifiedWorkloadService:
                         raise ValueError('foreign shard scope')
                 else:
                     raise ValueError('unknown role')
-            if not registry.all_terminated(self.container_inspect):
+            if not registry.all_terminated(self.container_inspect, inspect_native=self._observe_native_exit):
                 raise ValueError('owned launch stop not proven')
         except (OSError, ValueError, TypeError, KeyError, RuntimeError, sqlite3.Error) as error:
             raise ValueError('ACT_CONTAINER_CLEANUP_NOT_CONFIRMED') from error

@@ -11,6 +11,7 @@ import asyncio
 from dataclasses import replace
 import hashlib
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -25,6 +26,7 @@ from so101_demo.runtime.container_campaign.task_results import reserve_task_outp
 from so101_teleop.unified.contracts import AdmittedCampaignContext
 from paths import PACKAGE_ROOT
 
+TEACHER_SOCKET = Path('/act/ipc/teacher/inference.sock')
 GPU = 'GPU-28221cec-9d21-7753-fd5a-da645740df19'
 BUSINESS_FAILURE = dict(teacher_task_result='FAILED', act_data_status='INVALID', act_data_qc='FAIL')
 
@@ -141,7 +143,7 @@ def make_world(tmp_path, config, *, workers=('w00',), scenes=('s1', 's2'), scrip
         owned = run/'wave-0'/worker/'g1'
         (owned/'output').mkdir(parents=True)
         (owned/'task-inputs').mkdir()
-        shards.append(SimpleNamespace(root=owned, launch=SimpleNamespace(launch_id=f'wave-0-{worker}-g1',
+        shards.append(SimpleNamespace(root=owned, teacher_socket=TEACHER_SOCKET, launch=SimpleNamespace(launch_id=f'wave-0-{worker}-g1',
             worker_id=worker, launch_generation=1, wave_id='wave-0', owned_root=str(owned))))
     inputs = tmp_path/'inputs'
     inputs.mkdir()
@@ -346,7 +348,7 @@ def test_host_task_input_document_is_accepted_by_container_loader(tmp_path, monk
     from test_task_builder import make_env
     from so101_demo.runtime.container_campaign.task_builder import load_task_input
     env = make_env(tmp_path, monkeypatch)
-    shard = SimpleNamespace(root=env.root, launch=SimpleNamespace(launch_id='wave-0-w00-g1', worker_id='w00',
+    shard = SimpleNamespace(root=env.root, teacher_socket=TEACHER_SOCKET, launch=SimpleNamespace(launch_id='wave-0-w00-g1', worker_id='w00',
         launch_generation=1, wave_id='wave-0', owned_root=str(env.root)))
     endpoints = {role: SimpleNamespace(service_generation='service-'+role,
                  max_frame_bytes=env.campaign[role+'_service']['max_frame_bytes']) for role in ('teacher',)}
@@ -356,11 +358,35 @@ def test_host_task_input_document_is_accepted_by_container_loader(tmp_path, monk
         case_inputs={'default': dict(scope=env.document['scope'], inputs_manifest=env.document['inputs_manifest'])},
         dispatch_allowed=lambda: True)
     task = dispatch.prepare_task('default')
-    loaded = load_task_input(task, env.spec)
+    loaded = load_task_input(task, env.spec,teacher_socket=TEACHER_SOCKET)
     assert task.task_id == 'wave-0-w00-default' and loaded.scene_id == 'default' and loaded.root == env.root
     assert loaded.teacher['service_generation'] == 'service-teacher' and loaded.teacher['role'] == 'teacher'
     assert not hasattr(loaded, 'head')
     assert loaded.refs == {name: env.document[name] for name in ('scope', 'inputs_manifest')}
+
+
+def test_the_task_document_carries_the_socket_the_owner_says_the_instance_reaches(tmp_path, monkeypatch):
+    """The socket path is the shard owner's `teacher_socket`: the container mount for a container, the Host path for a native
+    instance. The coordinator holds no path of its own."""
+    import time
+    from test_task_builder import make_env
+    from so101_demo.runtime.container_campaign.task_builder import load_task_input
+    env = make_env(tmp_path, monkeypatch)
+    native = tmp_path/'run/ipc/teacher/inference.sock'
+    shard = SimpleNamespace(root=env.root, teacher_socket=native, launch=SimpleNamespace(launch_id='wave-0-w00-g1',
+        worker_id='w00', launch_generation=1, wave_id='wave-0', owned_root=str(env.root)))
+    endpoints = {'teacher': SimpleNamespace(service_generation='service-teacher',
+                 max_frame_bytes=env.campaign['teacher_service']['max_frame_bytes'])}
+    dispatch = InstanceDispatch(control=None, shard=shard, assignment=None, journal=None, endpoints=endpoints,
+        scene_manifest=env.document['scene_manifest'], config=env.runtime,
+        context=SimpleNamespace(deadline_monotonic_s=time.monotonic()+3000),
+        case_inputs={'default': dict(scope=env.document['scope'], inputs_manifest=env.document['inputs_manifest'])},
+        dispatch_allowed=lambda: True)
+    task = dispatch.prepare_task('default')
+    assert json.loads(open(task.inputs_ref.path).read())['teacher']['socket_path'] == str(native)
+    assert load_task_input(task, env.spec, teacher_socket=native).teacher['socket_path'] == str(native)
+    with pytest.raises(ValueError):
+        load_task_input(task, env.spec, teacher_socket=TEACHER_SOCKET)
 
 
 def test_task_document_names_only_launched_services(tmp_path, monkeypatch):
@@ -371,7 +397,7 @@ def test_task_document_names_only_launched_services(tmp_path, monkeypatch):
     from so101_demo.runtime.container_campaign import task_builder
     from so101_demo.runtime.container_campaign.task_builder import load_task_input
     env = make_env(tmp_path, monkeypatch)
-    shard = SimpleNamespace(root=env.root, launch=SimpleNamespace(launch_id='wave-0-w00-g1', worker_id='w00',
+    shard = SimpleNamespace(root=env.root, teacher_socket=TEACHER_SOCKET, launch=SimpleNamespace(launch_id='wave-0-w00-g1', worker_id='w00',
         launch_generation=1, wave_id='wave-0', owned_root=str(env.root)))
     # the launched set has one service; an extra, unlaunched Head endpoint in the mapping is never written
     endpoints = {role: SimpleNamespace(service_generation='service-'+role,
@@ -384,17 +410,17 @@ def test_task_document_names_only_launched_services(tmp_path, monkeypatch):
     task = dispatch.prepare_task('default')
     document = json.loads(open(task.inputs_ref.path).read())
     assert set(document) == task_builder._FIELDS and 'head' not in document and 'teacher' in document
-    assert load_task_input(task, env.spec).teacher == document['teacher']
+    assert load_task_input(task, env.spec,teacher_socket=TEACHER_SOCKET).teacher == document['teacher']
     # a document that names a Head endpoint is a different, refused shape
     stale = copy.deepcopy(document)
     stale['head'] = dict(role='head', socket_path='/act/ipc/head/inference.sock', service_generation='service-head',
                          max_frame_bytes=document['teacher']['max_frame_bytes'])
     with pytest.raises(ValueError):
-        load_task_input(make_task(env, stale, task_id=document['task_id']), env.spec)
+        load_task_input(make_task(env, stale, task_id=document['task_id']), env.spec,teacher_socket=TEACHER_SOCKET)
     # and one that omits Teacher is refused too
     missing = {key: value for key, value in document.items() if key != 'teacher'}
     with pytest.raises(ValueError):
-        load_task_input(make_task(env, missing, task_id=document['task_id']), env.spec)
+        load_task_input(make_task(env, missing, task_id=document['task_id']), env.spec,teacher_socket=TEACHER_SOCKET)
 
 
 def outage_from(poll):

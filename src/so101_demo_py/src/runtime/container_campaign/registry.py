@@ -17,14 +17,17 @@ import urllib.parse
 from so101_demo.runtime.act_instance.identity import ACT_INSTANCE_ROS_DOMAIN_ID
 from so101_demo.runtime.container_campaign.paths import _path
 from so101_demo.runtime.container_campaign.process_identity import (
-    ContainerChildBinding, ContainerOwnerKey, ProcessOwnerKey, container_exit_proven, shard_stop_proven,
+    ContainerChildBinding, ContainerOwnerKey, NativeOwnerKey, ProcessOwnerKey, owner_exit_proven, shard_stop_proven,
 )
 from so101_demo.runtime.container_campaign.retirement import read_shard_stop_evidence
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
 
 
 #: 2: a launch record carries no ROS domain or namespace (the fixed instance identity), and the stop audit schema is 2.
+#: A record also names its launcher; a record without the field is a container record, so older registries read unchanged.
 REGISTRY_VERSION = 2
+
+LAUNCHERS = ('container', 'native')
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,16 +41,27 @@ class ContainerLaunch:
     image_digest: str
     owned_root: str
     session_id: str | None = None
+    launcher: str = 'container'
 
     def __post_init__(self):
         try:
-            for value in (self.launch_id, self.container_name):
-                if type(value) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*', value) is None:
+            if self.launcher not in LAUNCHERS:
+                raise ValueError('launcher')
+            if self.launcher == 'native':
+                # a native instance is a Host process group: it has no container and no image
+                if self.container_name is not None or self.image_digest is not None or self.role != 'shard':
+                    raise ValueError('native scope')
+                if type(self.launch_id) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*', self.launch_id) is None:
                     raise ValueError('id')
+            else:
+                for value in (self.launch_id, self.container_name):
+                    if type(value) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*', value) is None:
+                        raise ValueError('id')
+                if (type(self.image_digest) is not str
+                        or re.fullmatch(r'sha256:[0-9a-f]{64}', self.image_digest) is None):
+                    raise ValueError('role/image/generation')
             if (self.role not in ('head', 'teacher', 'shard')
-                    or type(self.launch_generation) is not int or self.launch_generation <= 0
-                    or type(self.image_digest) is not str
-                    or re.fullmatch(r'sha256:[0-9a-f]{64}', self.image_digest) is None):
+                    or type(self.launch_generation) is not int or self.launch_generation <= 0):
                 raise ValueError('role/image/generation')
             _path(self.owned_root, directory=True)
             if self.role != 'shard':
@@ -125,7 +139,7 @@ class ContainerLaunchRegistry:
             for record in self.records():
                 previous = record['launch']
                 if (previous['launch_id'] == launch.launch_id
-                        or previous['container_name'] == launch.container_name
+                        or launch.container_name is not None and previous['container_name'] == launch.container_name
                         or previous['owned_root'] == launch.owned_root):
                     raise ValueError('LAUNCH_COLLISION')
                 if launch.role != 'shard' and previous['role'] == launch.role:
@@ -157,6 +171,18 @@ class ContainerLaunchRegistry:
             self._connection.execute('UPDATE launches SET owner_json=? WHERE launch_id=?',
                                      (canonical_json(asdict(owner)).decode(), launch_id))
 
+    def bind_native(self, launch_id, owner: NativeOwnerKey):
+        self._writable()
+        with self._lock, self._connection:
+            record = self._record(launch_id)
+            if (type(owner) is not NativeOwnerKey or record['launch'].get('launcher') != 'native'
+                    or record['owner'] is not None or owner.launch_generation != record['launch']['launch_generation']
+                    or any(item['owner'] is not None and item['owner'].get('pid') == owner.pid
+                           and item['owner'].get('started_ticks') == owner.started_ticks for item in self.records())):
+                raise ValueError('LAUNCH_BINDING_MISMATCH')
+            self._connection.execute('UPDATE launches SET owner_json=? WHERE launch_id=?',
+                                     (canonical_json(asdict(owner)).decode(), launch_id))
+
     def bind_child(self, launch_id, binding: ContainerChildBinding):
         self._writable()
         with self._lock, self._connection:
@@ -169,17 +195,20 @@ class ContainerLaunchRegistry:
                                      (canonical_json(asdict(binding)).decode(), launch_id))
 
     def prove_terminated(self, launch_id, inspect_document):
+        """Prove the registered owner is gone from `inspect_document`: the Docker inspection of a container, the native exit
+        observation of a native instance. A shard also needs the instance's own original stop receipt either way."""
         with self._lock, self._connection:
             record = self._record(launch_id)
             if record['owner'] is None:
                 raise ValueError('LAUNCH_OWNER_UNKNOWN')
-            owner = ContainerOwnerKey(**record['owner'])
-            if not container_exit_proven(owner, inspect_document):
+            native = record['launch'].get('launcher', 'container') == 'native'
+            owner = (NativeOwnerKey if native else ContainerOwnerKey)(**record['owner'])
+            if not owner_exit_proven(owner, inspect_document):
                 raise ValueError('LAUNCH_STOP_UNCONFIRMED')
             if record['launch']['role'] == 'shard':
                 try:
                     data = record['binding']
-                    binding = ContainerChildBinding(ContainerOwnerKey(**data['container']),
+                    binding = ContainerChildBinding((NativeOwnerKey if native else ContainerOwnerKey)(**data['container']),
                         ProcessOwnerKey(**data['process']), data['pid_namespace_inode'], data['control_socket'])
                     item = record['launch']
                     receipt = read_shard_stop_evidence(Path(item['owned_root']),
@@ -196,16 +225,25 @@ class ContainerLaunchRegistry:
                                          (canonical_json(inspect_document).decode(), launch_id))
             return True
 
-    def all_terminated(self, inspect_container):
+    def all_terminated(self, inspect_container, inspect_native=None):
+        """Re-prove every launch's stop. `inspect_container(container_id)` reads a container; `inspect_native(record)` reads
+        a native instance's exit document, and without it a native record is re-proved from the exit document stored when
+        its owner settled it (what an independent reader of a finished run has)."""
         with self._lock:
             records = self.records()
             if not records or any(item['owner'] is None or item['exit_inspect'] is None for item in records):
                 return False
             try:
-                return all(self.prove_terminated(item['launch']['launch_id'],
-                           inspect_container(item['owner']['container_id'])) for item in records)
+                return all(self.prove_terminated(item['launch']['launch_id'], self._exit_document(
+                    item, inspect_container, inspect_native)) for item in records)
             except (OSError, ValueError, RuntimeError, KeyError):
                 return False
+
+    @staticmethod
+    def _exit_document(record, inspect_container, inspect_native):
+        if record['launch'].get('launcher', 'container') == 'native':
+            return record['exit_inspect'] if inspect_native is None else inspect_native(record)
+        return inspect_container(record['owner']['container_id'])
 
     def close(self):
         with self._lock:

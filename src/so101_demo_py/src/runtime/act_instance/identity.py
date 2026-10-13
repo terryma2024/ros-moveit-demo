@@ -8,6 +8,9 @@ differ, and they are never ROS names.
 `INSTANCE_ROOT_ENV` is the instance marker. Its value is the instance's owned root. It is the only switch for the
 instance-process behavior that is not about addressing: a private rclpy context for evidence reads and resets, no rclpy
 signal handlers, and the recorder's bag-root decision. Generic processes without it keep their original behavior.
+`INSTANCE_OUTPUT_ENV` names the instance's output directory as the instance sees it (the layout's `output_root`); the
+recorder proves it is `<owned_root>/output` itself. Every descendant of the instance inherits both, which is also how the
+Host finds an instance's survivors without knowing their process groups.
 """
 
 from collections.abc import Mapping
@@ -17,6 +20,7 @@ from pathlib import Path
 ACT_INSTANCE_ROS_DOMAIN_ID = 181
 ACT_INSTANCE_ROS_NAMESPACE = "/"
 INSTANCE_ROOT_ENV = "SO101_ACT_INSTANCE_ROOT"
+INSTANCE_OUTPUT_ENV = "SO101_ACT_INSTANCE_OUTPUT"
 SIMULATION_SESSION_ENV = "SO101_MUJOCO_SESSION_ID"
 
 #: Everything but the session id, in launch order. Discovery stays on localhost even though the network is private.
@@ -58,10 +62,25 @@ def instance_root(*, environment=None):
     return str(root)
 
 
-def mark_instance(owned_root, *, environment=None):
-    """Set the instance marker once the entry has validated its spec; the value is the instance's owned root."""
+def instance_output(*, environment=None):
+    """The output directory the instance marker names, or None in a process that is not an ACT instance."""
     values = os.environ if environment is None else environment
-    root = Path(owned_root)
+    value = values.get(INSTANCE_OUTPUT_ENV)
+    if value is None:
+        return None
+    path = Path(value)
+    if not value or not path.is_absolute() or ".." in path.parts:
+        raise ValueError("ACT_INSTANCE_OUTPUT_INVALID")
+    return str(path)
+
+
+def mark_instance(owned_root, output_root, *, environment=None):
+    """Set the instance marker once the entry has validated its spec; the value is the instance's owned root and its output."""
+    values = os.environ if environment is None else environment
+    root, output = Path(owned_root), Path(output_root)
     if not root.is_absolute() or ".." in root.parts:
         raise ValueError("ACT_INSTANCE_ROOT_INVALID")
+    if not output.is_absolute() or ".." in output.parts:
+        raise ValueError("ACT_INSTANCE_OUTPUT_INVALID")
     values[INSTANCE_ROOT_ENV] = str(root)
+    values[INSTANCE_OUTPUT_ENV] = str(output)

@@ -37,6 +37,8 @@ from paths import PACKAGE_ROOT
 
 
 MODULE='so101_demo.runtime.container_campaign.task_builder'
+#: The Teacher socket as this instance reaches it; the layout supplies it, the Host writes the same path into the task input.
+TEACHER_SOCKET=Path('/act/ipc/teacher/inference.sock')
 OBSERVER_NOW_NS=1_000_000_000_000
 OBSERVER_CHECKS=('mujoco_session','advancing_physics','controller_states','moveit_graph','physical_stop','head_rgb',
                  'wrist_rgb')
@@ -161,7 +163,7 @@ def make_task(env,document=None,*,task_id='task-1',deadline=None,parent=None):
 
 
 def test_task_input_binds_task_instance_and_frozen_scene(env):
-    loaded=builder().load_task_input(make_task(env),env.spec)
+    loaded=builder().load_task_input(make_task(env),env.spec,teacher_socket=TEACHER_SOCKET)
     assert loaded.scene_id=='default' and loaded.task_id=='task-1' and loaded.root==env.root
     assert loaded.row==env.row and loaded.refs['scope']==env.document['scope']
     assert loaded.refs['inputs_manifest']==env.document['inputs_manifest']
@@ -171,12 +173,28 @@ def test_task_input_binds_task_instance_and_frozen_scene(env):
     assert not (env.output/'tasks').exists() and env.calls==[]
 
 
+def test_the_teacher_socket_is_the_layouts_not_a_fixed_container_path(env,tmp_path):
+    """A native instance reaches the Teacher through the Host path of the same socket; the loader accepts exactly the
+    layout's path and nothing else, so neither launcher's path is accepted by the other's instance."""
+    native=tmp_path/'run/ipc/teacher/inference.sock'
+    document=copy.deepcopy(env.document)
+    document['teacher']['socket_path']=str(native)
+    task=make_task(env,document)
+
+    loaded=builder().load_task_input(task,env.spec,teacher_socket=native)
+    assert loaded.teacher['socket_path']==str(native)
+    with pytest.raises(ValueError,match='COLLECTION_SERVICE_ENDPOINT_INVALID'):
+        builder().load_task_input(task,env.spec,teacher_socket=TEACHER_SOCKET)
+    with pytest.raises(ValueError,match='COLLECTION_SERVICE_ENDPOINT_INVALID'):
+        builder().load_task_input(make_task(env),env.spec,teacher_socket=native)
+
+
 @pytest.mark.parametrize('scene',['scene-a','scene-b'])
 def test_non_default_scene_of_a_bound_manifest_is_loaded(tmp_path,monkeypatch,scene):
     """Real: `freeze_inputs` binding the scene list, `load_task_input`, the frozen-input readers. The scene row (and so the
     cup position) comes from the frozen copy of the bound list; the approvals/roles are the synthetic fixture."""
     env=make_env(tmp_path,monkeypatch,bound_scene=scene)
-    loaded=builder().load_task_input(make_task(env),env.spec)
+    loaded=builder().load_task_input(make_task(env),env.spec,teacher_socket=TEACHER_SOCKET)
     row=next(row for row in BOUND_ROWS if row['scene_id']==scene)
     assert loaded.scene_id==scene and loaded.row==row
     assert env.document['scene_manifest']['path'].endswith('/scene_manifest/scenes.json')
@@ -200,14 +218,14 @@ def test_bound_manifest_is_the_only_scene_authority(tmp_path,monkeypatch,damage)
         write_collection_scope(build_collection_scope('formal',scene_id='scene-a',seed=99,
             inputs_sha256=frozen['inputs_sha256']),scope)
         document['scope']=ref(scope)
-    with pytest.raises(ValueError):builder().load_task_input(make_task(env,document),env.spec)
+    with pytest.raises(ValueError):builder().load_task_input(make_task(env,document),env.spec,teacher_socket=TEACHER_SOCKET)
     assert not (env.output/'tasks').exists() and env.calls==[]
 
 
 @pytest.mark.parametrize('extra',['output_path','callback','coordinator','lease','token','batch_id','coordinator_epoch'])
 def test_task_input_refuses_extra_output_callback_or_lease_fields(env,extra):
     document=copy.deepcopy(env.document);document[extra]='/elsewhere'
-    with pytest.raises(ValueError):builder().load_task_input(make_task(env,document),env.spec)
+    with pytest.raises(ValueError):builder().load_task_input(make_task(env,document),env.spec,teacher_socket=TEACHER_SOCKET)
 
 
 @pytest.mark.parametrize('damage',['task_id','worker','generation','wave','changed_bytes','foreign_parent',
@@ -227,7 +245,7 @@ def test_task_input_refuses_foreign_instance_or_changed_bytes(env,damage):
     task=make_task(env,document,**kwargs)
     if damage=='changed_bytes':
         with open(task.inputs_ref.path,'a') as stream:stream.write(' ')
-    with pytest.raises(ValueError):builder().load_task_input(task,env.spec)
+    with pytest.raises(ValueError):builder().load_task_input(task,env.spec,teacher_socket=TEACHER_SOCKET)
 
 
 @pytest.mark.parametrize('damage',['generation_spec','catalog_position','legacy_broker','diagnostic','env_domain',
@@ -263,7 +281,7 @@ def test_bad_input_refuses_before_task_directory_exists(env,monkeypatch,damage):
         spec['campaign_config']=ref(write_config(env.tmp,campaign))
     task=make_task(env,document)
     with pytest.raises(ValueError):
-        builder().build_collection_task(task,stack=env.stack,shard_spec=spec,output_root=env.output,ready_check=env.ready_check)
+        builder().build_collection_task(task,stack=env.stack,shard_spec=spec,output_root=env.output,teacher_socket=TEACHER_SOCKET,ready_check=env.ready_check)
     assert not (env.output/'tasks').exists() and not (env.root/'owned-runtime-processes.json').exists()
     assert env.calls==[]
 
@@ -271,7 +289,7 @@ def test_bad_input_refuses_before_task_directory_exists(env,monkeypatch,damage):
 def test_local_lease_fields_formats_and_dotted_task_id(env):
     document=copy.deepcopy(env.document);document['task_id']='task.1.a'
     task=make_task(env,document,task_id='task.1.a')
-    loaded=builder().load_task_input(task,env.spec)
+    loaded=builder().load_task_input(task,env.spec,teacher_socket=TEACHER_SOCKET)
     lease=builder().local_lease(env.spec,loaded.scene_id,issued=10.,deadline=20.)
     assert '.' in task.task_id and '.' not in lease.attempt_id
     assert (lease.batch_id,lease.coordinator_epoch,lease.worker_id,lease.worker_generation,lease.point_id,
@@ -325,7 +343,7 @@ def build(env,**kwargs):
     kwargs.setdefault('inference_client_factory',FakeInference)
     kwargs.setdefault('evidence',lambda session:SimpleNamespace(simulation_session_id=session,reset_epoch=2))
     return builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,
-        output_root=env.output,ready_check=env.ready_check,**kwargs)
+        output_root=env.output,teacher_socket=TEACHER_SOCKET,ready_check=env.ready_check,**kwargs)
 
 
 def test_builder_constructs_real_runtime_ports_teacher_without_coordinator(env):
@@ -381,7 +399,7 @@ def test_foreign_stack_or_output_refused_before_task_directory_exists(env,monkey
         fields[field]={'session':'other','domain':old.ros_domain_id+1,'stack_root':env.tmp}[damage]
         monkeypatch.setattr(env.stack,'launch',type(old)(**fields))
     with pytest.raises(ValueError):
-        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,output_root=output,ready_check=env.ready_check)
+        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,output_root=output,teacher_socket=TEACHER_SOCKET,ready_check=env.ready_check)
     assert not (output/'tasks').exists() and not (env.root/'owned-runtime-processes.json').exists()
 
 
@@ -504,7 +522,7 @@ def test_task_document_that_is_not_a_json_object_is_a_value_error(env,raw):
     path=env.root/'task-inputs'/'task-raw.json'
     path.write_bytes(raw)
     task=TaskSpec(task_id='task-raw',inputs_ref=InputRef(**ref(path)),deadline_monotonic_s=time.monotonic()+1800)
-    with pytest.raises(ValueError):builder().load_task_input(task,env.spec)
+    with pytest.raises(ValueError):builder().load_task_input(task,env.spec,teacher_socket=TEACHER_SOCKET)
 
 
 @pytest.mark.parametrize('missing',['workload_kind','campaign_id','worker_id','launch_generation','wave_id','owned_root',
@@ -512,9 +530,9 @@ def test_task_document_that_is_not_a_json_object_is_a_value_error(env,raw):
     'parallel_runtime','campaign_config','gpu_uuid'])
 def test_shard_spec_missing_a_required_key_is_a_value_error(env,missing):
     spec=copy.deepcopy(env.spec);del spec[missing]
-    with pytest.raises(ValueError):builder().load_task_input(make_task(env),spec)
+    with pytest.raises(ValueError):builder().load_task_input(make_task(env),spec,teacher_socket=TEACHER_SOCKET)
     with pytest.raises(ValueError):
-        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=spec,output_root=env.output,ready_check=env.ready_check)
+        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=spec,output_root=env.output,teacher_socket=TEACHER_SOCKET,ready_check=env.ready_check)
     assert not (env.output/'tasks').exists()
 
 
@@ -526,7 +544,7 @@ def test_shard_spec_of_the_wrong_shape_is_a_value_error(env,damage):
     elif damage=='business_text':spec['business_identity']='x'
     elif damage=='owned_root_int':spec['owned_root']=5
     else:del spec['business_identity']['runtime_config_sha256']
-    with pytest.raises(ValueError):builder().load_task_input(make_task(env),spec)
+    with pytest.raises(ValueError):builder().load_task_input(make_task(env),spec,teacher_socket=TEACHER_SOCKET)
     with pytest.raises(ValueError):builder().local_lease(spec,'default',issued=1.,deadline=2.)
     with pytest.raises(ValueError):builder().task_resources(spec,task_root=env.output)
 
@@ -817,7 +835,7 @@ class Rig:
             capture_numeric_evidence=lambda lease,localized,root,boundary:_write_numeric(root,boundary+1.0),
             publish_pose=lambda pose:True,execute_result=self.execute_result,cancel_motion=self.cancelled,
             confirm_no_controller_goal=self.confirmed,close_runtime=lambda:self.events.append(('closed',)))
-        self.build_kwargs=dict(stack=flow.stack,shard_spec=flow.spec,output_root=flow.output,ready_check=flow.ready_check,
+        self.build_kwargs=dict(stack=flow.stack,shard_spec=flow.spec,output_root=flow.output,teacher_socket=TEACHER_SOCKET,ready_check=flow.ready_check,
             evidence=self.evidence,
             inference_client_factory=FakeInference,dependencies=dict(reset_point=self.reset,current_evidence=self.evidence),
             runtime_overrides=overrides,perception_runner=self.perceive,process_group_factory=group,**seams)

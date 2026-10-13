@@ -90,13 +90,15 @@ def test_an_instance_records_with_the_stock_recorder_and_writes_no_topic_map(
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     root = tmp_path / "w00" / "g1"
     root.mkdir(parents=True)
+    (root / "output").mkdir()
     monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(root))
+    monkeypatch.setenv("SO101_ACT_INSTANCE_OUTPUT", str(root / "output"))     # a native layout: the output is the owned root's own
     from so101_demo.act.offline.raw_recorder import _bag_root_evidence
     rclpy.init()
     node = rclpy.create_node("instance_recorder_source")
     names = ("/rec14/a", "/rec14/b")
     publishers = {name: node.create_publisher(String, name, 100) for name in names}
-    recorder = RawRecorder(root / "attempts" / "scene" / "raw" / "bag", topics=names, core_topics=names)
+    recorder = RawRecorder(root / "output" / "tasks" / "task-1" / "raw" / "bag", topics=names, core_topics=names)
     stop = threading.Event()
 
     def publish():
@@ -114,6 +116,7 @@ def test_an_instance_records_with_the_stock_recorder_and_writes_no_topic_map(
         assert not any("__ns" in str(item) for item in argv)
         okay, state = recorder.wait_recording(20.0)
         assert okay, state
+        assert recorder.bag_root["location"] == "task_output" and recorder.bag_root["output_identity"]["same"] is True
         assert recorder._probe.get_namespace() == "/"
         time.sleep(0.3)
     finally:
@@ -124,7 +127,7 @@ def test_an_instance_records_with_the_stock_recorder_and_writes_no_topic_map(
         node.destroy_node()
     assert stats["closed"] and not stats["failure"] and stats["missing_core_topics"] == [], stats
     assert set(stats["bag"]["topics"]) == set(names)
-    assert _bag_root_evidence(recorder)["bag_root"]["location"] == "owned_root"
+    assert _bag_root_evidence(recorder)["bag_root"]["location"] == "task_output"
     assert not (recorder.bag_dir.parent / (recorder.bag_dir.name + "-topic-map.json")).exists()
 
 

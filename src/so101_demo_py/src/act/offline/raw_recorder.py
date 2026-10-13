@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from so101_demo.runtime.act_instance.identity import instance_root
+from so101_demo.runtime.act_instance.identity import instance_output, instance_root
 from .bag_root import bag_root_decision
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
@@ -293,7 +293,9 @@ class RawRecorder:
         self.bag_dir.parent.mkdir(parents=True, exist_ok=True)
         root=instance_root()
         if root is not None:
-            self.bag_root=bag_root_decision(self.bag_dir,Path(root))
+            output=instance_output()
+            if output is None:raise ValueError('ACT_INSTANCE_OUTPUT_UNSET')
+            self.bag_root=bag_root_decision(self.bag_dir,Path(root),output_mount=Path(output))
             if self.bag_root['code'] is not None:raise ValueError(self.bag_root['code'])
         if not rclpy.ok():
             rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO)
