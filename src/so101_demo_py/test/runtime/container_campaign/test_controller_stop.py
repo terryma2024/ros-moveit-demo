@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 
-def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None,idle=False,return_on_empty_ack=False):
+def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None,idle=False,return_on_empty_ack=False,real_messages=False):
     mod = importlib.import_module("so101_demo.runtime.container_campaign.controller_stop")
     clock = [1_000_000_000]
     endpoints = []
@@ -15,6 +15,12 @@ def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None,idle=False
     class Future:
         def done(self): return True
         def result(self):
+            if real_messages:
+                from action_msgs.msg import GoalInfo
+                from action_msgs.srv import CancelGoal
+                info = GoalInfo(); info.goal_id.uuid = list(range(16)); info.stamp.sec = 1
+                response = CancelGoal.Response(); response.return_code = bad_ack or 0; response.goals_canceling = [info]
+                return response
             return SimpleNamespace(return_code=bad_ack or 0, goals_canceling=[])
     class Node:
         def __init__(self): self.callbacks = {}
@@ -34,6 +40,12 @@ def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None,idle=False
                 if idle: continue
                 if missing and missing in topic: continue
                 status = 2 if active and active in topic else 4
+                if real_messages:
+                    from action_msgs.msg import GoalInfo, GoalStatus, GoalStatusArray
+                    entry = GoalStatus(); entry.status = status
+                    entry.goal_info = GoalInfo(); entry.goal_info.goal_id.uuid = list(range(16)); entry.goal_info.stamp.sec = 1
+                    callback(GoalStatusArray(status_list=[entry]))
+                    continue
                 callback(SimpleNamespace(status_list=[SimpleNamespace(status=status,
                     goal_info=SimpleNamespace(goal_id=SimpleNamespace(uuid=list(range(16))),
                                               stamp=SimpleNamespace(sec=1,nanosec=2)))]))
@@ -105,3 +117,22 @@ def test_malformed_original_observation_cannot_claim_proven(monkeypatch, problem
     elif problem == "future_status": document["lanes"]["neck"]["status_received_monotonic_ns"] = document["completed_monotonic_ns"]+1
     with pytest.raises(ValueError, match="ACT_CONTROLLER_STOP_OBSERVATION_INVALID"):
         mod.ControllerStopObservation(canonical_json(document))
+
+
+def test_real_ros_goal_messages_with_numpy_uuid_prove_a_stop_after_a_real_episode(monkeypatch):
+    """rclpy hands uuid as numpy.uint8 elements; a stop with real goal records in the status lists must still be provable."""
+    _, observation, _ = run_probe(monkeypatch, real_messages=True)
+    assert observation.proven
+    lane = observation.document["lanes"]["arm"]
+    assert lane["statuses"][0]["goal"]["uuid"] == bytes(range(16)).hex()
+    assert lane["goals_canceling"][0]["uuid"] == bytes(range(16)).hex()
+    _, active, _ = run_probe(monkeypatch, real_messages=True, active="arm_controller")
+    assert not active.proven
+
+
+@pytest.mark.parametrize("bad", [[1.5]+[0]*15, [True]+[0]*15, [256]+[0]*15, list(range(15)), [-1]+[0]*15])
+def test_malformed_goal_uuid_is_still_refused(bad):
+    mod = importlib.import_module("so101_demo.runtime.container_campaign.controller_stop")
+    goal = SimpleNamespace(goal_id=SimpleNamespace(uuid=bad), stamp=SimpleNamespace(sec=1, nanosec=2))
+    with pytest.raises(ValueError, match="ACT_CONTROLLER_STOP_MESSAGE_INVALID"):
+        mod._goal(goal)

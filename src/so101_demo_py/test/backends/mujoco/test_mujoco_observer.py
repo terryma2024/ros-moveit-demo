@@ -202,3 +202,43 @@ def test_recent_summaries_name_the_newest_frames_whatever_their_age(monkeypatch)
     assert recent[-1]["paused"] is True and recent[0]["paused"] is False
     assert recent[-1]["age_s"] == pytest.approx(0.3, abs=1e-6)
     assert set(recent[0]) == {"paused", "reset_epoch", "simulation_step", "publisher_sequence", "age_s"}
+
+
+def _joining_pair(world_module, monkeypatch, **kwargs):
+    from so101_demo.core.simulation.types import ObjectState, SimulationEvidence
+    monkeypatch.setattr(world_module, "convert_message", lambda message: message)
+    node = SimpleNamespace(create_subscription=lambda *args: object())
+    world = world_module.MujocoWorldObserver(node, "session-1", monotonic=lambda: 10., **kwargs)
+    replayed = SimulationEvidence(
+        simulation_time_s=141.54, frame_id="world", publisher_sequence=14164, simulation_step=60504, reset_epoch=1,
+        simulation_session_id="session-1", paused=False,
+        object_state=ObjectState(body_id=1, body="cup", position_world=(0., 0., 0.), orientation_xyzw=(0., 0., 0., 1.),
+                                 linear_velocity_world=(0., 0., 0.), angular_velocity_world=(0., 0., 0.)),
+        has_contact=False, minimum_signed_distance_m=0., maximum_normal_force_n=0., truncated=False,
+        left_fingertip_contacts=(), right_fingertip_contacts=(), other_object_contacts=())
+    live = replace(replayed, simulation_time_s=0.1, publisher_sequence=14180, simulation_step=42, reset_epoch=2, paused=True)
+    return world, replayed, live
+
+
+def test_a_one_shot_observer_that_joined_on_a_replayed_previous_epoch_takes_the_new_epoch_as_baseline(monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+    world, replayed, live = _joining_pair(world_module, monkeypatch, rebaseline_stale_join=True)
+    world.accept(replayed, received_at_s=10.)
+    world.accept(live, received_at_s=10.)
+    assert world.diagnostics()["rejections"] == [] and world.snapshot().reset_epoch == 2 and world.snapshot().paused
+    # the allowance is spent: a later epoch jump is judged as before
+    with pytest.raises(world_module.EvidenceRejected, match="new reset epoch must begin at simulation step zero"):
+        world.accept(replace(live, publisher_sequence=14181, reset_epoch=3, simulation_step=7), received_at_s=10.)
+
+
+def test_a_continuous_observer_still_rejects_a_new_epoch_that_does_not_begin_at_step_zero(monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+    world, replayed, live = _joining_pair(world_module, monkeypatch)
+    world.accept(replayed, received_at_s=10.)
+    with pytest.raises(world_module.EvidenceRejected, match="new reset epoch must begin at simulation step zero"):
+        world.accept(live, received_at_s=10.)
+    world2, replayed2, live2 = _joining_pair(world_module, monkeypatch, rebaseline_stale_join=True)
+    world2.accept(replayed2, received_at_s=10.)
+    world2.accept(replace(replayed2, publisher_sequence=14165, simulation_step=60505), received_at_s=10.)
+    with pytest.raises(world_module.EvidenceRejected, match="step zero"):
+        world2.accept(live2, received_at_s=10.)   # continuity already proven: the allowance is only for the joining sample

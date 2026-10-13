@@ -210,7 +210,8 @@ def current_evidence(simulation_session_id: str, timeout_s: float = 5.0):
     scope = _RosScope()
     try:
         node = scope.create_node("so101_teleop_mujoco_evidence")
-        observer = MujocoWorldObserver(node, simulation_session_id, max_age_s=1.0)
+        # one-shot: it joins a long-lived stack, possibly just after a reset, behind the publisher's transient-local replay
+        observer = MujocoWorldObserver(node, simulation_session_id, max_age_s=1.0, rebaseline_stale_join=True)
     except BaseException:
         scope.abandon()
         raise

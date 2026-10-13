@@ -120,6 +120,7 @@ class MujocoWorldObserver:
         history_capacity: int = 256,
         on_sequence_gap: Callable[[int, int], None] | None = None,
         accept_truncated: bool = False,
+        rebaseline_stale_join: bool = False,
     ) -> None:
         if not simulation_session_id:
             raise ValueError("simulation_session_id must be non-empty")
@@ -144,6 +145,12 @@ class MujocoWorldObserver:
         # Teacher policy v3: a sample whose contact list was truncated still carries the cup state, so it keeps the control evidence
         # fresh; it is counted (and offered to the taps, which mark the telemetry incomplete) instead of rejected. Default: rejected.
         self._accept_truncated = accept_truncated
+        # A one-shot observer that joins a long-lived publisher is first handed the publisher's transient-local replay (the
+        # newest samples of the PREVIOUS epoch when it joins within the replay depth of a reset). A depth-1 reader keeps only
+        # the newest of the rest, so the new epoch's step-zero sample may never reach it. With this set, a later epoch seen
+        # while the observer still holds only that one joining sample becomes the new baseline instead of a hazard. It is a
+        # statement about what a late joiner can know, so continuous observers (reset client, Teacher) leave it off.
+        self._rebaseline_stale_join = rebaseline_stale_join
         self._lock = threading.Lock()
         self._latest: SimulationEvidence | None = None
         self._received_at_s: float | None = None
@@ -237,9 +244,13 @@ class MujocoWorldObserver:
                     raise EvidenceRejected("publisher sequence must increase")
                 if evidence.reset_epoch < previous.reset_epoch:
                     raise EvidenceRejected("reset epoch moved backward")
-                if evidence.reset_epoch > previous.reset_epoch + 1:
+                rebaseline = (self._rebaseline_stale_join and len(self._history) == 1
+                              and evidence.reset_epoch > previous.reset_epoch)
+                if rebaseline:
+                    self._rebaseline_stale_join = False   # the join is a one-time event
+                elif evidence.reset_epoch > previous.reset_epoch + 1:
                     raise EvidenceRejected("reset epoch skipped")
-                if evidence.reset_epoch == previous.reset_epoch:
+                elif evidence.reset_epoch == previous.reset_epoch:
                     if evidence.simulation_step < previous.simulation_step:
                         raise EvidenceRejected("simulation step moved backward")
                     if evidence.simulation_step == previous.simulation_step and not evidence.paused:

@@ -301,3 +301,30 @@ def test_pause_snapshot_success_emits_no_failure_line(monkeypatch, capsys) -> No
         monkeypatch, response=True, snapshot=lambda: evidence)
     assert runtime._pause_snapshot(node, observer, 1.0) is evidence
     assert _failure_lines(capsys.readouterr()) == []
+
+
+def test_current_evidence_observer_tolerates_a_replayed_previous_epoch(monkeypatch) -> None:
+    from so101_demo.backends.mujoco import teleop_runtime
+
+    captured = {}
+    paused = SimpleNamespace(paused=True, simulation_session_id="sess")
+
+    class Observer:
+        def __init__(self, _node, _session, **kwargs):
+            captured.update(kwargs)
+
+    class Scope:
+        def create_node(self, _name):
+            return SimpleNamespace(destroy_node=lambda: None)
+
+        def abandon(self, *_args):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(teleop_runtime, "_RosScope", Scope)
+    monkeypatch.setattr(teleop_runtime, "MujocoWorldObserver", Observer)
+    monkeypatch.setattr(teleop_runtime, "_pause_snapshot", lambda *_a, **_k: paused)
+    assert teleop_runtime.current_evidence("sess") is paused
+    assert captured["rebaseline_stale_join"] is True

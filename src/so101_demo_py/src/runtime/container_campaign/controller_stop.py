@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import json
 import math
+import numbers
 import re
 import time
 
@@ -28,11 +29,17 @@ def _open_owner(namespace):
     return _open_isolated_ros_node(rclpy, "act_shard_goal_stop", namespace=namespace)
 
 
-def _goal(goal):
-    if (any(type(value) is not int or not 0 <= value <= 255 for value in goal.goal_id.uuid)
-            or type(goal.stamp.sec) is not int or type(goal.stamp.nanosec) is not int):
+def _byte(value):
+    """One uuid element. rclpy hands `uuid` over as a numpy.uint8 array, so the element is an integer by value, not by type."""
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral) or not 0 <= value <= 255:
         raise ValueError("ACT_CONTROLLER_STOP_MESSAGE_INVALID")
-    uuid = bytes(goal.goal_id.uuid)
+    return int(value)
+
+
+def _goal(goal):
+    if type(goal.stamp.sec) is not int or type(goal.stamp.nanosec) is not int:
+        raise ValueError("ACT_CONTROLLER_STOP_MESSAGE_INVALID")
+    uuid = bytes(_byte(value) for value in goal.goal_id.uuid)
     if len(uuid) != 16:
         raise ValueError("ACT_CONTROLLER_STOP_MESSAGE_INVALID")
     return dict(uuid=uuid.hex(), stamp=dict(sec=goal.stamp.sec, nanosec=goal.stamp.nanosec))
