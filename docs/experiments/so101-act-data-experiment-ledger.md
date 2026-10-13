@@ -69,11 +69,55 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3631
-next_experiment: EXP-582 (to be planned): the same eight scenes with two workers (functional W2), the first run with more than one shard.
+latest_checkpoint: CP-3632
+next_experiment: EXP-582 (PLANNED): first two-worker real functional run, the same eight scenes.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3632 — Two-worker functional inputs authored; EXP-582 planned
+
+- Inputs under the prep directory act-w2-inputs-20261013T050034Z, authored by a Sonnet agent from the EXP-581 inputs. Differences required by two workers only: contract worker_count 2 and run id, CLI flag --worker-count 2, new ids. Campaign config byte-identical to EXP-581's; same images, gate install, scene list, seed and policies. Validation 27 PASS, 2 informational, none failed.
+- OBSERVED from code by that agent: worker slots w00 and w01 take the first two configured ROS domains 181 and 182 under separate namespaces; the eight scenes form one wave with no fixed assignment, so the two shards pull scenes first-come and the split can differ between runs; one Teacher service instance is shared; both shards run under the single GPU lease taken at admission; the container path enforces no per-worker CPU, memory or GPU-memory budget and passes no Docker resource limit; the only enforced resource check is the disk floor. The real-time-factor hard stop of the runtime policy applies at run time.
+
+```yaml
+experiment_id: EXP-582
+status: PLANNED
+prior_experiment: EXP-581 (VALID; eight of eight with one worker)
+hypothesis: Two shard containers on separate ROS domains and namespaces, sharing one Teacher service and one GPU, collect the eight scenes concurrently through the production CLI with every completed scene's data judged VALID, the wave verified and admission settled.
+prediction: Both shards reach READY and pull scenes; no cross-talk between domains 181 and 182; wall time for collection is roughly half of EXP-581's 44 minutes if the host carries two simulators at real time. Unknown and to be learned - data loss or real-time-factor shortfall under two-way load, Teacher service queueing, Host verification of results from two shards. Any INVALID episode is reported with its cause, not gated.
+single_variable: Worker count 2 instead of 1. Same source commit, images, scene list, decisions and configuration values as EXP-581; new run and campaign ids. The scene-to-worker split is not controlled.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 64aca49d5 and clean; no running container, GPU compute process, ROS or MuJoCo process; disk above the floor; run root act-w2-20261013T050034Z absent; unified store IDLE with no lease and no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576, with two shards - both launched, both stopped with proof, slots w00 and w01 released. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop of either shard; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 64aca49d5; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 64aca49d5a3f427245e3b61f28cad5f2d6a28ceb (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:5583b43e7ee3bc6b1015a7646063271c4b06e431b8cbb975d5e426a6fb99f53d and shard image sha256:ad3374ba2498299f57137f8375f94323fd1fa55fffe3c99d8f46efa5affb3a48; Host R/gates/64aca49d5a3f/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181 and 182
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w2-inputs-20261013T050034Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w2-inputs-20261013T050034Z/run-w2.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3631 — EXP-581 VALID: first complete real container collection, eight of eight scenes VALID with QC PASS, wave verified
 
