@@ -156,3 +156,35 @@ def test_a_chunk_from_a_plugin_that_does_not_stamp_has_no_split_but_the_total():
     value.accept_message(message, receipt_ns=receipt)
     split = value.receipt_diagnostics()["latency_ms"]
     assert split["total"]["count"] == 1 and split["publish_to_receipt"]["count"] == 0
+
+
+def test_a_paused_simulation_before_the_window_is_not_receiver_lag_but_a_stall_after_it_still_is():
+    """Container bag: the recording starts before the Teacher; the simulation is paused for seconds (pose acceptance) between the
+    last pre-Teacher chunk and the first chunk of the window. Measured: a 6.3 s silence, sequences contiguous, policy 5.0 s."""
+    now = [10_000_000_000 + 40_000_000]
+    value, _ = adapter(clock=lambda: now[0], receiver_lag_max_s=5.0)
+    value.suspend_lag_check()
+    feed(value, 1)
+    now[0] += 6_300_000_000                               # paused: no chunk for 6.3 s
+    value.drain()
+    assert value.hazard is None
+    value.resume_lag_check()                              # the window opens
+    value.drain()
+    assert value.hazard is None, "the lag is measured from the window start, not from the last pre-pause sample"
+    now[0] += 4_900_000_000
+    value.drain()
+    assert value.hazard is None
+    now[0] += 200_000_000                                 # 5.1 s of real silence inside the window
+    with pytest.raises(ValueError, match="PHYSICS_RAW_RECEIVER_LAG_EXCEEDED"):
+        value.drain()
+
+
+def test_without_a_suspension_the_same_silence_is_still_a_lag():
+    now = [10_000_000_000 + 40_000_000]
+    value, _ = adapter(clock=lambda: now[0], receiver_lag_max_s=5.0)
+    feed(value, 1)
+    now[0] += 6_300_000_000
+    with pytest.raises(ValueError, match="PHYSICS_RAW_RECEIVER_LAG_EXCEEDED"):
+        value.drain()
+    value.resume_lag_check()                              # resuming something never suspended changes nothing
+    assert value.hazard == "PHYSICS_RAW_RECEIVER_LAG_EXCEEDED"

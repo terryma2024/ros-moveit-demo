@@ -154,6 +154,7 @@ class OfflineRosSources:
         self._joint_subscription = None
         self._counts = {"head": 0, "wrist": 0, "joint_states": 0}
         self._hazards_seen = 0
+        self._lag_window_pending = False
         self._finish_started = False
         self._summary_written = False
         self.tracker = SceneOperationTracker()
@@ -185,6 +186,13 @@ class OfflineRosSources:
             node, session_id=session_id, reset_epoch=reset_epoch)
         self._subscribe_joint_states()
         self._count_acquisitions()
+        self._lag_window_pending = False
+        if getattr(node, "start_at_stamp_ns", None) is not None:
+            suspend = getattr(getattr(self.binding, "physics_adapter", None), "suspend_lag_check", None)
+            if suspend is not None:
+                # the bag begins before the window: the simulation is paused there (live, the adapter only exists from the start)
+                suspend()
+                self._lag_window_pending = True
         self.host = RecorderDataSide(
             node=node, session_id=session_id, reset_epoch=reset_epoch, episode=episode, binding=self.binding,
             world_observer=self.world, execution_root=self._execution_root(), progress=lambda: self.pump(engine),
@@ -625,6 +633,9 @@ class OfflineRosSources:
 
     def pump(self, engine) -> None:
         self.node.deliver_due()
+        if self._lag_window_pending and getattr(self.node, "window_open", True):
+            self._lag_window_pending = False
+            self.binding.physics_adapter.resume_lag_check()
         self._refresh_scene()
         errors = self.node.take_callback_errors()
         if errors:

@@ -95,3 +95,57 @@ def test_the_sources_wait_for_a_raw_chunk_as_long_as_the_receiver_lag_policy_and
     host._native_source_wait_ns = 5_000_000_000
     assert host._native_sources_expired("initial", [source], [], [source], now) is False     # the policy wait
     assert host._native_sources_expired("initial", [source], [], [source], 1_000_000_000 + 5_100_000_000) is True
+
+
+def test_offline_sources_suspend_the_lag_check_until_the_replay_window_opens():
+    from so101_demo.act.offline import sources as module
+    events = []
+
+    def bind(node, **kwargs):
+        binding = _binding()
+        binding.physics_adapter.suspend_lag_check = lambda: events.append("suspend")
+        binding.physics_adapter.resume_lag_check = lambda: events.append("resume")
+        return binding
+
+    node = RecordingNode()
+    node.start_at_stamp_ns, node.window_open = 5_000, False
+    node.deliver_due = lambda *a, **k: 0
+    sources = module.OfflineRosSources(
+        node, _episode([]), _options(), bind=bind,
+        world_observer_factory=lambda n, session: SimpleNamespace(callback_count=1),
+        reference_port_factory=lambda n, **kw: SimpleNamespace(read=lambda when: {}, close=lambda: None),
+        policy=load_recorder_policy(POLICY_FILE))
+    engine = _engine([])
+    sources.prepare(engine)
+    assert events == ["suspend"]
+
+    def pump():
+        try:
+            sources.pump(engine)
+        except Exception:
+            pass   # the harness binding is partial: only the lag hook is under test
+
+    pump()
+    assert events == ["suspend"]
+    node.window_open = True
+    pump()
+    pump()
+    assert events == ["suspend", "resume"], "resumed once, when the window opened"
+
+
+def test_a_replay_without_a_window_start_never_suspends_the_lag_check():
+    from so101_demo.act.offline import sources as module
+    events = []
+
+    def bind(node, **kwargs):
+        binding = _binding()
+        binding.physics_adapter.suspend_lag_check = lambda: events.append("suspend")
+        return binding
+
+    sources = module.OfflineRosSources(
+        RecordingNode(), _episode([]), _options(), bind=bind,
+        world_observer_factory=lambda n, session: SimpleNamespace(callback_count=1),
+        reference_port_factory=lambda n, **kw: SimpleNamespace(read=lambda when: {}, close=lambda: None),
+        policy=load_recorder_policy(POLICY_FILE))
+    sources.prepare(_engine([]))
+    assert events == []

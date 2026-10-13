@@ -87,3 +87,31 @@ def test_bad_source_bindings_or_channels_fail_closed(tmp_path,problem):
         path.write_text(json.dumps(document))
     with pytest.raises(ValueError):bag_info(bag)
     with pytest.raises(ValueError):list(read_messages(bag))
+
+
+def test_replay_stream_and_node_deliver_logical_topics_of_a_scoped_bag(tmp_path):
+    from so101_demo.act.offline import replay
+    from so101_demo.act.offline.processor import load_clock_map
+    from offline_synthetic_bag import build_bag
+    import offline_synthetic_bag
+    root,namespace,scoped=fixture(tmp_path)
+    baseline=build_bag(tmp_path/'baseline')
+    topics=tuple(bag_info(baseline)['topics'])
+    module=importlib.import_module('so101_demo.act.offline.container_bag_topics')
+    mapping=module.write_topic_map(scoped,owned_root=root,namespace=namespace,topics=topics)
+    class ScopedWriter(BagWriter):
+        def create(self,topic,type_name,qos=''):return super().create(mapping[topic],type_name,qos)
+        def write(self,topic,message,stamp_ns):return super().write(mapping[topic],message,stamp_ns)
+        def write_serialized(self,topic,data,stamp_ns):return super().write_serialized(mapping[topic],data,stamp_ns)
+    import pytest as _p
+    mp=_p.MonkeyPatch();mp.setattr(offline_synthetic_bag,'BagWriter',ScopedWriter)
+    try:build_bag(scoped.parent)
+    finally:mp.undo()
+    clock_map,_=load_clock_map(scoped)
+    stream=replay.BagStream(scoped,clock_map)
+    seen=set()
+    while (message:=stream.pop()) is not None:seen.add(message.topic)
+    assert seen==set(topics) and not any(name.startswith(namespace) for name in seen)
+    filtered=replay.BagStream(scoped,clock_map,topics=['/so101/teacher/events'])
+    first=filtered.peek()
+    assert first is not None and first.topic=='/so101/teacher/events'

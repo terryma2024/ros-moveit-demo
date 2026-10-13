@@ -181,14 +181,19 @@ class BagStream:
         import rosbag2_py
 
         from .bag_io import STORAGE_ID
+        from .container_bag_topics import logical_channel_map
 
         self.map = clock_map
         self._reader = rosbag2_py.SequentialReader()
         self._reader.open(rosbag2_py.StorageOptions(uri=str(uri), storage_id=STORAGE_ID),
                           rosbag2_py.ConverterOptions("", ""))
         self.types = {item.name: item.type for item in self._reader.get_all_topics_and_types()}
+        # a container bag stores the shard-scoped channel names; the replay (like bag_info/read_messages) speaks the logical ones,
+        # so a subscription made on a logical topic is matched. A bag without a topic map maps every name to itself.
+        self.names = logical_channel_map(uri, self.types)
         if topics is not None:
-            self._reader.set_filter(rosbag2_py.StorageFilter(topics=[t for t in topics if t in self.types]))
+            wanted = set(topics)
+            self._reader.set_filter(rosbag2_py.StorageFilter(topics=[p for p, logical in self.names.items() if logical in wanted]))
         self._next = None
         self._index = 0
         self._last_stamp = None
@@ -206,7 +211,7 @@ class BagStream:
         if self._last_stamp is not None and stamp < self._last_stamp:
             raise ValueError("OFFLINE_BAG_NOT_TIME_ORDERED")
         self._last_stamp = stamp
-        self._next = BagMessage(self._index, topic, self.types[topic], stamp, self.map.monotonic_ns(stamp), bytes(data))
+        self._next = BagMessage(self._index, self.names[topic], self.types[topic], stamp, self.map.monotonic_ns(stamp), bytes(data))
         self._index += 1
 
     def peek(self):
@@ -371,6 +376,8 @@ class ReplayNode:
         # the episode window start: world evidence recorded before this bag stamp (the receipt of the first unpaused
         # world record after the worker's last pre-Teacher pause) is not delivered
         self.start_at_stamp_ns = start_at_stamp_ns
+        #: True once a message stamped at or after the window start has been played (always True without a window start)
+        self.window_open = start_at_stamp_ns is None
         self.stream = stream
         self.clock = clock
         self.sim_ns = 0
@@ -479,6 +486,8 @@ class ReplayNode:
             self.stream.pop()
             self.clock.set(message.monotonic_ns)
             count += 1
+            if self.start_at_stamp_ns is not None and message.stamp_ns >= self.start_at_stamp_ns:
+                self.window_open = True
             if (self.start_at_stamp_ns is not None and message.stamp_ns < self.start_at_stamp_ns
                     and message.topic in self.WITHHELD_BEFORE_WINDOW):
                 continue

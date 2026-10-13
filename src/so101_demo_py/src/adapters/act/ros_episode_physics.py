@@ -56,6 +56,12 @@ class RosEpisodePhysicsAdapter:
         # Policy (frozen in episode_recorder): the data fails on a receiver lag, not on a late chunk.
         self._lag_max_ns = None if receiver_lag_max_s is None else round(receiver_lag_max_s * 1e9)
         self._lag_check_ended = False
+        # The lag is "the newest received sample behind now" and only means something while the simulation publishes. A recording
+        # that begins before the Teacher's start has the simulation PAUSED between its last pre-Teacher chunk and the first one
+        # of the window (pose acceptance, perception: seconds in a container). The offline replay suspends the check there and
+        # re-arms it at the window start, from which instant the lag is measured; a live Recorder never suspends.
+        self._lag_suspended = False
+        self._lag_floor_ns = 0
         self._latency = {leg: deque(maxlen=_LATENCY_WINDOW) for leg in _LATENCY_LEGS}
         self._latency_peaks = {"max_publish_deferrals_total": 0, "max_receiver_lag_ns": 0}
         self._rejected = None
@@ -111,11 +117,24 @@ class RosEpisodePhysicsAdapter:
         with self._lock:
             self._lag_check_ended = True
 
+    def suspend_lag_check(self):
+        """The simulation is known to be paused (outside the window): chunks are not expected, a silence is not a lag."""
+        with self._lock:
+            self._lag_suspended = True
+
+    def resume_lag_check(self):
+        """The window opened: from now the newest sample may be at most the policy's lag behind this instant."""
+        with self._lock:
+            if self._lag_suspended:
+                self._lag_suspended = False
+                self._lag_floor_ns = int(self.clock_ns())
+
     def _check_lag(self):
         """Fail the data when the newest received sample is more than the policy's lag behind now. Needs the lock."""
-        if self._lag_max_ns is None or self._lag_check_ended or self.hazard is not None or self._previous is None:
+        if (self._lag_max_ns is None or self._lag_check_ended or self._lag_suspended or self.hazard is not None
+                or self._previous is None):
             return
-        newest = self._previous["chunk"]["samples"][-1]["clock_interval_begin_monotonic_ns"]
+        newest = max(self._previous["chunk"]["samples"][-1]["clock_interval_begin_monotonic_ns"], self._lag_floor_ns)
         lag = int(self.clock_ns()) - newest
         self._latency_peaks["max_receiver_lag_ns"] = max(self._latency_peaks["max_receiver_lag_ns"], lag)
         if lag > self._lag_max_ns:

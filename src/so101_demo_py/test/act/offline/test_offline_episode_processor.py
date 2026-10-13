@@ -460,3 +460,18 @@ def test_the_diagnostic_teacher_clock_repair_only_moves_a_lagging_reading_and_co
     assert json.loads(repair.apply(json.dumps(stop)))["payload"]["proof"]["source_clock"]["sim_time_ns"] == 300_000_000
     untouched = json.dumps({"type": "phase_begin", "seq": 3, "payload": {}})
     assert repair.apply(untouched) == untouched
+
+
+def test_replay_node_opens_the_window_at_the_first_message_stamped_at_or_after_the_start(tmp_path):
+    bag = build_bag(tmp_path / "raw")
+    clock_map, _ = processor.load_clock_map(bag)
+    stream = replay.BagStream(bag, clock_map)
+    clock = replay.VirtualClock(clock_map, stream.peek().monotonic_ns)
+    start = stream.peek().stamp_ns + 500_000_000
+    node = replay.ReplayNode(stream, clock, start_at_stamp_ns=start)
+    assert node.window_open is False
+    node.deliver_due(stream.peek().monotonic_ns + 100_000_000)
+    assert node.window_open is False
+    node.deliver_due(mono_of(1.0) + 10_000_000_000)
+    assert node.window_open is True
+    assert replay.ReplayNode(replay.BagStream(bag, clock_map), clock).window_open is True   # no window start: nothing to wait for
