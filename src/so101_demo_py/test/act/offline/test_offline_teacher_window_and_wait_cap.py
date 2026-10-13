@@ -12,7 +12,7 @@ from so101_demo.act.offline import orchestration
 from so101_demo.act.offline.orchestration import MIN_PROCESSING_S, SEAL_MARGIN_S, OfflineCollection
 from so101_demo.parallel_batch.contracts.common import RunMode
 
-from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision, _exit_code,
+from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision,
                                     collection_for, pilot_factory, worker_runtime)
 
 
@@ -169,7 +169,6 @@ def test_the_teacher_pass_survives_the_seal_when_the_budget_is_exhausted(tmp_pat
     location = store.seal(seal, teacher=claim)
     sealed = json.loads((location / "result.json").read_bytes())
     assert sealed["status"] == "PASSED" and sealed["teacher_task_result"] == "PASS" and sealed["act_data_status"] == "INVALID"
-    assert _exit_code(sealed, monkeypatch) == 3
 
 
 def test_the_runtime_passes_the_lease_deadline_to_the_collection(tmp_path, monkeypatch):

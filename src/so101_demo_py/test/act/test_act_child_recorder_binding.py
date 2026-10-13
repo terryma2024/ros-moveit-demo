@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-from pathlib import Path
 import time
 from types import SimpleNamespace
 
@@ -173,24 +172,6 @@ def test_sandbox_layout_records_beside_the_run_never_in_an_attempt_workspace(tmp
         assert not (tmp_path / "worker").exists()
     finally:
         episode.close()
-
-
-def test_run_rejects_a_posthoc_final_target_before_creating_run_root(tmp_path, monkeypatch):
-    from so101_demo.cli.act_diagnostic_episode import main
-    inputs, manifest, snapshot = frozen_child_inputs(tmp_path)
-    root = tmp_path / "live"
-    mkdir = Path.mkdir
-    def guarded_mkdir(path, *args, **kwargs):
-        if path == root:
-            raise AssertionError("wrong target reached run-root creation")
-        return mkdir(path, *args, **kwargs)
-    monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
-    target = list(snapshot["targets"]["final_target"])
-    target[0] += .5
-    assert main(["run", "--inputs", str(inputs.parent), "--root", str(root),
-                 "--mode", manifest["mode"], "--lifecycle", "FULL_RESTART",
-                 "--final-cup-pose", ",".join(map(str, target))]) == 2
-    assert not root.exists()
 
 
 def test_only_the_model_bound_execution_snapshot_binding_is_accepted(tmp_path):

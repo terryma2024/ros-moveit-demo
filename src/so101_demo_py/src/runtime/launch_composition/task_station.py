@@ -55,44 +55,7 @@ def _configured_task_station_actions(context):
     act_profile = context.launch_configurations.get("act_profile", "false") == "true"
     environment_actions = []
     if act_profile:
-        # The ACT profile is the same station with the frozen diagnostic-episode inputs checked before anything starts.
-        # There is no command broker and no reservation: the Teacher drives plain JointTrajectoryControllers.
-        first_inputs = context.launch_configurations.get("act_diagnostic_episode_inputs", "")
-        first_pin = context.launch_configurations.get("act_expected_inputs_sha256", "")
-        if bool(first_inputs) != bool(first_pin):
-            raise ValueError("EPISODE_INPUTS_IDENTITY_REQUIRED")
-        if first_inputs:
-            from so101_demo.act.diagnostic_episode_inputs import (
-                validate_execution_snapshot_binding,
-                verify_frozen_inputs,
-            )
-            frozen = verify_frozen_inputs(Path(first_inputs))
-            if frozen["inputs_sha256"] != first_pin:
-                raise ValueError("EPISODE_INPUTS_IDENTITY_MISMATCH")
-            if frozen.get("mode") != "preselected_target_diagnostic":
-                raise ValueError("EPISODE_INPUTS_DIAGNOSTIC_REQUIRED")
-            binding = frozen.get("execution_snapshot")
-            if binding is None:
-                raise ValueError("EPISODE_EXECUTION_INPUTS_REQUIRED")
-            validate_execution_snapshot_binding(binding)
-            import hashlib
-
-            from so101_demo.act.execution_snapshot import (
-                verify_execution_snapshot,
-                verify_installed_station_assets,
-            )
-            snapshot_root = Path(first_inputs).parent / binding["path"]
-            snapshot = verify_execution_snapshot(snapshot_root, expected_sha256=binding["sha256"])
-            verify_installed_station_assets(Path(get_package_share_directory("so101_demo_py")), snapshot)
-            selected_scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
-            frozen_scene = snapshot_root / snapshot["scene_path"]
-            if (selected_scene != frozen_scene or selected_scene.is_symlink()
-                    or hashlib.sha256(selected_scene.read_bytes()).hexdigest()
-                    != snapshot["files"][snapshot["scene_path"]]["sha256"]):
-                raise ValueError("EPISODE_FROZEN_SCENE_MISMATCH")
-            if (LaunchConfiguration("mujoco_initial_keyframe").perform(context)
-                    != snapshot["targets"]["reset_keyframe"]):
-                raise ValueError("EPISODE_FROZEN_RESET_KEYFRAME_MISMATCH")
+        # The ACT profile: there is no command broker and no reservation, the Teacher drives plain JointTrajectoryControllers.
         environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
                                SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id)]
     share = Path(get_package_share_directory("so101_demo_py"))
@@ -198,9 +161,7 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
                 default_value="task_start",
                 choices=MUJOCO_CUP_KEYFRAMES[:4] if act_profile else MUJOCO_CUP_KEYFRAMES,
             ),
-            *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
-               DeclareLaunchArgument("act_diagnostic_episode_inputs", default_value=""),
-               DeclareLaunchArgument("act_expected_inputs_sha256", default_value="")]
+            *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",))]
               if act_profile else []),
             OpaqueFunction(function=_configured_task_station_actions),
         ]

@@ -47,15 +47,6 @@ def test_the_retired_raw_pilot_switch_is_a_no_op_on_and_refused_off():
         validate_collection_request("off", "none", run_mode="formal", run_root="/r", raw_pilot=True)
 
 
-def test_the_cli_default_is_the_bag_recorder_and_the_old_switch_still_parses():
-    from so101_demo.cli import act_diagnostic_episode
-
-    parser = act_diagnostic_episode.build_parser()
-    base = ["run", "--inputs", "i", "--root", "r", "--mode", "preselected_target_diagnostic", "--lifecycle", "FULL_RESTART"]
-    assert parser.parse_args(base).raw_pilot is None and parser.parse_args(base).collection == "on"
-    assert parser.parse_args(base + ["--raw-pilot", "on"]).raw_pilot == "on"
-
-
 def test_the_worker_specification_round_trips_and_a_forged_one_is_refused(tmp_path):
     plain = CollectionOptions("on")
     assert collection_from_document(plain.document()) == plain
@@ -707,25 +698,10 @@ def test_a_fault_outside_the_sandbox_is_refused_before_any_process_starts(tmp_pa
     assert [event for event in events if event[0] == "start"] == [], "neither the bag recorder nor the Teacher was started"
 
 
-def _exit_code(sealed, monkeypatch):
-    """What `act_diagnostic_episode run` returns for this committed result (the verified completion gate's mapping)."""
-    from so101_demo.act import result_store
-    from so101_demo.cli import act_diagnostic_episode
-
-    proof = dict(result_status=sealed["status"], teacher_task_result="PASS", act_data_status=sealed["act_data_status"],
-                 act_data_qc=sealed["act_data_qc"], export_eligible=sealed["export_eligible"])
-    monkeypatch.setattr(result_store, "resolve_native_run", lambda root: dict(
-        coordinator_root="c", location="l", scope="s", inputs_manifest="i"))
-    monkeypatch.setattr(result_store, "verify_coordinator_commit", lambda *a, **k: proof)
-    monkeypatch.setattr(result_store, "verify_coordinator_cleanup", lambda *a, **k: dict(cleanup_proof_path="cleanup"))
-    monkeypatch.setattr(result_store, "write_commit_proof", lambda proof, path: "digest")
-    return act_diagnostic_episode._verified_run_completion("/nonexistent-run")[0]
-
-
 @pytest.mark.parametrize("fault", [fault for fault in COLLECTION_FAULTS if fault != "none"])
-def test_each_fault_gives_invalid_data_exit_3_while_the_teacher_stays_pass(tmp_path, monkeypatch, fault):
-    """Fault mode -> INVALID data, the Teacher's fields untouched, the real store seals a PASSED attempt with INVALID data (never
-    exportable), and the run's exit code is 3 (not 0, and not the Teacher-failure code 1)."""
+def test_each_fault_gives_invalid_data_while_the_teacher_stays_pass(tmp_path, monkeypatch, fault):
+    """Fault mode -> INVALID data, the Teacher's fields untouched, and the real store seals a PASSED attempt with INVALID data (never
+    exportable)."""
     from act_result_teacher import sealed_teacher
     from test_act_result_schema3 import setup_result
 
@@ -757,7 +733,6 @@ def test_each_fault_gives_invalid_data_exit_3_while_the_teacher_stays_pass(tmp_p
     sealed = json.loads((location / "result.json").read_bytes())
     assert sealed["status"] == "PASSED" and sealed["act_data_status"] == "INVALID"
     assert sealed["act_data_qc"] == "NOT_RUN" and sealed["export_eligible"] is False
-    assert _exit_code(sealed, monkeypatch) == 3
 
 
 def test_seal_attempt_hands_the_processors_qc_report_to_the_store(tmp_path, monkeypatch):

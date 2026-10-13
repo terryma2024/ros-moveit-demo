@@ -394,25 +394,6 @@ def test_a_process_with_a_filled_memo_cache_or_a_trusting_gate_is_refused_by_eve
     assert standalone("qc", run, tmp_path / "again.json") == 4
 
 
-def test_the_run_command_writes_the_commit_proof_only(tmp_path, monkeypatch):
-    """The run process builds memo-trusting gates (the Coordinator's), so it is not an independent readback: no receipt, no export check."""
-    from so101_demo.act import result_store
-    from so101_demo.cli import act_diagnostic_episode
-    from test_act_result_qc import controlled_committed_result
-
-    run, location, scope, inputs, _ = controlled_committed_result(tmp_path, monkeypatch, completed=True, teacher_outcome="PASSED")
-    context = dict(episode=location / "episode", location=location, scope=scope, inputs_manifest=inputs,
-                   coordinator_root=run / "coordinator")
-    monkeypatch.setattr(result_store, "resolve_native_run", lambda root: context)
-    monkeypatch.setattr(act_diagnostic_episode, "_check_export", lambda arguments: pytest.fail("the run does not check the export"))
-    monkeypatch.setattr(act_diagnostic_episode, "_readback", lambda *a, **k: pytest.fail("the run does not read back"))
-    root = run.parent
-    code, report = act_diagnostic_episode._verified_run_completion(root)
-    assert code == 3 and (root / "commit-proof.json").is_file()
-    assert not (root / act_diagnostic_episode.READBACK_RECEIPT).exists() and not list(root.glob("check-export*"))
-    assert not list(root.glob("qc*.json")) and not list(root.glob("verify-commit*"))
-
-
 # ---- a committed INVALID result that never produced a QC report ---------------------------------------------------
 
 def invalid_without_qc(tmp_path, monkeypatch, *, episode=False, report=False):

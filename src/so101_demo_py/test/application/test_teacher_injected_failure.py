@@ -170,13 +170,3 @@ def test_the_teacher_refuses_the_injection_unless_the_run_has_frozen_inputs(tmp_
 def _with_injection(options):
     options.inject_failure_at = "LIFT"
     return options
-
-
-def test_the_episode_cli_has_the_option_off_by_default():
-    from so101_demo.cli.act_diagnostic_episode import build_parser as episode_parser
-    base = ["run", "--inputs", "i", "--root", "r", "--final-cup-pose", "0 0 0 0 0 0 1"]
-    try:
-        defaults = episode_parser().parse_args(base)
-    except SystemExit:
-        pytest.skip("run arguments differ")
-    assert defaults.teacher_inject_failure_at is None

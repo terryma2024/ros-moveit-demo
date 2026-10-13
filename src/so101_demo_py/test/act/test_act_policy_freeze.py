@@ -2,7 +2,7 @@
 full effective values and its sha256.
 
 The Teacher and the Recorder load their policies from the frozen manifest at runtime and refuse a mismatch: the Teacher
-before any motion, the Recorder before it listens, `act_diagnostic_episode run` before it creates its run root.
+before any motion, the Recorder before it listens.
 """
 
 import hashlib
@@ -95,8 +95,10 @@ def test_the_freezer_and_prepare_no_longer_take_the_retired_endpoint_policy():
         with pytest.raises(SystemExit) as caught:
             parser.parse_args(refused)
         assert caught.value.code == 2
-    run = parser.parse_args(["run", "--inputs", "i", "--root", "r"])
-    assert (run.collection, run.collection_fault) == ("on", "none")
+    # `run` was removed with the old native ACT path: collection runs through `act_collect_parallel`
+    with pytest.raises(SystemExit) as caught:
+        parser.parse_args(["run", "--inputs", "i", "--root", "r"])
+    assert caught.value.code == 2
 
 
 @pytest.mark.parametrize("which, mutate", [
@@ -220,18 +222,6 @@ def test_the_recorder_loads_its_policy_only_from_the_frozen_manifest(tmp_path):
         load_recorder_frozen_policy(manifest_path)
     with pytest.raises(RecorderConfigRefused, match="RECORDER_FROZEN_INPUTS_INVALID"):
         load_recorder_frozen_policy(tmp_path / "does-not-exist.json")
-
-
-def test_diagnostic_episode_run_refuses_a_forged_policy_before_creating_its_run_root(tmp_path):
-    from so101_demo.cli import act_diagnostic_episode
-    from test_act_child_recorder_binding import frozen_child_inputs
-    manifest_path, document, _ = frozen_child_inputs(tmp_path)
-    forge_a_consistent_policy(manifest_path, "teacher_endpoint",
-                              lambda values: values["tolerances"].update(final_xy_m=0.5))
-    root = tmp_path / "live"
-    assert act_diagnostic_episode.main(["run", "--inputs", str(manifest_path.parent), "--root", str(root),
-                                   "--mode", document["mode"], "--lifecycle", "FULL_RESTART"]) == 2
-    assert not root.exists()
 
 
 def test_the_teacher_refuses_a_forged_policy_before_any_motion_or_runtime_load(tmp_path, capsys):

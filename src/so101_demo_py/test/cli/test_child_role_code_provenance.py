@@ -156,18 +156,13 @@ def test_the_composition_starts_the_broker_with_the_qualified_package(tmp_path, 
 
 def test_every_role_command_resolves_to_a_qualified_executable_under_a_decoy_path(tmp_path, monkeypatch):
     from so101_demo.act.offline.orchestration import PROCESSOR_ROLE, RAW_ROLE
-    from so101_demo.cli.act_diagnostic_episode import _broker_command
     from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     decoys = _decoy_path(tmp_path)
     monkeypatch.setenv("PATH", f"{decoys}:{os.environ.get('PATH', '')}")
     monkeypatch.setenv("ROS_DISTRO", "jazzy")
-    composition = SimpleNamespace(runtime_ipc_root=tmp_path / "ipc", authority=SimpleNamespace(ipc_root=tmp_path / "ipc"),
-                                  broker_input_root=tmp_path / "inputs", broker_runtime_root=tmp_path / "rt",
-                                  broker_spec_path=tmp_path / "rt" / "broker-spec.json", spec=SimpleNamespace(yolo_weights=tmp_path / "y.pt"))
     commands = {
         "worker": ProductionBatchComposition.worker_command(tmp_path / "worker.json"),
-        "broker-host-route": tuple(_broker_command(composition)),
         "broker-container-route": ("docker", "run", "--rm", "image"),
         "task-station": ("ros2", "launch", "so101_demo_py", "station.launch.py"),
         "dynamic-consumer": (sys.executable, "-m", "so101_demo.cli.dynamic_cup_pick_place", "--mode", "execute"),

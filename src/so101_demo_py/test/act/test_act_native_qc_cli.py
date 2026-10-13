@@ -3,7 +3,6 @@
 import copy
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
@@ -22,7 +21,7 @@ def test_qc_command_uses_readonly_recomputation_and_durable_common_report(tmp_pa
         calls.append((root,scope,inputs_manifest))
         return copy.deepcopy(document)
     monkeypatch.setattr(episode_qc,'recompute_native_qc',reader,raising=False)
-    monkeypatch.setattr(act_diagnostic_episode,'_run',lambda args:pytest.fail('QC started an execution stack'))
+    assert not hasattr(act_diagnostic_episode,'_run')   # QC has no execution stack to start
     target=tmp_path/'qc-report.json'
     code=act_diagnostic_episode.main(['qc','--episode',str(tmp_path/'episode'),'--scope',str(tmp_path/'common-scope.json'),
         '--inputs',str(tmp_path/'frozen'),'--output',str(target)])

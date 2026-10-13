@@ -236,8 +236,6 @@ class RosWorkerRuntimePorts(_ConcreteRosWorkerRuntimePorts):
         workspace_provider=None,
         authorize=None,
         broker_generation=None,
-        act_profile=False,
-        teacher_execution_policy=None,
     ):
         supplied = dict(side_effects or {})
         unknown = set(supplied) - self.REQUIRED
@@ -252,9 +250,6 @@ class RosWorkerRuntimePorts(_ConcreteRosWorkerRuntimePorts):
             dependencies={
                 "workspace_provider": workspace_provider,
                 "authorize": authorize,
-                "act_profile": act_profile,
-                # the values of the frozen execution policy this episode's manifest is bound to (None: structural checks only)
-                "teacher_execution_policy": teacher_execution_policy,
             },
         )
         self.side_effects = supplied
@@ -276,10 +271,9 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     adaptive_fields = {
         "start_paused", "worker_start_timeout_s", "adaptive_workers"
     }
-    episode_fields = {"episode_scope_path", "episode_inputs_manifest", "collection"}
     if (
         type(document) is not dict
-        or set(document) - episode_fields not in (required_fields, required_fields | adaptive_fields)
+        or set(document) not in (required_fields, required_fields | adaptive_fields)
         or document["schema_version"] != 1
         or (
             "start_paused" in document
@@ -290,17 +284,11 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         )
     ):
         raise CliError("WORKER_SPEC_INVALID")
-    for name in (episode_fields - {"collection"}) & set(document):
-        value = document[name]
-        if not isinstance(value, str) or not Path(value).is_absolute() or ".." in Path(value).parts:
-            raise CliError("WORKER_EPISODE_INPUT_INVALID")
     if type(document["broker_generation"]) is not int or document["broker_generation"] <= 0:
         raise CliError("WORKER_SPEC_BROKER_GENERATION")
     resources = _resource_from_dict(document["resources"])
     mode = RunMode(document["run_mode"])
     config = _load_runtime_config(Path(document["config_path"]))
-    # The ACT station (neck controller, seven-joint reset) is selected by the frozen inputs manifest. No broker lifecycle.
-    act_profile = mode is RunMode.EXECUTE and document.get("episode_inputs_manifest") is not None
     coordinator = _CoordinatorRpcProxy(
         document["socket_path"],
         document["token_path"],
@@ -309,23 +297,10 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         mode=mode,
         coordinator_epoch=document["coordinator_epoch"],
     )
-    results = _ArtifactResults({resources.worker_id: resources.worker_root}, mode,
-        collection_scope=document["episode_scope_path"] if act_profile else None,
-        collection_inputs_manifest=document["episode_inputs_manifest"] if act_profile else None)
+    results = _ArtifactResults({resources.worker_id: resources.worker_root}, mode)
     runtime_kwargs = {}
     runtime_ports = None
     broker_proxy = None
-    frozen_execution_policy = None
-    if act_profile and mode is not RunMode.DRY_RUN:
-        # the manifest the worker writes is bound to the frozen Teacher execution policy (its place_height record)
-        try:
-            from so101_demo.act.diagnostic_episode_inputs import verify_frozen_inputs
-            from so101_demo.act.frozen_runtime_inputs import EXECUTION_POLICY_BINDING
-
-            frozen = verify_frozen_inputs(Path(document["episode_inputs_manifest"]))
-            frozen_execution_policy = dict(frozen[EXECUTION_POLICY_BINDING]["values"])
-        except (OSError, KeyError, TypeError, ValueError) as error:
-            raise CliError("WORKER_EPISODE_INPUT_INVALID") from error
     if mode is not RunMode.DRY_RUN:
         runtime_ports = RosWorkerRuntimePorts(
             resources,
@@ -336,43 +311,13 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
             workspace_provider=results.workspace,
             authorize=coordinator.authorize_local,
             broker_generation=document["broker_generation"],
-            act_profile=act_profile,
-            teacher_execution_policy=frozen_execution_policy,
         )
         runtime_kwargs = runtime_ports.kwargs()
         runtime_kwargs["reserve_workspace"] = results.reserve_workspace
         runtime_kwargs["pose_receive_timeout_s"] = teacher_execution_bound_s(config)
-        # the scope document this worker's episode belongs to, if the specification names one: the path
-        # travels in the specification because that is how every other fact from outside the worker arrives here,
-        # and a worker whose specification omits it records nothing, exactly as before.
-        _scope_path = document.get("episode_scope_path")
-        if _scope_path is not None:
-            runtime_kwargs["episode_scope_path"] = str(_scope_path)
-        _inputs_manifest = document.get("episode_inputs_manifest")
-        if _inputs_manifest is not None:
-            runtime_kwargs["episode_inputs_manifest"] = str(_inputs_manifest)
-        if "collection" in document:
-            # the independent Recorder this worker starts around every Teacher attempt (Phase A4c); re-validated here
-            # so a specification that names a fault outside the sandbox refuses the worker before any Teacher starts
-            from so101_demo.act.collection_orchestration import (
-                CollectionRefused,
-                collection_from_document,
-            )
-            try:
-                runtime_kwargs["collection"] = collection_from_document(document["collection"])
-            except CollectionRefused as error:
-                raise CliError(str(error)) from error
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
-        # The run's scope document belongs here, written once and named to every worker, but this file has no
-        # frozen manifest to build it from: `_frozen` is act_diagnostic_episode.py's name and lives in that
-        # process, not this one. Whether the batch path is given the frozen set, or the composition that
-        # already reads it writes the document, is the one question left before the last wire is complete
-        # Until then the port is absent, which is the state every existing caller is in.
-        # Recording happens in the episode's own process, not here: the physical facts the row audit
-        # needs live on the far side of a subprocess boundary, so an episode opened here would see the parent's
-        # frames and boundaries rather than the episode's. The parent still owns the result port and the commit.
         broker_proxy = _WorkerBrokerProxy(
             coordinator, document["broker_socket_path"], resources, config,
             broker_generation=document["broker_generation"],

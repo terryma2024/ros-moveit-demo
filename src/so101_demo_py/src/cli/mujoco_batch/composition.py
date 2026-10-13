@@ -61,14 +61,6 @@ class ProductionBatchComposition(BrokerLifecycle, WorkerLifecycle, AdaptiveResul
         self.journal = None
         self._startup_stage = "constructor"
         try:
-            # the scope document the episodes of this run belong to. Optional: a composition told nothing about
-            # it produces workers whose specifications omit the field, which is the behaviour every existing caller has.
-            # Popped rather than read: _initialize names its keywords one by one and takes no **kwargs, so a key left
-            # in the mapping would reach it as an unexpected argument and fail the whole run at construction.
-            self._episode_scope_path = kwargs.pop("episode_scope_path", None)
-            self._episode_inputs_manifest = kwargs.pop("episode_inputs_manifest", None)
-            # the validated collection options of an ACT diagnostic-episode run (Phase A4c); None for every other caller
-            self._collection = kwargs.pop("collection", None)
             # the container-broker flag defaults here as well as in _initialize: tests replace _initialize to keep
             # its side effects out, and an attribute that only exists when the real initialiser ran is an attribute
             # those tests cannot rely on - which is how this one started failing once the container-free route was
@@ -191,32 +183,16 @@ class ProductionBatchComposition(BrokerLifecycle, WorkerLifecycle, AdaptiveResul
         worker_roots = {
             worker.worker_id: worker.worker_root for worker in self.resource_manifest.workers
         }
-        if self._episode_scope_path is None:
-            # no episode scope: the generic production adapter keeps its own paths, as the coordinator's gate
-            # requires (its comment in _commit says the ACT gate is "selected by the result contract the port
-            # implements - the generic production adapter must keep its own paths")
-            self.result_verifier = SealedResultAdapter(
-                worker_roots,
-                spec.request.run_mode,
-                expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
-            )
-        else:
-            # an episode scope is present: build the ACT result port, so the ACT gate fires on a real ACT episode. It
-            # takes the same worker_roots, and its verify() has the same signature as the adapter's
-            from so101_demo.act.result_store import ActCollectionResultVerifier
-            self.result_verifier = ActCollectionResultVerifier(
-                worker_roots,
-                scope=self._episode_scope_path,
-                inputs_manifest=self._episode_inputs_manifest,
-                trust_independent_qc_memo=True,
-            )
+        self.result_verifier = SealedResultAdapter(
+            worker_roots,
+            spec.request.run_mode,
+            expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
+        )
         self._startup_stage = "coordinator_journal"
         if self.journal is None:
             self.journal = CoordinatorJournal.create(
                 spec.request.evidence_root / "coordinator", spec.request.batch_id
             )
-        if self._episode_scope_path is not None:
-            self.result_verifier.bind_execution_journal(self.journal)
         self._startup_stage = "coordinator"
         self.coordinator = BatchCoordinator(
             self.journal,
@@ -307,11 +283,6 @@ class ProductionBatchComposition(BrokerLifecycle, WorkerLifecycle, AdaptiveResul
             )
             worker_spec = {
                 "schema_version": 1,
-                **({} if self._episode_scope_path is None
-                   else {"episode_scope_path": str(self._episode_scope_path)}),
-                **({} if self._episode_inputs_manifest is None
-                   else {"episode_inputs_manifest": str(self._episode_inputs_manifest)}),
-                **({} if self._collection is None else {"collection": self._collection.document()}),
                 "batch_id": spec.request.batch_id,
                 "run_mode": spec.request.run_mode.value,
                 "config_path": str(spec.config_path),

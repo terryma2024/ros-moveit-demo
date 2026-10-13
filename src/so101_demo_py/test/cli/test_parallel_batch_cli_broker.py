@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import hashlib
 import json
 import os
@@ -61,27 +60,10 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
     assert not hasattr(composition, "broker")
     assert composition.broker_spec_path is None
     assert composition.results is not composition.result_verifier
-    # the port is chosen by the contract it must implement (correction 4): without an episode scope the generic
-    # adapter keeps its own paths, exactly as the coordinator's ACT gate requires; with one the composition
-    # builds the verifying class the gate selects, so a real ACT episode takes that path
+    # the native batch composition builds the generic adapter only: the ACT result verifier belonged to the removed old native ACT path
     from so101_demo.act.result_store import ActCollectionResultVerifier
 
-    # stated as "not the ACT class" rather than "is this other class", because this codebase has two adapter classes
-    # under similar names and the contract is about which one the coordinator's gate recognises
     assert not isinstance(composition.result_verifier, ActCollectionResultVerifier)
-    # The positive direction needs a spec whose evidence root does not collide with the one this composition already
-    # claimed, and the file's own idiom for that is to rebind it. With the episode scope present the
-    # composition must build the class the coordinator's gate selects, so a real ACT episode takes that path.
-    judging = ProductionBatchComposition(
-        replace(spec, request=replace(spec.request, evidence_root=scratch / "act-evidence")),
-        resource_probe=Probe(),
-        claim_root=scratch / "claims-act",
-        worker_launcher=lambda owner, path: owner._run_worker_local(path),
-        episode_scope_path=str(scratch / "original-common-scope.json"),
-    )
-    assert isinstance(judging.result_verifier, ActCollectionResultVerifier)
-    assert judging.result_verifier.scope == scratch / "original-common-scope.json"
-    assert judging.coordinator.result_port is judging.result_verifier
     summary = composition.run()
     assert isinstance(composition.last_local_components[0], ParallelWorker)
     assert isinstance(composition.last_local_components[1], DryRunWorkerRuntime)

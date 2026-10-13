@@ -166,13 +166,6 @@ class ParallelWorkerRuntime(WorkerCaptures, PointProtocol, CollectionRecorder, E
         # The station shape is a platform decision (Linux headless, Darwin visible), so it is a
         # port with a default rather than a hard-coded launch command.
         self._station_config = station_config or task_station_config
-        if station_config is None and episode_inputs_manifest is not None:
-            # A diagnostic-episode run is the ACT station, chosen by the frozen inputs (never by the ambient environment).
-            from dataclasses import replace
-
-            from so101_demo.runtime.act_diagnostic_episode_station import DiagnosticEpisodeStation
-            self._station_config = DiagnosticEpisodeStation.bind(episode_inputs_manifest, episode_scope_path)
-            self.resources = replace(resources, environment=self._station_config.environment(resources))
         if not callable(self._station_config):
             raise TypeError("station_config must be callable")
         self._ready_probe = ready_probe or _required("ready_probe")

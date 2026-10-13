@@ -9,7 +9,7 @@ import pytest
 from so101_demo.act import episode_qc, qc_memo
 from so101_demo.act.offline import orchestration
 
-from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision, _exit_code,
+from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision,
                                     collection_for, pilot_factory, worker_runtime)
 from test_independent_qc_memo import episode, paths
 
@@ -112,4 +112,3 @@ def test_a_missing_or_stale_memo_keeps_the_teacher_pass_sealed_instead_of_losing
     location = store.seal(seal, teacher=sealed_teacher(store, "PASSED", data=decision.act_data_status, reason=decision.act_data_reason))
     sealed = json.loads((location / "result.json").read_bytes())
     assert sealed["status"] == "PASSED" and sealed["act_data_status"] == "INVALID" and sealed["act_data_qc"] == "NOT_RUN"
-    assert _exit_code(sealed, monkeypatch) == 3

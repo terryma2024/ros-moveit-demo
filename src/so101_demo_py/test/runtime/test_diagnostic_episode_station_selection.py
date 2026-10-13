@@ -1,128 +1,24 @@
-"""The first-episode production composition selects the ACT station from the frozen inputs, not from ambient state.
+"""The ACT profile's readiness contract: the neck controller joins the node inventory and the ready probe, and a failed probe
+leaves its reason in the worker result.
 
-The L1 run b4a1 launched the ORIGINAL pick-place profile (no neck controller) because the broker-era
-`DiagnosticEpisodeStation` had been deleted without a replacement and `ParallelWorkerRuntime` fell back to the default station.
+The native `act_diagnostic_episode run` station that used to bind the ACT launch to the frozen inputs was removed with the old
+native ACT path; the container and native campaign stacks come from `act_stack` and `ActRosRuntimePorts`.
 """
-import importlib.util
-import os
 import subprocess
 from types import SimpleNamespace
 
-import pytest
-
-
-from launch import LaunchContext
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
-from launch.utilities import perform_substitutions
-from launch_ros.actions import Node
-
 from so101_demo.parallel_batch.contracts.common import RunMode
-from so101_demo.runtime.launch_composition import common as launch_common
-from so101_demo.runtime.launch_composition import descriptions as launch_descriptions
-from so101_demo.runtime.launch_composition import gazebo_actions as launch_gazebo_actions
-from so101_demo.runtime.launch_composition import perception as launch_perception
-from so101_demo.runtime.launch_composition import task_station as launch_task_station
-from so101_demo.runtime.launch_composition import text_pick_agent as launch_text_pick_agent
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
-from test_act_child_recorder_binding import frozen_child_inputs
 from parallel_worker_runtime_support import _ProcessGroup, _resources
-from paths import PACKAGE_ROOT
-
-PACKAGE = PACKAGE_ROOT
-FORBIDDEN = ("act_command_" + "broker", "controller_" + "reservation")
 
 
-def production_station(tmp_path):
-    """The command and environment the production Worker composition produces for the frozen first-episode inputs."""
-    manifest, document, snapshot = frozen_child_inputs(tmp_path)
-    scope = tmp_path / "scope.json"
-    resources = _resources(tmp_path / "w", "worker-01", 0, 181)
+def started_runtime(tmp_path):
     processes = _ProcessGroup()
     runtime = build_worker_runtime(
-        resources, RunMode.EXECUTE, process_group=processes,
-        episode_inputs_manifest=str(manifest), episode_scope_path=str(scope),
+        _resources(tmp_path / "w", "worker-01", 0, 181), RunMode.EXECUTE, process_group=processes,
         reset_point=lambda _lease: None, initial_gate=lambda *_a: object(), capture_rgb=lambda *_a: None)
     runtime.start_physical_runtime()
-    assert len(processes.specs) == 1
-    return processes.specs[0].argv, processes.environments[0], manifest, document, snapshot, runtime
-
-
-def arguments(argv):
-    return dict(item.split(":=", 1) for item in argv if ":=" in item)
-
-
-def evaluated_nodes(argv):
-    """Evaluate the launch file the production command names, with exactly the arguments it passes."""
-    name = next(item for item in argv if item.endswith(".launch.py"))
-    spec = importlib.util.spec_from_file_location("production_launch", PACKAGE / "launch" / name)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    description = module.generate_launch_description()
-    context = LaunchContext()
-    for action in description.entities:
-        if isinstance(action, DeclareLaunchArgument) and action.default_value is not None:
-            context.launch_configurations[action.name] = perform_substitutions(context, action.default_value)
-    context.launch_configurations.update(arguments(argv))
-    opaque = next(action for action in description.entities if isinstance(action, OpaqueFunction))
-    found = []
-
-    def walk(items):
-        for item in items:
-            if isinstance(item, Node):
-                found.append((item, context))
-            walk(getattr(item, "entities", None) or [])
-    walk(opaque.execute(context))
-    return found
-
-
-@pytest.fixture(autouse=True)
-def source_share(monkeypatch):
-    # the launch reads config/ and assets/ from the package share; the source tree is the same layout
-    monkeypatch.setattr(launch_descriptions, "get_package_share_directory",
-                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
-    monkeypatch.setattr(launch_gazebo_actions, "get_package_share_directory",
-                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
-    monkeypatch.setattr(launch_perception, "get_package_share_directory",
-                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
-    monkeypatch.setattr(launch_task_station, "get_package_share_directory",
-                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
-    monkeypatch.setattr(launch_text_pick_agent, "get_package_share_directory",
-                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
-    monkeypatch.setattr(launch_common, "get_package_share_directory",
-                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
-    monkeypatch.setattr(os, "environ", os.environ.copy())
-
-
-def test_the_production_station_is_the_act_launch_bound_to_the_frozen_inputs(tmp_path):
-    argv, environment, manifest, document, snapshot, _ = production_station(tmp_path)
-    assert "so101_mujoco_act.launch.py" in argv and "so101_mujoco_task_station.launch.py" not in argv
-    values = arguments(argv)
-    assert values["act_diagnostic_episode_inputs"] == str(manifest)
-    assert values["act_expected_inputs_sha256"] == document["inputs_sha256"]
-    assert values["mujoco_scene"].endswith(snapshot["scene_path"]) and "/execution/" in values["mujoco_scene"]
-    assert values["headless"] == "true" and values["sensor_rendering"] == "true" and values["include_teleop"] == "false"
-    # the ACT profile is explicit in the worker's own environment, not borrowed from the parent's
-    assert environment["SO101_ACT_PROFILE"] == "1" and environment["SO101_SIMULATION_SESSION_ID"] == "session-worker-01"
-    assert not any(any(token in item for token in FORBIDDEN) for item in list(argv) + list(environment))
-
-
-def test_the_launch_the_production_command_evaluates_to_uses_the_act_profile_with_a_neck_and_no_broker(tmp_path):
-    argv, *_ = production_station(tmp_path)
-    nodes = evaluated_nodes(argv)
-    executables = [(node.node_package, node.node_executable) for node, _ in nodes]
-    assert ("mujoco_ros2_control", "ros2_control_node") in executables
-    spawned = [node._Node__arguments[0] for node, _ in nodes if node.node_executable == "spawner"]
-    assert spawned == ["joint_state_broadcaster", "arm_controller", "gripper_controller", "neck_controller"]
-    simulator, context = next((node, c) for node, c in nodes if node.node_executable == "ros2_control_node")
-    files = [perform_substitutions(context, item.param_file) for item in simulator._Node__parameters
-             if hasattr(item, "param_file")]
-    assert files == [str(PACKAGE / "config/mujoco/act/ros2_controllers.yaml"),
-                     str(PACKAGE / "config/mujoco/act/mujoco_plugins.yaml")]
-    assert all(str(PACKAGE / "config/mujoco/act") in node._Node__arguments[-1]
-               for node, _ in nodes if node.node_executable == "spawner")
-    assert not any(any(token in str(value) for token in FORBIDDEN)
-                   for node, _ in nodes for value in [node.node_executable, node.node_package,
-                                                      node._Node__arguments or ""])
+    return runtime
 
 
 def test_the_readiness_node_set_and_the_ready_probe_include_the_neck_for_the_act_profile(monkeypatch):
@@ -147,7 +43,7 @@ def test_a_failed_ready_probe_leaves_its_reason_in_the_worker_result_not_only_in
     ports.dependencies = {"act_profile": True}
     assert ports.ready_probe(()) is False
     assert "MOTION_STACK_CONTROLLER_NOT_ACTIVE" in ports.ready_failure_message
-    argv, environment, manifest, document, snapshot, runtime = production_station(tmp_path)
+    runtime = started_runtime(tmp_path)
     runtime._ready_probe = ports.ready_probe
     assert runtime.worker_ready_gate() is False
     assert "MOTION_STACK_CONTROLLER_NOT_ACTIVE" in runtime.ready_failure()

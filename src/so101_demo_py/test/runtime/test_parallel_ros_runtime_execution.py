@@ -704,14 +704,10 @@ def test_the_worker_binds_the_manifest_to_the_frozen_execution_policy(tmp_path):
     import json
     import os
 
-    from so101_demo.cli.mujoco_batch.worker_process import RosWorkerRuntimePorts
     from so101_demo.parallel_batch import dynamic_manifest
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     policy = {"place_height_mode": "tilt_compensated"}
-    ports = RosWorkerRuntimePorts(SimpleNamespace(session_id="session-1"), catalog={}, teacher_execution_policy=policy)
-    assert ports.dependencies["teacher_execution_policy"] is policy
-    assert RosWorkerRuntimePorts(SimpleNamespace(session_id="session-1"), catalog={}).dependencies["teacher_execution_policy"] is None
 
     identity = {name: 1 for name in ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id", "attempt_id",
                                      "lease_generation")}

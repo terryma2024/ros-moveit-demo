@@ -20,10 +20,8 @@ Manifests written this way carry a provenance sidecar recording
 `NOT_FROZEN_UNTIL_RUNTIME_PREFLIGHT`. Until the runtime preflight produces the real candidate source and
 reachability evidence, no manifest is frozen.
 
-`act_collect` runs a single-scenario collection.
-
-`act_collect_parallel` admits and runs one container collection campaign. It first checks the arguments,
-the contract for the chosen plane and every input file. It then freezes one input set, bound to the scene
+`act_collect_parallel` admits and runs one collection campaign. By default each instance is a container. It first checks
+the arguments, the contract for the chosen plane and every input file. It then freezes one input set, bound to the scene
 list, in a new run directory under the registered evidence root. Everything that can be refused is refused
 at this point, before anything is spawned. Next it asks unified admission for the GPU lease and the worker
 slots. The owner starts the Teacher service once and one shard per slot per wave, and drives the scenes
@@ -44,6 +42,19 @@ contract, or `--worker-count` is 8 and `--manifest` is the gate contract; in the
 `--worker-count` must be 8, `--manifest` is the scene list, and `--qualification-report` is required. That
 report must come from another run under the same registered evidence root, and formal admission recomputes
 and verifies it in full. Passing `--qualification-report` together with `--qualification` is refused.
+
+To collect without a container, pass `--instance-launcher native` with `--worker-count 1`. This is the way to run a
+single-worker collection on the Host. A formal run needs eight workers, so a native run is always a `--qualification`
+run. The native instance runs the same instance program from the same spec as a container instance; only the launcher
+differs. The run directory has the same layout, with one worker slot, `w00`. The Teacher service still runs in its
+container. A native instance has no isolation, so admission refuses it unless it is the only ACT instance on the host, and
+ROS domain 181 on the Host must have no other participants while it runs.
+
+The old `act_collect` entry point and the `run` command of `act_diagnostic_episode` have been removed, along with the
+diagnostic-only options they carried (the `preselected_target_diagnostic` collection mode, Teacher failure injection, the
+fault sandbox and `--collection off`). `act_diagnostic_episode` keeps `inspect`, `prepare`, `preflight`, `qc`,
+`verify-commit`, `check-export` and `readback`. `inspect` produces the candidate registry that `--input-candidates`
+takes, and the last four read a finished run back.
 
 Exit code 0 means the campaign completed and settled, and the command prints one JSON line with
 `campaign_id`, `run`, `plane`, `scene_count` and `waves`. Exit code 2 means the command refused before

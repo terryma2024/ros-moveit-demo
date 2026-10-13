@@ -129,7 +129,6 @@ setup(
             "act_build_pick_place_validation_qualified_report = "
             "so101_demo.cli.act_build_pick_place_validation_qualified_report:main",
             "act_sample = so101_demo.cli.act_sample:main",
-            "act_collect = so101_demo.cli.act_collect:main",
             "act_collect_parallel = so101_demo.cli.act_collect_parallel:main",
             "act_build_parallel_qualification_report = "
             "so101_demo.cli.act_build_parallel_qualification_report:main",

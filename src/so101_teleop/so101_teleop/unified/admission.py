@@ -246,9 +246,7 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
     return identity
 
 
-_ACT_START_KINDS = frozenset({"pick_place_validation_phase", "pick_place_validation_full", "act_collection_start",
-                              "act_diagnostic_episode"})
-_DIAGNOSTIC_START_KIND = "act_diagnostic_episode"
+_ACT_START_KINDS = frozenset({"pick_place_validation_phase", "pick_place_validation_full", "act_collection_start"})
 _ACT_PAYLOAD_KEYS = frozenset({
     "campaign_id", "backend", "worker_count", "source_path", "source_sha256",
     "manifest_path", "manifest_sha256", "runtime_config_path", "runtime_config_sha256",
@@ -269,12 +267,6 @@ _COLLECTION_PAYLOAD_KEYS = (_ACT_PAYLOAD_KEYS - _COLLECTION_EXCLUDED_KEYS) | fro
 # (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
 _PICK_PLACE_VALIDATION_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
     "preparation_receipt_path", "preparation_receipt_sha256"})
-
-# the diagnostic payload additionally binds the frozen inputs and the explicit mode record; the
-# formal and pick-place validation schemas above are unchanged, so neither can smuggle these fields in
-_DIAGNOSTIC_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
-    "collection_scope_path", "collection_scope_sha256",
-    "inputs_manifest_path", "inputs_manifest_sha256"})
 
 
 def _real_owner(pid: int, started_ticks: int) -> bool:
@@ -379,10 +371,8 @@ class UnifiedWorkloadService:
         if not isinstance(payload, dict):
             raise ValueError("CAMPAIGN_START_SCHEMA")
         pick_place_validation = spec.kind in ("pick_place_validation_phase", "pick_place_validation_full")
-        diagnostic = spec.kind == _DIAGNOSTIC_START_KIND
         container_collection = spec.kind == 'act_collection_start'
-        expected = (_PICK_PLACE_VALIDATION_PAYLOAD_KEYS if pick_place_validation else
-                    _DIAGNOSTIC_PAYLOAD_KEYS if diagnostic else _COLLECTION_PAYLOAD_KEYS)
+        expected = _PICK_PLACE_VALIDATION_PAYLOAD_KEYS if pick_place_validation else _COLLECTION_PAYLOAD_KEYS
         if set(payload) != expected:
             # a payload missing only the calibration pair is a calibration problem, not a schema one
             if set(payload) == expected - {"calibration_report_path",
@@ -410,15 +400,6 @@ class UnifiedWorkloadService:
                 raise ValueError('INSTANCE_LAUNCHER_INVALID')
             if payload['instance_launcher'] == 'native' and payload['worker_count'] != 1:
                 raise ValueError('NATIVE_INSTANCE_SINGLE_WORKER_ONLY')
-        if diagnostic:
-            # one Worker, no resume and no qualification claim: the diagnostic scope replaces the
-            # Head Search prerequisite only, so it must not borrow the qualification lane either
-            if payload["qualification_mode"] is not False:
-                raise ValueError("DIAGNOSTIC_QUALIFICATION_INVALID")
-            if payload["worker_count"] != 1:
-                raise ValueError("DIAGNOSTIC_SCOPE_INVALID")
-            if payload["qualification_receipt_path"] is not None:
-                raise ValueError("QUALIFICATION_RECEIPT_UNEXPECTED")
         if spec.kind.startswith("act_collection"):
             if payload["qualification_mode"]:
                 if payload["worker_count"] not in (1, 2, 8):
@@ -501,10 +482,9 @@ class UnifiedWorkloadService:
                 calibration = json.loads(calibration_bytes)
                 from so101_demo.act.calibration import installed_calibration_identity, require_gate
 
-                if not diagnostic:
-                    require_gate(calibration,
-                                 "formal_collection" if spec.kind.startswith("act_collection")
-                                 else "pick_place_validation")
+                require_gate(calibration,
+                             "formal_collection" if spec.kind.startswith("act_collection")
+                             else "pick_place_validation")
                 # the installed ACT profile must still exist and be readable; the
                 # comparison of that identity with the report's recorded one
                 (self.calibration_identity_probe or installed_calibration_identity)()
@@ -512,12 +492,6 @@ class UnifiedWorkloadService:
                 raise ValueError("CALIBRATION_REQUIRED") from error
             # Per the owner's amendment the report's own recorded identity is not
             # compared with the tree that is running; the probe above still refuses a missing profile.
-            if diagnostic:
-                # the Head Search prerequisite is the only thing this scope removes: every non-Head
-                # check and its measured values must still be present
-                from so101_demo.act.diagnostic_episode_inputs import require_nonhead_gate
-
-                require_nonhead_gate(calibration)
             if pick_place_validation:
                 from so101_demo.act.head_search_binding import validate_head_search_binding
                 try:
@@ -540,8 +514,6 @@ class UnifiedWorkloadService:
                 or receipt["evidence_root"] != str(root)
             ):
                 raise ValueError("POLICY_NOT_ACTIVATED")
-        if diagnostic:
-            self._require_diagnostic_scope(payload, root)
         if container_collection and not payload['qualification_mode']:
             # formal collection: a verified exact-eight qualification report of ANOTHER run of the registered root
             path, digest = payload['qualification_receipt_path'], payload['qualification_receipt_sha256']
@@ -608,80 +580,6 @@ class UnifiedWorkloadService:
         if container_collection and physical_uuid != campaign_config['gpu_uuid']:
             raise ValueError('CAMPAIGN_GPU_BINDING_MISMATCH')
         return payload, children, physical_uuid
-
-    # every runtime artifact a diagnostic payload names must be the frozen copy of this role; the
-    # second element says whether the closed payload also carries that artifact's digest
-    _DIAGNOSTIC_FROZEN_BINDINGS = {
-        "source": ("reset_recipe", True), "manifest": ("anchor_scene", True),
-        "runtime_config": ("runtime_config", True), "collection_config": ("collection_config", True),
-        "calibration_report": ("path_policy", True),
-        "proposal": ("contact_proposal", False),
-        "activation_receipt": ("contact_activation", False)}
-
-    def _require_diagnostic_scope(self, payload: dict, root: Path) -> dict:
-        """Bind one diagnostic episode to its frozen inputs and its explicit mode record.
-
-        The scope names the mode, the manifest names the frozen bytes, and every runtime artifact
-        the payload carries must be the frozen copy of its role: a caller cannot keep a valid
-        manifest while pointing the run at a different config, report or activation pair. The
-        scope's `inputs_sha256` must equal the manifest's frozen digest and its scene and seed must
-        equal the frozen anchor, so neither the mode, the inputs nor the initial state can be
-        swapped after admission.
-        """
-
-        from so101_demo.act.collection_scope import CollectionMode, read_collection_scope
-        from so101_demo.act.diagnostic_episode_inputs import (anchor_identity_from_bytes,
-                                                         require_nonhead_gate,
-                                                         resource_policy_identity,
-                                                         verify_frozen_inputs)
-
-        for name in ("collection_scope", "inputs_manifest"):
-            path = Path(payload[f"{name}_path"])
-            if (not path.is_absolute() or ".." in path.parts
-                    or not path.resolve().is_relative_to(root.resolve())):
-                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-            self._verify_artifact(str(path), payload[f"{name}_sha256"])
-        manifest_path = Path(payload["inputs_manifest_path"])
-        try:
-            manifest = verify_frozen_inputs(manifest_path)
-            frozen_root = manifest_path.parent.resolve()
-            frozen = lambda role: (frozen_root / manifest["roles"][role]["path"]).read_bytes()
-            for key, (role, digest_declared) in self._DIAGNOSTIC_FROZEN_BINDINGS.items():
-                entry = manifest["roles"][role]
-                expected = (frozen_root / entry["path"]).resolve()
-                if Path(payload[f"{key}_path"]).resolve() != expected:
-                    raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-                if digest_declared and payload[f"{key}_sha256"] != entry["sha256"]:
-                    raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-            scope = read_collection_scope(Path(payload["collection_scope_path"]),
-                                          expected_mode=CollectionMode.DIAGNOSTIC,
-                                          expected_inputs_sha256=manifest["inputs_sha256"])
-            # every frozen calibration report carries its own structural contract: all five
-            # non-Head checks, complete measurements with matching sample digests. Distinct reports
-            # are allowed, so each one is validated instead of relying on equality
-            # with the payload's report.
-            for role in ("path_policy", "placement_qc", "rgb_skew"):
-                require_nonhead_gate(json.loads(frozen(role)))
-            # the anchor identity is derived from the frozen anchor bytes, so neither the manifest
-            # nor the scope can assert a scene or seed the bytes do not describe
-            derived_anchor = anchor_identity_from_bytes(frozen("anchor_scene"))
-            anchor = manifest["roles"]["anchor_scene"]["identity"]
-            if (not isinstance(anchor, dict)
-                    or any(anchor.get(key) != value for key, value in derived_anchor.items())
-                    or scope["scene_id"] != derived_anchor["scene_id"]
-                    or scope["seed"] != derived_anchor["seed"]
-                    or manifest["evidence_root"] != payload["evidence_root"]):
-                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-            # the resource policy is re-derived from the frozen config bytes rather than trusted
-            # from the manifest's own summary. Per the owner's amendment the manifest's recorded source and config
-            # identity is provenance, not a claim about the tree that is running now.
-            derived_resource = resource_policy_identity(frozen("runtime_config"),
-                                                        frozen("collection_config"))
-            if manifest["roles"]["resource_thresholds"]["identity"] != derived_resource:
-                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-        except (OSError, KeyError, TypeError, ValueError) as error:
-            raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND") from error
-        return scope
 
     def start(self, spec: OperationSpec, *, allow_existing: bool = True) -> AdmittedCampaignContext:
         """Validate everything, acquire resources and persist one context atomically."""

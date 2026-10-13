@@ -19,7 +19,6 @@ for _candidate in DEMO_TEST_IMPORT_PATH:
         sys.path.insert(0, str(_candidate))
 
 from test_act_campaign_admission import _write_policy, _start_spec, _service
-from test_act_diagnostic_episode_admission import _diagnostic_spec
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey
@@ -322,42 +321,35 @@ def test_pick_place_still_requires_calibration_and_activation(tmp_path):
         store.close()
 
 
-def test_diagnostic_admission_unchanged(tmp_path):
-    """Pinned before the collection edit: the diagnostic kind keeps the report, proposal and receipt rules and their keys."""
-    def drop(*keys):
-        return lambda payload: [payload.pop(key) for key in keys]
-
-    cases = (('no_proposal_key', drop('proposal_path'), 'CAMPAIGN_START_SCHEMA'),
-             ('no_calibration_pair', drop('calibration_report_path', 'calibration_report_sha256'), 'CALIBRATION_REQUIRED'),
-             ('other_fingerprint', lambda payload: payload.update(contact_policy_fingerprint='0'*64), 'POLICY_NOT_ACTIVATED'))
-    for name, mutate, code in cases:
-        store = IntentStore.open(tmp_path/('state-'+name))
-        try:
-            service = _service(store)
-            with pytest.raises(ValueError, match=code):
-                service.start(_diagnostic_spec(tmp_path, tag=name, payload_mutation=mutate))
-            assert service.child_registry.launches() == () and service.arbiter.is_idle()
-            assert store._query_one('SELECT * FROM gpu_workload_leases') is None
-        finally:
-            store.close()
-    store = IntentStore.open(tmp_path/'state-ok')
+def test_the_diagnostic_episode_kind_is_no_longer_admitted(tmp_path):
+    """The old native `act_diagnostic_episode run` is removed with its admission kind: the kind is unknown, nothing is acquired."""
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = replace(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path), kind='act_diagnostic_episode')
+    store = IntentStore.open(tmp_path/'state-removed')
     try:
-        assert _service(store).start(_diagnostic_spec(tmp_path, tag='ok')).workload_kind == 'act_diagnostic_episode'
+        service = _service(store)
+        with pytest.raises(ValueError, match='UNKNOWN_OPERATION'):
+            service.start(spec)
+        assert service.child_registry.launches() == () and service.arbiter.is_idle()
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is None
     finally:
         store.close()
+    from so101_teleop.unified import admission
+    assert not hasattr(admission, '_DIAGNOSTIC_PAYLOAD_KEYS') and 'act_diagnostic_episode' not in admission._ACT_START_KINDS
 
 
 def test_only_the_collection_payload_carries_the_report_hash(tmp_path):
-    """Pinned before the formal-collection edit: pick-place validation and diagnostic keep their key sets; the hash is collection-only."""
+    """Pinned before the formal-collection edit: pick-place validation keeps its key set; the hash is collection-only."""
     from so101_teleop.unified import admission
     key = 'qualification_receipt_sha256'
     assert key in admission._COLLECTION_PAYLOAD_KEYS
-    for name in ('_ACT_PAYLOAD_KEYS', '_PICK_PLACE_VALIDATION_PAYLOAD_KEYS', '_DIAGNOSTIC_PAYLOAD_KEYS'):
+    for name in ('_ACT_PAYLOAD_KEYS', '_PICK_PLACE_VALIDATION_PAYLOAD_KEYS'):
         assert key not in getattr(admission, name)
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     pick_place = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
-    cases = (('pick_place', pick_place), ('diagnostic', _diagnostic_spec(tmp_path, tag='keys')))
+    cases = (('pick_place', pick_place),)
     for name, spec in cases:
         store = IntentStore.open(tmp_path/('state-'+name))
         try:
