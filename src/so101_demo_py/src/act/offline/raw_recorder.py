@@ -21,7 +21,6 @@ import json
 import os
 import re
 import signal
-import shutil
 import subprocess
 import sys
 import threading
@@ -144,6 +143,22 @@ def build_options(bag_dir: Path, topics=TOPICS, node_name=NODE_NAME):
         topic: QoSProfile(depth=depth, history=HistoryPolicy.KEEP_LAST, reliability=ReliabilityPolicy.RELIABLE)
         for topic, depth in DEEP_RELIABLE.items() if topic in topics}
     return storage, options
+
+
+def qos_overrides_for(topics, topic_map=None) -> dict:
+    """{topic as the recorder sees it: QoS profile} for the deep reliable queues of the recorded topics (the profile the scoped
+    recorder accepted: keep_last, reliable, volatile, depth > 0)."""
+    names = topic_map or {}
+    return {names.get(topic, topic): {"history": "keep_last", "depth": depth, "reliability": "reliable", "durability": "volatile"}
+            for topic, depth in DEEP_RELIABLE.items() if topic in topics}
+
+
+def record_argv(bag_dir, qos_path, node_name, topics) -> list:
+    """The stock `ros2 bag record` verb through `bag_record_entry`, which keeps the process-wide log level at INFO and raises only
+    the recorder's own logger to RECORDER_LOG_LEVEL (a global `--log-level debug` makes rcl print two lines per taken message)."""
+    return [sys.executable, "-m", "so101_demo.act.offline.bag_record_entry", "-s", "mcap", "-o", str(bag_dir),
+            "--node-name", node_name, "--disable-keyboard-controls", "--max-cache-size", str(256 * 1024 * 1024),
+            "--qos-profile-overrides-path", str(qos_path), "--topics", *topics]
 
 
 class SceneReadSidecar:
@@ -303,21 +318,13 @@ class RawRecorder:
         self._executor.add_node(self._probe)
         self._spin_thread = threading.Thread(target=self._executor.spin, name="so101-raw-probe-spin", daemon=True)
         self._spin_thread.start()
-        executable = shutil.which("ros2")
-        if executable is None or not os.access(executable, os.X_OK):
-            raise RuntimeError("RAW_ROS2_EXECUTABLE_UNAVAILABLE")
         import yaml
 
         qos_path = self.bag_dir.parent / (self.bag_dir.name + "-qos.yaml")
-        overrides = {self.topic_map[topic]: {"history": "keep_last", "depth": depth, "reliability": "reliable", "durability": "volatile"}
-                     for topic, depth in DEEP_RELIABLE.items() if topic in self.topics}
+        overrides = qos_overrides_for(self.topics, self.topic_map)
         qos_path.write_text(yaml.safe_dump(overrides))
         self._log = open(self.bag_dir.parent / (self.bag_dir.name + "-record.log"), "xb")
-        argv=[executable, "bag", "record", "-s", "mcap", "-o", str(self.bag_dir),
-                                          "--node-name", self.node_name, "--disable-keyboard-controls",
-                                          "--log-level", RECORDER_LOG_LEVEL,
-                                          "--max-cache-size", str(256 * 1024 * 1024),
-                                          "--qos-profile-overrides-path", str(qos_path), *self.topics]
+        argv=record_argv(self.bag_dir, qos_path, self.node_name, self.topics)
         if namespace is not None:
             from ament_index_python.packages import get_package_prefix
             native=Path(get_package_prefix('so101_mujoco_support'))/'lib/so101_mujoco_support/act_scoped_bag_record'

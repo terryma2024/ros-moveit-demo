@@ -69,7 +69,11 @@ def test_the_bag_records_everything_published_after_recording_and_closes_with_it
     # C5: the recorder runs with debug logging (the per-topic loss lines exist only there) and reports the per-topic breakdown, an
     # empty one when nothing was lost
     assert stats["transport_lost"] == 0 and stats["transport_lost_by_topic"] == {} and stats["transport_lost_events"] == [], stats
-    assert "[DEBUG]" in (tmp_path / "raw" / "bag-record.log").read_text(errors="replace")
+    log_text = (tmp_path / "raw" / "bag-record.log").read_text(errors="replace")
+    assert "[DEBUG]" in log_text
+    # experiment 583: a process-wide DEBUG level printed two rcl lines per taken message (42 MB per episode) from the thread
+    # that takes the messages; only the recorder's own logger is at DEBUG
+    assert "Subscription taking serialized message" not in log_text and log_text.count("\n") < 2000, log_text.count("\n")
     assert stats["anchor_start"]["system_ns"] > 0 and stats["anchor_end"]["monotonic_ns"] > stats["anchor_start"]["monotonic_ns"]
     for name in names:
         count = stats["bag"]["topics"][name]["count"]
@@ -109,7 +113,7 @@ def test_an_instance_without_a_namespace_records_with_the_stock_recorder_and_wri
     try:
         recorder.start()
         argv = recorder._recorder.args
-        assert Path(argv[0]).name == "ros2" and argv[1:3] == ["bag", "record"]
+        assert argv[:3] == [sys.executable, "-m", "so101_demo.act.offline.bag_record_entry"] and "--log-level" not in argv
         assert not any("__ns" in str(item) or "act_scoped_bag_record" in str(item) for item in argv)
         okay, state = recorder.wait_recording(20.0)
         assert okay, state
