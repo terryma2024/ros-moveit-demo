@@ -148,7 +148,7 @@ class MujocoWorldObserver:
         # A one-shot observer that joins a long-lived publisher is first handed the publisher's transient-local replay (the
         # newest samples of the PREVIOUS epoch when it joins within the replay depth of a reset). A depth-1 reader keeps only
         # the newest of the rest, so the new epoch's step-zero sample may never reach it. With this set, a later epoch seen
-        # while the observer still holds only that one joining sample becomes the new baseline instead of a hazard. It is a
+        # (however many samples of the older epoch preceded it: the replay plus live ones) becomes the new baseline instead of a hazard. It is a
         # statement about what a late joiner can know, so continuous observers (reset client, Teacher) leave it off.
         self._rebaseline_stale_join = rebaseline_stale_join
         self._lock = threading.Lock()
@@ -244,8 +244,8 @@ class MujocoWorldObserver:
                     raise EvidenceRejected("publisher sequence must increase")
                 if evidence.reset_epoch < previous.reset_epoch:
                     raise EvidenceRejected("reset epoch moved backward")
-                rebaseline = (self._rebaseline_stale_join and len(self._history) == 1
-                              and evidence.reset_epoch > previous.reset_epoch)
+                rebaseline = (self._rebaseline_stale_join
+                              and evidence.reset_epoch > previous.reset_epoch)   # any number of joining samples
                 if rebaseline:
                     self._rebaseline_stale_join = False   # the join is a one-time event
                 elif evidence.reset_epoch > previous.reset_epoch + 1:

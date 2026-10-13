@@ -237,8 +237,21 @@ def test_a_continuous_observer_still_rejects_a_new_epoch_that_does_not_begin_at_
     world.accept(replayed, received_at_s=10.)
     with pytest.raises(world_module.EvidenceRejected, match="new reset epoch must begin at simulation step zero"):
         world.accept(live, received_at_s=10.)
-    world2, replayed2, live2 = _joining_pair(world_module, monkeypatch, rebaseline_stale_join=True)
+    world2, replayed2, live2 = _joining_pair(world_module, monkeypatch)
     world2.accept(replayed2, received_at_s=10.)
     world2.accept(replace(replayed2, publisher_sequence=14165, simulation_step=60505), received_at_s=10.)
     with pytest.raises(world_module.EvidenceRejected, match="step zero"):
-        world2.accept(live2, received_at_s=10.)   # continuity already proven: the allowance is only for the joining sample
+        world2.accept(live2, received_at_s=10.)   # a continuous observer keeps the strict rule whatever it has seen
+
+
+def test_a_one_shot_observer_that_joined_on_several_previous_epoch_samples_still_takes_the_new_epoch_as_baseline(monkeypatch):
+    # EXP-580 fn8-05: the transient-local replay plus a live sample of the old epoch arrived before the new epoch did
+    from so101_demo.backends.mujoco import observer as world_module
+    world, replayed, live = _joining_pair(world_module, monkeypatch, rebaseline_stale_join=True)
+    world.accept(replayed, received_at_s=10.)
+    world.accept(replace(replayed, publisher_sequence=14165, simulation_step=60505), received_at_s=10.)
+    world.accept(replace(replayed, publisher_sequence=14166, simulation_step=60506), received_at_s=10.)
+    world.accept(live, received_at_s=10.)
+    assert world.diagnostics()["rejections"] == [] and world.snapshot().reset_epoch == 2 and world.snapshot().paused
+    with pytest.raises(world_module.EvidenceRejected, match="new reset epoch must begin at simulation step zero"):
+        world.accept(replace(live, publisher_sequence=14181, reset_epoch=3, simulation_step=7), received_at_s=10.)
