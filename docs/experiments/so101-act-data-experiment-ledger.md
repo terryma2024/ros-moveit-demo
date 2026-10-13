@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3638
-next_experiment: EXP-585 (PLANNED): checkpoint B, the first real non-container single-worker run of the instance program, eight scenes.
+latest_checkpoint: CP-3639
+next_experiment: NONE until the native stop observation rule and the INPUT_TIMESTAMP_FUTURE findings of EXP-585 are resolved.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3639 — EXP-585 VALID failure: native instance collects eight scenes, six VALID; native stop unconfirmed by the Host observation; lease released under the standing authorisation
+
+- Checkpoint B of the design change. The instance program ran on the Host through the same campaign flow; the collection worked. Failures: the Host stop observation reported an unreadable process as a marker survivor, so the stop was unconfirmed, the wave was not verified and the lease stayed held; two episodes are INVALID with INPUT_TIMESTAMP_FUTURE, a reason not seen before. Not retried. Root-cause work assigned to a Sonnet writer; no judgement to be loosened and unreadable same-user processes not to be ignored.
+- Manual release of the held admission state, applied once by R/manual-lease-release-20261013-exp585.py under the standing human authorisation of CP-3628 ("本次及后续同类均可"). The coordinator treats an unproven stop of a native instance as the same class as an unproven container stop; that reading is the coordinator's and is reported to the human. Preconditions checked by the script before the transaction: final-exit.json leader absent, no group member, graph clear; the instance's receipt with all four facts and not forced; the leader pid and its process group absent now; no process matching the instance, simulator, controller, MoveIt or recorder names; no container running; the store in exactly the held state. Byte backup, one transaction with the same row changes as the designed settle and the parent of operation 48fd8108020f4d34953c81a160514f04 written CANCELLED. Read back: IDLE, no lease, no active slot. Record in R/manual-lease-release-20261013-exp585. A human-authorised override of the fence, not a proof.
+- Run script rule changed per the human statement recorded in the EXP-585 entry: launch scripts no longer require HEAD to equal the gated commit; the no-diff and not-dirty rule for the source trees stays.
+- Retained: run root, prep directory, logs under R/run-logs. Nothing deleted.
 
 ## CP-3638 — Plan tasks 5 and 6 implemented (one instance program, container and native shells, native launcher); gates PASS; EXP-585 planned
 
@@ -84,7 +91,7 @@ next_experiment: EXP-585 (PLANNED): checkpoint B, the first real non-container s
 
 ```yaml
 experiment_id: EXP-585
-status: PLANNED
+status: VALID
 prior_experiment: EXP-584 (VALID; container, fixed identity, eight of eight)
 hypothesis: The same instance program, started on the Host as one process group with the fixed identity instead of inside a container, collects the eight scenes through the same Host campaign flow with the same artifacts, and its stop is proven by the native proof.
 prediction: Admission accepts instance_launcher native with one worker; the native instance reaches READY on domain 181 on the Host; the stack starts with the Host ros2 and renders through NVIDIA EGL; scenes run and are judged by the same code; the output layout under wave-0/w00/g1 matches the container's; the wave verifies; final-exit.json shows the leader absent or zombie, no group member, no marker survivor, graph clear; no native-leftovers.json; slot and lease released. First-time stages - everything about a Host stack under this launcher. The first stage that fails, if any, is the new information.
@@ -107,17 +114,31 @@ provenance:
   gz_partition: the instance's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-native-inputs-20261013T132000Z/inspect.zsh
-    exit_code: PENDING
-  - command: zsh <registered root>/act-native-inputs-20261013T132000Z/run-native.zsh
-    exit_code: PENDING
+    exit_code: 0
+  - command: zsh <registered root>/act-native-inputs-20261013T132000Z/run-native.zsh (first invocation)
+    exit_code: 90
+  - command: zsh <registered root>/act-native-inputs-20261013T132000Z/run-native.zsh (second invocation)
+    exit_code: 1
 observed:
-  - PENDING
+  - First invocation refused by the script's own pre-flight before anything started - its worktree item required HEAD to equal the gated commit, while HEAD carried the ledger-only commit of CP-3638; the source trees had no diff. The coordinator changed that one item in the prep directory's preconditions.py to the rule of the container run scripts (no diff of src, scripts, third_party against the gated commit and no uncommitted change there), noted in the file. The human then stated that the HEAD equality rule can be removed ("“启动脚本要求HEAD与源码提交完全一致” 这个规则可以去掉").
+  - Second invocation - admission accepted instance_launcher native with one worker; the native instance reached READY on the Host (runtime-ready.json, stack-readiness.json) and ran all eight scenes; every scene teacher_task_result PASS.
+  - Six scenes act_data_status VALID with act_data_qc PASS (default, fn8-01, fn8-02, fn8-03, fn8-06, fn8-07).
+  - fn8-04 INVALID, "OFFLINE_PROCESSOR_INVALID: rc=3; INPUT_TIMESTAMP_FUTURE; RECORDER_SEAL_FAILED: INPUT_TIMESTAMP_FUTURE". fn8-05 INVALID, "OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_SOURCE_GAP: /arm_controller/controller_state gaps=1; OFFLINE_SOURCE_GAP: /gripper_controller/controller_state gaps=1; INPUT_TIMESTAMP_FUTURE; RECORDER_SEAL_FAILED: INPUT_TIMESTAMP_FUTURE". INPUT_TIMESTAMP_FUTURE has not appeared in any container run.
+  - The simulator's contact publisher reports about 454 messages per second in the instance log during the last scene.
+  - Instance side of the stop - instance-exit.json WAVE_COMPLETE with cleanup_confirmed true; shard-stop.json all four facts true, forced false; retirement/stack-stop.json physical_stop_confirmed, graph_clear, group_clear true, kill_sent false; retirement/audit.json no error.
+  - Host side of the stop - final-exit.json leader_state absent, group_members empty, graph_clear true, marker_survivors [-1] (the unreadable sentinel). host-cleanup.json LAUNCH_STOP_UNCONFIRMED, no group signalled; no native-leftovers.json. campaign-cleanup.json services terminated true, shard terminated false. The CLI reported CAMPAIGN_RUN_FAILED: CAMPAIGN_SHARD_STOP_UNCONFIRMED and CAMPAIGN_CLEANUP_UNCONFIRMED, exit 1. No wave verification ran.
+  - After the run - no container running; no process matching the instance, simulator, controller, MoveIt or recorder names; unified store VALIDATION_ACTIVE with the lease and slot w00 of campaign nat1f-20261013T132000Z held.
+  - Timing from file times - Teacher ready 21:22:12, results from 21:27:53 to 22:04:56, instance exit 22:05:03 (local). About 43 minutes for eight scenes.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The same instance program runs outside a container through the same Host flow - stack start, EGL rendering, recording, offline processing, sealing and QC all worked for six scenes.
+  - The native stop observation refused because a process whose environment it could not read had started after the instance; on a desktop host with other users' processes that will always happen. The rule as written cannot confirm a stop on this host; to be established which processes and corrected without ignoring unreadable processes of the same user.
+  - INPUT_TIMESTAMP_FUTURE is new and its cause is not established. The contact publisher rate suggests the Host simulation ran below real time; not established, and container rates are to be compared.
+conclusion: VALID failure. The native launcher and the single instance program work for the collection itself (six of eight VALID, two INVALID for a new reason). The run fails on the native stop proof, which is unconfirmed by one fact, so the wave was not verified and the admission stayed held by design.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-native-20261013T132000Z (host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1 with final-exit.json, shard-stop.json, retirement/, native-instance.log, output/tasks)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-native-inputs-20261013T132000Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp585, exp585-console.log and exp585-console-2.log
+decision: KEEP
 next_experiment: NONE
 ```
 
