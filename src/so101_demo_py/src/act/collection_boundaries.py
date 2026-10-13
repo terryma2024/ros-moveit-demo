@@ -7,6 +7,9 @@ import json
 from .contracts import fields, finite, identifier, integer, sha256, vector
 from .native_endpoints import validate_source_clock
 
+#: the stages every collection retains, once each: QC and the formal audit coverage both require exactly these
+COLLECTION_BOUNDARY_STAGES = ('verified_reset', 'capture_start', 'initial_capture', 'normal_stop', 'final_capture')
+
 
 def validate_verified_reset(document, *, identity=None):
     """The V3 verified reset: the FIRST evidence of this session and epoch the Recorder itself retained.

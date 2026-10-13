@@ -20,13 +20,11 @@ from act_episode_audit_support import (
 import pytest
 
 from so101_demo.act.acquisition import AcquisitionMinter
-from so101_demo.act.episode_audit.checks import (
-    FORMAL_PHASES,  # F5: the prescribed lifecycle
-    MANIFEST_KIND,
-)
+from so101_demo.act.episode_audit.checks import MANIFEST_KIND
 from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
-from so101_demo.act.joints import ARM_JOINTS  # F5: the ratified joint order
+from teacher_formal_audit import TeacherEpisode
+from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
 
 
 def test_a_formal_audit_requires_the_registered_lease_contract(tmp_path):
@@ -210,72 +208,24 @@ def test_readback_requires_exact_types_and_correlated_clocks(tmp_path):
         verify_audit_manifest(path)
 
 
-def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
+def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path, frozen_scene):
     """Proposal B: the window's fields and per-outcome ordering are ratified and enforced."""
 
-    # the writer carries full source coverage first, so each attempt below fails on the window alone
-    writer = _formal_writer(tmp_path / "window")
-    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
-                                        "positions": [0.1] * 6, "accepted": True,
-                                        # F5: coverage needs one complete raw group, not a bare
-                                        # projection, so the legacy flat group travels with it
-                                        "joint_names": list(ARM_JOINTS),
-                                        "sim_stamp_ns": 1_100_000_000,
-                                        "received_monotonic_ns": 1_100_000_001,
-                                        "velocities": [0.0] * 6})
-    writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
-                                     "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
-                                                     "cup_position_world_m": [0.0, 0.0, 0.0]}})
-    writer.append_source("physics", {"kind": "support", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "table_contact": True, "supported": True}})
-    # F5: the ratified observations are retained with this writer, joined by the row's own instant
-    _scene = {"scene_revision": 1, "attached_objects": [], "world_object_ids": [], "is_diff": False,
-              "sim_time_s": 1.1, "source": "scene_port"}
-    _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
-                  "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
-                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
-                 # T3-F13: the action has two controllers, so the collection carries one record for each
-                 {"controller": "gripper", "joint_names": ["6"], "commanded_positions": [0.0],
-                  "measured_positions": [0.0], "measured_velocities": [0.0],
-                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
-    writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
-                                                             "cup_position_world_m": [0.0, 0.0, 0.0],
-                                                             "planning_scene_observation": _scene,
-                                                             "controller_feedback": _feedback}})
-    writer.append_source("physics", {"kind": "contact", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "left_contact_count": 0,
-                                                     "right_contact_count": 0, "table_contact": True}})
-    writer.append_source("physics", {"kind": "retract", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "cup_position_world_m": [0.0, 0.0, 0.0]}})
-    for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
-                             for phase in FORMAL_PHASES],
-                            ("release", {"release_epoch": 1, "supported": True,
-                                         "no_fingertip_contact": True})]):
-        writer.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()}, "sim_time_s": 1.1,
-                                        "monotonic_ns": 1, "payload": payload})
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window() | {"extra": 1})
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(label_cutoff_s=1.5))                    # outside the physics window
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(first_command_s=1.5))                   # after the physics end
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(source_schedule={"head": [1.1, 1.0], "wrist": [1.0, 1.1]}))
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(permitted_gaps_s=[[0.5, 0.6]]))         # outside the collection window
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(source_schedule={"head": [0.9, 1.0], "wrist": [1.0, 1.1]}))
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(streams_required=[], source_schedule={}))   # nothing required, nothing seen
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(outcome="no_command"))                  # must null both instants
-    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
-        writer.seal(_window(outcome="interrupted_diagnostic"))      # never formal evidence
+    # the writer carries full source coverage first, so each attempt below fails on the window alone; the first-command and
+    # normal-end windows are also checked against the Teacher's own clocks, which names the same defect under its own code
+    writer, window = TeacherEpisode(frozen_scene).write(tmp_path / "window")
+    refused = "AUDIT_WINDOW_INVALID|NATIVE_DISPATCH_WINDOW_INVALID|NATIVE_NORMAL_END_WINDOW_INVALID"
+    for broken in (window | {"extra": 1},
+                   {**window, "label_cutoff_s": 0.5},                     # outside the physics window
+                   {**window, "first_command_s": 0.5},                    # after the physics end
+                   {**window, "source_schedule": {"head": [0.2, 0.1], "wrist": [0.1, 0.2]}},
+                   {**window, "permitted_gaps_s": [[0.5, 0.6]]},          # outside the collection window
+                   {**window, "source_schedule": {"head": [0.05, 0.1], "wrist": [0.1, 0.2]}},
+                   {**window, "streams_required": [], "source_schedule": {}},   # nothing required, nothing seen
+                   {**window, "outcome": "no_command"},                   # must null both instants
+                   {**window, "outcome": "interrupted_diagnostic"}):      # never formal evidence
+        with pytest.raises(ValueError, match=refused):
+            writer.seal(broken)
     # a diagnostic audit may record a legacy window, but one that opts into the ratified shape is held
     # to it: an interrupted diagnostic window is legal, a complete one without a cutoff is not
     interrupted = EpisodeAuditWriter(tmp_path / "interrupted", scope(), identity(),
@@ -299,7 +249,7 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
 
 
 def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
-    """A formal seal must carry physics, references, events and a release (T3-F5)."""
+    """A formal seal must carry the Teacher's facts, not an empty or partial stream (T3-F5)."""
 
     empty = _formal_writer(tmp_path / "empty")
     with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
@@ -313,62 +263,6 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
     with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
         partial.seal({**_window(), "first_command_s": 1.1, "physics_end_s": 1.1})
 
-    complete = _formal_writer(tmp_path / "complete")
-    complete.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
-                                          "positions": [0.1] * 6, "accepted": True,
-                                        # F5: coverage needs one complete raw group, not a bare
-                                        # projection, so the legacy flat group travels with it
-                                        "joint_names": list(ARM_JOINTS),
-                                        "sim_stamp_ns": 1_100_000_000,
-                                        "received_monotonic_ns": 1_100_000_001,
-                                        "velocities": [0.0] * 6})
-    complete.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
-                                       "observation": {"simulation_time_s": 1.1,
-                                                       "simulation_step": 1,
-                                                       "cup_position_world_m": [0.0, 0.0, 0.0]}})
-    complete.append_source("physics", {"kind": "support", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "table_contact": True, "supported": True}})
-    # F5: the ratified observations are retained with this writer, joined by the row's own instant
-    _scene = {"scene_revision": 1, "attached_objects": [], "world_object_ids": [], "is_diff": False,
-              "sim_time_s": 1.1, "source": "scene_port"}
-    _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
-                  "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
-                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
-                 # T3-F13: the action has two controllers, so the collection carries one record for each
-                 {"controller": "gripper", "joint_names": ["6"], "commanded_positions": [0.0],
-                  "measured_positions": [0.0], "measured_velocities": [0.0],
-                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
-    complete.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
-                                                             "cup_position_world_m": [0.0, 0.0, 0.0],
-                                                             "planning_scene_observation": _scene,
-                                                             "controller_feedback": _feedback}})
-    complete.append_source("physics", {"kind": "contact", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "left_contact_count": 0,
-                                                     "right_contact_count": 0, "table_contact": True}})
-    complete.append_source("physics", {"kind": "retract", "sim_time_s": 1.1,
-                                              "release_epoch": 1,
-                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "cup_position_world_m": [0.0, 0.0, 0.0]}})
-    for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
-                             for phase in FORMAL_PHASES],
-                            ("release", {"release_epoch": 1, "supported": True,
-                                         "no_fingertip_contact": True})]):
-        complete.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()},
-                                          "sim_time_s": 1.1, "monotonic_ns": 1, "payload": payload})
-    # this formal audit has coverage but no bound row, so its window says exactly that (T3-F11); it must
-    # also hold the acquisitions its schedule declares, which is the rule the matcher enforces
-    minter = AcquisitionMinter()
-    for camera in ("head", "wrist"):
-        for stamp in (1.0, 1.1, 1.2):
-            complete.append_acquisition(minter.mint(
-                camera, session_id="s", reset_epoch=1, stamp_s=stamp,
-                received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO))
-    # this sub-case's rows all sit at 1.1, so its window states that rather than borrowing the shared literal
-    assert complete.seal(_window(outcome="no_label", label_cutoff_s=None,
-                                 physics_end_s=1.1)).is_file()
     # the diagnostic mode keeps its previous behaviour, which is what the plan separates
     diagnostic = EpisodeAuditWriter(tmp_path / "diagnostic", scope(), identity(),
                                     {"inputs_sha256": "a" * 64})

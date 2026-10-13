@@ -30,7 +30,6 @@ from so101_demo.act.episode_audit.checks import (
     _event_identity_ok,
     _Files,
     _finite,
-    _formal_coverage_ok,
     _hex64,
     _identity_ok,
     _integer,
@@ -45,6 +44,7 @@ from so101_demo.act.episode_audit.checks import (
     _window_matches_observed,
     _window_ok,
 )
+from so101_demo.act.episode_audit.formal_coverage import formal_coverage_ok
 
 
 class EpisodeAuditWriter:
@@ -459,7 +459,7 @@ class EpisodeAuditWriter:
             _initial = self.identity.get("release_epoch")
             if type(_initial) is not int:
                 _initial = 0
-            if (not _formal_coverage_ok(self.root / "audit")
+            if (not formal_coverage_ok(self.root / "audit")
                     # F3: every release step the stream takes must be named by a release event, not just one
                     or any(epoch > _initial and not named for epoch, named in self._release_named.items())):
                 raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")

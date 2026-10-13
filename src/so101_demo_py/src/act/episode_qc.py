@@ -61,7 +61,8 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     """
     import copy
     import mujoco
-    from .collection_boundaries import boundary_clock, claim_collection_boundary, world_source_digest
+    from .collection_boundaries import (
+        COLLECTION_BOUNDARY_STAGES, boundary_clock, claim_collection_boundary, world_source_digest)
     from .contracts import finite
     from so101_demo.act.episode_audit.checks import _identity_ok
     from .execution_snapshot import verify_execution_snapshot
@@ -71,7 +72,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     from .raw_physics_chunks import verify_raw_chunk
     from .scene_association import canonical
     from .teacher_collection import (
-        SCHEMA as EVENT_SCHEMA, first_command_clock, validate_event_summary, validate_first_command_window,
+        SCHEMA as EVENT_SCHEMA, event_sequence_whole, first_command_clock, validate_event_summary, validate_first_command_window,
         validate_normal_end_window, validate_reset_complete_matches, validate_teacher_event)
 
     if not _identity_ok(identity, formal=True):
@@ -118,7 +119,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
             document = claim_collection_boundary(event, identity=identity,
                 seen=seen_boundaries, world_hashes=world_hashes)
             boundaries[document['stage']] = document
-    if set(boundaries) != {'verified_reset', 'capture_start', 'initial_capture', 'normal_stop', 'final_capture'} \
+    if set(boundaries) != set(COLLECTION_BOUNDARY_STAGES) \
             or not sources:
         raise ValueError('NATIVE_QC_COMPLETE_ORIGINALS_REQUIRED')
     # ---- the V2 event sequence: whole, ordered, and each required event present ---------------------------------
@@ -138,13 +139,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
         raise ValueError('NATIVE_QC_NORMAL_STOP_EVENT_REQUIRED')
     if not by_type.get('terminal'):
         raise ValueError('NATIVE_QC_TERMINAL_EVENT_REQUIRED')
-    sequences = [document['seq'] for _event, document in teacher]
-    scene_operations = summary['types'].get('scene_operation', 0)
-    if (summary['accepted'] != summary['last_seq'] or sequences != sorted(set(sequences))
-            or (sequences and sequences[-1] > summary['last_seq'])
-            or summary['last_seq'] - len(sequences) != scene_operations
-            or any(summary['types'].get(kind, 0) != len(items) for kind, items in by_type.items())
-            or sum(summary['types'].values()) != summary['accepted']):
+    if not event_sequence_whole(summary, [document for _event, document in teacher]):
         raise ValueError('NATIVE_QC_EVENT_SEQUENCE_GAP')
     reset = boundaries['verified_reset']['value']
     validate_reset_complete_matches(by_type['reset_complete'][0], reset)

@@ -60,6 +60,25 @@ def validate_event_summary(summary):
     return summary
 
 
+def event_sequence_whole(summary, documents) -> bool:
+    """Whether the retained Teacher events and the Recorder's sealed summary describe one whole, gap-free stream.
+
+    Every accepted event took the next sequence number; scene operations take numbers without being retained, so the numbers
+    the summary accounts for beyond the retained events are exactly its scene operations. Native QC and the formal audit
+    coverage both ask this question, so there is one answer.
+    """
+    by_type = {}
+    for document in documents:
+        by_type.setdefault(document['type'], []).append(document)
+    sequences = [document['seq'] for document in documents]
+    scene_operations = summary['types'].get('scene_operation', 0)
+    return not (summary['accepted'] != summary['last_seq'] or sequences != sorted(set(sequences))
+                or (sequences and sequences[-1] > summary['last_seq'])
+                or summary['last_seq'] - len(sequences) != scene_operations
+                or any(summary['types'].get(kind, 0) != len(items) for kind, items in by_type.items())
+                or sum(summary['types'].values()) != summary['accepted'])
+
+
 _RESET_PAYLOAD_KEYS = frozenset({"session_id", "reset_epoch", "simulation_time_s", "simulation_step",
                                  "publisher_sequence", "received_monotonic_ns"})
 

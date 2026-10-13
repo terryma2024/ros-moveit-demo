@@ -29,7 +29,6 @@ from so101_demo.act.episode_audit.checks import (
     _audit_manifest_key,
     _capture_window_matches_observed,
     _event_identity_ok,
-    _formal_coverage_ok,
     _hex64,
     _identity_ok,
     _payload_typed,
@@ -43,6 +42,7 @@ from so101_demo.act.episode_audit.checks import (
     _window_matches_observed,
     _window_ok,
 )
+from so101_demo.act.episode_audit.formal_coverage import formal_coverage_ok
 from so101_demo.act.qc_session import load_model, session_memo
 
 
@@ -122,7 +122,7 @@ def verify_audit_manifest(path: Path) -> dict:
                                             audit / "physics.jsonl", _PHYSICS_FIELDS,
                                             "AUDIT_PHYSICS_INVALID")]):
             raise ValueError("AUDIT_WINDOW_INVALID")
-    if formal_window and not _formal_coverage_ok(audit):
+    if formal_window and not formal_coverage_ok(audit):
         # the seal gate's coverage requirement holds when the audit is read back, not only when sealed
         raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")
     return manifest
