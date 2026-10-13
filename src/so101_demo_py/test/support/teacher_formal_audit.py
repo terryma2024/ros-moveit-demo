@@ -135,8 +135,11 @@ class _Base:
         return sample
 
 
-def _alignment(base: _Base, operation: str, step: int, samples: dict) -> dict:
-    """One real scene association of `operation`, sourced from native step `step` (the raw sample must have been made before)."""
+def _alignment(base: _Base, operation: str, step: int, samples: dict, apply_step: int | None = None) -> dict:
+    """One real scene association of `operation`, sourced from native step `step` (the raw sample must have been made before).
+
+    The Teacher's apply request is sent at native step `apply_step` (default: `step`); the read-back runs no earlier than it. The
+    sample a geometry was frozen from and the moment it was applied are different facts."""
 
     from moveit_msgs.msg import AttachedCollisionObject, CollisionObject, PlanningScene, PlanningSceneComponents
     from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
@@ -148,7 +151,9 @@ def _alignment(base: _Base, operation: str, step: int, samples: dict) -> dict:
     from so101_demo.core.task_geometry import Pose7
 
     world = base.world_at(step)
-    clock = SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=round(step * STEP_S * 1e9)))
+    apply_step = step if apply_step is None else apply_step
+    clock_step = [apply_step]
+    clock = SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=round(clock_step[0] * STEP_S * 1e9)))
     geometry = source_geometry(base.geometry, world)
     components = (PlanningSceneComponents.WORLD_OBJECT_NAMES | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
                   | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS | PlanningSceneComponents.OBJECT_COLORS)
@@ -210,6 +215,7 @@ def _alignment(base: _Base, operation: str, step: int, samples: dict) -> dict:
     if apply_request is not None:
         record_scene_service_call(request=apply_request, phase=apply_phase, service="/apply_planning_scene",
             invoke=lambda: ApplyPlanningScene.Response(success=True), records=calls, ros_clock=clock)
+    clock_step[0] = max(step, apply_step)
     query = GetPlanningScene.Request()
     query.components.components = components
     record_scene_service_call(request=query, phase="RAW_SCENE_READ" if operation == "initial" else "READ_BACK",
@@ -228,19 +234,21 @@ class TeacherEpisode:
     * `states` / `final_status` / `terminal`: the phases that ran, how the last one finished and what the terminal claims;
     * `omit_events`: Teacher event types the Teacher never emitted;
     * `omit_boundaries`, `omit_alignments`, `omit_continuity`, `queue` ("ok", "none", "twice", "short");
-    * `alignment_steps`: moves an alignment to another native step; `raw_first_step` / `raw_last_step`: the retained native range;
+    * `alignment_steps`: moves an alignment to another native step (its apply request moves with it unless `apply_steps` says
+        otherwise); `apply_steps`: the native step at which an alignment's apply request is sent, independent of its sample; `raw_first_step` / `raw_last_step`: the retained native range;
     * `reference`: "raw" (a complete raw group) or "projected" (a bare projection).
     """
 
     def __init__(self, frozen_scene, *, states=STATES, final_status="SUCCEEDED", terminal="COMPLETED",
                  omit_events=(), omit_boundaries=(), omit_alignments=(), omit_continuity=False, queue="ok",
-                 alignment_steps=None, raw_first_step=1, raw_last_step=LAST_STEP, reference="raw", omit_summary=False,
+                 alignment_steps=None, apply_steps=None, raw_first_step=1, raw_last_step=LAST_STEP, reference="raw", omit_summary=False,
                  summary_gap=False):
         self.base = _Base(frozen_scene)
         self.states, self.final_status, self.terminal = tuple(states), final_status, terminal
         self.omit_events, self.omit_boundaries = set(omit_events), set(omit_boundaries)
         self.omit_alignments, self.omit_continuity, self.queue = set(omit_alignments), omit_continuity, queue
         self.steps = dict(ALIGNMENT_STEPS, **(alignment_steps or {}))
+        self.apply_steps = dict(apply_steps or {})
         self.raw_first_step, self.raw_last_step, self.reference = raw_first_step, raw_last_step, reference
         self.summary = None
         self.omit_summary, self.summary_gap = omit_summary, summary_gap
@@ -337,7 +345,7 @@ class TeacherEpisode:
                 samples[step] = base.raw_sample(step, _ns())
             for operation, aligned in wanted.items():
                 if aligned == step:
-                    alignments[operation] = _alignment(base, operation, step, samples)
+                    alignments[operation] = _alignment(base, operation, step, samples, self.apply_steps.get(operation))
             if step >= 50 and step % 5 == 0 and step <= 115:
                 scene_clock = _ns()
                 received = _ns()

@@ -13,7 +13,9 @@ whole episode:
 * T3 physics history: raw native chunks with no step missing from the first command through the stop and the end observation,
   and one Recorder queue account whose accepted and written counts equal the bound rows.
 * T4 scene and controller records: one `initial` alignment, a `world_sync` before the first command, one controller reference
-  report; a COMPLETED episode also has its MoveIt attach inside ATTACH_MOVEIT and its detach inside the release window.
+  report; a COMPLETED episode also has its MoveIt attach inside ATTACH_MOVEIT and its detach inside the release window, each
+  judged by the simulation time of the apply request (`apply.record.request_ros_clock.sim_time_ns`), not by the native sample
+  the geometry was frozen from; a row without that clock does not satisfy the clause.
 * T5 release (COMPLETED only): DETACH_MOVEIT, OPEN_GRIPPER and WAIT_RELEASE_SETTLE succeeded in that order, and the MoveIt detach
   was applied before the gripper opened.
 * T6 reference: at least one accepted reference with one complete raw group.
@@ -202,10 +204,25 @@ def _scene_records_ok(by_kind: dict, lifecycle: dict) -> bool:
     attach_begin, attach_finish = windows["ATTACH_MOVEIT"]
     detach_begin = windows["DETACH_MOVEIT"][0]
     retreat_begin = windows["RETREAT"][0]
-    times = {operation: [_ns(row["sim_time_s"]) for row, item in associations if item["operation"] == operation]
+    times = {operation: [_apply_request_ns(item) for _row, item in associations if item["operation"] == operation]
              for operation in ("attach", "detach")}
-    return (any(attach_begin <= time <= attach_finish for time in times["attach"])
-            and any(detach_begin <= time <= retreat_begin for time in times["detach"]))
+    return (any(time is not None and attach_begin <= time <= attach_finish for time in times["attach"])
+            and any(time is not None and detach_begin <= time <= retreat_begin for time in times["detach"]))
+
+
+def _apply_request_ns(association: dict):
+    """The simulation time at which the Teacher's `/apply_planning_scene` request was actually sent, or None when the
+    association does not retain it. The row's own `sim_time_s` is the native sample the geometry was frozen from, which for an
+    attach is the grasp check's sample and may lie in the previous phase; the phase windows are judged by the request."""
+
+    apply = association.get("apply")
+    if not isinstance(apply, dict):
+        return None
+    clock = apply["record"].get("request_ros_clock")
+    if not isinstance(clock, dict):
+        return None
+    value = clock.get("sim_time_ns")
+    return value if type(value) is int else None
 
 
 def _phase_windows(lifecycle: dict) -> dict:
@@ -227,9 +244,9 @@ def _release_ok(by_kind: dict, lifecycle: dict) -> bool:
         return False
     windows = _phase_windows(lifecycle)
     detach_begin, open_begin = windows["DETACH_MOVEIT"][0], windows["OPEN_GRIPPER"][0]
-    return any(row["payload"]["association"]["operation"] == "detach"
-               and detach_begin <= _ns(row["sim_time_s"]) <= open_begin
-               for row in by_kind.get("source_alignment", ()))
+    return any(item["operation"] == "detach" and (time := _apply_request_ns(item)) is not None
+               and detach_begin <= time <= open_begin
+               for item in (row["payload"]["association"] for row in by_kind.get("source_alignment", ())))
 
 
 def _reference_ok(references: list) -> bool:

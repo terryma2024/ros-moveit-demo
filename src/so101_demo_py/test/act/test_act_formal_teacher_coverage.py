@@ -76,6 +76,9 @@ CLAUSE_FAULTS = {
     "t4_no_controller_reference": dict(omit_continuity=True),
     "t5_detach_only_after_the_gripper_opened": dict(omit_alignments={"detach"}),
     "t5_detach_applied_after_open_gripper": dict(omit_alignments={"detach_sync"}, alignment_steps={"detach": 96}),
+    # the sample is inside the window but the apply request was sent before it / after the gripper opened
+    "t4_attach_requested_before_attach_moveit": dict(apply_steps={"attach": 70}),
+    "t5_detach_requested_after_open_gripper": dict(omit_alignments={"detach_sync"}, apply_steps={"detach": 96}),
     "t6_no_complete_raw_reference": dict(reference="projected"),
 }
 
@@ -88,6 +91,43 @@ def test_each_clause_failure_refuses_the_formal_seal(tmp_path, frozen_scene, nam
         seal(tmp_path / name, frozen_scene, **CLAUSE_FAULTS[name])
     # the refusal is the named clause's, not an accident of another one
     assert formal_coverage_failure(tmp_path / name / "audit") == name[:2].upper()
+
+
+def test_the_phase_windows_judge_the_apply_request_not_the_frozen_sample(tmp_path, frozen_scene):
+    """The real shape: the attach geometry was frozen from the grasp check's sample, before ATTACH_MOVEIT began (step 78 <
+    79), and the apply request was sent inside it (step 80). The detach likewise is frozen early and applied inside."""
+
+    from so101_demo.act.episode_audit.formal_coverage import formal_coverage_failure
+
+    path = seal(tmp_path / "real", frozen_scene, alignment_steps={"attach": 78, "detach": 88},
+                apply_steps={"attach": 80, "detach": 92})
+    assert formal_coverage_failure(path.parent) is None
+    rows = [json.loads(line) for line in (path.parent / "events.jsonl").read_text().splitlines()]
+    attach = next(row for row in rows if row["kind"] == "source_alignment"
+                  and row["payload"]["association"]["operation"] == "attach")
+    assert attach["sim_time_s"] < 0.158 < attach["payload"]["association"]["apply"]["record"]["request_ros_clock"]["sim_time_ns"] / 1e9
+
+
+@pytest.mark.parametrize("operation,expected", [("attach", "T4"), ("detach", "T4")])
+def test_a_row_without_the_apply_request_clock_does_not_cover(tmp_path, frozen_scene, operation, expected):
+    """Fail closed: no fallback to the sample time. Every row of the operation loses its request clock."""
+
+    from so101_demo.act.episode_audit.formal_coverage import formal_coverage_failure
+
+    path = seal(tmp_path / "ok", frozen_scene)
+    assert formal_coverage_failure(path.parent) is None
+
+    def rewrite(rows):
+        count = 0
+        for row in rows:
+            if row["kind"] == "source_alignment" and row["payload"]["association"]["operation"] == operation:
+                row["payload"]["association"]["apply"]["record"]["request_ros_clock"] = None
+                count += 1
+        assert count
+        return rows
+
+    resigned = _resigned_copy(path, tmp_path, rewrite)
+    assert formal_coverage_failure(resigned.parent) == expected
 
 
 def test_the_fault_catalogue_names_every_boundary_and_alignment():
