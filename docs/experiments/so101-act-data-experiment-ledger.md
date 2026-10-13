@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 845a04d6dbd30bc0aa3f1d5e598e6909e5353e71
+current_commit: 6a884e23b44208a5a0911647b306720fe0cd66ba
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,60 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3625
-next_experiment: EXP-579 (to be planned after the fix): repeat with the rclpy context defect and the goal-check service names fixed.
+latest_checkpoint: CP-3626
+next_experiment: EXP-579 (PLANNED): fourth real functional run, eight scenes with one worker, images of 6a884e23b.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3626 — EXP-578 defects root-caused and fixed; gates PASS and images rebuilt on 6a884e23b; EXP-579 planned
+
+- Commits `d0454ff93` and `6a884e23b` (Sonnet-written, Opus-reviewed). Root causes from EXP-578, established from the code and the run's logs: (1) the Teacher context probe read simulation evidence through a function that initialised the process-global rclpy context unconditionally while the RGB-D source retained for inference held that context - reset and evidence now use a private context in container mode, shut down after each call; (2) the goal confirmation waited one second per lane in sequence for cancel services on a freshly started participant, which starved the arm and gripper lanes - it now polls every lane for the whole timeout; this replaces the incomplete hypothesis of CP-3623; (3) the Recorder bag validation required the bag under the native owned root while task data lives under the fixed container path /act/output, so the bag was refused with CONTAINER_BAG_ROOT_MISMATCH and the Recorder never recorded - the fixed mount is now accepted only when proven by device and inode to be this instance's output directory, and the decision is written into raw/ready.json. An unconfirmed helper cleanup now names the unproven facts in the instance exit record.
+- Correction to CP-3625: raw/ready.json and raw/record-stats.json of EXP-578 show a Recorder process start and stop, not a recording; the bag root refusal above means no bag was accepted in that run.
+- Host package gates on 6a884e23b, R/gates/6a884e23b442: fresh build rc 0, 192 s; so101_demo_py rc 0, 12604 passed, 0 failed, 167 skipped, 369 s (demo-run.AKibR0jg); other 13 packages rc 0, 2348 tests, 0 errors, 0 failures, 60 skipped, 512 s (test-run.xFH2fAU1). Worktree unchanged and clean. PASSED.
+- Images rebuilt on 6a884e23b: shard R/image-build-20261013T003815Z (166.5 s), inference R/image-build-20261013T004245Z (89.1 s).
+- Unified store read back read-only: IDLE, no owner, no lease, no child, no active slot; the EXP-578 parent was settled by the designed path. No running container, no GPU compute process.
+- Fourth-run inputs authored under the prep directory act-w1-inputs-20261013T004503Z. Its input validation reports the stricter-than-admission item "every historical parent COMPLETE" as BLOCKED because the parent released in CP-3624 is CANCELLED; the real admission accepted that state in EXP-578, so the item is informational. The remaining items PASS once the gate result exists.
+- Open risks unchanged and not addressed here: the RGB-D source keeps the default context and is protected by sequencing only; no start-time check that /act/output is the instance output beyond the Recorder's own check.
+
+```yaml
+experiment_id: EXP-579
+status: PLANNED
+prior_experiment: EXP-578 (VALID failure at an rclpy context reuse after frame capture)
+hypothesis: With reset and evidence on a private rclpy context, concurrent goal confirmation and the Recorder accepting the instance's fixed output mount, the production CLI carries eight scenes with one worker through the complete task chain in a real container and settles admission.
+prediction: The first task passes the Teacher context probe and reaches real recording, Teacher inference and motion, stages never run in a container before; the first stage that fails, if any, is the new information. On a fault the goal confirmation settles all lanes, the native stop is confirmed and admission is settled by the designed path. Structural success as in EXP-576.
+single_variable: The fixes of commits d0454ff93 and 6a884e23b and their rebuilt images relative to EXP-578. Same scene list, decisions and configuration values; new run and campaign ids. The confounds listed in EXP-576 remain.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 6a884e23b and clean; no running container, GPU compute process, ROS or MuJoCo process; disk above the floor; run root act-w1-20261013T004503Z absent; unified store IDLE with no lease and no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 6a884e23b; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 6a884e23b44208a5a0911647b306720fe0cd66ba (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:866155cabb1cbeea77d9bb440d5390943bf3c4b9309e46ddfb960ffb815dd12d and shard image sha256:c02913fdc822b4cde6ec105199e84b0f5453396bc0a8063d7041c5de9c22cd7a; Host R/gates/6a884e23b442/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261013T004503Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261013T004503Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3625 — EXP-578 VALID failure: initial gate, Recorder, consumer and frame capture pass; task stops at an rclpy context reuse
 
