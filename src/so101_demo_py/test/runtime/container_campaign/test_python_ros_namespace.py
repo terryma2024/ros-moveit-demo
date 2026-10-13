@@ -206,3 +206,80 @@ def test_container_init_installs_no_signal_handlers(init_calls,monkeypatch):
     assert 'signal_handler_options' not in module().container_ros_init_options(environment=dict(
         SO101_ACT_CONTAINER_NAMESPACE=NAMESPACE,ROS_NAMESPACE=NAMESPACE))
     assert module().container_ros_global_init_options(environment={})=={}
+
+
+def test_every_goal_lane_resolves_to_the_names_native_retirement_uses():
+    """The task's cancel and status endpoints, under the container options, are the ones native retirement reaches."""
+    import rclpy
+    from so101_demo.runtime.container_campaign.controller_stop import _LANES
+    from so101_demo.runtime.parallel_ros_ports.observations import _GOAL_LANES
+    options=module().container_ros_init_options(environment=dict(
+        SO101_ACT_CONTAINER_NAMESPACE=NAMESPACE,ROS_NAMESPACE=NAMESPACE))
+    context=rclpy.context.Context()
+    context.init(**options,domain_id=232)
+    node=None
+    try:
+        node=rclpy.create_node('lane_probe',context=context)
+        assert set(_GOAL_LANES.items())<=set(_LANES.items())          # same lane prefixes (the neck lane is native-only)
+        for name,prefix in _GOAL_LANES.items():
+            native=NAMESPACE+_LANES[name]
+            assert node.resolve_service_name(prefix+'/cancel_goal')==native+'/cancel_goal',name
+            assert node.resolve_topic_name(prefix+'/status')==native+'/status',name
+    finally:
+        if node is not None:node.destroy_node()
+        context.shutdown()
+
+
+# ---- default-context initialisers keep the shard's own signal handlers ---------------------------------------------------
+
+def default_context_initialisers(monkeypatch):
+    """The task-path calls that initialise the process-global default context in the shard (PID 1)."""
+    from types import SimpleNamespace
+    from so101_demo.ros.rgbd_snapshot import RosRgbdSnapshotSource
+    from so101_demo.runtime.parallel_ros_ports import observations
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    reset=observations.ResetBoundaryReceipt('reset-2','session',1.,1.,2,(0.,)*6)
+    def gate():
+        import so101_demo.backends.mujoco.teleop_runtime as teleop
+        monkeypatch.setattr(teleop,"current_evidence",lambda *args,**kwargs:SimpleNamespace(reset_epoch=2,left_fingertip_contacts=(),
+            right_fingertip_contacts=()))
+        return observations.observe_parallel_initial_gate(reset,namespace=NAMESPACE)
+    pose=SimpleNamespace(source_stamp_ns=1,pose_world=SimpleNamespace(values=(0.,)*7))
+    return {'rgbd_source':RosRgbdSnapshotSource,
+            'shutdown_observation':lambda:observations.observe_worker_shutdown('session',timeout_s=.1),
+            'initial_gate':gate,
+            'pose_publication':lambda:ParallelRosRuntimePorts(SimpleNamespace(),catalog={}).publish_pose(pose)}
+
+
+def fake_default_context(monkeypatch):
+    import rclpy
+    calls=[]
+    monkeypatch.setattr(rclpy,'ok',lambda *args,**kwargs:False)
+    monkeypatch.setattr(rclpy,'init',lambda *args,**kwargs:calls.append((args,kwargs)))
+    monkeypatch.setattr(rclpy,'shutdown',lambda *args,**kwargs:None)
+    monkeypatch.setattr(rclpy,'try_shutdown',lambda *args,**kwargs:None)
+    def create_node(*args,**kwargs):
+        raise _InitReached
+    monkeypatch.setattr(rclpy,'create_node',create_node)
+    return calls
+
+
+@pytest.mark.parametrize('site',['rgbd_source','shutdown_observation','initial_gate','pose_publication'])
+def test_default_context_initialisers_install_no_signal_handlers_in_a_container(site,monkeypatch):
+    from rclpy.signals import SignalHandlerOptions
+    calls=fake_default_context(monkeypatch)
+    mark_container(monkeypatch)
+    call=default_context_initialisers(monkeypatch)[site]
+    with pytest.raises(_InitReached):call()
+    (args,kwargs),=calls
+    assert args==() and kwargs['signal_handler_options']==SignalHandlerOptions.NO
+    assert '__ns:='+NAMESPACE in kwargs['args']
+
+
+@pytest.mark.parametrize('site',['rgbd_source','shutdown_observation','initial_gate','pose_publication'])
+def test_default_context_initialisers_are_unchanged_outside_a_container(site,monkeypatch):
+    calls=fake_default_context(monkeypatch)
+    monkeypatch.delenv('SO101_ACT_CONTAINER_NAMESPACE',raising=False)
+    call=default_context_initialisers(monkeypatch)[site]
+    with pytest.raises(_InitReached):call()
+    assert calls==[((),{})]

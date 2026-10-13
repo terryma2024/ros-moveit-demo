@@ -20,7 +20,7 @@ from so101_demo.parallel_batch.perception import (
     LocalizedPose,
 )
 from so101_demo.runtime.parallel_ros_ports.binding import RuntimeBinding
-from so101_demo.runtime.container_campaign.ros_namespace import container_ros_init_options
+from so101_demo.runtime.container_campaign.ros_namespace import container_ros_global_init_options
 from so101_demo.runtime.parallel_ros_ports.isolated_node import (
     _ACTIVE_GOAL_STATES,
     _open_isolated_ros_node,
@@ -151,7 +151,7 @@ def observe_worker_shutdown(session_id: str, *, timeout_s: float) -> ShutdownObs
 
     initialized_here = not rclpy.ok()
     if initialized_here:
-        rclpy.init(**container_ros_init_options())
+        rclpy.init(**container_ros_global_init_options())
     node = rclpy.create_node("so101_parallel_recovery_observer")
     deadline = time.monotonic() + timeout_s
     previous = None
@@ -274,7 +274,8 @@ def observe_no_parallel_goals(*, timeout_s: float) -> bool:
     """Independently observe exact controller and MoveIt status topics settled.
 
     A lane that published no status is settled by an empty cancel-all answer, see `_lane_settled`; the request only asks
-    the server to cancel what it has, so it can stop a late goal but never starts one."""
+    the server to cancel what it has, so it can stop a late goal but never starts one. The cancel services are polled for
+    the whole timeout, since a fresh participant needs time to discover them."""
 
     from action_msgs.msg import GoalStatusArray
     from action_msgs.srv import CancelGoal
@@ -304,11 +305,14 @@ def observe_no_parallel_goals(*, timeout_s: float) -> bool:
     futures = {}
     try:
         deadline = time.monotonic() + timeout_s
-        for name, client in clients.items():
-            services[name] = client.wait_for_service(timeout_sec=max(0.0, min(1.0, deadline - time.monotonic())))
-            if services[name]:
-                futures[name] = client.call_async(CancelGoal.Request())
         while time.monotonic() < deadline:
+            # A participant that has just started discovers the servers one by one, and not before a second or more has
+            # passed: poll each service for the whole budget instead of giving every lane a fixed share of it. A lane
+            # whose service is never found has no cancel answer, and without a status it stays unsettled.
+            for name, client in clients.items():
+                services[name] = bool(services.get(name)) or client.wait_for_service(timeout_sec=0.0)
+                if services[name] and name not in futures:
+                    futures[name] = client.call_async(CancelGoal.Request())
             owner.spin_once(timeout_sec=0.01)
             answers = {name: future.result() for name, future in futures.items() if future.done()}
             if all(_lane_settled(statuses[name], answers.get(name)) for name in names):
@@ -526,7 +530,7 @@ def observe_parallel_initial_gate(
 
     initialized_here = not rclpy.ok()
     if initialized_here:
-        rclpy.init(**container_ros_init_options())
+        rclpy.init(**container_ros_global_init_options())
     service_node = rclpy.create_node("so101_parallel_gate_services")
     graph_node = rclpy.create_node("so101_parallel_gate_graph")
     goal_receipts = {}

@@ -287,6 +287,54 @@ def stages(executor):
     return [x['stage'] for x in executor.cleanup_errors]
 
 
+def test_unconfirmed_helper_cleanup_names_the_proofs_that_failed(tmp_path):
+    """`cleanup_confirmed:false` alone left a real run undiagnosable: the failed proof was only in memory."""
+    retirement = ExternalRetirement()
+    execution = None
+    def builder(spec):
+        nonlocal execution
+        execution = ExternalExecution(tmp_path, spec, blocked=True)
+        execution.retire_proofs = {'processes_empty': True, 'recorder_proven': False, 'controller_proven': False,
+                                   'runtime_closed': True}
+        execution.shutdown_owned = lambda: False
+        return execution
+    async def run():
+        executor = make(tmp_path, builder, retirement, stop_timeout_s=1., retire_timeout_s=1.)
+        try:
+            await executor.assign_task(task())
+            await started(lambda: execution)
+            await asyncio.wait_for(executor.terminate('fixture end'), 2)
+            assert await asyncio.wait_for(executor.wait_stopped(), 1) is False
+            (error,) = executor.cleanup_errors
+            assert error['stage'] == 'helpers' and error['type'] == 'CleanupUnconfirmed'
+            assert error['reason'] == 'unconfirmed proofs: controller_proven, recorder_proven'
+        finally:
+            if execution is not None:
+                execution.run_allowed.set()
+    asyncio.run(run())
+
+
+def test_confirmed_helper_cleanup_records_no_error(tmp_path):
+    execution = None
+    def builder(spec):
+        nonlocal execution
+        execution = ExternalExecution(tmp_path, spec, blocked=True)
+        execution.retire_proofs = {'processes_empty': True}
+        return execution
+    async def run():
+        executor = make(tmp_path, builder, stop_timeout_s=1., retire_timeout_s=1.)
+        try:
+            await executor.assign_task(task())
+            await started(lambda: execution)
+            await asyncio.wait_for(executor.terminate('fixture end'), 2)
+            assert await asyncio.wait_for(executor.wait_stopped(), 1) is True
+            assert executor.cleanup_errors == []
+        finally:
+            if execution is not None:
+                execution.run_allowed.set()
+    asyncio.run(run())
+
+
 def test_hung_helper_shutdown_still_retires_and_stops(tmp_path):
     release = threading.Event()
     retirement = ExternalRetirement()

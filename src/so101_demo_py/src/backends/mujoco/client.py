@@ -124,11 +124,14 @@ class MujocoRosClient:
 
     def __init__(
         self, service_node: Any, joint_state_node: Any, *, service_timeout_s: float = 5.0,
+        executor: Any = None,
     ) -> None:
         if not math.isfinite(service_timeout_s) or service_timeout_s <= 0.0:
             raise ValueError("service_timeout_s must be finite and positive")
         self._service_node = service_node
         self._joint_state_node = joint_state_node
+        # a private ROS context spins on its own executor; None keeps the process-global one
+        self._executor = executor
         self._timeout_s = service_timeout_s
         self._pause = self._reset = self._switch = None
         self._pause = service_node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
@@ -233,7 +236,7 @@ class MujocoRosClient:
             if remaining <= 0:
                 raise MujocoServiceError(f"{operation} service timeout")
             rclpy.spin_until_future_complete(
-                self._service_node, future, timeout_sec=min(0.01, remaining))
+                self._service_node, future, executor=self._executor, timeout_sec=min(0.01, remaining))
         if not future.done():
             raise MujocoServiceError(f"{operation} service timeout")
         error = future.exception()
@@ -280,7 +283,7 @@ class MujocoRosClient:
         switch_future = self._switch.call_async(request)
         deadline = time.monotonic() + self._timeout_s
         rclpy.spin_until_future_complete(
-            self._service_node, switch_future, timeout_sec=self._timeout_s
+            self._service_node, switch_future, executor=self._executor, timeout_sec=self._timeout_s
         )
         if not switch_future.done():
             raise MujocoServiceError("switch controllers service timeout")
@@ -336,4 +339,4 @@ class MujocoRosClient:
                    for value, target in zip(actual, expected, strict=True))
 
     def progress(self) -> None:
-        rclpy.spin_once(self._joint_state_node, timeout_sec=0.01)
+        rclpy.spin_once(self._joint_state_node, executor=self._executor, timeout_sec=0.01)

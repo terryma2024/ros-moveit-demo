@@ -220,8 +220,10 @@ def test_recovery_goal_checks_use_transient_local_action_status_qos(monkeypatch)
 class _GoalLaneNode:
     """Three action lanes whose cancel-all answer and status samples a test chooses; nothing else."""
 
-    def __init__(self, *, canceling, statuses, return_code=0):
+    def __init__(self, *, canceling, statuses, return_code=0, discovery_s=0.0):
         self.canceling, self.statuses, self.return_code = canceling, statuses, return_code
+        self.discovery_s = discovery_s     # a fresh participant sees the servers only after this long
+        self.opened = 0.0
         self.callbacks = {}
         self.cancel_requests = []
 
@@ -235,7 +237,11 @@ class _GoalLaneNode:
         class Client:
             @staticmethod
             def wait_for_service(*, timeout_sec):
-                return timeout_sec > 0.0
+                import time
+
+                ready_at = node.opened + node.discovery_s
+                time.sleep(min(max(timeout_sec, 0.0), max(ready_at - time.monotonic(), 0.0)))
+                return time.monotonic() >= ready_at
 
             @staticmethod
             def call_async(_request):
@@ -279,16 +285,22 @@ _LANES = (
 )
 
 
-def _goal_checks(monkeypatch, *, canceling=None, statuses=None, return_code=0):
+def _goal_checks(monkeypatch, *, canceling=None, statuses=None, return_code=0, discovery_s=0.0, timeout_s=0.3):
+    import time
+
     from so101_demo.runtime.parallel_ros_ports import observations as ros_runtime_observations
 
-    node = _GoalLaneNode(canceling=canceling or {}, statuses=statuses or {}, return_code=return_code)
-    monkeypatch.setattr(
-        ros_runtime_observations, "_open_isolated_ros_node", lambda *_args, **_kwargs: _GoalLaneOwner(node)
-    )
+    node = _GoalLaneNode(canceling=canceling or {}, statuses=statuses or {}, return_code=return_code,
+                         discovery_s=discovery_s)
+
+    def open_node(*_args, **_kwargs):
+        node.opened = time.monotonic()   # every check opens its own participant, which discovers from scratch
+        return _GoalLaneOwner(node)
+
+    monkeypatch.setattr(ros_runtime_observations, "_open_isolated_ros_node", open_node)
     return (
-        ros_runtime_observations.cancel_and_confirm_parallel_goals(timeout_s=0.3),
-        ros_runtime_observations.observe_no_parallel_goals(timeout_s=0.3),
+        ros_runtime_observations.cancel_and_confirm_parallel_goals(timeout_s=timeout_s),
+        ros_runtime_observations.observe_no_parallel_goals(timeout_s=timeout_s),
         node,
     )
 
@@ -327,4 +339,32 @@ def test_lanes_with_settled_statuses_still_settle(monkeypatch):
         monkeypatch, statuses={lane: [4, 5, 6] for lane in _LANES})
 
     assert cancelled is True
+    assert confirmed is True
+
+
+def test_a_fresh_participant_gets_the_whole_budget_to_discover_the_cancel_services(monkeypatch):
+    """EXP-578: the confirmation gave each lane's service one second, so the lanes after the first never found theirs
+    in time on a participant that had just started, while the last one did."""
+    cancelled, confirmed, node = _goal_checks(monkeypatch, discovery_s=1.4, timeout_s=4.0)
+
+    assert cancelled is True
+    assert confirmed is True
+    assert sorted(node.cancel_requests) == sorted([lane + "/cancel_goal" for lane in _LANES] * 2)
+
+
+def test_a_lane_whose_cancel_service_is_never_reached_stays_unsettled(monkeypatch, capsys):
+    cancelled, confirmed, node = _goal_checks(monkeypatch, discovery_s=60.0, timeout_s=0.4)
+
+    assert cancelled is False
+    assert confirmed is False
+    assert node.cancel_requests == []
+    assert '"service_ready": false' in capsys.readouterr().err
+
+    # a status sample is evidence by itself, whatever the service does; a lane without one needs the service
+    cancelled, confirmed, _node = _goal_checks(
+        monkeypatch, discovery_s=60.0, timeout_s=0.4,
+        statuses={_LANES[0]: [4], _LANES[1]: [4]})
+    assert cancelled is False and confirmed is False   # the third lane has neither status nor service
+    cancelled, confirmed, _node = _goal_checks(
+        monkeypatch, discovery_s=60.0, timeout_s=0.4, statuses={lane: [4] for lane in _LANES})
     assert confirmed is True

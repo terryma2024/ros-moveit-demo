@@ -342,8 +342,8 @@ class PerceptionPorts:
         else:
             initialized_here = not rclpy.ok()
             if initialized_here:
-                from so101_demo.runtime.container_campaign.ros_namespace import container_ros_init_options
-                rclpy.init(**container_ros_init_options())
+                from so101_demo.runtime.container_campaign.ros_namespace import container_ros_global_init_options
+                rclpy.init(**container_ros_global_init_options())
             node = rclpy.create_node(
                 "so101_parallel_pose_publisher",
                 parameter_overrides=[Parameter("use_sim_time", value=True)],

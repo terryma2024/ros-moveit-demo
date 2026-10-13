@@ -38,6 +38,10 @@ def _thread_call(function, *args):
     return future
 
 
+class CleanupUnconfirmed(RuntimeError):
+    """Helper cleanup finished without proving every named fact."""
+
+
 class ContainerTaskExecutor:
     def __init__(self, *, instance_id, builder, retirement, output_root=Path('/act/output'),
                  owner_timeout_s, stop_timeout_s, retire_timeout_s, clock=time.monotonic, ready=True):
@@ -220,6 +224,13 @@ class ContainerTaskExecutor:
                 try:
                     cleaned = await self._bounded(asyncio.shield(self._cleanup_future()), timeout)
                     helpers_stopped = cleaned is True and helpers_stopped
+                    if cleaned is not True:
+                        # the proofs are only in memory otherwise: name the ones that were not True
+                        proofs = getattr(self._execution, 'retire_proofs', None)
+                        failed = sorted(name for name, value in proofs.items() if value is not True) \
+                            if isinstance(proofs, dict) else []
+                        self._cleanup_error('helpers', CleanupUnconfirmed(
+                            'unconfirmed proofs: ' + ', '.join(failed) if failed else 'cleanup returned no proof set'))
                 except Exception as error:
                     helpers_stopped = False
                     self._cleanup_error('helpers', error)
