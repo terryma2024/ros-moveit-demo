@@ -48,6 +48,16 @@ def test_gate_reads_exact_disjoint_forty_eight_and_formal_manifests(tmp_path):
                                          'teacher_physical_success_rate'}
 
 
+def test_shard_and_inference_images_may_carry_different_package_source_hashes(tmp_path):
+    """Human ruling: the two images are built separately, so their package source hashes need not be equal."""
+    document = fixture(tmp_path)
+    images = document['controlled_identity']['image_source_install']
+    images['shard'] = dict(images['shard'],package_source_sha256='7'*64)
+    assert images['shard']['package_source_sha256'] != images['inference']['package_source_sha256']
+    assert module().validate_qualification_contract(document) == document
+    assert module().validate_controlled_identity(document['controlled_identity']) == document['controlled_identity']
+
+
 @pytest.mark.parametrize('workers',[1,2])
 def test_functional_contract_uses_same_full_eight_scene_list(tmp_path,workers):
     gate = fixture(tmp_path)

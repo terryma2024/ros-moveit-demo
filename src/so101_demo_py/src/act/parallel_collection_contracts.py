@@ -51,7 +51,6 @@ def validate_controlled_identity(identity):
     _require(type(images) is dict and set(images) == {'inference','shard'})
     for image in images.values():
         _image(image)
-    _require(images['inference']['package_source_sha256'] == images['shard']['package_source_sha256'])
     _require(type(identity['gpu_uuid']) is str and re.fullmatch(
         r'GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}',identity['gpu_uuid']) is not None)
     return copy.deepcopy(identity)

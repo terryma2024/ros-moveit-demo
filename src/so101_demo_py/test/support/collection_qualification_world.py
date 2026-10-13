@@ -62,7 +62,8 @@ CAMPAIGN_ID = 'campaign-one'
 STARTED = '2026-10-12T01:02:03.123Z'
 MODE = 'preselected_target_diagnostic'
 INFERENCE_IMAGE = dict(digest='sha256:'+'b'*64, package_source_sha256='c'*64, install_sha256='d'*64)
-SHARD_IMAGE = dict(INFERENCE_IMAGE, digest='sha256:'+'e'*64)
+#: the shard image is built separately from the inference image, so its package source hash differs too
+SHARD_IMAGE = dict(INFERENCE_IMAGE, digest='sha256:'+'e'*64, package_source_sha256='f'*64)
 #: the sealed documents are written once per scene; these two scene indexes are the controlled business failures of the default world
 TEACHER_FAILED = (3, 11)
 QC_FAILED = (7,)
