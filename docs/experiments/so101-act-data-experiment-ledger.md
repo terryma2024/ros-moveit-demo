@@ -69,11 +69,57 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3623
-next_experiment: NONE can be admitted. A third real functional run (repeat of EXP-577 with the fixes of 845a04d6d on rebuilt images) is prepared in principle but blocked: the unified admission store holds the EXP-577 GPU lease and slot and no designed path settles it; a human decision is required.
+latest_checkpoint: CP-3624
+next_experiment: EXP-578 (PLANNED): third real functional run, eight scenes with one worker, images of 845a04d6d.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3624 — Human answers: manual release authorised and coordinator decisions accepted; lease released; EXP-578 planned
+
+- Human answers of 2026-10-13 through the question prompt (verbatim option labels): to "是否允许我手工解除这条占用以便启动第三次真实采集？" the user chose "可以手工解除"; to "此前没等到回复，我自行做了几项仅用于仿真采集的决定。是否认可继续沿用？" the user chose "全部认可". The coordinator decisions of CP-3618 and CP-3619 (existing r12 proposal and activation receipt as the contact policy source although its text says "diagnostic use"; seven scene positions inside the triangle of the three approved anchors, seeded and frozen; one Teacher service instance; the 5400 s campaign deadline unchanged) are therefore now human-approved for simulated collection.
+- Manual release applied by R/manual-lease-release-20261012.py, once: pre-checks that the EXP-577 shard container is exited with no process and that no container is running; byte backup of unified/intents.sqlite3; one immediate transaction that refuses unless the store is in exactly the held state read back in CP-3623; the same four row changes the designed settle applies - parent of operation e4a674a6f2b24194b54b7e1a77e16fd1 from ACTIVE to CANCELLED (written as CANCELLED, not COMPLETE, because the campaign did not complete), global state to IDLE with no owner, worker slot w00 of campaign w1f-20261012T220436Z to inactive, the one GPU workload lease deleted. Result read back: state IDLE, zero leases, zero active slots. Every affected row before and after is in R/manual-lease-release-20261012/release-record.json with the database hashes and the backup. The run's own launch registry (no exit record for the shard) and all run evidence are untouched; the stop of that shard remains unproven in the record, and this release is a human-authorised override of the fence, not a proof.
+- Guide docs/guides/so101-act-head-wrist-rgb.md corrected for the collection CLI (commit abea3b0ad), written with the project humanizer skill; other stale statements in the guide about no runtime having been started were left for a later revision.
+- Third-run inputs authored under the prep directory act-w1-inputs-20261012T225245Z (images of 845a04d6d, Host gate install R/gates/845a04d6dbd3, same scene list); 21 of 23 validation items PASS and the two admission-state items were BLOCKED before the release.
+
+```yaml
+experiment_id: EXP-578
+status: PLANNED
+prior_experiment: EXP-577 (VALID failure at the initial gate; unproven stop after a reset)
+hypothesis: With the namespace-aware node inventory and the physics hold released on retirement, the production CLI carries eight scenes with one worker through the complete task chain in a real container and settles admission.
+prediction: The first task passes the initial gate and reaches Recorder start, ACT frame capture and Teacher inference, stages never run in a container before; the first stage that fails, if any, is the new information. If a fault occurs after a reset, the native stop is now confirmed and the admission is settled by the designed path. Structural success as in EXP-576.
+single_variable: The fixes of commit 845a04d6d and its rebuilt images relative to EXP-577. Same scene list, decisions and configuration values; new run and campaign ids. The confounds listed in EXP-576 remain. The goal-settling change of 845a04d6d is hypothesis-based and is itself under test.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 845a04d6d and clean; no running container, GPU compute process, ROS or MuJoCo process; disk above the floor; run root act-w1-20261012T225245Z absent; unified store IDLE with no lease and no active slot (after the authorised release).
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 845a04d6d; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 845a04d6dbd30bc0aa3f1d5e598e6909e5353e71 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:781c345eefe4e173adb254ec7779dc1e15f822910c4ac7dac9071d70a273a902 and shard image sha256:4940f08777699daadfdf9c67cd8c8738741f6255e2e35289a3a6470f7741dbba; Host R/gates/845a04d6dbd3/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261012T225245Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261012T225245Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3623 — EXP-577 defects root-caused and fixed; gates PASS and images rebuilt on 845a04d6d; admission state held, human decision required
 
