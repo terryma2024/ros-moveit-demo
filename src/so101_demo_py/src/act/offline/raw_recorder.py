@@ -30,7 +30,7 @@ from pathlib import Path
 from so101_demo.runtime.container_campaign.ros_namespace import (
     container_ros_namespace,container_ros_init_options,
 )
-from .container_bag_topics import write_topic_map
+from .container_bag_topics import bag_root_decision, write_topic_map
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
 STATS_SCHEMA = "SO101_RAW_RECORD_STATS"
@@ -271,6 +271,7 @@ class RawRecorder:
         self._recording_ready = False
         self._matched_counts = {}
         self.topic_map={topic:topic for topic in self.topics}
+        self.bag_root=None   # container mode: where the bag may live and the directory identities that decided it
 
     def start(self) -> None:
         import rclpy
@@ -284,6 +285,7 @@ class RawRecorder:
         if namespace is not None:
             root=os.environ.get('SO101_ACT_CONTAINER_OWNED_ROOT')
             if root is None:raise ValueError('CONTAINER_BAG_OWNED_ROOT_REQUIRED')
+            self.bag_root=bag_root_decision(self.bag_dir,Path(root))
             self.topic_map=write_topic_map(self.bag_dir,owned_root=Path(root),namespace=namespace,topics=self.topics)
         if not rclpy.ok():
             rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO,**container_ros_init_options())
@@ -480,6 +482,11 @@ class RawRecorder:
         return {"closed": True, "bag": info, "missing_core_topics": missing}
 
 
+def _bag_root_evidence(recorder) -> dict:
+    """Container mode only: the bag-location decision and both output directories' device and inode, for the run's proof."""
+    return {} if recorder.bag_root is None else {"bag_root": recorder.bag_root}
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="so101_raw_recorder")
     parser.add_argument("--bag-dir", type=Path, required=True)
@@ -496,9 +503,11 @@ def main(argv=None) -> int:
         recorder.start()
         ok, state = recorder.wait_recording(options.ready_timeout_s)
         _atomic_json(options.ready_file, {"schema": READY_SCHEMA, "schema_version": 1, "state": "RECORDING" if ok else "NOT_RECORDING",
-                                          "pid": os.getpid(), "anchor": recorder.anchor_start, "topics": state})
+                                          "pid": os.getpid(), "anchor": recorder.anchor_start, "topics": state,
+                                          **_bag_root_evidence(recorder)})
     except BaseException as error:   # noqa: BLE001
-        _atomic_json(options.ready_file, {"schema": READY_SCHEMA, "schema_version": 1, "state": "FAILED", "error": repr(error)[:300]})
+        _atomic_json(options.ready_file, {"schema": READY_SCHEMA, "schema_version": 1, "state": "FAILED", "error": repr(error)[:300],
+                                          **_bag_root_evidence(recorder)})
         _atomic_json(options.stats_file, recorder.stop())
         return 3
     stop.wait()

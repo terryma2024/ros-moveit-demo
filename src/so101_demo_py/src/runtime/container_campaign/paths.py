@@ -7,8 +7,13 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 
 from so101_demo.runtime.inference.config import _open_regular
+
+
+#: Where a shard container sees its own `<owned_root>/output` (the one fixed output mount, see `build_role_mounts`).
+TASK_OUTPUT_MOUNT = Path('/act/output')
 
 
 @dataclass(frozen=True)
@@ -25,6 +30,29 @@ def _path(value, *, directory=False):
             or (directory and not path.is_dir()) or (not directory and not (path.is_file() or path.is_dir()))):
         raise ValueError("canonical existing path required")
     return path
+
+
+def task_output_identity(mount, owned_output):
+    """Whether `mount` is `owned_output`: both canonical real directories (no symlink anywhere) with one device and inode.
+
+    A bind mount is the same directory reached through two paths, which only the kernel's `(st_dev, st_ino)` can tell. A
+    symlink, a missing or non-canonical path, a foreign instance's output or a tmpfs mounted there is not it. Pure: it reads
+    nothing but `lstat` and returns the readback that goes into the recorder's evidence."""
+    result = {}
+    for label, value in (('mount', mount), ('owned_output', owned_output)):
+        path = Path(value)
+        entry = {'path': str(path), 'directory': False, 'st_dev': None, 'st_ino': None}
+        try:
+            info = path.lstat()
+            entry.update(directory=stat.S_ISDIR(info.st_mode) and path.is_absolute() and path.resolve() == path
+                         and '..' not in path.parts, st_dev=info.st_dev, st_ino=info.st_ino)
+        except (OSError, RuntimeError):
+            pass
+        result[label] = entry
+    result['same'] = (result['mount']['directory'] and result['owned_output']['directory']
+                      and result['mount']['st_dev'] == result['owned_output']['st_dev']
+                      and result['mount']['st_ino'] == result['owned_output']['st_ino'])
+    return result
 
 
 def validate_registered_evidence_root(config_root, payload_root, *, registration):
@@ -125,7 +153,7 @@ def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config
             output = _path(task_output_root, directory=True)
             if role != 'shard' or output != owned/'output':
                 raise ValueError('task output owner')
-            mounts.append(RoleMount(output, Path('/act/output'), False, 'task_output'))
+            mounts.append(RoleMount(output, TASK_OUTPUT_MOUNT, False, 'task_output'))
         for source in (*approved_inputs, *config_paths):
             source = _path(source)
             # Do not expose the root, another shard, or any Host journal to a role.

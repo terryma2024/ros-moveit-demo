@@ -8,7 +8,7 @@ from pathlib import Path
 import os
 
 from so101_demo.act.parallel_collection_contracts import read_document
-from so101_demo.runtime.container_campaign.paths import _path
+from so101_demo.runtime.container_campaign.paths import TASK_OUTPUT_MOUNT,_path,task_output_identity
 from so101_demo.runtime.container_campaign.ros_namespace import validate_container_namespace,qualified_name
 from so101_demo.runtime.inference.config import calibration_runtime_hash,validate_file_ref
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
@@ -22,16 +22,44 @@ def topic_map_path(uri):
     return bag.parent/(bag.name+'-topic-map.json')
 
 
-def _validate(document,uri):
+def bag_root_decision(uri,owned_root,*,output_mount=TASK_OUTPUT_MOUNT,output_identity=task_output_identity):
+    """Where a scoped bag may live in a container, with the readback that justifies it.
+
+    Exactly two places: under this instance's native owned root, or under the fixed output mount - and the mount only when
+    it is proven to be `<owned_root>/output` itself (same device and inode, no symlink), so a path that merely has that name
+    never counts. `code` is None when accepted: `CONTAINER_BAG_ROOT_MISMATCH` for a bag under neither,
+    `CONTAINER_BAG_OUTPUT_NOT_INSTANCE` for a bag under the mount when the mount is not this instance's output."""
+    root=Path(owned_root)
+    bag=Path(uri)
+    identity=output_identity(Path(output_mount),root/'output')
+    decision=dict(bag=str(bag),owned_root=str(root),output_mount=str(output_mount),output_identity=identity,
+        location=None,code='CONTAINER_BAG_ROOT_MISMATCH')
+    if not bag.is_absolute() or '..' in bag.parts:
+        return decision
+    try:
+        if bag.parent.resolve(strict=True)!=bag.parent:
+            return decision
+    except (OSError,RuntimeError):
+        return decision
+    if bag.is_relative_to(root):
+        return dict(decision,location='owned_root',code=None)
+    if bag.is_relative_to(Path(output_mount)):
+        if identity.get('same') is True:
+            return dict(decision,location='task_output',code=None)
+        return dict(decision,code='CONTAINER_BAG_OUTPUT_NOT_INSTANCE')
+    return decision
+
+
+def _validate(document,uri,*,output_mount=TASK_OUTPUT_MOUNT,output_identity=task_output_identity):
     if (type(document) is not dict or set(document)!=_FIELDS
             or type(document['schema_version']) is not int or document['schema_version']!=1
             or document['kind']!='ACT_CONTAINER_BAG_TOPICS'):
         raise ValueError('CONTAINER_BAG_TOPIC_MAP_INVALID')
     root=_path(document['owned_root'],directory=True)
     bag=Path(uri)
-    if (not bag.is_absolute() or bag.parent.resolve(strict=True)!=bag.parent
-            or not bag.is_relative_to(root) or '..' in bag.parts):
-        raise ValueError('CONTAINER_BAG_ROOT_MISMATCH')
+    decision=bag_root_decision(bag,root,output_mount=output_mount,output_identity=output_identity)
+    if decision['code'] is not None:
+        raise ValueError(decision['code'])
     namespace=validate_container_namespace(document['ros_namespace'])
     ready_ref=document['runtime_ready']
     if ready_ref['path']!=str(root/'runtime-ready.json'):
@@ -50,13 +78,13 @@ def _validate(document,uri):
     return dict(topics)
 
 
-def write_topic_map(uri,*,owned_root,namespace,topics):
+def write_topic_map(uri,*,owned_root,namespace,topics,output_mount=TASK_OUTPUT_MOUNT,output_identity=task_output_identity):
     root=Path(owned_root)
     document=dict(schema_version=1,kind='ACT_CONTAINER_BAG_TOPICS',owned_root=str(root),
         ros_namespace=namespace,runtime_ready=dict(path=str(root/'runtime-ready.json'),
             sha256=calibration_runtime_hash(root/'runtime-ready.json')),
         topics={topic:qualified_name(namespace,topic) for topic in topics})
-    mapping=_validate(document,uri)
+    mapping=_validate(document,uri,output_mount=output_mount,output_identity=output_identity)
     target=topic_map_path(uri)
     descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
     with os.fdopen(descriptor,'wb') as stream:
@@ -69,11 +97,11 @@ def write_topic_map(uri,*,owned_root,namespace,topics):
     return mapping
 
 
-def read_topic_map(uri):
+def read_topic_map(uri,*,output_mount=TASK_OUTPUT_MOUNT,output_identity=task_output_identity):
     path=topic_map_path(uri)
     try:path.lstat()
     except FileNotFoundError:return {}
-    return _validate(read_document(path),uri)
+    return _validate(read_document(path),uri,output_mount=output_mount,output_identity=output_identity)
 
 
 def logical_channel_map(uri,physical_names):
