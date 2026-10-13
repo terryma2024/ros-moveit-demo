@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 6a884e23b44208a5a0911647b306720fe0cd66ba
+current_commit: 833ae09666116211e5e49792d669971670c3282e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,61 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3627
-next_experiment: NONE can be admitted. EXP-580 (repeat with the three EXP-579 defects fixed) is blocked on the fixes and on the admission state held by EXP-579; releasing it is a human decision.
+latest_checkpoint: CP-3628
+next_experiment: EXP-580 (PLANNED): fifth real functional run, eight scenes with one worker, images of 833ae0966.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3628 — Human rulings (standing lease release; formal coverage replaced by the Teacher rule); EXP-579 defects fixed; gates PASS, images rebuilt on 833ae0966; EXP-580 planned
+
+- Human answers of 2026-10-13 through the question prompt (verbatim): to "…准入库的 GPU 租约和 w00 槽位再次被挂住（容器已退出、无存活进程）。是否允许我手工解除？" the user chose "本次及后续同类均可"; to the question how to handle the formal seal check that requires the old runner's nine phase events and four kinds of physics checkpoint rows which the Teacher path never writes, the user answered in free text "不保留就规则，都改用新规则。" (read as 不保留旧规则 - the old rule is not kept, everything uses the new rule); to whether a Teacher-failed episode may seal in formal mode the user chose "允许封存但不可导出".
+- Manual release of the EXP-579 admission state applied once by R/manual-lease-release-20261013-exp579.py under the same preconditions and row changes as CP-3624 (container so101-act-16cb815e5daf1773-w00-g1 exited with no process, no container running, store in exactly the held state read back, byte backup, parent of operation d4c96b6313934ef088d76ee542c1c447 written CANCELLED). Read back: IDLE, no lease, no active slot. Record and backup in R/manual-lease-release-20261013-exp579. A human-authorised override of the fence, not a proof; the run's own evidence is untouched.
+- Commits (Sonnet-written, Opus-reviewed): `173bcf185` "replay container bags by logical topic and do not count the pre-window pause as receiver lag"; `5066b983a` "one-shot evidence read survives a stale join; goal stop accepts rclpy uuid elements"; `833ae0966` "formal seal coverage is stated from what a Teacher episode records". Root causes: PROVEN - the replay stream read shard-scoped topic names while subscriptions use logical names, so the first container episode delivered nothing; PROVEN by replaying the real bag - the pre-Teacher pause was counted as receiver lag by the offline physics adapter; PROVEN - the goal stop validator demanded built-in int uuid elements while rclpy delivers numpy integers, never exercised before because no goal had existed; HYPOTHESIS for the mechanism - the one-shot evidence observer joined on a replayed sample of the previous reset epoch and rejected every later sample, to be confirmed by a second task in a real run.
+- Formal coverage: investigation saved as R/one-way-teacher-formal-coverage-investigation.md. PROVEN there: all 71 sealed Teacher episodes under the evidence root are diagnostic; the old predicate was only ever satisfied by a test fixture. Per the ruling the predicate is replaced (no dispatch by collector identity): Teacher lifecycle with the registered states for a completed run, five boundaries, contiguous raw physics steps from first command through stop and end observation with a whole queue account, alignments and controller reference, release order with the detach before the gripper opens, accepted reference. No numeric threshold changed. Deviation recorded: a Teacher-failed run has no normal stop and the offline engine still refuses to seal it, so in production such a run is a business result with INVALID data, not a sealed non-exportable episode; that engine rule is unchanged and is open for the human.
+- Integration evidence, not qualification: offline replay of the real EXP-579 bag with 833ae0966 under R/scratch/replay-exp579.LIvbuZKX - formal seal, engine readback and fresh-process independent QC PASS (815 records, 42750 native steps, verdict VALID).
+- Host package gates: R/gates/5066b983af21 build rc 0, so101_demo_py 12619 passed 0 failed, other packages 2348 tests 0 failures; R/gates/833ae0966611 build rc 0 198 s, so101_demo_py rc 0 12665 passed 0 failed 167 skipped 389 s (demo-run.QUzxVk2V), other 13 packages rc 0 2348 tests 0 errors 0 failures 60 skipped 514 s (test-run.YNk5XK4v). Worktree unchanged and clean. PASSED. Two load-sensitive tests failed once in the writer's own 8-way targeted run and passed alone and in both gates.
+- Images rebuilt on 833ae0966: shard R/image-build-20261013T023904Z (196.9 s), inference R/image-build-20261013T024232Z (134.5 s). Inputs under the prep directory act-w1-inputs-20261013T024537Z; its store check now accepts CANCELLED historical parents and still requires an idle store.
+- Retained: all run roots, prep directories, logs, gate, image and scratch directories. Nothing deleted.
+
+```yaml
+experiment_id: EXP-580
+status: PLANNED
+prior_experiment: EXP-579 (VALID failure; first scene end to end with INVALID data, second reset rejected, stop unproven)
+hypothesis: With logical-topic replay, the pre-window lag suspension, the stale-join allowance, the uuid fix and the Teacher formal coverage rule, the production CLI carries eight scenes with one worker through the complete task chain in a real container, seals and verifies the wave and settles admission.
+prediction: The first scene's ACT data is VALID with QC PASS inside the container, as the offline replay of the EXP-579 bag was. The second scene passes its reset, the first real test of the stale-join hypothesis. Stages never run before - a second and later scene on one stack, in-container QC, Host readback of a VALID episode, wave verification. The first stage that fails, if any, is the new information. On a fault the goal stop is proven and admission settles by the designed path.
+single_variable: The fixes of the three commits above and their rebuilt images relative to EXP-579. Same scene list, decisions and configuration values; new run and campaign ids. The confounds listed in EXP-576 remain.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 833ae0966 and clean; no running container, GPU compute process, ROS or MuJoCo process; disk above the floor; run root act-w1-20261013T024537Z absent; unified store IDLE with no lease and no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 833ae0966; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 833ae09666116211e5e49792d669971670c3282e (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:70a8924c80e3979e30f261fca98362442367c87c36ae8e3e196c8228922a6eac and shard image sha256:489623b8a1dc64054c3425ca0a4f30ff39e177328890d08e99446cafe5d6ac27; Host R/gates/833ae0966611/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261013T024537Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261013T024537Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3627 — EXP-579 VALID failure: first scene runs end to end with Teacher PASS but ACT data INVALID; second reset rejected; stop unproven, admission held
 
