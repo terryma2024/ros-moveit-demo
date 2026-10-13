@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3636
-next_experiment: EXP-584 (PLANNED): one worker and eight scenes on the fixed identity after the recorder log fix, the deeper writer histories and the namespace code removal.
+latest_checkpoint: CP-3637
+next_experiment: NONE until plan tasks 5 and 6 (instance program, native launcher) are implemented; then checkpoint B, a native single-worker run.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3637 — EXP-584 VALID: fixed identity with the namespace code removed, eight of eight VALID; deep writers hold in two burst episodes
+
+- Regression run after the recorder log fix, the deeper /clock and camera writers and plan task 4. Eight of eight VALID with QC PASS, wave verified, stop proven, designed settle. Recorder logs back to about 10 KB. Two episodes had a delivery burst; /clock and the cameras lost nothing in them, the shallow topics did, outside the windows.
+- Plan tasks 1 to 4 of the fixed-identity amendment are now verified by a real container run. Next: tasks 5 and 6 (one instance program with a container shell and a native shell), then checkpoint B.
+- Open, unchanged: the cause of the delivery stall; the intermittent test_task_builder failure of CP-3636; the color-frame loss rule (human decision); the single-tick controller state holes.
+- Retained: run root, prep directory, logs under R/run-logs/exp584, exited containers. Nothing deleted.
 
 ## CP-3636 — EXP-583 losses analysed (bursts exist on both recorders); recorder log fix, deeper /clock and camera writers, plan task 4 removal; gates PASS; EXP-584 planned
 
@@ -89,7 +96,7 @@ next_experiment: EXP-584 (PLANNED): one worker and eight scenes on the fixed ide
 
 ```yaml
 experiment_id: EXP-584
-status: PLANNED
+status: VALID
 prior_experiment: EXP-583 (VALID; fixed identity, six of eight VALID)
 hypothesis: With the namespace code removed, the recorder log volume back to kilobytes and deep /clock and camera writers, the fixed-identity shard still collects eight scenes end to end, and losses on /clock and the cameras no longer occur when a delivery stall happens.
 prediction: Structural success as EXP-583. bag-record.log in the kilobyte range and still carrying per-topic loss lines. In any burst episode /clock and camera samples arrive late and intact while scene_state, joint_states and controller states may still lose samples. Single-tick controller state holes at or below the earlier rate of about one per episode. The number of VALID episodes is reported, not gated; eight scenes cannot establish a loss rate.
@@ -112,17 +119,26 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261013T095500Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261013T095500Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Pre-flight - no GPU compute process this time (the remote desktop process of EXP-583 was not on the GPU); no container; store schema 2, IDLE.
+  - Launch argv ROS_DOMAIN_ID=181, no ROS_NAMESPACE, --network none, --ipc private. All eight scenes returned business results - each teacher_task_result PASS, act_data_status VALID, act_data_qc PASS, no reason.
+  - Instance exit WAVE_COMPLETE, cleanup_confirmed true; shard-stop.json all four facts true; campaign-cleanup.json terminated true, CAMPAIGN_CLOSING. Host wave verification passed; CLI exit 0. Store IDLE with no lease afterwards; no container running.
+  - Recorder logs - raw/bag-record.log between 9391 and 11564 bytes per episode (about 42 MB in EXP-583), still carrying per-topic loss lines.
+  - Loss lines per episode - six episodes have five to seven loss lines with a transport total of about six, one message per topic at 1791886415.59 to .61 in the fn8-03 log read (a single instant; position relative to recorder start not checked). Episodes fn8-02 and fn8-07 have 17 and 20 loss lines; fn8-02 reports 381 messages lost on the transport in total, on scene_state, joint_states and the three controller state topics (for example neck controller state 111 then 48, scene_state 24 then 11) and one on evidence. In neither episode is there any loss line for /clock or any camera topic. Both episodes are VALID, so those losses lie outside their windows.
+  - Timing from file times - Teacher ready 17:57:05, results from 18:02:30 to 18:40:55, instance exit 18:40:59, wave verified 18:58:44 (local). About 44 minutes of collection and 18 minutes of Host readback.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The namespace code removal did not break the container path.
+  - In the two burst episodes the deepened /clock and camera writers lost nothing while the writers left shallow lost samples, as predicted. That supports the writer-depth account of which topics lose in a delivery stall.
+  - Eight of eight VALID does not show that bursts no longer reach episode windows; two bursts occurred and landed outside the windows. Single-tick controller state holes inside windows were not counted for this run.
+conclusion: VALID, all structural criteria met; eight of eight VALID with QC PASS on the fixed-identity topology with the namespace code removed. The recorder log fix and the deeper /clock and camera writers behave as predicted. The delivery stall itself is unexplained and still loses scene_state, joint_states and controller state samples when it occurs.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261013T095500Z (host/campaign-result.json, host/wave-0-verified.json, host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261013T095500Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp584 (shard stdout and CLI log, kept under the evidence root)
+decision: KEEP
 next_experiment: NONE
 ```
 
