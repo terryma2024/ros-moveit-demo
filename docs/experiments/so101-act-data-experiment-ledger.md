@@ -95,6 +95,7 @@ lifecycle: ISOLATED_STACK
 preconditions:
   - Worktree src, scripts and third_party equal to 7a809c86a and clean; no running container, GPU compute process, ROS or MuJoCo process on the host (a host participant on domain 181 would not be seen by the container but is excluded anyway); disk above the floor; run root act-w1-20261013T071452Z absent; unified store schema 2, IDLE, no lease, no active slot.
   - Discovery lists twelve roles READY with one candidate each.
+  - Amended before launch - the pre-flight found one GPU compute process not owned by this work, /usr/share/rustdesk/rustdesk (remote desktop, 239 MiB, GPU utilisation 21 percent at the time), present since the reboot. It is left running; it is a known confound for timing and loss and is not counted as a competing workload for the invalid criterion below.
 success_criteria:
   - As EXP-576, on the fixed identity. Per-scene business results are reported, not gated.
 failure_criteria:
