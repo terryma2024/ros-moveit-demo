@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3624
-next_experiment: EXP-578 (PLANNED): third real functional run, eight scenes with one worker, images of 845a04d6d.
+latest_checkpoint: CP-3625
+next_experiment: EXP-579 (to be planned after the fix): repeat with the rclpy context defect and the goal-check service names fixed.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3625 — EXP-578 VALID failure: initial gate, Recorder, consumer and frame capture pass; task stops at an rclpy context reuse
+
+- Third real attempt, after the human-authorised release. The first task reached the initial gate, Recorder start, the Teacher consumer child and ACT frame capture, all for the first time in a container, then failed with "Context.init() must only be called once". The native stop was confirmed after a reset and the Host settled the admission through the designed path; the unified store state is to be read back before the next run. No episode was collected. Not retried.
+- The goal-check diagnostics added in 845a04d6d show arm and gripper cancel services not ready from the task's confirm path; the hypothesis recorded in CP-3623 is not sufficient.
+- Retained: run root, prep directory, logs. Nothing deleted.
 
 ## CP-3624 — Human answers: manual release authorised and coordinator decisions accepted; lease released; EXP-578 planned
 
@@ -84,7 +90,7 @@ next_experiment: EXP-578 (PLANNED): third real functional run, eight scenes with
 
 ```yaml
 experiment_id: EXP-578
-status: PLANNED
+status: VALID
 prior_experiment: EXP-577 (VALID failure at the initial gate; unproven stop after a reset)
 hypothesis: With the namespace-aware node inventory and the physics hold released on retirement, the production CLI carries eight scenes with one worker through the complete task chain in a real container and settles admission.
 prediction: The first task passes the initial gate and reaches Recorder start, ACT frame capture and Teacher inference, stages never run in a container before; the first stage that fails, if any, is the new information. If a fault occurs after a reset, the native stop is now confirmed and the admission is settled by the designed path. Structural success as in EXP-576.
@@ -107,18 +113,26 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261012T225245Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261012T225245Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Discovery twelve roles READY; freeze, admission (store idle after the authorised release), Teacher service and shard start, READY.
+  - The first task wave-0-w00-default passed the ready gates, reset and, for the first time, the initial gate. New stages reached in a real container, shown by files in its working directory - raw/ready.json, raw/pilot-result.json and raw/record-stats.json (Recorder started and later stopped), dynamic/consumer-ready.json (Teacher consumer child started and reported ready under the namespace), initial-rgb.png (ACT frame captured).
+  - First failing stage - the task then failed with fault "Context.init() must only be called once" (instance-exit.json, journal failed.json). The consumer's log shows DYNAMIC_EXECUTE_PHASE_TIMING with outcome TEACHER_USER_STOP at get_one.begin and a /cup_pose census of zero messages - it was stopped while waiting for the first pose, so no Teacher inference result reached it and no motion started.
+  - Revocation - CANCEL_REQUESTED, then 8.08 s later CONTROLLER_CANCEL_RESULT with motion_stopped true and controllers_confirmed false. The new diagnostic line PARALLEL_GOAL_CHECK_UNSETTLED for the confirm check reports the arm and gripper lanes with service_ready false and no answer, the moveit lane with service_ready true and an empty cancel answer (line truncated in the captured log after that).
+  - Stop - native retirement confirmed this time after a reset: retirement/stack-stop.json has physical_stop_confirmed, graph_clear and group_clear true, shard-stop.json has all four facts true, audit.json has no error. instance-exit.json has cleanup_confirmed false (the task helper cleanup was not confirmed) and the container exited with code 1; the Host recorded the shard and the Teacher service terminated true (host-cleanup.json, campaign-cleanup.json terminated true). The CLI reported CAMPAIGN_RUN_FAILED: CONTAINER_WAVE_COMMIT_READBACK_INVALID and exited 1; no CAMPAIGN_CLEANUP_UNCONFIRMED line. No container running.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The physics hold release of 845a04d6d made the native stop provable after a reset (compare EXP-577).
+  - The hypothesis behind the goal-settling change of 845a04d6d is at least incomplete - the arm and gripper lanes failed because their cancel service was not ready from the task's confirm path, not only for lack of status messages; the native retirement reaches the same controllers through namespaced action prefixes.
+  - "Context.init() must only be called once" is an rclpy context reuse in the task process; where exactly is to be established from the shard stdout and the code.
+conclusion: VALID failure, three stages further than EXP-577. Initial gate, Recorder start, consumer start and frame capture work in a real container; the task stops at an rclpy context initialisation error before any Teacher inference result is used. The stop after a fault is now proven and the admission settles by the designed path.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261012T225245Z (host/campaign-cleanup.json, host/wave-0/task-journal/wave-0-w00-default, wave-0/w00/g1/instance-exit.json, shard-stop.json, retirement/, output/tasks/wave-0-w00-default)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261012T225245Z
+  - /tmp/so101-debug-act-data-66c42e4c/w1-20261012T225245Z.log and /tmp/so101-debug-act-data-66c42e4c/exp578-logs
+decision: KEEP
+next_experiment: EXP-579
 ```
 
 ## CP-3623 — EXP-577 defects root-caused and fixed; gates PASS and images rebuilt on 845a04d6d; admission state held, human decision required
