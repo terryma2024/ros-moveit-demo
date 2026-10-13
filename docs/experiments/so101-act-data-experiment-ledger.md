@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3643
-next_experiment: EXP-587 (PLANNED): two concurrent containers on the fixed identity, eight scenes.
+latest_checkpoint: CP-3644
+next_experiment: NONE planned. The exact-W8 qualification needs human decisions first (quality pass counts, source of the 40 qualification scenes, deadline handling).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3644 — EXP-587 VALID: two concurrent containers on the fixed identity, eight of eight VALID, no cross-talk evidence
+
+- Two shard containers with the same domain 181 and identical names, isolated only by private network and IPC, collected the eight scenes concurrently: eight of eight VALID with QC PASS, wave verified, both stops proven, admission settled by design. Each shard's readiness, stop audit and sealed records show only its own session.
+- State of the fixed-identity amendment: tasks 1 to 7 implemented; verified by real runs with one container (EXP-584), a native single worker (EXP-586) and two containers (EXP-587), all on the functional plane with eight scenes. Not done: the exact-W8 qualification, formal collection, export; the delivery stall is unexplained; the color-frame loss rule and the single-tick controller state holes are open; so101_teleop test parallelism in the fast gate is disabled pending diagnosis.
+- Next engineering work without a real run: the native multi-worker removal plan (confirmed in CP-3642), starting with refusing native multi-worker at every entry.
+- Retained: run root, prep directory, logs under R/run-logs. Nothing deleted.
 
 ## CP-3643 — Coverage fix committed; branch pushed by human instruction; fast gate first runs (teleop parallelism kills the gate, disabled); gate PASS on 4b187eee1; EXP-587 planned
 
@@ -86,7 +93,7 @@ next_experiment: EXP-587 (PLANNED): two concurrent containers on the fixed ident
 
 ```yaml
 experiment_id: EXP-587
-status: PLANNED
+status: VALID
 prior_experiment: EXP-584 (VALID; one container on the fixed identity) and EXP-582 (VALID; two containers on the old per-worker-domain topology)
 hypothesis: Two shard containers with the same ROS domain 181 and identical names, isolated only by private network and IPC namespaces, collect the eight scenes concurrently without seeing each other, with the same outcome as two containers on separate domains.
 prediction: Both shards READY; each shard's node inventory, stack readiness and stop audit show only its own stack (a foreign node would fail the inventory or the graph-empty stop fact); every episode's evidence carries only its own shard's simulation session id; distinct PID namespace inodes in the two stop receipts; eight scenes split first-come; wave verified; both stops proven; both slots released. Collection in about half the one-container time. This is also the first real container run of the restructured instance program (commit 7b2d6c902 and later) and of the corrected coverage clauses. Per-scene results are reported, not gated.
@@ -109,17 +116,27 @@ provenance:
   gz_partition: each shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w2-inputs-20261013T165700Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w2-inputs-20261013T165700Z/run-w2.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Both shard launch argvs carry ROS_DOMAIN_ID=181, no ROS_NAMESPACE, --network none, --ipc private; simulation session ids act-8d57ab3e33946af1-w00-g1 and act-8d57ab3e33946af1-w01-g1.
+  - Each shard's stack-readiness.json has its own session id, domain 181, and all seven checks true (advancing_physics, controller_states, head_rgb, moveit_graph, mujoco_session, physical_stop, wrist_rgb).
+  - All eight scenes returned business results - each teacher_task_result PASS, act_data_status VALID, act_data_qc PASS, no reason. w00 ran default, fn8-03, fn8-04, fn8-06; w01 ran fn8-01, fn8-02, fn8-05, fn8-07.
+  - In each shard's sealed episode and source records the only simulation session id present is that shard's own.
+  - Both shard-stop.json have controllers_stopped, goals_stopped, ros_children_exited and ros_graph_empty true and forced false, with different PID namespace inodes (4026533337 and 4026533399). Both instance exits WAVE_COMPLETE with cleanup_confirmed true.
+  - campaign-cleanup.json terminated true for the service and both shards, stop_reason CAMPAIGN_CLOSING. Host wave verification passed; the CLI exited 0. Unified store IDLE with no lease afterwards. No container running.
+  - Timing from file times - Teacher ready 01:06:41, results from 01:12:17 to 01:29:35, instance exits 01:29:09 and 01:29:38, wave verified 01:47:27 (local). About 23 minutes of collection and 18 minutes of Host readback.
 inferred:
-  - NONE
-conclusion: PENDING
+  - Two containers on the same ROS domain with identical names did not see each other - each passed its node inventory and stack readiness, stopped with an empty graph, and sealed only its own session's evidence. The cross-talk check on sealed records read the session id fields of the episode and source records; it did not decode the bags for foreign samples.
+  - The container path works on the restructured instance program and with the corrected coverage clauses (eight of eight sealed formal).
+  - Loss bursts and stall counts were not measured for this run.
+conclusion: VALID, all success criteria met. The fixed in-container identity is verified with two concurrent containers - eight of eight VALID with QC PASS, wave verified, both stops proven, designed settle, no evidence of cross-talk. With EXP-584 (one container) and EXP-586 (native single worker) the amendment's tasks 1 to 7 are verified by real runs on the functional plane.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w2-20261013T165700Z (host/campaign-result.json, host/wave-0-verified.json, host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1, wave-0/w01/g1)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w2-inputs-20261013T165700Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp587 and exp587-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
