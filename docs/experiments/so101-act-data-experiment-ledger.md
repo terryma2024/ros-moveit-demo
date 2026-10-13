@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 74db37fb4676d04781bb3eecddd16d99c1cb8236
+current_commit: 83075e656 (source; gates not yet run on it)
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3641
+latest_checkpoint: CP-3642
 next_experiment: NONE planned yet; next real runs are a container regression on the restructured instance program and two concurrent containers on the fixed identity.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3642 — fn8-05 cause (coverage clause compared the wrong time); hash-equality rule and old native ACT path removed; native multi-worker removal plan confirmed
+
+- EXP-586 fn8-05, established by a Sonnet agent on the sealed audit, read-only: the refusing clause is T4. Nothing is missing - physics steps contiguous, eighteen Teacher states SUCCEEDED, release order and detach timing fine. T4 compared the attach alignment's sim_time_s, the time of the native physics sample the attach geometry was frozen from (1503650 ms, inside VERIFY_PHYSICAL_GRASP), with the ATTACH_MOVEIT window (1503662 to 1503800 ms); the apply request itself was at about 1503696 ms, inside the window. The other episodes passed with margins of 4 to 24 ms against a 10 ms sample period. The clause was written by the coordinator in CP-3628 and compared the wrong quantity. Human decision of 2026-10-14 through the question prompt, option label verbatim "改为用请求时间": T4 and T5 judge attach and detach by the time the apply request was sent. Assigned to a Sonnet writer; the requirement that attach and detach lie inside their phases is unchanged and a row without the request clock fails.
+- Commit `66e288b4a`: the collection contract no longer requires the inference and shard images to share a package source hash (human statement recorded in CP-3640). No other place enforced or assumed it.
+- Commit `83075e656`, plan task 7 of the fixed-identity amendment: the run command of act_diagnostic_episode and its helpers, the diagnostic episode station, the stale act_collect entry, the ACT launch file and launch arguments only that path used, the ACT fields of the native worker spec and batch composition and the act_diagnostic_episode admission kind are removed; the read-only commands stay; a source tree test guards the removal; the guide describes the native single-worker launcher. Left and reported: the workload port of the native batch worker, dead in production, used as a harness by about seventeen tests. Writer's own runs: so101_demo_py 11560 passed and 1 failed against a stale install (passes on a fresh overlay), so101_teleop 989 passed. Host gates NOT yet run on these commits.
+- A forked discussion session committed a design document only, `a9fc26c69` (docs/superpowers/specs/2026-10-14-so101-act-shard-shell-image-design.md): the shard image as an isolation shell with a mounted install directory and virtual environment. It defines a scheme and authorises no implementation; it records human rulings given in that session, which the coordinator did not see first hand.
+- Native multi-worker. Human statement of 2026-10-14, verbatim: "非 ACT 的原生多 worker 也已经对齐现在的方案。它只是当初为了实现ACT数据采集而做的pre方案。" The coordinator read "也已经对齐" as "is also to be aligned" and asked; the human chose "按建议执行" for the recommended option - every entry refuses native multi-worker, the adaptive pool, its scripts and the macOS two-worker route are removed, Web Expert Validation stays as a single-worker tool, the runtime YAML files and their contract stay byte-identical - and "可以，验证待补" for landing the macOS change from ai-station with the macOS real run recorded as an outstanding gate. Investigation and plan: R/native-multi-worker-removal-plan-draft.md, committed as docs/superpowers/specs/2026-10-14-so101-native-multi-worker-removal-plan.md. OBSERVED there: the only product consumer of native multi-worker is Web Expert Validation (a documented page with sequential, parallel and adaptive modes); the design record supports "pre-scheme for ACT" for the fixed batch and not for the adaptive pool, the Web page or the macOS campaign, which were specified as their own features; about 13 thousand lines of the batch family remain as the runtime library of the ACT instance program. Not started; it follows the coverage fix and the next container runs.
+- Fast gate scripts (the three human-approved speed-ups) are written under R/fast-gate and have not been run.
 
 ## CP-3641 — EXP-586 VALID: checkpoint B passes, native single worker end to end with a proven stop; one episode refused by the formal coverage rule
 
