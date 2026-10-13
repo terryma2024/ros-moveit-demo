@@ -136,6 +136,80 @@ def test_an_unreadable_environment_is_skipped_only_when_it_predates_the_instance
     (proc/'14'/'environ').chmod(0o600)
 
 
+def lineage_proc(tmp_path, entries):
+    """Fixture `/proc` with parent links and owners: pid -> (state, ppid, started, uid, environ or None when unreadable)."""
+    proc = tmp_path/'proc'
+    proc.mkdir()
+    for pid, (state, ppid, started, uid, environ) in entries.items():
+        entry = proc/str(pid)
+        entry.mkdir()
+        fields = [state, str(ppid)] + ['0']*17 + [str(started)]
+        (entry/'stat').write_text(f'{pid} (name) ' + ' '.join(fields))
+        (entry/'status').write_text(f'Name:\tname\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n')
+        (entry/'environ').write_bytes(b'A=1\x00' if environ is None else environ)
+        (entry/'environ').chmod(0o600 if environ is not None else 0o000)
+    return proc
+
+
+def scan(tmp_path, entries, *, observer_pid=900):
+    """Run the scan for user 1000 and an instance that started at tick 100; `'MARK'` stands for an environment with the marker."""
+    root = tmp_path/'g1'
+    marker = f'{INSTANCE_ROOT_ENV}={root}'.encode()
+    proc = lineage_proc(tmp_path, {pid: (*row[:4], marker if row[4] == 'MARK' else row[4]) for pid, row in entries.items()})
+    try:
+        return marker_survivors(root, started_ticks=100, proc=proc, uid=1000, observer_pid=observer_pid)
+    finally:
+        for entry in proc.iterdir():
+            (entry/'environ').chmod(0o600)
+
+
+INIT = ('S', 0, 1, 0, b'')
+LAUNCHER = ('S', 1, 50, 1000, b'')
+
+
+def test_an_unreadable_process_of_another_user_cannot_be_the_instances_descendant(tmp_path):
+    # the instance runs unprivileged and its stack launches no setuid helper, so another user's process never descends from it
+    assert scan(tmp_path, {
+        1: INIT, 900: LAUNCHER,
+        20: ('S', 1, 200, 0, None),              # root daemon, unreadable, started during the run
+        21: ('S', 2, 210, 0, None),              # kernel worker
+    }) == []
+
+
+def test_an_unreadable_process_of_the_same_user_is_cleared_only_by_a_lineage_that_excludes_the_instance(tmp_path):
+    assert scan(tmp_path, {
+        1: INIT, 900: LAUNCHER,
+        30: ('S', 1, 120, 0, b''),               # sshd [priv], root
+        31: ('S', 30, 130, 1000, None),          # sshd: user@notty, same uid, non-dumpable: created by a foreign-user parent
+        40: ('S', 900, 140, 1000, b'A=1\x00'),   # readable parent without the marker ...
+        41: ('S', 40, 150, 1000, None),          # ... so its unreadable child is not the instance's
+        61: ('S', 1, 50, 1000, b'A=1\x00'),
+        60: ('S', 61, 110, 1000, b'A=1\x00'),    # predates the instance and is not an adopter
+        51: ('S', 60, 170, 1000, None),
+    }) == []
+
+
+def test_an_unreadable_process_that_may_descend_from_the_instance_still_fails_the_proof(tmp_path):
+    found = scan(tmp_path, {
+        1: INIT, 900: LAUNCHER,
+        70: ('S', 1, 150, 1000, None),           # orphan adopted by init
+        71: ('S', 900, 150, 1000, None),         # child of the launching process (an adopter if it is a subreaper)
+        73: ('S', 1, 140, 1000, None),
+        72: ('S', 73, 150, 1000, None),          # unreadable parent that is itself adopted by init
+        75: ('S', 1, 140, 1000, 'MARK'),
+        74: ('S', 75, 150, 1000, None),          # parent carries the marker
+        76: ('S', 777, 150, 1000, None),         # parent vanished
+    })
+    assert sorted(found) == sorted([UNREADABLE]*6 + [75])
+
+
+def test_an_adopting_ancestor_of_the_launcher_is_not_cleared_by_predating_the_instance(tmp_path):
+    assert scan(tmp_path, {
+        1: INIT, 800: ('S', 1, 10, 1000, b'A=1\x00'), 900: ('S', 800, 50, 1000, b''),
+        80: ('S', 800, 150, 1000, None),         # child of an ancestor of the launcher: may be an orphan that ancestor adopted
+    }) == [UNREADABLE]
+
+
 def test_the_exit_observation_is_the_document_the_proof_judges(spawned, tmp_path):
     root = tmp_path/'g1'
     root.mkdir()

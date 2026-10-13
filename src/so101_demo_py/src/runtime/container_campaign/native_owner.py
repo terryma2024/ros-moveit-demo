@@ -41,9 +41,11 @@ from so101_teleop.unified.contracts import AdmittedCampaignContext
 from so101_teleop.unified.native_bridge import NativeBridgeProcessOwner
 
 
-#: Variables of the Host environment an instance must not inherit: its identity is the fixed one, set explicitly below.
+#: Variables of the Host environment an instance must not inherit: its identity is the fixed one, set explicitly below, and a
+#: container has no desktop display (with one, the MuJoCo node renders through a GLFW window on the Host's X server instead of the
+#: headless EGL context every container run used: EXP-585 logged "using GLFW").
 _NOT_INHERITED = frozenset({"ROS_NAMESPACE", "ROS_DOMAIN_ID", INSTANCE_ROOT_ENV, INSTANCE_OUTPUT_ENV, "CUDA_VISIBLE_DEVICES",
-                            "SO101_MUJOCO_SESSION_ID", "GZ_PARTITION"})
+                            "SO101_MUJOCO_SESSION_ID", "GZ_PARTITION", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"})
 
 
 def native_instance_environment(base, *, owned_root, session_id, gpu_uuid):

@@ -73,6 +73,15 @@ def test_the_environment_is_the_hosts_with_the_fixed_identity_on_top(tmp_path):
     assert base['ROS_NAMESPACE'] == '/act/w00'                          # the Host's own mapping is untouched
 
 
+def test_the_instance_sees_no_desktop_display_so_that_it_renders_headless_like_a_container(tmp_path):
+    # EXP-585: the Host's DISPLAY made the MuJoCo node open a GLFW window on the desktop X server ("using GLFW") instead of the
+    # headless EGL context every container run used; a container has no display
+    base = dict(PATH='/usr/bin', DISPLAY=':1', WAYLAND_DISPLAY='wayland-0', XAUTHORITY='/run/user/1000/gdm/Xauthority')
+    environment = native_instance_environment(base, owned_root=tmp_path, session_id='s1', gpu_uuid='GPU-x')
+    assert not {'DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY'} & set(environment) and environment['PATH'] == '/usr/bin'
+    assert base['DISPLAY'] == ':1'
+
+
 def test_a_failed_spawn_keeps_the_intent_and_never_claims_cleanup(tmp_path, monkeypatch):
     def refuse(*args, **kwargs):
         raise OSError('exec failed')

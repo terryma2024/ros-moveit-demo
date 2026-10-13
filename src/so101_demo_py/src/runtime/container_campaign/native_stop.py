@@ -10,7 +10,10 @@ the call; none of them is inferred from a signal that was sent.
     group_members      live members of the instance's process group (the instance leads a group of its own)
     marker_survivors   live processes of this user whose environment carries this instance's marker
                        (`SO101_ACT_INSTANCE_ROOT=<owned root>`); the ROS stack and the recorder run in sessions of their
-                       own, so only the marker finds them after an abnormal instance exit
+                       own, so only the marker finds them after an abnormal instance exit. A process of this user whose
+                       environment cannot be read (non-dumpable: `sshd`, browser sandboxes) counts as a survivor
+                       (`UNREADABLE`) unless it predates the instance or its parent lineage proves it was not created by
+                       the instance (`_lineage_excludes`); a process of another user is never counted
     graph_clear        `ros2 node list` on the instance's fixed domain is empty (admission keeps every other participant off
                        that domain while a native instance is admitted)
 """
@@ -92,20 +95,96 @@ def _carries_marker(entry, wanted, started_ticks, *, attempts=4, pause_s=.05):
     return None
 
 
-def marker_survivors(owned_root, *, started_ticks, proc=Path("/proc"), uid=None, exclude=()):
+def _stat_fields(entry):
+    """`(state, ppid, started_ticks)` from `/proc/<pid>/stat`; raises the read error."""
+    fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+    return fields[0], int(fields[1]), int(fields[19])
+
+
+def _user_ids(entry):
+    """The real and effective uid of the process: from `status` (world-readable, also for a non-dumpable process), else the
+    owner of its `/proc` directory."""
+    try:
+        for line in (entry / "status").read_text().splitlines():
+            if line.startswith("Uid:"):
+                real, effective = line.split()[1:3]
+                return {int(real), int(effective)}
+    except (OSError, ValueError):
+        pass                                # no `status` (or exited: the directory stat below then raises)
+    return {entry.stat().st_uid}
+
+
+def _adopters(proc, observer_pid):
+    """The pids that could have adopted an orphan of the instance: `init`, the launching process (the instance's parent) and
+    its ancestors. An orphan is reparented to the nearest ancestor of its dead parent that is a subreaper, else to `init`;
+    whether an ancestor is a subreaper is not readable from `/proc`, so all of them count."""
+    found = {1, observer_pid}
+    pid = observer_pid
+    for _ in range(64):
+        try:
+            pid = _stat_fields(Path(proc) / str(pid))[1]
+        except (OSError, IndexError, ValueError):
+            break
+        if pid <= 0 or pid in found:
+            break
+        found.add(pid)
+    return found
+
+
+def _lineage_excludes(entry, wanted, uid, started_ticks, proc, adopters):
+    """Whether an unreadable process of this user started after the instance is provably not its descendant, from its parents.
+
+    A child is created by its parent and stays with it until the parent exits; only then is it adopted by an adopter. So an
+    instance descendant has, going up through its live parents, a chain of processes that started after the instance (all
+    descendants too) which ends at an adopter or at the instance leader (now gone). The chain is cut, and the process cleared,
+    at the first parent that is (a) another user's process: the instance is unprivileged and its stack launches no setuid
+    helper, so it never creates one (`sshd [priv]` -> `sshd: user@notty`); (b) older than the instance and not an adopter; or
+    (c) readable without the marker. An adopter, the marker, a vanished or unreadable parent, or a parent that is itself
+    unreadable and not cleared keeps the process a survivor."""
+    seen = set()
+    for _ in range(64):
+        try:
+            parent = _stat_fields(entry)[1]
+        except (OSError, IndexError, ValueError):
+            return False
+        if parent <= 1 or parent in seen:
+            return False                  # adopted by init, or a loop
+        seen.add(parent)
+        entry = Path(proc) / str(parent)
+        try:
+            if uid not in _user_ids(entry):
+                return True
+            _, _, parent_started = _stat_fields(entry)
+        except (OSError, IndexError, ValueError):
+            return False                  # the parent vanished or cannot be read: cannot be ruled out
+        if parent in adopters:
+            return False
+        if parent_started < started_ticks:
+            return True
+        carries = _carries_marker(entry, wanted, started_ticks)
+        if carries is not None:
+            return not carries
+    return False
+
+
+def marker_survivors(owned_root, *, started_ticks, proc=Path("/proc"), uid=None, exclude=(), observer_pid=None):
     """Live processes of this user whose initial environment names `owned_root` as their instance root.
 
-    An unreadable process that cannot be ruled out is reported as `UNREADABLE`, so that the proof fails closed."""
+    A process whose environment cannot be read is a survivor (`UNREADABLE`) unless a fact excludes it: another user's
+    process, a process older than the instance, or an unreadable process of this user whose parent lineage proves it was
+    created by something that is not the instance (`_lineage_excludes`; `observer_pid` is the launching process)."""
     from so101_demo.runtime.act_instance.identity import INSTANCE_ROOT_ENV
 
     wanted = (INSTANCE_ROOT_ENV + "=" + str(owned_root)).encode()
     uid = os.getuid() if uid is None else uid
+    observer_pid = os.getpid() if observer_pid is None else observer_pid
+    adopters = _adopters(proc, observer_pid)
     found = []
     for entry in sorted(Path(proc).iterdir(), key=lambda item: item.name):
         if not entry.name.isdigit() or int(entry.name) in exclude:
             continue
         try:
-            if entry.stat().st_uid != uid:
+            if uid not in _user_ids(entry):
                 continue
         except (FileNotFoundError, ProcessLookupError):
             continue
@@ -114,7 +193,8 @@ def marker_survivors(owned_root, *, started_ticks, proc=Path("/proc"), uid=None,
             continue
         carries = _carries_marker(entry, wanted, started_ticks)
         if carries is None:
-            found.append(UNREADABLE)
+            if not _lineage_excludes(entry, wanted, uid, started_ticks, proc, adopters):
+                found.append(UNREADABLE)
         elif carries:
             found.append(int(entry.name))
     return found
