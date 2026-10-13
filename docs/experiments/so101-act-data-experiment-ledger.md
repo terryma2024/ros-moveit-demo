@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3628
-next_experiment: EXP-580 (PLANNED): fifth real functional run, eight scenes with one worker, images of 833ae0966.
+latest_checkpoint: CP-3629
+next_experiment: EXP-581 (to be planned after the fixes): repeat with the stale-join allowance widened and the data loss causes established.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3629 — EXP-580 VALID failure: first valid container episode (QC PASS); four episodes INVALID on loss or continuity; sixth reset rejected; stop and settle by design
+
+- Fifth real attempt. Five scenes ran the full Teacher task on one stack, all Teacher PASS. Scene fn8-01 is the first episode collected in a real container that is VALID with QC PASS and export eligible. The other four are INVALID (topic loss on the first, camera grid and raw physics continuity on three with identical reasons). The sixth scene's reset was rejected by the reset epoch rule again and the instance faulted; the stop was fully proven and the admission settled without intervention. The wave was not committed, so nothing is listed as collected data. Not retried.
+- The valid episode is one functional-plane episode with one worker; it is not qualification and proves nothing about eight-way operation or the loss rate.
+- Root-cause work assigned to a Sonnet writer with the rule that no loss, continuity or grid judgement is loosened.
+- Retained: run root, prep directory, logs, exited containers. Nothing deleted.
 
 ## CP-3628 — Human rulings (standing lease release; formal coverage replaced by the Teacher rule); EXP-579 defects fixed; gates PASS, images rebuilt on 833ae0966; EXP-580 planned
 
@@ -88,7 +95,7 @@ next_experiment: EXP-580 (PLANNED): fifth real functional run, eight scenes with
 
 ```yaml
 experiment_id: EXP-580
-status: PLANNED
+status: VALID
 prior_experiment: EXP-579 (VALID failure; first scene end to end with INVALID data, second reset rejected, stop unproven)
 hypothesis: With logical-topic replay, the pre-window lag suspension, the stale-join allowance, the uuid fix and the Teacher formal coverage rule, the production CLI carries eight scenes with one worker through the complete task chain in a real container, seals and verifies the wave and settles admission.
 prediction: The first scene's ACT data is VALID with QC PASS inside the container, as the offline replay of the EXP-579 bag was. The second scene passes its reset, the first real test of the stale-join hypothesis. Stages never run before - a second and later scene on one stack, in-container QC, Host readback of a VALID episode, wave verification. The first stage that fails, if any, is the new information. On a fault the goal stop is proven and admission settles by the designed path.
@@ -111,18 +118,29 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261013T024537Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261013T024537Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Discovery twelve roles READY; freeze, admission, Teacher service and shard start, READY.
+  - Five scenes returned business results on one stack, all with status PASSED, teacher_execution_status COMPLETED, teacher_task_result PASS (host journal collected.json).
+  - wave-0-w00-fn8-01 - act_data_status VALID, act_data_qc PASS, export_eligible true. The first valid episode collected in a real container - sealed formal under the Teacher coverage rule and passed in-container QC.
+  - wave-0-w00-default - INVALID, "OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_TOPIC_LOSS:/clock gaps=1 missing=85; OFFLINE_TOPIC_LOSS:/so101/simulation/scene_state missing=17; OFFLINE_TOPIC_LOSS:/head_camera/color reported_in_window=1 detected=0; OFFLINE_TOPIC_LOSS:/wrist_camera/color reported_in_window=1 detected=0", QC NOT_RUN.
+  - wave-0-w00-fn8-02, fn8-03 and fn8-04 - INVALID with the same reason text each, "OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_CAMERA_GRID: 2 intervals other than 100 ms (a +2 ms frame or a missing frame); OFFLINE_TOPIC_LOSS:/clock gaps=2 missing=2; PHYSICS_RAW_CONTINUITY_INVALID; RECORDER_SEAL_FAILED: PHYSICS_RAW_CONTINUITY_INVALID", QC NOT_RUN.
+  - Sixth scene wave-0-w00-fn8-05 failed with fault "fresh paused atomic MuJoCo evidence unavailable". Shard log PAUSE_SNAPSHOT_FAILURE - 100 callbacks, 98 rejected with "new reset epoch must begin at simulation step zero", latest held sample at reset_epoch 5, simulation_step 92765, paused false. Scenes fn8-06 and fn8-07 were not started.
+  - Stop - shard-stop.json has all four facts true including goals_stopped; instance-exit.json cleanup_confirmed true with no cleanup error; container exit code 0; host-cleanup.json and campaign-cleanup.json terminated true with no error. The CLI reported CAMPAIGN_RUN_FAILED: CONTAINER_WAVE_COMMIT_READBACK_INVALID and exited 1; no CAMPAIGN_CLEANUP_UNCONFIRMED line.
+  - Unified store after the run, read-only - IDLE, no owner, no lease, no child, settled by the designed path. No container running.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The logical-topic replay, the lag suspension, the uuid fix and the Teacher coverage rule hold in a real container. The goal stop after real motion is now provable.
+  - The stale-join allowance is too narrow - four resets on the stack passed and the fifth was rejected with the held sample still in the previous epoch, consistent with more than one replayed sample being accepted before the new epoch; to be verified against the code.
+  - Four of five episodes lost or misjudged data with one worker. Three identical reason texts suggest a systematic cause on later scenes of a long-lived stack; the first scene looks like a burst loss. Causes not established.
+conclusion: VALID failure with the first valid container episode. One of five collected episodes is VALID with QC PASS; four are INVALID on loss or continuity findings; the run stopped at the sixth scene's reset. Stop, cleanup and admission settle worked by design. The wave was not committed.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261013T024537Z (host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1/instance-exit.json, shard-stop.json, retirement/, output/tasks)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261013T024537Z
+  - /tmp/so101-debug-act-data-66c42e4c/w1-20261013T024537Z.log and /tmp/so101-debug-act-data-66c42e4c/exp580-logs
+decision: KEEP
+next_experiment: EXP-581
 ```
 
 ## CP-3627 — EXP-579 VALID failure: first scene runs end to end with Teacher PASS but ACT data INVALID; second reset rejected; stop unproven, admission held
