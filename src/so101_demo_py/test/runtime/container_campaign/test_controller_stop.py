@@ -50,9 +50,9 @@ def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None,idle=False
                     goal_info=SimpleNamespace(goal_id=SimpleNamespace(uuid=list(range(16))),
                                               stamp=SimpleNamespace(sec=1,nanosec=2)))]))
         def close(self): closed.append(True)
-    monkeypatch.setattr(mod, "_open_owner", lambda namespace: Owner())
+    monkeypatch.setattr(mod, "_open_owner", lambda: Owner())
     monkeypatch.setattr(mod, "_ros_types", lambda: (object, SimpleNamespace(Request=lambda: object()), object()))
-    result = mod.observe_act_controller_stop(ros_namespace="/act/campaign/w00", timeout_s=0.1,
+    result = mod.observe_act_controller_stop(timeout_s=0.1,
                                             monotonic_ns=lambda: clock[0],return_on_empty_ack=return_on_empty_ack)
     assert closed == [True]
     return mod, result, endpoints
@@ -62,7 +62,11 @@ def test_neck_moveit_arm_and_gripper_all_have_original_status_and_ack(monkeypatc
     mod, observation, endpoints = run_probe(monkeypatch)
     assert observation.proven
     assert len(endpoints) == 8
-    assert all(name.startswith("/act/campaign/w00/") for name in endpoints)
+    assert all(name.startswith("/") and "/act/" not in name for name in endpoints)   # the fixed, un-namespaced lanes
+    assert {name.rsplit("/_action/", 1)[0] for name in endpoints} == {
+        "/arm_controller/follow_joint_trajectory", "/gripper_controller/follow_joint_trajectory",
+        "/neck_controller/follow_joint_trajectory", "/execute_trajectory"}
+    assert observation.document["schema_version"] == 2 and "ros_namespace" not in observation.document
     assert any("/neck_controller/" in name for name in endpoints)
     assert set(observation.document["lanes"]) == {"arm", "gripper", "neck", "moveit"}
     assert all(lane["cancel_return_code"] == 0 and lane["statuses"][0]["status"] == 4
@@ -96,9 +100,9 @@ def test_idle_ack_can_return_for_retirement_but_never_claims_standalone_stop(mon
 @pytest.mark.parametrize("budget", [True, 0, -1, float("inf"), float("nan")])
 def test_invalid_budget_refused_before_any_ros_context(budget, monkeypatch):
     mod = importlib.import_module("so101_demo.runtime.container_campaign.controller_stop")
-    monkeypatch.setattr(mod, "_open_owner", lambda namespace: pytest.fail("invalid budget created ROS node"))
+    monkeypatch.setattr(mod, "_open_owner", lambda: pytest.fail("invalid budget created ROS node"))
     with pytest.raises(ValueError, match="ACT_CONTROLLER_STOP_CONFIG_INVALID"):
-        mod.observe_act_controller_stop(ros_namespace="/act/campaign/w00", timeout_s=budget)
+        mod.observe_act_controller_stop(timeout_s=budget)
 
 
 @pytest.mark.parametrize("problem", ["empty", "missing_neck", "bool_ack", "bool_status", "extra_lane", "extra_field", "wrong_kind", "future_status"])

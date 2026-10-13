@@ -3,6 +3,7 @@
 No Docker, container or ROS runs here; owners are constructed but never started.
 """
 
+from dataclasses import asdict
 import hashlib
 import json
 import os
@@ -45,8 +46,7 @@ def prepared(tmp_path):
             expected_sha256=campaign_sha), paths=paths, registry=registry,
         parallel_runtime=dict(path=str(runtime), sha256=hashlib.sha256(runtime.read_bytes()).hexdigest()),
         approved_inputs=(), config_paths=(campaign_path, runtime))
-    slot = ActWorkerSlot(campaign_id='campaign', worker_id='w00', execution_generation=1, ros_domain_id=181,
-                         namespace='/act/campaign/w00', controller_name='/act/campaign/w00/arm_controller')
+    slot = ActWorkerSlot(campaign_id='campaign', worker_id='w00', execution_generation=1)
     return launcher, registry, slot, paths
 
 
@@ -59,7 +59,8 @@ def test_launcher_writes_a_spec_the_real_shard_loader_accepts(tmp_path):
         assert spec == written == owner.spec
         assert set(written) == _FIELDS | _COLLECTION_FIELDS
         assert not any('worker_spec' in name or 'coordinator' in name for name in written)
-        assert written['ros_namespace'] == slot.namespace and written['ros_domain_id'] == slot.ros_domain_id
+        assert written['schema_version'] == 2 and not {'ros_namespace', 'ros_domain_id'} & set(written)
+        assert not {'ros_namespace', 'ros_domain_id'} & set(asdict(owner.launch)) and 'ROS_NAMESPACE' not in ' '.join(owner.argv)
         assert written['wave_id'] == 'wave-0' and written['launch_generation'] == 1
         # The Host launch id is exactly what the child derives as its instance id.
         assert owner.launch.launch_id == instance_id_for(written) == 'wave-0-w00-g1'
@@ -95,8 +96,7 @@ def test_waves_must_be_prepared_in_order_with_the_admitted_slots(tmp_path):
     try:
         with pytest.raises(ValueError, match='COLLECTION_SHARD_WAVE_INVALID'):
             launcher(plan={'wave_index': 1}, endpoints={}, slots=(slot,))
-        foreign = ActWorkerSlot(campaign_id='campaign', worker_id='w01', execution_generation=1,
-            ros_domain_id=182, namespace='/act/campaign/w01', controller_name='/act/campaign/w01/arm_controller')
+        foreign = ActWorkerSlot(campaign_id='campaign', worker_id='w01', execution_generation=1)
         with pytest.raises(ValueError, match='COLLECTION_SHARD_WAVE_INVALID'):
             launcher(plan={'wave_index': 0}, endpoints={}, slots=(foreign,))
         assert not (paths['run']/'wave-0').exists()

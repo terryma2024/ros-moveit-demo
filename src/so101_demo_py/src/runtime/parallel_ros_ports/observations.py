@@ -20,7 +20,7 @@ from so101_demo.parallel_batch.perception import (
     LocalizedPose,
 )
 from so101_demo.runtime.parallel_ros_ports.binding import RuntimeBinding
-from so101_demo.runtime.container_campaign.ros_namespace import container_ros_global_init_options
+from so101_demo.ros.process_init import global_init_options
 from so101_demo.runtime.parallel_ros_ports.isolated_node import (
     _ACTIVE_GOAL_STATES,
     _open_isolated_ros_node,
@@ -151,7 +151,7 @@ def observe_worker_shutdown(session_id: str, *, timeout_s: float) -> ShutdownObs
 
     initialized_here = not rclpy.ok()
     if initialized_here:
-        rclpy.init(**container_ros_global_init_options())
+        rclpy.init(**global_init_options())
     node = rclpy.create_node("so101_parallel_recovery_observer")
     deadline = time.monotonic() + timeout_s
     previous = None
@@ -530,7 +530,7 @@ def observe_parallel_initial_gate(
 
     initialized_here = not rclpy.ok()
     if initialized_here:
-        rclpy.init(**container_ros_global_init_options())
+        rclpy.init(**global_init_options())
     service_node = rclpy.create_node("so101_parallel_gate_services")
     graph_node = rclpy.create_node("so101_parallel_gate_graph")
     goal_receipts = {}

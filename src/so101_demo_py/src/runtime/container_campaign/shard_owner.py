@@ -49,7 +49,6 @@ class ContainerShardOwner:
                 or str(paths['run']) != admitted_context.evidence_root
                 or Path(launch.owned_root).resolve(strict=True) != Path(launch.owned_root)
                 or not Path(launch.owned_root).is_relative_to(paths['run'])
-                or entry.ros_domain_id != launch.ros_domain_id or entry.ros_namespace != launch.ros_namespace
                 or entry.mujoco_session_id != launch.session_id
                 or type(service_token) is not str or re.fullmatch(r'[0-9a-f]{64}',service_token) is None
                 or type(max_frame_bytes) is not int or max_frame_bytes <= 0
@@ -63,7 +62,6 @@ class ContainerShardOwner:
         expected = dict(campaign_id=admitted_context.campaign_id,worker_id=launch.worker_id,
             execution_generation=admitted_context.execution_generation,service_epoch=admitted_context.service_epoch,
             launch_generation=launch.launch_generation,owned_root=str(self.root),
-            ros_namespace=launch.ros_namespace,ros_domain_id=launch.ros_domain_id,
             simulation_session_id=launch.session_id,gpu_uuid=admitted_context.physical_gpu_uuid,
             service_token=service_token)
         if (any(self.spec.get(name) != value or type(self.spec.get(name)) is not type(value)
@@ -164,17 +162,15 @@ class ContainerShardOwner:
                 runtime_id=self.spec['runtime_id'],
                 service_epoch=self.context.service_epoch,campaign_id=self.context.campaign_id,
                 worker_id=self.launch.worker_id,execution_generation=self.context.execution_generation,
-                ros_namespace=self.launch.ros_namespace,session_id=self.launch.session_id,
-                ros_domain_id=self.launch.ros_domain_id,inspect_container=self.inspect,
+                session_id=self.launch.session_id,inspect_container=self.inspect,
                 namespace_reader=self.namespace_reader)
             binding = self.bridge.accept_ready(read_document(control/'child-ready.json'))
             self.registry.bind_child(self.launch.launch_id,binding)
             await self._wait_file(self.root/'runtime-ready.json',deadline)
             await self._wait_file(self.root/'stack-readiness.json',deadline)
             ready = read_document(self.root/'runtime-ready.json')
-            expected_ready = dict(schema_version=1,kind='ACT_SHARD_RUNTIME_READY',
-                generation=self.launch.launch_generation,process_owner=asdict(binding.process),
-                ros_namespace=self.launch.ros_namespace)
+            expected_ready = dict(schema_version=2,kind='ACT_SHARD_RUNTIME_READY',
+                generation=self.launch.launch_generation,process_owner=asdict(binding.process))
             if (set(ready) != set(expected_ready)|{'readiness_sha256'}
                     or any(ready[name] != value or type(ready[name]) is not type(value)
                            for name,value in expected_ready.items())

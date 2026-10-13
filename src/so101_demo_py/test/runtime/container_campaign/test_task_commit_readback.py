@@ -264,7 +264,7 @@ def register(registry, run, worker, index, wave='wave-0'):
     owned = run/wave/worker/'g1'
     launch = ContainerLaunch(launch_id=f'{wave}-{worker}-g1', role='shard', worker_id=worker, wave_id=wave,
         launch_generation=1, container_name=f'so101-test-{worker}-g1', image_digest='sha256:'+'a'*64,
-        owned_root=str(owned), ros_namespace=f'/act/campaign/{worker}', ros_domain_id=181+index, session_id=f'session-{index}')
+        owned_root=str(owned), session_id=f'session-{index}')
     owner = ContainerOwnerKey(f'{index:x}'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'a'*64, 1)
     registry.register(launch)
     registry.bind_container(launch.launch_id, owner)

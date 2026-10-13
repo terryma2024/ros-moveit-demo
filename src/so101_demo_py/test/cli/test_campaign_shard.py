@@ -17,10 +17,10 @@ def fixture(tmp_path):
     source = Path(__file__).parents[2] / "config/mujoco/parallel_batch_linux_cuda.yaml"
     shutil.copyfile(source, runtime)
     import hashlib
-    document = dict(schema_version=1, kind="ACT_CONTAINER_SHARD", workload_kind="no_motion_readiness",
+    document = dict(schema_version=2, kind="ACT_CONTAINER_SHARD", workload_kind="no_motion_readiness",
         campaign_id="campaign", worker_id="w00", launch_generation=1, execution_generation=3,
         runtime_id="runtime1", service_epoch="epoch1", service_token="1"*64,
-        owned_root=str(root), ros_namespace="/act/campaign/w00", ros_domain_id=181,
+        owned_root=str(root),
         simulation_session_id="campaign-wave00-w00-g1", gpu_uuid="GPU-28221cec-9d21-7753-fd5a-da645740df19",
         controlled_runtime=dict(path=str(runtime), sha256=hashlib.sha256(runtime.read_bytes()).hexdigest()))
     path = tmp_path / "shard.json"
@@ -37,15 +37,16 @@ def test_frozen_config_supplies_owner_and_startup_budgets(tmp_path):
     assert runtime.initializing_hard_timeout_s == 180.0
 
 
-@pytest.mark.parametrize("problem", ["version", "extra", "root", "namespace", "domain", "generation", "backend", "scope", "hash"])
+@pytest.mark.parametrize("problem", ["version", "old_version", "extra", "root", "namespace", "domain", "generation", "backend", "scope", "hash"])
 def test_bad_spec_refused_before_runtime_factory(tmp_path, monkeypatch, problem):
     mod = importlib.import_module("so101_demo.cli.campaign_shard")
     path, document = fixture(tmp_path)
     if problem == "version": document["schema_version"] = True
     elif problem == "extra": document["hardware"] = True
     elif problem == "root": document["owned_root"] = "relative"
-    elif problem == "namespace": document["ros_namespace"] = "/"
-    elif problem == "domain": document["ros_domain_id"] = True
+    elif problem == "old_version": document["schema_version"] = 1
+    elif problem == "namespace": document["ros_namespace"] = "/act/campaign/w00"
+    elif problem == "domain": document["ros_domain_id"] = 181
     elif problem == "generation": document["launch_generation"] = True
     elif problem == "backend": document["workload_kind"] = "hardware"
     elif problem == "scope": document["worker_id"] = "w01"
@@ -102,15 +103,15 @@ def test_collection_spec_uses_original_controlled_json_and_builds_the_task_build
 
 
 def test_shard_composition_gives_tasks_a_fresh_probe_per_call_and_keeps_the_start_probe_single_use(tmp_path):
-    """Real stack owner and probes over the namespaced launch; only the observer subprocess seam is a double."""
+    """Real stack owner and probes over the plain, un-namespaced launch; only the observer subprocess seam is a double."""
     import subprocess
-    from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
+    from so101_teleop.unified.act_stack import ActStackLaunch
     from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
     mod=importlib.import_module('so101_demo.cli.campaign_shard')
     observer=tmp_path/'act_stack_ready';observer.write_text('#!/usr/bin/env python3\n');observer.chmod(0o700)
     stack_root=tmp_path/'stack';stack_root.mkdir()
-    launch=ContainerActStackLaunch(ros2_executable=Path('/usr/bin/true'),session_id='session1',evidence_root=stack_root,
-        ros_domain_id=181,environment={'GZ_PARTITION':'session1'},ros_namespace='/act/campaign/w00',readiness_timeout_s=60.)
+    launch=ActStackLaunch(ros2_executable=Path('/usr/bin/true'),session_id='session1',evidence_root=stack_root,
+        ros_domain_id=181,environment={'GZ_PARTITION':'session1'})
     ready,ready_check,stack=mod.compose_stack(launch,observer)
     assert stack.ready_probe is ready and ready_check is not ready
     assert type(ready_check) is RepeatableActStackReadyProbe
@@ -128,7 +129,7 @@ def test_shard_composition_gives_tasks_a_fresh_probe_per_call_and_keeps_the_star
     assert ready() is True and ready.readiness_bytes==document    # the shard start
     assert [ready_check(),ready_check(),ready_check()]==[True,True,True]
     assert len(runs)==4 and all(argv==runs[0] for argv in runs)
-    assert runs[0][runs[0].index('--ros-namespace')+1]=='/act/campaign/w00' and runs[0][0]==str(observer)
+    assert '--ros-namespace' not in runs[0] and runs[0][runs[0].index('--ros-domain-id')+1]=='181' and runs[0][0]==str(observer)
     with pytest.raises(ValueError,match='ACT_STACK_READINESS_PROBE_REUSED'):
         stack.ready_probe()
 
@@ -167,3 +168,27 @@ def test_bad_collection_spec_refuses_before_any_native_runtime(tmp_path,monkeypa
     path.write_text(json.dumps(document))
     monkeypatch.setattr(mod,'run_shard',lambda *args:pytest.fail('bad collection spec started native runtime'))
     assert mod.main(['--spec',str(path)])==2
+
+
+def test_the_shard_launches_the_plain_execution_stack_at_the_fixed_identity(tmp_path):
+    from so101_teleop.unified.act_stack import ActStackLaunch
+    mod=importlib.import_module('so101_demo.cli.campaign_shard')
+    stack_root=tmp_path/'stack';stack_root.mkdir()
+    spec=dict(simulation_session_id='session1')
+    environment={'ROS_DOMAIN_ID':'181','MUJOCO_GL':'egl','SO101_ACT_INSTANCE_ROOT':str(tmp_path)}
+    launch=mod.shard_stack_launch(spec,ros2=Path('/usr/bin/true'),stack_root=stack_root,environment=environment)
+
+    assert type(launch) is ActStackLaunch and launch.ros_domain_id==181 and launch.session_id=='session1'
+    assert launch.argv()[2:4]==['so101_demo_py','so101_mujoco_act_execution_stack.launch.py']
+    assert not any('namespace' in item or 'container_shard' in item for item in launch.argv())
+    process_environment=launch.process_environment()
+    assert process_environment['ROS_DOMAIN_ID']=='181' and process_environment['GZ_PARTITION']=='session1'
+    assert 'ROS_NAMESPACE' not in process_environment and process_environment['SO101_ACT_INSTANCE_ROOT']==str(tmp_path)
+
+
+def test_the_shard_entry_no_longer_depends_on_the_namespaced_stack_or_marker():
+    mod=importlib.import_module('so101_demo.cli.campaign_shard')
+    source=Path(mod.__file__).read_text()
+
+    assert 'ContainerActStackLaunch' not in source and 'container_campaign.stack_launch' not in source
+    assert 'SO101_ACT_CONTAINER' not in source and 'ros_namespace' not in source

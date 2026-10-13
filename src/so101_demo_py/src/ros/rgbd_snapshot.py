@@ -18,7 +18,7 @@ from ..cli.rgbd_point_cloud import (
     robust_center,
 )
 from ..runtime.point_cloud_preview import render_point_cloud_preview, write_png_rgb8
-from ..runtime.container_campaign.ros_namespace import container_ros_global_init_options
+from .process_init import global_init_options
 
 
 class SnapshotSource(Protocol):
@@ -175,7 +175,7 @@ class RosRgbdSnapshotSource:
         self._subscriptions: list[Any] = []
         self._closed = False
         if self._initialized_here:
-            rclpy.init(**container_ros_global_init_options())
+            rclpy.init(**global_init_options())
         try:
             self._node = rclpy.create_node(
                 "rgbd_sensor_capture",

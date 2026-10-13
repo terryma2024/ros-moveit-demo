@@ -53,7 +53,10 @@ from .contracts import (
     RevokeTarget,
 )
 
-SCHEMA_VERSION = 1
+#: 2: `act_worker_slots` is keyed by (campaign, worker, generation) alone; the per-slot ROS domain, namespace and
+#: controller columns and their three partial unique indexes are gone (the fixed in-instance identity). A version 1 store
+#: is migrated in place by `_migrate_slot_identity_schema`; its slot rows stay readable in `act_worker_slots_v1`.
+SCHEMA_VERSION = 2
 LOCK_FILE_NAME = "service.lock"
 
 LEASE_CLAIMING = "CLAIMING"
@@ -146,17 +149,64 @@ CREATE TABLE IF NOT EXISTS act_worker_slots (
   campaign_id TEXT NOT NULL,
   worker_id TEXT NOT NULL,
   execution_generation INTEGER NOT NULL,
-  ros_domain_id INTEGER NOT NULL,
-  namespace TEXT NOT NULL,
-  controller_name TEXT NOT NULL,
   slot_json TEXT NOT NULL,
   active INTEGER NOT NULL CHECK (active IN (0,1)),
   PRIMARY KEY (campaign_id, worker_id, execution_generation)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS act_active_slot_domain ON act_worker_slots(ros_domain_id) WHERE active=1;
-CREATE UNIQUE INDEX IF NOT EXISTS act_active_slot_namespace ON act_worker_slots(namespace) WHERE active=1;
-CREATE UNIQUE INDEX IF NOT EXISTS act_active_slot_controller ON act_worker_slots(controller_name) WHERE active=1;
 """
+
+_PER_SLOT_RESOURCE_INDEXES = ("act_active_slot_domain", "act_active_slot_namespace", "act_active_slot_controller")
+
+
+def _stored_schema_version(connection: sqlite3.Connection) -> int | None:
+    """The version of an existing store, or None for a store with no tables yet (a fresh database)."""
+    tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "schema_meta" in tables:
+        row = connection.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
+        if row is not None:
+            return int(row[0])
+    if "act_worker_slots" in tables:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(act_worker_slots)")}
+        return 1 if "ros_domain_id" in columns else SCHEMA_VERSION
+    return None
+
+
+def _migrate_slot_identity_schema(connection: sqlite3.Connection) -> None:
+    """Move a version 1 store to version 2 in one immediate transaction, or refuse and change nothing.
+
+    The store must be IDLE with no active ACT slot and no GPU lease, so nothing live depends on the dropped uniqueness.
+    The v1 slot table is renamed, not copied: its rows stay as the audit record. Only the ACT slot table is touched."""
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        state = connection.execute("SELECT state FROM global_state WHERE singleton = 1").fetchone()
+        if state is not None and state[0] != IDLE:
+            raise MutationError(f"STORE_MIGRATION_REFUSED: state is {state[0]}, not {IDLE}")
+        active = connection.execute("SELECT COUNT(*) FROM act_worker_slots WHERE active = 1").fetchone()[0]
+        if active:
+            raise MutationError(f"STORE_MIGRATION_REFUSED: {active} active ACT worker slot(s)")
+        leases = connection.execute("SELECT COUNT(*) FROM gpu_workload_leases").fetchone()[0]
+        if leases:
+            raise MutationError(f"STORE_MIGRATION_REFUSED: {leases} GPU workload lease(s)")
+        for name in _PER_SLOT_RESOURCE_INDEXES:
+            connection.execute(f"DROP INDEX IF EXISTS {name}")
+        connection.execute("ALTER TABLE act_worker_slots RENAME TO act_worker_slots_v1")
+        connection.execute(
+            "CREATE TABLE act_worker_slots (campaign_id TEXT NOT NULL, worker_id TEXT NOT NULL, "
+            "execution_generation INTEGER NOT NULL, slot_json TEXT NOT NULL, "
+            "active INTEGER NOT NULL CHECK (active IN (0,1)), "
+            "PRIMARY KEY (campaign_id, worker_id, execution_generation))"
+        )
+        connection.execute("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(SCHEMA_VERSION),),
+        )
+    except BaseException:
+        with contextlib.suppress(sqlite3.Error):
+            connection.execute("ROLLBACK")
+        raise
+    connection.execute("COMMIT")
 
 
 @dataclass(frozen=True)
@@ -202,15 +252,29 @@ class IntentStore:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=FULL")
         connection.execute("PRAGMA foreign_keys=ON")
-        connection.executescript(_SCHEMA)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
-            (str(SCHEMA_VERSION),),
-        )
-        connection.execute(
-            "INSERT OR IGNORE INTO global_state (singleton, state, updated_ns) VALUES (1, ?, 0)",
-            (IDLE,),
-        )
+        try:
+            stored = _stored_schema_version(connection)
+            if stored == 1:
+                _migrate_slot_identity_schema(connection)
+            elif stored is not None and stored != SCHEMA_VERSION:
+                raise MutationError(f"STORE_SCHEMA_UNSUPPORTED: version {stored}")
+            connection.executescript(_SCHEMA)
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO global_state (singleton, state, updated_ns) VALUES (1, ?, 0)",
+                (IDLE,),
+            )
+        except BaseException:
+            with contextlib.suppress(sqlite3.Error):
+                connection.close()
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock_fd)
+            raise
         with contextlib.suppress(OSError):
             os.chmod(database_path, 0o600)
         store = cls(root, lock_fd, connection)

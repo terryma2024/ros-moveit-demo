@@ -14,12 +14,17 @@ import stat
 import threading
 import urllib.parse
 
+from so101_demo.runtime.act_instance.identity import ACT_INSTANCE_ROS_DOMAIN_ID
 from so101_demo.runtime.container_campaign.paths import _path
 from so101_demo.runtime.container_campaign.process_identity import (
     ContainerChildBinding, ContainerOwnerKey, ProcessOwnerKey, container_exit_proven, shard_stop_proven,
 )
 from so101_demo.runtime.container_campaign.retirement import read_shard_stop_evidence
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
+
+
+#: 2: a launch record carries no ROS domain or namespace (the fixed instance identity), and the stop audit schema is 2.
+REGISTRY_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,8 +37,6 @@ class ContainerLaunch:
     container_name: str
     image_digest: str
     owned_root: str
-    ros_namespace: str | None = None
-    ros_domain_id: int | None = None
     session_id: str | None = None
 
     def __post_init__(self):
@@ -48,14 +51,10 @@ class ContainerLaunch:
                 raise ValueError('role/image/generation')
             _path(self.owned_root, directory=True)
             if self.role != 'shard':
-                if any(value is not None for value in (self.worker_id, self.wave_id,
-                        self.ros_namespace, self.ros_domain_id, self.session_id)):
+                if any(value is not None for value in (self.worker_id, self.wave_id, self.session_id)):
                     raise ValueError('service scope')
             elif (type(self.worker_id) is not str or re.fullmatch(r'w[0-9]{2}', self.worker_id) is None
                     or type(self.wave_id) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*', self.wave_id) is None
-                    or type(self.ros_namespace) is not str
-                    or re.fullmatch(r'(?:/[a-zA-Z_][a-zA-Z0-9_]*)+', self.ros_namespace) is None
-                    or type(self.ros_domain_id) is not int or not 0 <= self.ros_domain_id <= 232
                     or type(self.session_id) is not str
                     or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*', self.session_id) is None):
                 raise ValueError('shard scope')
@@ -87,7 +86,7 @@ class ContainerLaunchRegistry:
         if create:
             with self._connection:
                 self._connection.execute('CREATE TABLE metadata (version INTEGER, kind TEXT)')
-                self._connection.execute('INSERT INTO metadata VALUES (1, ?)', ('ACT_CONTAINER_LAUNCH_REGISTRY',))
+                self._connection.execute('INSERT INTO metadata VALUES (?, ?)', (REGISTRY_VERSION, 'ACT_CONTAINER_LAUNCH_REGISTRY'))
                 self._connection.execute('CREATE TABLE launches (sequence INTEGER PRIMARY KEY, launch_id TEXT UNIQUE, '
                                          'launch_json TEXT, owner_json TEXT, binding_json TEXT, exit_json TEXT)')
             directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
@@ -96,7 +95,7 @@ class ContainerLaunchRegistry:
             finally:
                 os.close(directory)
         if self._connection.execute('SELECT version, kind FROM metadata').fetchall() != [
-                (1, 'ACT_CONTAINER_LAUNCH_REGISTRY')]:
+                (REGISTRY_VERSION, 'ACT_CONTAINER_LAUNCH_REGISTRY')]:
             self._connection.close()
             raise ValueError('LAUNCH_REGISTRY_SCHEMA_INVALID')
 
@@ -142,12 +141,6 @@ class ContainerLaunchRegistry:
                         # Cached settlement never substitutes for the original
                         # controller/native evidence when reusing a logical slot.
                         self.prove_terminated(previous['launch_id'], record['exit_inspect'])
-                        if any(previous[name] != getattr(launch, name)
-                               for name in ('ros_domain_id', 'ros_namespace')):
-                            raise ValueError('LAUNCH_COLLISION: immutable slot drift')
-                    if record['exit_inspect'] is None and any(previous[name] == getattr(launch, name)
-                            for name in ('ros_domain_id', 'ros_namespace')):
-                        raise ValueError('LAUNCH_COLLISION: live resource overlap')
             self._connection.execute('INSERT INTO launches (launch_id, launch_json) VALUES (?, ?)',
                                      (launch.launch_id, canonical_json(asdict(launch)).decode()))
 
@@ -191,8 +184,8 @@ class ContainerLaunchRegistry:
                     item = record['launch']
                     receipt = read_shard_stop_evidence(Path(item['owned_root']),
                         process_owner=binding.process, launch_generation=owner.launch_generation,
-                        ros_namespace=item['ros_namespace'], session_id=item['session_id'],
-                        ros_domain_id=item['ros_domain_id'], namespace_inode=binding.pid_namespace_inode)
+                        session_id=item['session_id'], ros_domain_id=ACT_INSTANCE_ROS_DOMAIN_ID,
+                        namespace_inode=binding.pid_namespace_inode)
                     if not shard_stop_proven(binding, receipt, inspect_document):
                         raise ValueError('native stop not proven')
                 except (OSError, ValueError, TypeError, KeyError) as error:

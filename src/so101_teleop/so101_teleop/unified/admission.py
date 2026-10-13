@@ -585,10 +585,11 @@ class UnifiedWorkloadService:
                 child = ActChildLaunch(**item)
                 if child.campaign_id != payload["campaign_id"] or child.execution_generation != spec.execution_generation:
                     raise ValueError("CHILD_CAMPAIGN_MISMATCH")
-                for slot in self.slot_registry.slots():
-                    for name in ('ros_domain_id','namespace','controller_name'):
-                        if getattr(slot,name) == getattr(child,name):
-                            raise ValueError('WORKER_SLOT_RESOURCE_SHARED')
+                if self.slot_registry.slots():
+                    # A slot has no ROS names to compare with this child's, because its container is isolated. Without
+                    # one, the only safe reading of "do not collide" is that no native child starts while a container
+                    # campaign still holds a slot. (The native-instance exclusivity rule is separate.)
+                    raise ValueError('WORKER_SLOT_RESOURCE_SHARED')
                 proposed.register(child)
             children = tuple(ActChildLaunch(**item) for item in payload["children"])
         try:
@@ -841,8 +842,7 @@ class UnifiedWorkloadService:
                     slot = by_worker[item['worker_id']]
                     owned = Path(item['owned_root'])
                     if (owned != root/item['wave_id']/slot.worker_id/f"g{item['launch_generation']}"
-                            or not item['wave_id'].startswith('wave-')
-                            or item['ros_domain_id'] != slot.ros_domain_id or item['ros_namespace'] != slot.namespace):
+                            or not item['wave_id'].startswith('wave-')):
                         raise ValueError('foreign shard scope')
                 else:
                     raise ValueError('unknown role')

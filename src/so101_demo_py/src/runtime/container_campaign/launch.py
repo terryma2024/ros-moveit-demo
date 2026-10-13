@@ -1,7 +1,8 @@
 """Fixed campaign roles, selected GPU and least-privilege Docker launch argv.
 
 This consumes the unified entry's selected resources; it issues no resource
-authorization and performs no Docker mutation. The image map has exactly head,
+authorization and performs no Docker mutation. A shard's ROS identity is fixed (`act_instance.identity`): the
+private network (`--network none`) and private IPC (`--ipc private`) are its only isolation, so neither may change. The image map has exactly head,
 teacher and shard entries from the frozen campaign configuration.
 """
 
@@ -11,6 +12,7 @@ import math
 from pathlib import Path
 import re
 
+from so101_demo.runtime.act_instance.identity import instance_environment
 from so101_demo.runtime.container_campaign.paths import _path, build_role_mounts
 from so101_demo.runtime.inference.config import _image, _open_regular, calibration_runtime_hash
 
@@ -54,16 +56,11 @@ class InferenceLaunchArgs:
 @dataclass(frozen=True, slots=True)
 class ShardLaunchArgs:
     spec: Path
-    ros_domain_id: int
-    ros_namespace: str
     mujoco_session_id: str
 
     def __post_init__(self):
         try:
             _input_path(self.spec)
-            _require(type(self.ros_domain_id) is int and 0 <= self.ros_domain_id <= 232)
-            _require(type(self.ros_namespace) is str
-                     and re.fullmatch(r"(?:/[a-zA-Z_][a-zA-Z0-9_]*)+", self.ros_namespace) is not None)
             _require(type(self.mujoco_session_id) is str
                      and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", self.mujoco_session_id) is not None)
         except (OSError, ValueError, TypeError) as error:
@@ -114,10 +111,7 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
             _require(type(entry) is ShardLaunchArgs)
             _require(entry.spec in host_paths["config_paths"])
             command = ["campaign_shard", "--spec", str(entry.spec)]
-            environment.extend(["ROS_DOMAIN_ID="+str(entry.ros_domain_id),
-                "ROS_NAMESPACE="+entry.ros_namespace, "MUJOCO_GL=egl",
-                "SO101_MUJOCO_SESSION_ID="+entry.mujoco_session_id,
-                "ROS_LOCALHOST_ONLY=1", "ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST"])
+            environment.extend(instance_environment(mujoco_session_id=entry.mujoco_session_id))
         else:
             _require(type(entry) is InferenceLaunchArgs and entry.config in host_paths["config_paths"])
             _require((entry.head_descriptor is not None) == (role == "head"))

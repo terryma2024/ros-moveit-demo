@@ -7,6 +7,7 @@ logical source contracts remain unchanged; foreign channels are never dropped.
 from pathlib import Path
 import os
 
+from so101_demo.act.offline.bag_root import bag_root_decision
 from so101_demo.act.parallel_collection_contracts import read_document
 from so101_demo.runtime.container_campaign.paths import TASK_OUTPUT_MOUNT,_path,task_output_identity
 from so101_demo.runtime.container_campaign.ros_namespace import validate_container_namespace,qualified_name
@@ -20,34 +21,6 @@ _FIELDS={'schema_version','kind','owned_root','ros_namespace','runtime_ready','t
 def topic_map_path(uri):
     bag=Path(uri)
     return bag.parent/(bag.name+'-topic-map.json')
-
-
-def bag_root_decision(uri,owned_root,*,output_mount=TASK_OUTPUT_MOUNT,output_identity=task_output_identity):
-    """Where a scoped bag may live in a container, with the readback that justifies it.
-
-    Exactly two places: under this instance's native owned root, or under the fixed output mount - and the mount only when
-    it is proven to be `<owned_root>/output` itself (same device and inode, no symlink), so a path that merely has that name
-    never counts. `code` is None when accepted: `CONTAINER_BAG_ROOT_MISMATCH` for a bag under neither,
-    `CONTAINER_BAG_OUTPUT_NOT_INSTANCE` for a bag under the mount when the mount is not this instance's output."""
-    root=Path(owned_root)
-    bag=Path(uri)
-    identity=output_identity(Path(output_mount),root/'output')
-    decision=dict(bag=str(bag),owned_root=str(root),output_mount=str(output_mount),output_identity=identity,
-        location=None,code='CONTAINER_BAG_ROOT_MISMATCH')
-    if not bag.is_absolute() or '..' in bag.parts:
-        return decision
-    try:
-        if bag.parent.resolve(strict=True)!=bag.parent:
-            return decision
-    except (OSError,RuntimeError):
-        return decision
-    if bag.is_relative_to(root):
-        return dict(decision,location='owned_root',code=None)
-    if bag.is_relative_to(Path(output_mount)):
-        if identity.get('same') is True:
-            return dict(decision,location='task_output',code=None)
-        return dict(decision,code='CONTAINER_BAG_OUTPUT_NOT_INSTANCE')
-    return decision
 
 
 def _validate(document,uri,*,output_mount=TASK_OUTPUT_MOUNT,output_identity=task_output_identity):

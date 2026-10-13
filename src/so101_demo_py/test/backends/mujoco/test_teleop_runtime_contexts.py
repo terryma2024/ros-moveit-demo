@@ -1,4 +1,4 @@
-"""Evidence reads and resets inside a container stack must not touch the process-global rclpy context.
+"""Evidence reads and resets inside an ACT instance must not touch the process-global rclpy context.
 
 Real rclpy contexts, no live graph: the point is who initialises and who shuts down which context. A retained RGB-D
 source (or any other task component) owns the default context while the Teacher context probe reads evidence.
@@ -6,15 +6,16 @@ source (or any other task component) owns the default context while the Teacher 
 
 import pytest
 
-NAMESPACE = "/act/campaign_w1f_20261012T220436Z/w00"
 
 
 @pytest.fixture
-def container_environment(monkeypatch):
+def container_environment(monkeypatch, tmp_path):
+    """The instance marker alone: no ROS namespace, the fixed identity's root namespace."""
     import rclpy
 
-    monkeypatch.setenv("SO101_ACT_CONTAINER_NAMESPACE", NAMESPACE)
-    monkeypatch.setenv("ROS_NAMESPACE", NAMESPACE)
+    monkeypatch.delenv("SO101_ACT_CONTAINER_NAMESPACE", raising=False)
+    monkeypatch.delenv("ROS_NAMESPACE", raising=False)
+    monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(tmp_path))
     monkeypatch.setenv("ROS_DOMAIN_ID", "231")
     rclpy.try_shutdown()
     yield
@@ -25,9 +26,9 @@ def container_environment(monkeypatch):
 def default_context_holder(container_environment):
     """What the retained RGB-D source does: initialise the default context and keep a node on it."""
     import rclpy
-    from so101_demo.runtime.container_campaign.ros_namespace import container_ros_global_init_options
+    from so101_demo.ros.process_init import global_init_options
 
-    rclpy.init(**container_ros_global_init_options())
+    rclpy.init(**global_init_options())
     node = rclpy.create_node("retained_rgbd_source")
     yield node
     node.destroy_node()
@@ -72,12 +73,35 @@ def test_repeated_evidence_reads_leave_no_context_behind(container_environment):
         assert not rclpy.ok()   # nothing was left initialised in the default context
 
 
-def test_without_a_container_marker_the_default_context_is_still_used(monkeypatch):
+def test_the_instance_scope_uses_a_private_context_and_no_namespace_arguments(container_environment, monkeypatch):
+    import rclpy
+    from rclpy.signals import SignalHandlerOptions
+    from so101_demo.backends.mujoco import teleop_runtime
+
+    seen = []
+    original_init = rclpy.init
+
+    def init(*args, **kwargs):
+        seen.append(kwargs)
+        return original_init(*args, **kwargs)
+
+    monkeypatch.setattr(rclpy, "init", init)
+    scope = teleop_runtime._RosScope()
+    try:
+        assert scope.context is not None and not rclpy.ok()   # private; the default context was not initialised
+        assert seen == [dict(context=scope.context, signal_handler_options=SignalHandlerOptions.NO)]
+        assert "args" not in seen[0]
+    finally:
+        scope.close()
+
+
+def test_without_the_instance_marker_the_default_context_is_still_used(monkeypatch):
     """Host and macOS callers are unchanged: they initialise and shut down the default context themselves."""
     import rclpy
     from so101_demo.backends.mujoco import teleop_runtime
 
     monkeypatch.delenv("SO101_ACT_CONTAINER_NAMESPACE", raising=False)
+    monkeypatch.delenv("SO101_ACT_INSTANCE_ROOT", raising=False)
     monkeypatch.setenv("ROS_DOMAIN_ID", "231")
     rclpy.try_shutdown()
     seen = []

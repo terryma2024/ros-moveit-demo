@@ -79,7 +79,7 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     if type(campaign_id) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*',campaign_id) is None:
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
     runtime = _collection_runtime(arguments.collection_config)
-    if arguments.worker_count > runtime.max_worker_count or arguments.worker_count > len(runtime.ros_domain_ids):
+    if arguments.worker_count > runtime.max_worker_count:
         raise ValueError('COLLECTION_RUNTIME_WORKER_COUNT_INVALID')
     fingerprint = contact_policy_fingerprint
     if type(fingerprint) is not str or re.fullmatch(r'[0-9a-f]{64}',fingerprint) is None:
@@ -95,11 +95,8 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     with workload.arbiter.store._thread_lock:
         generation = workload.arbiter.store.execution_generation(Domain.VALIDATION)+1
     slots = []
-    for index,domain in enumerate(runtime.ros_domain_ids[:arguments.worker_count]):
-        worker_id = f'w{index:02d}'
-        namespace = '/act/campaign_'+campaign_id.replace('-','_')+'/'+worker_id
-        slots.append(asdict(ActWorkerSlot(campaign_id,worker_id,generation,domain,namespace,
-                                         namespace+'/arm_controller')))
+    for index in range(arguments.worker_count):
+        slots.append(asdict(ActWorkerSlot(campaign_id,f'w{index:02d}',generation)))
     payload = dict(campaign_id=campaign_id,backend='mujoco',worker_count=arguments.worker_count,
         contact_policy_fingerprint=fingerprint,evidence_root=str(root),
         service_epoch=workload.service_epoch,resource_binding_id=workload.resource_binding_id,

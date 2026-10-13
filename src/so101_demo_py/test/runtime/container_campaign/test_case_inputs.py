@@ -154,15 +154,15 @@ def task_for(world, tmp_path, monkeypatch, scene):
 
     root = tmp_path / ('owned-' + scene)
     (root / 'task-inputs').mkdir(parents=True)
-    namespace, session, domain = '/act/campaign/w00', 'session-' + scene, 7
+    session = 'session-' + scene
     runtime_path = RUNTIME_YAML
     binding, frozen, campaign = world['binding'], world['frozen'], world['campaign']
     identity = dict(manifest_sha256='a' * 64, runtime_config_sha256=campaign['controlled_runtime']['sha256'],
                     collection_config_sha256=frozen['roles']['collection_config']['sha256'],
                     contact_policy_fingerprint=binding['contact_policy_fingerprint'])
     spec = dict(workload_kind='act_collection', campaign_id='campaign-1', worker_id='w00', launch_generation=1,
-                execution_generation=1, simulation_session_id=session, owned_root=str(root), ros_namespace=namespace,
-                ros_domain_id=domain, business_identity=identity, parallel_runtime=ref(runtime_path),
+                execution_generation=1, simulation_session_id=session, owned_root=str(root),
+                business_identity=identity, parallel_runtime=ref(runtime_path),
                 campaign_config=ref(world['campaign_path']), deadline_monotonic_s=time.monotonic() + 3600,
                 wave_id='wave-0', gpu_uuid=campaign['gpu_uuid'])
     document = dict(schema_version=1, kind=task_builder.KIND, task_id='task-1', worker_id='w00', launch_generation=1,
@@ -171,8 +171,9 @@ def task_for(world, tmp_path, monkeypatch, scene):
     endpoints = endpoint_fields(campaign)
     # the launched service roles are whatever the loader's closed field set names
     document.update({role: endpoints[role] for role in ('head', 'teacher') if role in task_builder._FIELDS})
-    for name, value in dict(SO101_ACT_CONTAINER_NAMESPACE=namespace, ROS_NAMESPACE=namespace, ROS_DOMAIN_ID=str(domain),
-                            SO101_ACT_CONTAINER_OWNED_ROOT=str(root), SO101_MUJOCO_SESSION_ID=session,
+    monkeypatch.delenv('ROS_NAMESPACE', raising=False)
+    for name, value in dict(ROS_DOMAIN_ID='181', ROS_LOCALHOST_ONLY='1', ROS_AUTOMATIC_DISCOVERY_RANGE='LOCALHOST',
+                            SO101_ACT_INSTANCE_ROOT=str(root), SO101_MUJOCO_SESSION_ID=session,
                             MUJOCO_GL='egl').items():
         monkeypatch.setenv(name, value)
     path = root / 'task-inputs' / 'task-1.json'

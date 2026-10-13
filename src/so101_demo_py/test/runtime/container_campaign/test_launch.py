@@ -25,8 +25,7 @@ def fixture(tmp_path, role):
         owned.mkdir(parents=True)
         (owned / "control").mkdir(mode=0o700)
         sockets["control"] = owned / "control"
-        entry = module.ShardLaunchArgs(spec=config, ros_domain_id=141,
-            ros_namespace="/act/campaign/w00", mujoco_session_id="campaign-wave00-w00-g1")
+        entry = module.ShardLaunchArgs(spec=config, mujoco_session_id="campaign-wave00-w00-g1")
     else:
         owned = paths["services"][role]
         descriptor = paths["run"] / "head-descriptor.json"
@@ -81,7 +80,10 @@ def test_fixed_image_private_namespaces_and_mounts(tmp_path, role):
         assert any("dst=/act/control" in mount for mount in mounts)
         assert all(any(f"dst=/act/ipc/{name},readonly" in mount for mount in mounts) for name in ("head", "teacher"))
         env = [argv[i+1] for i, value in enumerate(argv) if value == "--env"]
-        assert "ROS_DOMAIN_ID=141" in env and "ROS_NAMESPACE=/act/campaign/w00" in env
+        # the fixed identity: one domain for every shard, no namespace, localhost-only discovery; the container is the isolation
+        assert env.count("ROS_DOMAIN_ID=181") == 1 and not [item for item in env if item.startswith("ROS_NAMESPACE")]
+        assert "SO101_MUJOCO_SESSION_ID=campaign-wave00-w00-g1" in env
+        assert "ROS_LOCALHOST_ONLY=1" in env and "ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST" in env and "MUJOCO_GL=egl" in env
     else:
         assert len([mount for mount in mounts if "dst=/act/ipc" in mount]) == 1
         assert not any("wave-00" in mount or "dst=/act/control" in mount for mount in mounts)
@@ -107,15 +109,31 @@ def test_launch_rejects_unbound_image_mount_gpu_or_entry(tmp_path, problem):
         build(module, images, paths, **changes)
 
 
-@pytest.mark.parametrize("problem", ["domain_bool", "domain_outside", "namespace", "session", "relative_spec"])
+def test_shard_isolation_is_the_container_alone_in_every_launch(tmp_path):
+    """Identical ROS identity in every shard is safe only while the network and IPC namespaces are private."""
+    module, images, paths = fixture(tmp_path, "shard")
+    argv = build(module, images, paths)
+    assert argv.count("--network") == 1 and argv[argv.index("--network")+1] == "none"
+    assert argv.count("--ipc") == 1 and argv[argv.index("--ipc")+1] == "private"
+    assert not {"--pid", "--uts", "--userns", "--cgroupns", "--net", "--publish", "-p", "--add-host"}.intersection(argv)
+    assert not any(value.startswith(("--network=", "--ipc=", "--pid=")) for value in argv)
+    assert not any("/dev/shm" in value or "docker.sock" in value for value in argv)
+    environment = [argv[i+1] for i, value in enumerate(argv) if value == "--env"]
+    assert "ROS_LOCALHOST_ONLY=1" in environment and "ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST" in environment
+
+
+@pytest.mark.parametrize("extra", [dict(ros_domain_id=181), dict(ros_namespace="/act/campaign/w00")])
+def test_a_shard_entry_no_longer_carries_a_domain_or_namespace(tmp_path, extra):
+    module, _images, paths = fixture(tmp_path, "shard")
+    with pytest.raises(TypeError):
+        module.ShardLaunchArgs(spec=paths["entry"].spec, mujoco_session_id="campaign-wave00-w00-g1", **extra)
+
+
+@pytest.mark.parametrize("problem", ["session", "relative_spec"])
 def test_shard_identity_is_explicit_and_closed(tmp_path, problem):
     module, _images, paths = fixture(tmp_path, "shard")
-    kwargs = dict(spec=paths["entry"].spec, ros_domain_id=141,
-                  ros_namespace="/act/campaign/w00", mujoco_session_id="campaign-wave00-w00-g1")
-    if problem == "domain_bool": kwargs["ros_domain_id"] = True
-    elif problem == "domain_outside": kwargs["ros_domain_id"] = 233
-    elif problem == "namespace": kwargs["ros_namespace"] = "/"
-    elif problem == "session": kwargs["mujoco_session_id"] = "../other"
+    kwargs = dict(spec=paths["entry"].spec, mujoco_session_id="campaign-wave00-w00-g1")
+    if problem == "session": kwargs["mujoco_session_id"] = "../other"
     elif problem == "relative_spec": kwargs["spec"] = Path("spec.json")
     with pytest.raises(ValueError, match="CONTAINER_LAUNCH_INVALID"):
         module.ShardLaunchArgs(**kwargs)

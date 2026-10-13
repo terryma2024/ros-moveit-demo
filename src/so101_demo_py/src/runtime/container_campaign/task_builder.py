@@ -34,7 +34,8 @@ from so101_demo.runtime.parallel_worker_parts.receipts import RuntimeDecision
 from so101_demo.runtime.act_teacher_client import ActTeacherClient
 from so101_demo.runtime.container_campaign.case_artifacts import CollectionCaseArtifacts
 from so101_demo.runtime.container_campaign.collection_runtime import ContainerCollectionRuntime
-from so101_demo.runtime.container_campaign.ros_namespace import container_ros_namespace
+from so101_demo.runtime.act_instance.identity import (
+    ACT_INSTANCE_ROS_DOMAIN_ID, ACT_INSTANCE_ROS_NAMESPACE, INSTANCE_ROOT_ENV, verify_instance_environment)
 from so101_demo.runtime.container_campaign.task_contracts import TaskSpec
 from so101_demo.runtime.inference.client import InferenceClient
 from so101_demo.runtime.inference.config import validate_file_ref,load_campaign_config
@@ -75,7 +76,7 @@ def _finite(value):
     return type(value) in (int,float) and math.isfinite(value)
 
 
-_SPEC_TEXT=('workload_kind','campaign_id','worker_id','wave_id','owned_root','ros_namespace',
+_SPEC_TEXT=('workload_kind','campaign_id','worker_id','wave_id','owned_root',
     'simulation_session_id','gpu_uuid')
 _SPEC_IDENTITY=('runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint')
 
@@ -85,7 +86,7 @@ def _check_spec(spec):
     try:
         if (type(spec) is not dict or any(type(spec[name]) is not str for name in _SPEC_TEXT)
                 or spec['workload_kind']!='act_collection' or re.fullmatch(r'w[0-9]+',spec['worker_id']) is None
-                or any(type(spec[name]) is not int for name in ('launch_generation','ros_domain_id'))
+                or type(spec['launch_generation']) is not int
                 or not _finite(spec['deadline_monotonic_s'])
                 or type(spec['business_identity']) is not dict
                 or any(type(spec['business_identity'][name]) is not str for name in _SPEC_IDENTITY)
@@ -106,12 +107,12 @@ def load_task_input(task,shard_spec,*,clock=time.monotonic):
             or task.deadline_monotonic_s<=now or task.deadline_monotonic_s>shard_spec['deadline_monotonic_s']):
         raise ValueError('COLLECTION_TASK_DEADLINE_INVALID')
     root=Path(shard_spec['owned_root'])
-    if (root.resolve(strict=True)!=root or not root.is_dir()
-            or container_ros_namespace()!=shard_spec['ros_namespace']
-            or os.environ.get('SO101_ACT_CONTAINER_OWNED_ROOT')!=str(root)
-            or os.environ.get('ROS_DOMAIN_ID')!=str(shard_spec['ros_domain_id'])
-            or os.environ.get('SO101_MUJOCO_SESSION_ID')!=shard_spec['simulation_session_id']
-            or os.environ.get('MUJOCO_GL')!='egl'):
+    try:
+        verify_instance_environment(os.environ,session_id=shard_spec['simulation_session_id'])
+        drift=os.environ.get(INSTANCE_ROOT_ENV)!=str(root)
+    except ValueError:
+        drift=True
+    if root.resolve(strict=True)!=root or not root.is_dir() or drift:
         raise ValueError('COLLECTION_TASK_ENVIRONMENT_DRIFT')
     if task.inputs_ref.path!=str(root/'task-inputs'/(task.task_id+'.json')):
         raise ValueError('COLLECTION_TASK_INPUT_LOCATION_INVALID')
@@ -213,9 +214,9 @@ def task_resources(shard_spec,*,task_root):
     session=shard_spec['simulation_session_id']
     temporary=root/'tmp'
     return WorkerResources(worker_id=shard_spec['worker_id'],slot_index=int(shard_spec['worker_id'][1:]),
-        generation=shard_spec['launch_generation'],ros_domain_id=shard_spec['ros_domain_id'],
+        generation=shard_spec['launch_generation'],ros_domain_id=ACT_INSTANCE_ROS_DOMAIN_ID,
         simulation_port=session,bridge_port=session,gz_partition=session,session_id=session,
-        controller_namespace=shard_spec['ros_namespace'],render_backend='egl',render_context_id=session,
+        controller_namespace=ACT_INSTANCE_ROS_NAMESPACE,render_backend='egl',render_context_id=session,
         render_context_namespace=temporary/'render',virtual_display='not_applicable',
         ros_home=temporary/'ros-home',ros_log_dir=root/'ros-logs',temp_dir=temporary,
         socket_namespace=root/'control',socket_path=root/'control'/'worker-unused.sock',
@@ -276,9 +277,8 @@ def _check_stack(stack,spec,root,output_root):
     except (OSError,TypeError,ValueError):
         outside=False
     if (not outside or not isinstance(stack,ActStackProcessOwner) or stack.launch.evidence_root!=root/'stack'
-            or stack.launch.ros_domain_id!=spec['ros_domain_id']
-            or stack.launch.session_id!=spec['simulation_session_id']
-            or getattr(stack.launch,'ros_namespace',None)!=spec['ros_namespace']):
+            or stack.launch.ros_domain_id!=ACT_INSTANCE_ROS_DOMAIN_ID
+            or stack.launch.session_id!=spec['simulation_session_id']):
         raise ValueError('COLLECTION_BORROWED_STACK_MISMATCH')
 
 

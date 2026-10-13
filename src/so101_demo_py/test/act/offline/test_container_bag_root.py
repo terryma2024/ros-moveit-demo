@@ -1,4 +1,4 @@
-"""Where a scoped bag may live in a container: the owned root, or the fixed output mount proven to be its `output`.
+"""Where a bag may live in an ACT instance: the owned root, or the fixed output mount proven to be its `output`.
 
 A bind mount is the same directory reached through two paths, and an unprivileged test cannot create one. So the identity
 check is a small pure function over two directory paths, tested here with real directories (the same directory twice,
@@ -13,11 +13,10 @@ import os
 
 import pytest
 
-NAMESPACE = '/act/campaign/w00'
 
 
-def topics():
-    return importlib.import_module('so101_demo.act.offline.container_bag_topics')
+def bag_root():
+    return importlib.import_module('so101_demo.act.offline.bag_root')
 
 
 def paths():
@@ -27,8 +26,6 @@ def paths():
 def instance(tmp_path):
     root = tmp_path / 'w00/g1'
     (root / 'output').mkdir(parents=True)
-    (root / 'runtime-ready.json').write_text(json.dumps(dict(
-        schema_version=1, kind='ACT_SHARD_RUNTIME_READY', generation=1, ros_namespace=NAMESPACE)))
     return root
 
 
@@ -84,22 +81,22 @@ def test_a_bag_under_the_output_mount_needs_the_mount_to_be_this_instances_outpu
     mount.mkdir()
     bag = bag_under(mount)
 
-    mapping = topics().write_topic_map(bag, owned_root=root, namespace=NAMESPACE, topics=('/clock',),
-                                       output_mount=mount, output_identity=verdict(True))
-    assert mapping == {'/clock': NAMESPACE + '/clock'}
-    assert topics().read_topic_map(bag, output_mount=mount, output_identity=verdict(True)) == mapping
-    with pytest.raises(ValueError, match='^CONTAINER_BAG_OUTPUT_NOT_INSTANCE$'):
-        topics().read_topic_map(bag, output_mount=mount, output_identity=verdict(False))
+    accepted = bag_root().bag_root_decision(bag, root, output_mount=mount, output_identity=verdict(True))
+    refused = bag_root().bag_root_decision(bag, root, output_mount=mount, output_identity=verdict(False))
+
+    assert accepted['code'] is None and accepted['location'] == 'task_output'
+    assert refused['code'] == 'CONTAINER_BAG_OUTPUT_NOT_INSTANCE' and refused['location'] is None
 
 
 def test_a_bag_under_the_mount_is_refused_with_the_real_identity_when_it_is_not_this_instances_output(tmp_path):
     root = instance(tmp_path)
     mount = tmp_path / 'mount'          # a different directory than <root>/output: a foreign output or a tmpfs
     mount.mkdir()
-    bag = bag_under(mount)
 
-    with pytest.raises(ValueError, match='^CONTAINER_BAG_OUTPUT_NOT_INSTANCE$'):
-        topics().write_topic_map(bag, owned_root=root, namespace=NAMESPACE, topics=('/clock',), output_mount=mount)
+    decision = bag_root().bag_root_decision(bag_under(mount), root, output_mount=mount)
+
+    assert decision['code'] == 'CONTAINER_BAG_OUTPUT_NOT_INSTANCE'
+    assert decision['output_identity']['same'] is False
 
 
 def test_a_bag_under_neither_root_is_refused_even_when_the_mount_is_proven(tmp_path):
@@ -108,55 +105,50 @@ def test_a_bag_under_neither_root_is_refused_even_when_the_mount_is_proven(tmp_p
     mount.mkdir()
     elsewhere = tmp_path / 'elsewhere'
     elsewhere.mkdir()
-    bag = bag_under(elsewhere)
 
-    with pytest.raises(ValueError, match='^CONTAINER_BAG_ROOT_MISMATCH$'):
-        topics().write_topic_map(bag, owned_root=root, namespace=NAMESPACE, topics=('/clock',),
-                                 output_mount=mount, output_identity=verdict(True))
+    decision = bag_root().bag_root_decision(bag_under(elsewhere), root, output_mount=mount,
+                                            output_identity=verdict(True))
+    assert decision['code'] == 'CONTAINER_BAG_ROOT_MISMATCH'
     # a sibling that only shares the mount's name prefix is not under the mount
     sibling = tmp_path / 'mount-other'
     sibling.mkdir()
-    with pytest.raises(ValueError, match='^CONTAINER_BAG_ROOT_MISMATCH$'):
-        topics().write_topic_map(bag_under(sibling), owned_root=root, namespace=NAMESPACE, topics=('/clock',),
-                                 output_mount=mount, output_identity=verdict(True))
+    decision = bag_root().bag_root_decision(bag_under(sibling), root, output_mount=mount, output_identity=verdict(True))
+    assert decision['code'] == 'CONTAINER_BAG_ROOT_MISMATCH'
 
 
-def test_a_bag_under_the_owned_root_is_accepted_as_before_and_other_rules_stay_strict(tmp_path):
+def test_a_bag_under_the_owned_root_is_accepted_and_traversal_stays_refused(tmp_path):
     root = instance(tmp_path)
-    bag = bag_under(root)
 
-    assert topics().write_topic_map(bag, owned_root=root, namespace=NAMESPACE, topics=('/clock',)) == {
-        '/clock': NAMESPACE + '/clock'}
-    with pytest.raises(ValueError, match='CONTAINER_BAG_READINESS_MISMATCH'):
-        topics().write_topic_map(bag, owned_root=root, namespace='/act/foreign/w00',
-                                 topics=('/clock',))
+    accepted = bag_root().bag_root_decision(bag_under(root), root)
+    assert accepted['code'] is None and accepted['location'] == 'owned_root'
     mount = tmp_path / 'mount'
     mount.mkdir()
     traversal = mount / 'tasks/../../elsewhere/bag'
-    decision = topics().bag_root_decision(traversal, root, output_mount=mount, output_identity=verdict(True))
+    decision = bag_root().bag_root_decision(traversal, root, output_mount=mount, output_identity=verdict(True))
     assert decision['code'] == 'CONTAINER_BAG_ROOT_MISMATCH' and decision['location'] is None
 
 
 def run_recorder(tmp_path, monkeypatch, bag, *, container):
     raw_recorder = importlib.import_module('so101_demo.act.offline.raw_recorder')
+    monkeypatch.delenv('SO101_ACT_CONTAINER_NAMESPACE', raising=False)
+    monkeypatch.delenv('ROS_NAMESPACE', raising=False)
     if container:
-        monkeypatch.setenv('SO101_ACT_CONTAINER_NAMESPACE', NAMESPACE)
-        monkeypatch.setenv('ROS_NAMESPACE', NAMESPACE)
-        monkeypatch.setenv('SO101_ACT_CONTAINER_OWNED_ROOT', str(tmp_path / 'w00/g1'))
+        monkeypatch.setenv('SO101_ACT_INSTANCE_ROOT', str(tmp_path / 'w00/g1'))
     else:
-        monkeypatch.delenv('SO101_ACT_CONTAINER_NAMESPACE', raising=False)
+        monkeypatch.delenv('SO101_ACT_INSTANCE_ROOT', raising=False)
     ready, stats = tmp_path / 'ready.json', tmp_path / 'stats.json'
     code = raw_recorder.main(['--bag-dir', str(bag), '--scene-reads', str(tmp_path / 'scene.jsonl'),
                               '--ready-file', str(ready), '--stats-file', str(stats)])
     return code, json.loads(ready.read_text())
 
 
-def test_the_recorders_ready_record_carries_the_bag_location_decision(tmp_path, monkeypatch):
+def test_the_recorders_ready_record_carries_the_bag_location_decision_for_the_instance_marker_alone(tmp_path, monkeypatch):
     instance(tmp_path)
     elsewhere = tmp_path / 'elsewhere'
     elsewhere.mkdir()
 
     code, ready = run_recorder(tmp_path, monkeypatch, bag_under(elsewhere), container=True)
+    assert not (elsewhere / 'tasks/task-1/attempts/default/lease/working/raw/bag-topic-map.json').exists()
 
     assert code == 3 and ready['state'] == 'FAILED' and 'CONTAINER_BAG_ROOT_MISMATCH' in ready['error']
     decision = ready['bag_root']
@@ -165,7 +157,7 @@ def test_the_recorders_ready_record_carries_the_bag_location_decision(tmp_path, 
     assert decision['output_identity']['owned_output']['st_ino'] == os.lstat(tmp_path / 'w00/g1/output').st_ino
 
 
-def test_outside_a_container_the_ready_record_is_unchanged(tmp_path, monkeypatch):
+def test_outside_an_instance_the_ready_record_is_unchanged(tmp_path, monkeypatch):
     def refuse(self):
         raise RuntimeError('no ROS in this test')
 
@@ -181,8 +173,8 @@ def test_the_decision_carries_the_readback_whether_or_not_it_accepts(tmp_path):
     mount.mkdir()
     bag = bag_under(mount)
 
-    refused = topics().bag_root_decision(bag, root, output_mount=mount)
-    accepted = topics().bag_root_decision(bag, root, output_mount=mount, output_identity=verdict(True))
+    refused = bag_root().bag_root_decision(bag, root, output_mount=mount)
+    accepted = bag_root().bag_root_decision(bag, root, output_mount=mount, output_identity=verdict(True))
 
     assert refused['code'] == 'CONTAINER_BAG_OUTPUT_NOT_INSTANCE' and refused['location'] is None
     assert refused['output_identity']['mount']['st_ino'] is not None

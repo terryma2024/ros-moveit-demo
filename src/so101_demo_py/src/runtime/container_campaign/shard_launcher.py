@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 import secrets
 
-from so101_demo.cli.campaign_shard import instance_id_for,load_spec
+from so101_demo.cli.campaign_shard import SPEC_SCHEMA_VERSION,instance_id_for,load_spec
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch,ContainerLaunchRegistry
@@ -62,11 +62,11 @@ class ContainerShardLauncher:
             session='act-'+short+'-'+slot.worker_id+'-g'+str(generation)
             runtime_id='runtime-'+short+'-'+slot.worker_id+'-g'+str(generation)
             token=secrets.token_hex(32)
-            spec=dict(schema_version=1,kind='ACT_CONTAINER_SHARD',workload_kind='act_collection',
+            spec=dict(schema_version=SPEC_SCHEMA_VERSION,kind='ACT_CONTAINER_SHARD',workload_kind='act_collection',
                 campaign_id=self.context.campaign_id,worker_id=slot.worker_id,
                 launch_generation=generation,execution_generation=self.context.execution_generation,
                 runtime_id=runtime_id,service_epoch=self.context.service_epoch,service_token=token,
-                owned_root=str(root),ros_namespace=slot.namespace,ros_domain_id=slot.ros_domain_id,
+                owned_root=str(root),
                 simulation_session_id=session,gpu_uuid=self.context.physical_gpu_uuid,
                 controlled_runtime=config['controlled_runtime'],business_identity=identity,
                 parallel_runtime=self.parallel_runtime,campaign_config=dict(path=self.context.campaign_config_path,
@@ -78,11 +78,9 @@ class ContainerShardLauncher:
             launch=ContainerLaunch(launch_id=wave_id+'-'+slot.worker_id+'-g'+str(generation),role='shard',
                 worker_id=slot.worker_id,wave_id=wave_id,launch_generation=generation,
                 container_name='so101-act-'+short+'-'+slot.worker_id+'-g'+str(generation),
-                image_digest=config['shard_image']['digest'],owned_root=str(root),
-                ros_namespace=slot.namespace,ros_domain_id=slot.ros_domain_id,session_id=session)
+                image_digest=config['shard_image']['digest'],owned_root=str(root),session_id=session)
             if launch.launch_id!=instance_id_for(spec):raise ValueError('COLLECTION_SHARD_INSTANCE_ID_DRIFT')
-            entry=ShardLaunchArgs(spec=spec_path,ros_domain_id=slot.ros_domain_id,
-                ros_namespace=slot.namespace,mujoco_session_id=session)
+            entry=ShardLaunchArgs(spec=spec_path,mujoco_session_id=session)
             owners.append(ContainerShardOwner(admitted_context=self.context,launch=launch,entry=entry,
                 images=images,paths=self.paths,registry=self.registry,approved_inputs=self.approved_inputs,
                 config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path))),service_token=token,

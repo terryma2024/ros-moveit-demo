@@ -30,7 +30,9 @@ from pathlib import Path
 from so101_demo.runtime.container_campaign.ros_namespace import (
     container_ros_namespace,container_ros_init_options,
 )
-from .container_bag_topics import bag_root_decision, write_topic_map
+from so101_demo.runtime.act_instance.identity import instance_root
+from .bag_root import bag_root_decision
+from .container_bag_topics import write_topic_map
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
 STATS_SCHEMA = "SO101_RAW_RECORD_STATS"
@@ -282,10 +284,14 @@ class RawRecorder:
             raise FileExistsError(f"RAW_BAG_EXISTS: {self.bag_dir}")
         self.bag_dir.parent.mkdir(parents=True, exist_ok=True)
         namespace=container_ros_namespace()
-        if namespace is not None:
+        root=instance_root()
+        if root is None and namespace is not None:   # the retired per-worker namespace marker carried its own root
             root=os.environ.get('SO101_ACT_CONTAINER_OWNED_ROOT')
             if root is None:raise ValueError('CONTAINER_BAG_OWNED_ROOT_REQUIRED')
+        if root is not None:
             self.bag_root=bag_root_decision(self.bag_dir,Path(root))
+            if self.bag_root['code'] is not None:raise ValueError(self.bag_root['code'])
+        if namespace is not None:
             self.topic_map=write_topic_map(self.bag_dir,owned_root=Path(root),namespace=namespace,topics=self.topics)
         if not rclpy.ok():
             rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO,**container_ros_init_options())

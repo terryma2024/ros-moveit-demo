@@ -581,7 +581,7 @@ class ContainerBridgeProcessOwner:
     """Host ownership by Docker identity; inner ready/stop PID keys remain opaque."""
 
     def __init__(self, *, container_owner, control_socket_root, runtime_id, service_epoch,
-                 campaign_id, worker_id, execution_generation, ros_namespace, session_id, ros_domain_id, inspect_container=None,
+                 campaign_id, worker_id, execution_generation, session_id, inspect_container=None,
                  namespace_reader=None):
         from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey
 
@@ -590,16 +590,13 @@ class ContainerBridgeProcessOwner:
                 or root.resolve(strict=True) != root
                 or any(type(value) is not str or not value for value in (
                     runtime_id, service_epoch, campaign_id, worker_id, session_id))
-                or type(execution_generation) is not int or execution_generation <= 0
-                or type(ros_domain_id) is not int or not 0 <= ros_domain_id <= 232
-                or type(ros_namespace) is not str
-                or re.fullmatch(r"(?:/[a-zA-Z_][a-zA-Z0-9_]*)+", ros_namespace) is None):
+                or type(execution_generation) is not int or execution_generation <= 0):
             raise MutationError("CONTAINER_BRIDGE_CONFIG_INVALID")
         self.container_owner, self.control_socket_root = container_owner, root
         self.runtime_id, self.service_epoch = runtime_id, service_epoch
         self.campaign_id, self.worker_id = campaign_id, worker_id
         self.execution_generation = execution_generation
-        self.ros_namespace, self.session_id, self.ros_domain_id = ros_namespace, session_id, ros_domain_id
+        self.session_id = session_id
         self._inspect_container = inspect_container or self._docker_inspect
         self._namespace_reader = namespace_reader or (lambda pid: os.stat(f"/proc/{pid}/ns/pid").st_ino)
         self.binding = None
@@ -668,6 +665,7 @@ class ContainerBridgeProcessOwner:
             return False
 
     def stopped(self):
+        from so101_demo.runtime.act_instance.identity import ACT_INSTANCE_ROS_DOMAIN_ID
         from so101_demo.runtime.container_campaign.process_identity import shard_stop_proven
         from so101_demo.runtime.container_campaign.retirement import read_shard_stop_evidence
 
@@ -676,7 +674,7 @@ class ContainerBridgeProcessOwner:
         try:
             receipt = read_shard_stop_evidence(self.control_socket_root.parent,
                 process_owner=self.binding.process, launch_generation=self.container_owner.launch_generation,
-                ros_namespace=self.ros_namespace, session_id=self.session_id, ros_domain_id=self.ros_domain_id,
+                session_id=self.session_id, ros_domain_id=ACT_INSTANCE_ROS_DOMAIN_ID,
                 namespace_inode=self.binding.pid_namespace_inode)
             return shard_stop_proven(self.binding, receipt, self._observe())
         except (OSError, ValueError, KeyError, MutationError):

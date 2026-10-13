@@ -40,7 +40,7 @@ def test_each_task_gate_observes_the_stack_afresh_and_never_the_start_probe(flow
     for argv in runs:
         assert argv[argv.index("--session-id") + 1] == flow.stack.launch.session_id
         assert argv[argv.index("--ros-domain-id") + 1] == str(flow.stack.launch.ros_domain_id)
-        assert argv[argv.index("--ros-namespace") + 1] == flow.stack.launch.ros_namespace
+        assert str(flow.stack.launch.ros_domain_id) == "181" and "--ros-namespace" not in argv
         assert argv[0] == str(flow.observer)
     with pytest.raises(ValueError, match="ACT_STACK_READINESS_PROBE_REUSED"):
         flow.stack.ready_probe()

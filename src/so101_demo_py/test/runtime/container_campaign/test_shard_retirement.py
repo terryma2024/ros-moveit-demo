@@ -49,8 +49,7 @@ def fixture(tmp_path, monkeypatch, *, forced=False, goal_failed=False, stack_fai
         calls.append("goal-stop")
         return goals
     retirement = mod.NativeShardRetirement(process_owner=owner, launch_generation=7,
-        evidence_root=root, stack=stack, ros_namespace="/act/campaign/w00",
-        goal_stop_budget_s=5, stack_stop_budget_s=15, goal_stop_probe=goal_probe)
+        evidence_root=root, stack=stack, goal_stop_budget_s=5, stack_stop_budget_s=15, goal_stop_probe=goal_probe)
     return mod, root, owner, native, retirement, calls
 
 
@@ -64,8 +63,7 @@ def test_concurrent_retirement_is_single_flight_and_originals_read_back(tmp_path
         assert first["forced"] is False
     asyncio.run(run())
     assert calls == ["goal-stop", "native-stop"]
-    actual = mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7,
-        ros_namespace="/act/campaign/w00", session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
+    actual = mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7, session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
     assert actual["goals_stopped"] is True
     assert (root / "retirement/controller-stop.json").is_file()
     assert (root / "retirement/stack-stop.json").is_file()
@@ -89,15 +87,13 @@ def test_idle_empty_cancel_acks_need_full_unforced_native_termination(tmp_path,m
     receipt = asyncio.run(retirement.retire(fenced=True))
     if native_failure is None:
         assert receipt['goals_stopped'] is True
-        actual = mod.read_shard_stop_evidence(root,process_owner=owner,launch_generation=7,
-            ros_namespace='/act/campaign/w00',session_id='session1',ros_domain_id=181,
+        actual = mod.read_shard_stop_evidence(root,process_owner=owner,launch_generation=7, session_id='session1',ros_domain_id=181,
             namespace_inode=pid_namespace_inode())
         assert actual['goals_stopped'] is True
     else:
         assert receipt['goals_stopped'] is False
         with pytest.raises(ValueError,match='SHARD_STOP_EVIDENCE_UNCONFIRMED'):
-            mod.read_shard_stop_evidence(root,process_owner=owner,launch_generation=7,
-                ros_namespace='/act/campaign/w00',session_id='session1',ros_domain_id=181,
+            mod.read_shard_stop_evidence(root,process_owner=owner,launch_generation=7, session_id='session1',ros_domain_id=181,
                 namespace_inode=pid_namespace_inode())
 
 
@@ -125,8 +121,7 @@ def test_native_termination_cannot_cover_uncertain_or_nonempty_goal_ack(tmp_path
     receipt = asyncio.run(retirement.retire(fenced=True))
     assert receipt['controllers_stopped'] is True and receipt['goals_stopped'] is False
     with pytest.raises(ValueError,match='SHARD_STOP_EVIDENCE_UNCONFIRMED'):
-        mod.read_shard_stop_evidence(root,process_owner=owner,launch_generation=7,
-            ros_namespace='/act/campaign/w00',session_id='session1',ros_domain_id=181,
+        mod.read_shard_stop_evidence(root,process_owner=owner,launch_generation=7, session_id='session1',ros_domain_id=181,
             namespace_inode=pid_namespace_inode())
 
 
@@ -141,8 +136,7 @@ def test_uncertain_or_forced_stop_is_retained_and_never_retried(tmp_path, monkey
     asyncio.run(run())
     assert calls == ["goal-stop", "native-stop"]
     with pytest.raises(ValueError, match="SHARD_STOP_EVIDENCE_UNCONFIRMED"):
-        mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7,
-            ros_namespace="/act/campaign/w00", session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
+        mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7, session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
 
 
 def test_an_unconfirmed_native_stop_names_what_the_stack_probe_saw(tmp_path, monkeypatch):
@@ -169,8 +163,7 @@ def test_an_unconfirmed_native_stop_names_what_the_stack_probe_saw(tmp_path, mon
     assert "ACT_STACK_WORLD_SESSION_INVALID" in error["reason"] and len(error["reason"]) <= 1500
     # the written evidence still reads back as an unconfirmed stop
     with pytest.raises(ValueError, match="SHARD_STOP_EVIDENCE_UNCONFIRMED"):
-        mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7,
-            ros_namespace="/act/campaign/w00", session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
+        mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7, session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
 
 
 def test_unfenced_stop_cannot_invoke_ros_or_publish_receipt(tmp_path, monkeypatch):
@@ -180,21 +173,19 @@ def test_unfenced_stop_cannot_invoke_ros_or_publish_receipt(tmp_path, monkeypatc
     assert not calls and not (root / "shard-stop.json").exists()
 
 
-@pytest.mark.parametrize("problem", ["raw_goal", "raw_native", "summary", "generation", "namespace", "session", "domain"])
+@pytest.mark.parametrize("problem", ["raw_goal", "raw_native", "summary", "generation", "session", "domain"])
 def test_summary_and_original_evidence_scope_drift_rejected(tmp_path, monkeypatch, problem):
     import json
 
     mod, root, owner, _native, retirement, _calls = fixture(tmp_path, monkeypatch)
     asyncio.run(retirement.retire(fenced=True))
-    kwargs = dict(process_owner=owner, launch_generation=7, ros_namespace="/act/campaign/w00",
-                  session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
+    kwargs = dict(process_owner=owner, launch_generation=7, session_id="session1", ros_domain_id=181, namespace_inode=pid_namespace_inode())
     if problem == "raw_goal": (root / "retirement/controller-stop.json").write_text('{}')
     elif problem == "raw_native": (root / "retirement/stack-stop.json").write_text('{}')
     elif problem == "summary":
         doc=json.loads((root / "shard-stop.json").read_bytes()); doc["forced"]=True
         (root / "shard-stop.json").write_bytes(canonical_json(doc))
     elif problem == "generation": kwargs["launch_generation"] = 8
-    elif problem == "namespace": kwargs["ros_namespace"] = "/act/other/w00"
     elif problem == "session": kwargs["session_id"] = "other"
     elif problem == "domain": kwargs["ros_domain_id"] = 182
     with pytest.raises(ValueError, match="SHARD_STOP_EVIDENCE"):
@@ -209,3 +200,17 @@ def test_process_identity_drift_during_stop_cannot_publish_success(tmp_path, mon
         asyncio.run(retirement.retire(fenced=True))
     assert calls == ["goal-stop", "native-stop"]
     assert not (root / "shard-stop.json").exists()
+
+
+def test_the_stop_audit_is_schema_two_and_carries_no_ros_namespace(tmp_path, monkeypatch):
+    import json
+
+    mod, root, _owner, _native, retirement, _calls = fixture(tmp_path, monkeypatch)
+    asyncio.run(retirement.retire(fenced=True))
+    audit = json.loads((root / "retirement/audit.json").read_bytes())
+
+    assert audit["schema_version"] == 2 and audit["ros_domain_id"] == 181 and audit["session_id"] == "session1"
+    assert "ros_namespace" not in audit
+    with pytest.raises(TypeError):
+        mod.NativeShardRetirement(process_owner=_owner, launch_generation=7, evidence_root=root,
+            stack=retirement.stack, ros_namespace="/act/campaign/w00", goal_stop_budget_s=5, stack_stop_budget_s=15)

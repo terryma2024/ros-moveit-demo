@@ -29,8 +29,8 @@ from test_config_identity import campaign_fixture,write_config
 from test_shard_retirement import fixture as native_fixture
 from so101_demo.act.collection_scope import build_collection_scope,write_collection_scope
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
-from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
 from so101_demo.runtime.container_campaign.task_contracts import InputRef,TaskSpec
+from so101_teleop.unified.act_stack import ActStackLaunch
 from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
 from so101_teleop.unified.pick_place_startup_issuer import InstalledActStackReadinessProbe
 from paths import PACKAGE_ROOT
@@ -75,11 +75,9 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
     native_dir=tmp_path/'native';native_dir.mkdir()
     _,root,process,native,retirement,calls=native_fixture(native_dir,monkeypatch)
     stack=retirement.stack;old=stack.launch
-    namespace='/act/campaign/w00'
-    stack.launch=ContainerActStackLaunch(ros2_executable=old.ros2_executable,session_id=old.session_id,
+    stack.launch=ActStackLaunch(ros2_executable=old.ros2_executable,session_id=old.session_id,
         evidence_root=old.evidence_root,ros_domain_id=old.ros_domain_id,
-        environment=dict(old.environment)|{'GZ_PARTITION':'task-builder-partition'},
-        ros_namespace=namespace,readiness_timeout_s=180.)
+        environment=dict(old.environment)|{'GZ_PARTITION':'task-builder-partition'})
     # The borrowed stack carries the REAL single-use start probe, already consumed by the shard start, exactly as in
     # production; a task gate that reuses it fails with ACT_STACK_READINESS_PROBE_REUSED instead of passing silently.
     observer=tmp_path/'act_stack_ready';observer.write_text('#!/usr/bin/env python3\n');observer.chmod(0o700)
@@ -113,7 +111,7 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
     output=tmp_path/'output';output.mkdir(mode=0o700)
     spec=dict(workload_kind='act_collection',campaign_id='campaign-1',worker_id='w00',launch_generation=1,
         execution_generation=1,simulation_session_id=old.session_id,owned_root=str(root),
-        ros_namespace=namespace,ros_domain_id=old.ros_domain_id,business_identity=identity,
+        business_identity=identity,
         parallel_runtime=ref(runtime_path),campaign_config=ref(campaign_path),
         deadline_monotonic_s=time.monotonic()+3600,wave_id='wave-0',gpu_uuid=campaign['gpu_uuid'])
     document=dict(schema_version=1,kind='ACT_CONTAINER_COLLECTION_TASK',task_id='task-1',worker_id='w00',
@@ -122,8 +120,10 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
     for role in ('teacher',):
         document[role]=dict(role=role,socket_path='/act/ipc/'+role+'/inference.sock',
             service_generation='service-'+role,max_frame_bytes=campaign[role+'_service']['max_frame_bytes'])
-    for name,value in dict(SO101_ACT_CONTAINER_NAMESPACE=namespace,ROS_NAMESPACE=namespace,
-        ROS_DOMAIN_ID=str(old.ros_domain_id),SO101_ACT_CONTAINER_OWNED_ROOT=str(root),
+    monkeypatch.delenv('ROS_NAMESPACE',raising=False)
+    monkeypatch.delenv('SO101_ACT_CONTAINER_NAMESPACE',raising=False)
+    for name,value in dict(ROS_DOMAIN_ID='181',SO101_ACT_INSTANCE_ROOT=str(root),ROS_LOCALHOST_ONLY='1',
+        ROS_AUTOMATIC_DISCOVERY_RANGE='LOCALHOST',
         SO101_MUJOCO_SESSION_ID=old.session_id,MUJOCO_GL='egl').items():monkeypatch.setenv(name,value)
     stack.process.poll=lambda:None
     return SimpleNamespace(document=document,spec=spec,stack=stack,calls=calls,root=root,output=output,
@@ -233,7 +233,7 @@ def test_task_input_refuses_foreign_instance_or_changed_bytes(env,damage):
 
 @pytest.mark.parametrize('damage',['generation_spec','catalog_position','legacy_broker','diagnostic','env_domain',
                                    'env_root','env_session','env_gl','runtime_sha','model','frame_size',
-                                   'foreign_teacher_socket','head_endpoint','contact_policy','foreign_namespace'])
+                                   'foreign_teacher_socket','head_endpoint','contact_policy','foreign_namespace','discovery','legacy_marker'])
 def test_bad_input_refuses_before_task_directory_exists(env,monkeypatch,damage):
     document=copy.deepcopy(env.document);spec=copy.deepcopy(env.spec)
     if damage=='generation_spec':spec['launch_generation']=2
@@ -251,10 +251,12 @@ def test_bad_input_refuses_before_task_directory_exists(env,monkeypatch,damage):
         value=json.loads(scope.read_bytes());value['mode']='preselected_target_diagnostic'
         scope.write_text(json.dumps(value));document['scope']=ref(scope)
     elif damage=='env_domain':monkeypatch.setenv('ROS_DOMAIN_ID','999')
-    elif damage=='env_root':monkeypatch.setenv('SO101_ACT_CONTAINER_OWNED_ROOT','/elsewhere')
+    elif damage=='env_root':monkeypatch.setenv('SO101_ACT_INSTANCE_ROOT','/elsewhere')
     elif damage=='env_session':monkeypatch.setenv('SO101_MUJOCO_SESSION_ID','other-session')
     elif damage=='env_gl':monkeypatch.setenv('MUJOCO_GL','glx')
-    elif damage=='foreign_namespace':monkeypatch.setenv('SO101_ACT_CONTAINER_NAMESPACE','/act/campaign/w05')
+    elif damage=='foreign_namespace':monkeypatch.setenv('ROS_NAMESPACE','/act/campaign/w05')
+    elif damage=='discovery':monkeypatch.setenv('ROS_AUTOMATIC_DISCOVERY_RANGE','SUBNET')
+    elif damage=='legacy_marker':monkeypatch.delenv('SO101_ACT_INSTANCE_ROOT')
     elif damage=='runtime_sha':spec['business_identity']['runtime_config_sha256']='e'*64
     elif damage=='contact_policy':spec['business_identity']['contact_policy_fingerprint']='f'*64
     elif damage=='model':
@@ -367,7 +369,7 @@ def test_module_imports_no_coordinator_protocol_or_worker_modules():
             assert name!='so101_demo.parallel_batch.worker' and not name.startswith('so101_demo.parallel_batch.worker.')
 
 
-@pytest.mark.parametrize('damage',['session','domain','namespace','stack_root','output_inside_stack'])
+@pytest.mark.parametrize('damage',['session','domain','stack_root','output_inside_stack'])
 def test_foreign_stack_or_output_refused_before_task_directory_exists(env,monkeypatch,damage):
     old=env.stack.launch
     output=env.output
@@ -375,12 +377,9 @@ def test_foreign_stack_or_output_refused_before_task_directory_exists(env,monkey
         output=env.root/'stack'/'output';output.mkdir(exist_ok=True)
     else:
         fields=dict(ros2_executable=old.ros2_executable,session_id=old.session_id,evidence_root=old.evidence_root,
-            ros_domain_id=old.ros_domain_id,environment=old.environment,ros_namespace=old.ros_namespace,
-            readiness_timeout_s=old.readiness_timeout_s)
-        field=dict(session='session_id',domain='ros_domain_id',namespace='ros_namespace',
-            stack_root='evidence_root')[damage]
-        fields[field]={'session':'other','domain':old.ros_domain_id+1,'namespace':'/act/campaign/w05',
-                       'stack_root':env.tmp}[damage]
+            ros_domain_id=old.ros_domain_id,environment=old.environment)
+        field=dict(session='session_id',domain='ros_domain_id',stack_root='evidence_root')[damage]
+        fields[field]={'session':'other','domain':old.ros_domain_id+1,'stack_root':env.tmp}[damage]
         monkeypatch.setattr(env.stack,'launch',type(old)(**fields))
     with pytest.raises(ValueError):
         builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,output_root=output,ready_check=env.ready_check)
@@ -510,7 +509,7 @@ def test_task_document_that_is_not_a_json_object_is_a_value_error(env,raw):
 
 
 @pytest.mark.parametrize('missing',['workload_kind','campaign_id','worker_id','launch_generation','wave_id','owned_root',
-    'ros_namespace','ros_domain_id','simulation_session_id','deadline_monotonic_s','business_identity',
+    'simulation_session_id','deadline_monotonic_s','business_identity',
     'parallel_runtime','campaign_config','gpu_uuid'])
 def test_shard_spec_missing_a_required_key_is_a_value_error(env,missing):
     spec=copy.deepcopy(env.spec);del spec[missing]

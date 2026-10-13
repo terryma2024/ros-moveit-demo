@@ -15,7 +15,7 @@ from so101_teleop.unified.worker_slots import ActWorkerSlot
 
 def fixture(tmp_path,**kwargs):
     service,registry,calls,containers = service_fixture(tmp_path,**kwargs)
-    slot = ActWorkerSlot('campaign','w00',1,181,'/act/campaign/w00','/act/campaign/w00/arm_controller')
+    slot = ActWorkerSlot('campaign','w00',1)
     sha = hashlib.sha256(json.dumps([asdict(slot)],sort_keys=True,separators=(',',':')).encode()).hexdigest()
     path = service.paths['run']/'functional.json'
     scenes = service.paths['run']/'scenes.json'
@@ -117,8 +117,8 @@ class FakeShard:
     def __init__(self, owner, wave, *, release=True):
         slot = owner.slots[0]
         self.context, self.registry, self.release = owner.context, owner.registry, release
-        self.launch = SimpleNamespace(worker_id=slot.worker_id, ros_domain_id=slot.ros_domain_id,
-            ros_namespace=slot.namespace, wave_id='wave-'+str(wave), launch_id=f'wave-{wave}-w00-g1')
+        self.launch = SimpleNamespace(worker_id=slot.worker_id,
+            wave_id='wave-'+str(wave), launch_id=f'wave-{wave}-w00-g1')
         self.closes = self.health_checks = 0
 
     async def check_health(self):

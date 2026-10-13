@@ -161,21 +161,21 @@ def stop_evidence(spec, owner, process):
     lane_prefix = {'arm': '/arm_controller/follow_joint_trajectory/_action',
                    'gripper': '/gripper_controller/follow_joint_trajectory/_action',
                    'neck': '/neck_controller/follow_joint_trajectory/_action', 'moveit': '/execute_trajectory/_action'}
-    lanes = {name: dict(action_prefix=spec['ros_namespace']+prefix, cancel_sent_monotonic_ns=1_000_000_100,
+    lanes = {name: dict(action_prefix=prefix, cancel_sent_monotonic_ns=1_000_000_100,
         cancel_received_monotonic_ns=1_000_000_200, cancel_return_code=0, goals_canceling=[],
         status_received_monotonic_ns=1_000_000_300, statuses=[]) for name, prefix in lane_prefix.items()}
-    goal = canonical_json(dict(schema_version=1, kind='ACT_CONTROLLER_STOP_OBSERVATION',
-        ros_namespace=spec['ros_namespace'], started_monotonic_ns=1_000_000_000, completed_monotonic_ns=1_000_000_400,
+    goal = canonical_json(dict(schema_version=2, kind='ACT_CONTROLLER_STOP_OBSERVATION',
+        started_monotonic_ns=1_000_000_000, completed_monotonic_ns=1_000_000_400,
         lanes=lanes))
     stack = canonical_json(dict(schema_version=1, leader_pid=native['pid'], pgid=native['pgid'],
         started_ticks=native['started_ticks'], argv_sha256=native['argv_sha256'], session_id=spec['simulation_session_id'],
-        ros_domain_id=spec['ros_domain_id'], group_clear=True, graph_clear=True, physical_stop_confirmed=True,
+        ros_domain_id=181, group_clear=True, graph_clear=True, physical_stop_confirmed=True,
         parent_exited=False, term_sent=True, kill_sent=False, finished_at_monotonic_ns=1_000_000_500))
     retirement._write(audit_root, 'controller-stop.json', goal)
     retirement._write(audit_root, 'stack-stop.json', stack)
-    retirement._write(audit_root, 'audit.json', canonical_json(dict(schema_version=1, kind='ACT_SHARD_STOP_AUDIT',
+    retirement._write(audit_root, 'audit.json', canonical_json(dict(schema_version=2, kind='ACT_SHARD_STOP_AUDIT',
         generation=spec['launch_generation'], process_owner=asdict(process), pid_namespace_inode=pid_namespace_inode(),
-        ros_namespace=spec['ros_namespace'], session_id=spec['simulation_session_id'], ros_domain_id=spec['ros_domain_id'],
+        session_id=spec['simulation_session_id'], ros_domain_id=181,
         native_owner=native, controller_stop_sha256=hashlib.sha256(goal).hexdigest(),
         native_stop_sha256=hashlib.sha256(stack).hexdigest(), errors=[])))
     retirement._write(root, 'shard-stop.json', canonical_json(dict(schema_version=1, kind='shard_stop_receipt',
@@ -345,10 +345,10 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
             instances[f'{wave_id}-{worker}-g{generation}'] = dict(owner_root=str(owned), worker_id=worker,
                 launch_generation=generation, wave_id=wave_id)
             session = f'session-{wave_index}-{number}'
-            spec = dict(schema_version=1, kind='ACT_CONTAINER_SHARD', workload_kind='act_collection', campaign_id=CAMPAIGN_ID,
+            spec = dict(schema_version=2, kind='ACT_CONTAINER_SHARD', workload_kind='act_collection', campaign_id=CAMPAIGN_ID,
                 worker_id=worker, launch_generation=generation, execution_generation=1,
                 runtime_id=f'runtime-{wave_index}-{number}', service_epoch='epoch-1', service_token='0'*64,
-                owned_root=str(owned), ros_namespace=f'/act/campaign/{worker}', ros_domain_id=181+number,
+                owned_root=str(owned),
                 simulation_session_id=session, gpu_uuid=GPU, controlled_runtime=ref(runtime),
                 business_identity=dict(manifest_sha256=hashlib.sha256(contract_raw).hexdigest(),
                     runtime_config_sha256=identity['runtime_config_sha256'],
@@ -398,8 +398,7 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
             spec, owned = shard_specs[wave_id, worker], owners[wave_id, worker]
             launch = ContainerLaunch(launch_id=f'{wave_id}-{worker}-g{generation}', role='shard', worker_id=worker,
                 wave_id=wave_id, launch_generation=generation, container_name=f'so101-qualification-{worker}-g{generation}',
-                image_digest=shard_image['digest'], owned_root=str(owned), ros_namespace=spec['ros_namespace'],
-                ros_domain_id=spec['ros_domain_id'], session_id=spec['simulation_session_id'])
+                image_digest=shard_image['digest'], owned_root=str(owned), session_id=spec['simulation_session_id'])
             owner = ContainerOwnerKey(hashlib.sha256(launch.container_name.encode()).hexdigest(), STARTED,
                                       shard_image['digest'], generation)
             registry.register(launch)
@@ -407,8 +406,8 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
             registry.bind_child(launch.launch_id, ContainerChildBinding(owner, process, pid_namespace_inode(),
                                                                          str(owned/'control/normal.sock')))
             _write(owned/'actual-container-provenance.json', provenance_document(owner, shard_image))
-            _write(owned/'runtime-ready.json', dict(schema_version=1, kind='ACT_SHARD_RUNTIME_READY', generation=generation,
-                process_owner=asdict(process), ros_namespace=spec['ros_namespace'], readiness_sha256='0'*64))
+            _write(owned/'runtime-ready.json', dict(schema_version=2, kind='ACT_SHARD_RUNTIME_READY', generation=generation,
+                process_owner=asdict(process), readiness_sha256='0'*64))
             stop_evidence(spec, owner, process)
             registry.prove_terminated(launch.launch_id, inspect_document(owner))
             _write(owned/'host-cleanup.json', dict(terminated=True, launch_id=launch.launch_id, errors=[]))

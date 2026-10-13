@@ -175,23 +175,23 @@ def controlled_stop_evidence(spec, namespace_inode):
         async def stop(self, **kwargs):
             (root / 'stack' / 'cleanup-receipt.json').write_bytes(canonical_json(dict(schema_version=1,
                 leader_pid=native.pid, pgid=native.pgid, started_ticks=native.started_ticks, argv_sha256=native.argv_sha256,
-                session_id=spec['simulation_session_id'], ros_domain_id=spec['ros_domain_id'], group_clear=True,
+                session_id=spec['simulation_session_id'], ros_domain_id=181, group_clear=True,
                 graph_clear=True, physical_stop_confirmed=True, parent_exited=False, term_sent=True, kill_sent=False,
                 finished_at_monotonic_ns=_time.monotonic_ns())))
             self.process = self.owner = None
 
     with STOP_EVIDENCE_LOCK, pytest.MonkeyPatch.context() as patch:    # the patches are process-global: one shard at a time
-        patch.setattr(controller_stop, '_open_owner', lambda namespace: Owner())
+        patch.setattr(controller_stop, '_open_owner', lambda: Owner())
         patch.setattr(controller_stop, '_ros_types', lambda: (object, SimpleNamespace(Request=lambda: object()), object()))
         patch.setattr(retirement, 'pid_namespace_inode', lambda: namespace_inode)
-        observation = controller_stop.observe_act_controller_stop(ros_namespace=spec['ros_namespace'], timeout_s=0.1,
+        observation = controller_stop.observe_act_controller_stop(timeout_s=0.1,
                                                                   monotonic_ns=lambda: clock[0])
         launch = ActStackLaunch(ros2_executable=Path('/usr/bin/true'), session_id=spec['simulation_session_id'],
-                                evidence_root=root / 'stack', ros_domain_id=spec['ros_domain_id'], environment={})
+                                evidence_root=root / 'stack', ros_domain_id=181, environment={})
         stack = Stack(launch, ready_probe=lambda: True, stop_probe=lambda: True, graph_clear_probe=lambda: True)
         stack.owner, stack.process = native, SimpleNamespace(pid=501)
         asyncio.run(retirement.NativeShardRetirement(process_owner=read_process_owner(os.getpid()),
-            launch_generation=spec['launch_generation'], evidence_root=root, stack=stack, ros_namespace=spec['ros_namespace'],
+            launch_generation=spec['launch_generation'], evidence_root=root, stack=stack,
             goal_stop_budget_s=5, stack_stop_budget_s=15, goal_stop_probe=lambda **kwargs: observation).retire(fenced=True))
 
 
@@ -253,8 +253,8 @@ class Docker:
             safety_socket='/act/control/safety.sock')))
         stack = root / 'stack-readiness.json'
         stack.write_bytes(b'{"stack":"controlled"}\n')
-        (root / 'runtime-ready.json').write_bytes(canonical_json(dict(schema_version=1, kind='ACT_SHARD_RUNTIME_READY',
-            generation=spec['launch_generation'], process_owner=process, ros_namespace=spec['ros_namespace'],
+        (root / 'runtime-ready.json').write_bytes(canonical_json(dict(schema_version=2, kind='ACT_SHARD_RUNTIME_READY',
+            generation=spec['launch_generation'], process_owner=process,
             readiness_sha256=hashlib.sha256(stack.read_bytes()).hexdigest())))
 
     def runs(self, shard):

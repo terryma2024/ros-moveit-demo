@@ -147,8 +147,7 @@ class ContainerCampaignOwner:
                     raise ValueError('CAMPAIGN_SHARD_PREPARATION_INVALID')
                 for shard,slot in zip(prepared,self.slots,strict=True):
                     if (shard.context!=self.context or shard.registry is not self.registry
-                            or (shard.launch.worker_id,shard.launch.ros_domain_id,shard.launch.ros_namespace)!=
-                            (slot.worker_id,slot.ros_domain_id,slot.namespace)
+                            or shard.launch.worker_id!=slot.worker_id
                             or shard.launch.wave_id!='wave-'+str(plan['wave_index'])):
                         raise ValueError('CAMPAIGN_SHARD_SLOT_MISMATCH')
                 self.shards.extend(prepared)

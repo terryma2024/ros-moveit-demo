@@ -37,15 +37,14 @@ def fixture(tmp_path, response, *, generation=1):
         registered_evidence_root=str(tmp_path),campaign_config_path=str(spec),campaign_config_sha256='d'*64)
     launch = ContainerLaunch(launch_id=f'measurement-w00-g{generation}',role='shard',worker_id='w00',
         wave_id='measurement',launch_generation=generation,container_name=f'so101-campaign-w00-g{generation}',
-        image_digest=image['digest'],owned_root=str(root),ros_namespace='/act/campaign/w00',
-        ros_domain_id=181,session_id=f'campaign-w00-g{generation}')
-    spec.write_text(json.dumps(dict(schema_version=1,kind='ACT_CONTAINER_SHARD',
+        image_digest=image['digest'],owned_root=str(root),session_id=f'campaign-w00-g{generation}')
+    spec.write_text(json.dumps(dict(schema_version=2,kind='ACT_CONTAINER_SHARD',
         workload_kind='no_motion_readiness',campaign_id='campaign',worker_id='w00',execution_generation=1,
-        service_epoch='epoch',launch_generation=generation,owned_root=str(root),ros_namespace=launch.ros_namespace,
-        ros_domain_id=181,simulation_session_id=launch.session_id,gpu_uuid=gpu,service_token='e'*64,
+        service_epoch='epoch',launch_generation=generation,owned_root=str(root),
+        simulation_session_id=launch.session_id,gpu_uuid=gpu,service_token='e'*64,
         runtime_id='runtime',controlled_runtime=dict(path=str(runtime),
             sha256=hashlib.sha256(runtime.read_bytes()).hexdigest()))))
-    entry = ShardLaunchArgs(spec=spec,ros_domain_id=181,ros_namespace=launch.ros_namespace,
+    entry = ShardLaunchArgs(spec=spec,
                             mujoco_session_id=launch.session_id)
     registry = ContainerLaunchRegistry(paths['host']/'launches.sqlite3')
     calls = []
@@ -120,7 +119,7 @@ def test_actual_restart_of_settled_predecessor_prevents_next_intent_or_docker(tm
     asyncio.run(retirement.retire(fenced=True))
     previous=ContainerLaunch(launch_id='previous-w00-g7',role='shard',worker_id='w00',wave_id='previous',
         launch_generation=7,container_name='so101-previous-g7',image_digest='sha256:'+'a'*64,
-        owned_root=str(old_root),ros_namespace='/act/campaign/w00',ros_domain_id=181,session_id='session1')
+        owned_root=str(old_root),session_id='session1')
     key=ContainerOwnerKey('f'*64,'2026-10-12T01:02:03.123Z','sha256:'+'a'*64,7)
     registry.register(previous);registry.bind_container(previous.launch_id,key)
     registry.bind_child(previous.launch_id,ContainerChildBinding(key,process,pid_namespace_inode(),

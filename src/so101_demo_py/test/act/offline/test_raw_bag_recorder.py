@@ -82,6 +82,52 @@ def test_the_bag_records_everything_published_after_recording_and_closes_with_it
     assert stats["anchor_start"]["system_ns"] - 1_000_000_000 <= stamps[0] <= stats["anchor_end"]["system_ns"]
 
 
+def test_an_instance_without_a_namespace_records_with_the_stock_recorder_and_writes_no_topic_map(
+        tmp_path, monkeypatch, isolated_ros_domain):
+    """The instance marker alone decides the bag root; the recorder is `ros2 bag record` on the logical names."""
+    monkeypatch.delenv("SO101_ACT_CONTAINER_NAMESPACE", raising=False)
+    monkeypatch.delenv("ROS_NAMESPACE", raising=False)
+    root = tmp_path / "w00" / "g1"
+    root.mkdir(parents=True)
+    monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(root))
+    from so101_demo.act.offline.raw_recorder import _bag_root_evidence
+    rclpy.init()
+    node = rclpy.create_node("instance_recorder_source")
+    names = ("/rec14/a", "/rec14/b")
+    publishers = {name: node.create_publisher(String, name, 100) for name in names}
+    recorder = RawRecorder(root / "attempts" / "scene" / "raw" / "bag", topics=names, core_topics=names)
+    stop = threading.Event()
+
+    def publish():
+        while not stop.is_set():
+            for name, publisher in publishers.items():
+                publisher.publish(String(data=name))
+            time.sleep(0.005)
+
+    thread = threading.Thread(target=publish, daemon=True)
+    thread.start()
+    try:
+        recorder.start()
+        argv = recorder._recorder.args
+        assert Path(argv[0]).name == "ros2" and argv[1:3] == ["bag", "record"]
+        assert not any("__ns" in str(item) or "act_scoped_bag_record" in str(item) for item in argv)
+        okay, state = recorder.wait_recording(20.0)
+        assert okay, state
+        assert recorder._probe.get_namespace() == "/"
+        time.sleep(0.3)
+    finally:
+        stop.set()
+        thread.join()
+        time.sleep(0.05)
+        stats = recorder.stop()
+        node.destroy_node()
+    assert stats["closed"] and not stats["failure"] and stats["missing_core_topics"] == [], stats
+    assert set(stats["bag"]["topics"]) == set(names)
+    assert recorder.topic_map == {name: name for name in names}
+    assert _bag_root_evidence(recorder)["bag_root"]["location"] == "owned_root"
+    assert not (recorder.bag_dir.parent / (recorder.bag_dir.name + "-topic-map.json")).exists()
+
+
 @pytest.mark.skipif(sys.platform=='darwin',reason='container-only native recorder')
 def test_native_scoped_recorder_keeps_logical_readback_and_original_namespace(tmp_path,monkeypatch,isolated_ros_domain):
     from ament_index_python.packages import get_package_prefix

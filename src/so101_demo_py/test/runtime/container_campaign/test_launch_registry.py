@@ -91,8 +91,7 @@ def test_shard_cannot_settle_from_docker_exit_without_inner_original_proof(tmp_p
     registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
     item = mod.ContainerLaunch(launch_id='wave-00-w00-g1', role='shard', worker_id='w00',
         wave_id='wave-00', launch_generation=1, container_name='so101-shard-w00-g1',
-        image_digest='sha256:'+'b'*64, owned_root=str(tmp_path), ros_namespace='/act/test/w00',
-        ros_domain_id=181, session_id='wave00-w00-g1')
+        image_digest='sha256:'+'b'*64, owned_root=str(tmp_path), session_id='wave00-w00-g1')
     registry.register(item)
     registry.bind_container(item.launch_id, ContainerOwnerKey('a'*64,
         '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1))
@@ -126,8 +125,7 @@ def test_shard_registry_recomputes_original_stop_before_slot_reuse(tmp_path, mon
     registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
     item = mod.ContainerLaunch(launch_id='wave-00-w00-g7', role='shard', worker_id='w00',
         wave_id='wave-00', launch_generation=7, container_name='so101-shard-w00-g7',
-        image_digest='sha256:'+'b'*64, owned_root=str(root), ros_namespace='/act/campaign/w00',
-        ros_domain_id=181, session_id='session1')
+        image_digest='sha256:'+'b'*64, owned_root=str(root), session_id='session1')
     owner = ContainerOwnerKey('a'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 7)
     registry.register(item)
     registry.bind_container(item.launch_id, owner)
@@ -142,16 +140,14 @@ def test_shard_registry_recomputes_original_stop_before_slot_reuse(tmp_path, mon
     next_root.mkdir()
     next_launch = mod.ContainerLaunch(launch_id='wave-01-w00-g8', role='shard', worker_id='w00',
         wave_id='wave-01', launch_generation=8, container_name='so101-shard-w00-g8',
-        image_digest='sha256:'+'b'*64, owned_root=str(next_root), ros_namespace='/act/campaign/w00',
-        ros_domain_id=181, session_id='session2')
+        image_digest='sha256:'+'b'*64, owned_root=str(next_root), session_id='session2')
     if tamper:
         with pytest.raises(ValueError, match='LAUNCH_STOP_UNCONFIRMED'):
             registry.register(next_launch)
     else:
         registry.register(next_launch)
         assert len(registry.records()) == 2
-        assert registry.records()[0]['launch']['ros_domain_id'] == registry.records()[1]['launch']['ros_domain_id']
-        assert registry.records()[0]['launch']['ros_namespace'] == registry.records()[1]['launch']['ros_namespace']
+        assert not {'ros_domain_id', 'ros_namespace'} & set(registry.records()[1]['launch'])
         assert not registry.all_terminated(lambda cid: inspect_document())  # new launch still unknown
     registry.close()
 
@@ -242,3 +238,40 @@ def test_read_only_open_refuses_creation_a_missing_file_and_bad_flags(tmp_path):
     assert list(tmp_path.iterdir()) == []
     with pytest.raises(ValueError, match='LAUNCH_REGISTRY_PATH_INVALID'):
         mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3', create=False, read_only='yes')
+
+
+def test_a_launch_record_carries_no_ros_domain_or_namespace_and_the_registry_is_version_two(tmp_path):
+    import sqlite3
+    mod = module()
+    path = tmp_path/'launches.sqlite3'
+    registry = mod.ContainerLaunchRegistry(path)
+    registry.register(launch(tmp_path))
+    assert not {'ros_domain_id', 'ros_namespace'} & set(registry.records()[0]['launch'])
+    with pytest.raises(TypeError):
+        mod.ContainerLaunch(launch_id='x', role='shard', worker_id='w00', wave_id='wave-0', launch_generation=1,
+            container_name='x', image_digest='sha256:'+'b'*64, owned_root=str(tmp_path), session_id='s1', ros_namespace='/a/w00')
+    registry.close()
+    assert sqlite3.connect(path).execute('SELECT version, kind FROM metadata').fetchall() == [
+        (2, 'ACT_CONTAINER_LAUNCH_REGISTRY')]
+
+
+def test_two_live_shards_on_the_one_fixed_identity_do_not_collide(tmp_path):
+    """The fixed ROS identity is shared by every shard, so the registry's only live-resource rules are the Host's own."""
+    mod = module()
+    registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
+    roots = []
+    for index in range(2):
+        root = tmp_path/f'w0{index}'
+        root.mkdir()
+        roots.append(root)
+        registry.register(mod.ContainerLaunch(launch_id=f'wave-0-w0{index}-g1', role='shard', worker_id=f'w0{index}',
+            wave_id='wave-0', launch_generation=1, container_name=f'so101-shard-w0{index}-g1',
+            image_digest='sha256:'+'b'*64, owned_root=str(root), session_id=f'session-{index}'))
+    assert len(registry.records()) == 2
+    with pytest.raises(ValueError, match='LAUNCH_COLLISION: session reuse'):
+        other = tmp_path/'w02'
+        other.mkdir()
+        registry.register(mod.ContainerLaunch(launch_id='wave-0-w02-g1', role='shard', worker_id='w02',
+            wave_id='wave-0', launch_generation=1, container_name='so101-shard-w02-g1',
+            image_digest='sha256:'+'b'*64, owned_root=str(other), session_id='session-0'))
+    registry.close()

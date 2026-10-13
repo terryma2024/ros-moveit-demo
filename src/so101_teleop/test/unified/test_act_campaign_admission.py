@@ -577,9 +577,7 @@ def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_pa
     from dataclasses import asdict
     paths, first_slot, base, store, service, inspect = fixture(tmp_path)
     try:
-        slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}',ros_domain_id=181+index,
-                 namespace=f'/act/campaign/w{index:02d}',controller_name=f'/act/campaign/w{index:02d}/arm_controller'))
-                 for index in range(8)]
+        slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}')) for index in range(8)]
         formal = replace(base,payload=dict(base.payload,worker_count=8,worker_slots=slots,qualification_mode=False))
         with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_REQUIRED"):
             service.start(formal)
@@ -593,9 +591,7 @@ def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_pa
 
 def _formal_with_receipt(base, first_slot, path):
     from dataclasses import asdict
-    slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}',ros_domain_id=181+index,
-             namespace=f'/act/campaign/w{index:02d}',controller_name=f'/act/campaign/w{index:02d}/arm_controller'))
-             for index in range(8)]
+    slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}')) for index in range(8)]
     return replace(base,payload=dict(base.payload, worker_count=8, qualification_mode=False,
                    qualification_receipt_path=str(path),
                    qualification_receipt_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest(), worker_slots=slots))

@@ -17,14 +17,8 @@ from so101_demo.parallel_batch.contracts.common import RunMode
 def test_case_cleanup_never_replaces_native_instance_or_clears_uncertain_stop(tmp_path,monkeypatch,problem):
     _,root,process,native,retirement,calls=stack_fixture(tmp_path,monkeypatch)
     stack=retirement.stack
-    from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
-    old=stack.launch
-    stack.launch=ContainerActStackLaunch(ros2_executable=old.ros2_executable,session_id=old.session_id,
-        evidence_root=old.evidence_root,ros_domain_id=old.ros_domain_id,environment=old.environment,
-        ros_namespace='/act/campaign/w00',readiness_timeout_s=180.)
     stack.process.poll=lambda:None
-    resources=replace(_resources(tmp_path,'worker-1',0,181),worker_root=root,session_id='session1',
-                      controller_namespace='/act/campaign/w00')
+    resources=replace(_resources(tmp_path,'worker-1',0,181),worker_root=root,session_id='session1')
     helpers=_ProcessGroup()
     module=importlib.import_module('so101_demo.runtime.container_campaign.collection_runtime')
     runtime=module.ContainerCollectionRuntime(resources,RunMode.EXECUTE,existing_stack=stack,
@@ -50,18 +44,12 @@ def test_each_reset_binds_its_original_case_and_requires_prior_cleanup(tmp_path,
     from test_case_artifacts import fixture as cases_fixture
     from so101_demo.runtime.container_campaign.case_artifacts import CollectionCaseArtifacts
     from so101_demo.runtime.container_campaign.collection_runtime import ContainerCollectionRuntime
-    from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
     from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
     from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
     _,root,process,native,retirement,calls=stack_fixture(tmp_path,monkeypatch)
     stack=retirement.stack
-    old=stack.launch
-    stack.launch=ContainerActStackLaunch(ros2_executable=old.ros2_executable,session_id=old.session_id,
-        evidence_root=old.evidence_root,ros_domain_id=old.ros_domain_id,environment=old.environment,
-        ros_namespace='/act/campaign/w00',readiness_timeout_s=180.)
     stack.process.poll=lambda:None
-    resources=replace(_resources(tmp_path,'w00',0,181),worker_root=root,session_id='session1',
-                      controller_namespace='/act/campaign/w00')
+    resources=replace(_resources(tmp_path,'w00',0,181),worker_root=root,session_id='session1')
     refs=cases_fixture(tmp_path)
     artifacts=CollectionCaseArtifacts(worker_id='w00',launch_generation=1,worker_root=root,
         case_inputs=refs,clock=lambda:11.)
@@ -88,18 +76,12 @@ def test_each_reset_binds_its_original_case_and_requires_prior_cleanup(tmp_path,
 
 def _borrowed(tmp_path,monkeypatch):
     from so101_demo.runtime.container_campaign.collection_runtime import ContainerCollectionRuntime
-    from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
     _,root,process,native,retirement,calls=stack_fixture(tmp_path,monkeypatch)
     stack=retirement.stack
-    old=stack.launch
-    stack.launch=ContainerActStackLaunch(ros2_executable=old.ros2_executable,session_id=old.session_id,
-        evidence_root=old.evidence_root,ros_domain_id=old.ros_domain_id,environment=old.environment,
-        ros_namespace='/act/campaign/w00',readiness_timeout_s=180.)
     stack.process.poll=lambda:None
     data=tmp_path/'data'/'tasks'/'task-1'
     data.mkdir(parents=True)
-    resources=replace(_resources(tmp_path,'w00',0,181),worker_root=data,session_id='session1',
-                      controller_namespace='/act/campaign/w00')
+    resources=replace(_resources(tmp_path,'w00',0,181),worker_root=data,session_id='session1')
     def build(resources=resources,native_owned_root=root,**extra):
         options=dict(capture_act_frame=lambda *args:None,process_group=_ProcessGroup(),
             ready_probe=lambda requirements:True)|extra
@@ -115,14 +97,13 @@ def test_task_data_root_separate_from_native_owned_root(tmp_path,monkeypatch):
     assert not data.is_relative_to(root) and stack.launch.evidence_root==root/'stack'
 
 
-@pytest.mark.parametrize('problem',['stack_root','domain','namespace','session','data_inside_stack',
+@pytest.mark.parametrize('problem',['stack_root','domain','session','data_inside_stack',
                                     'relative_root','missing_root','symlink_root','file_root'])
-def test_foreign_stack_root_domain_namespace_or_session_refused(tmp_path,monkeypatch,problem):
+def test_foreign_stack_root_domain_or_session_refused(tmp_path,monkeypatch,problem):
     build,resources,root,stack,data=_borrowed(tmp_path,monkeypatch)
     kwargs={}
     if problem=='stack_root':kwargs['native_owned_root']=tmp_path/'data'
     elif problem=='domain':kwargs['resources']=replace(resources,ros_domain_id=182)
-    elif problem=='namespace':kwargs['resources']=replace(resources,controller_namespace='/act/campaign/w01')
     elif problem=='session':kwargs['resources']=replace(resources,session_id='other')
     elif problem=='data_inside_stack':
         inside=root/'stack'/'tasks';inside.mkdir()

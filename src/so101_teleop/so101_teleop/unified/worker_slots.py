@@ -8,22 +8,21 @@ import re
 
 @dataclass(frozen=True)
 class ActWorkerSlot:
+    """One logical worker of one campaign generation.
+
+    A slot names an instance, not a ROS graph: every instance runs at the fixed identity of
+    `so101_demo.runtime.act_instance.identity` and the container is its isolation, so a slot carries no domain,
+    namespace or controller name that could collide."""
+
     campaign_id: str
     worker_id: str
     execution_generation: int
-    ros_domain_id: int
-    namespace: str
-    controller_name: str
 
     def __post_init__(self):
         if (type(self.campaign_id) is not str
                 or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*', self.campaign_id) is None
                 or type(self.worker_id) is not str or re.fullmatch(r'w[0-9]{2}', self.worker_id) is None
-                or type(self.execution_generation) is not int or self.execution_generation < 0
-                or type(self.ros_domain_id) is not int or not 0 <= self.ros_domain_id <= 232
-                or type(self.namespace) is not str
-                or re.fullmatch(r'(?:/[a-zA-Z_][a-zA-Z0-9_]*)+', self.namespace) is None
-                or self.controller_name != self.namespace+'/arm_controller'):
+                or type(self.execution_generation) is not int or self.execution_generation < 0):
             raise ValueError('WORKER_SLOT_INVALID')
 
 
@@ -54,10 +53,6 @@ class ActWorkerSlotRegistry:
                 if (previous.campaign_id, previous.worker_id, previous.execution_generation) == (
                         slot.campaign_id, slot.worker_id, slot.execution_generation):
                     raise ValueError('DUPLICATE_WORKER_SLOT')
-                for name, error in (('ros_domain_id','ROS_DOMAIN_SHARED'), ('namespace','ROS_NAMESPACE_SHARED'),
-                                    ('controller_name','ROS_CONTROLLER_SHARED')):
-                    if getattr(previous,name) == getattr(slot,name):
-                        raise ValueError(error)
             existing.append(slot)
 
     @contextlib.contextmanager
@@ -68,9 +63,8 @@ class ActWorkerSlotRegistry:
             with self.store.immediate_transaction():
                 self.validate(slots)
                 for slot in slots:
-                    self.store._connection.execute('INSERT INTO act_worker_slots VALUES (?,?,?,?,?,?,?,1)',
-                        (slot.campaign_id, slot.worker_id, slot.execution_generation, slot.ros_domain_id,
-                         slot.namespace, slot.controller_name, _canonical(slot)))
+                    self.store._connection.execute('INSERT INTO act_worker_slots VALUES (?,?,?,?,1)',
+                        (slot.campaign_id, slot.worker_id, slot.execution_generation, _canonical(slot)))
             try:
                 yield
             except BaseException:

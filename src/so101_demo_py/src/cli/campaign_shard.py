@@ -16,14 +16,16 @@ import time
 
 from so101_demo.runtime.container_campaign.paths import _path
 from so101_demo.runtime.container_campaign.process_identity import read_process_owner
-from so101_demo.runtime.container_campaign.ros_namespace import validate_container_namespace
+from so101_demo.runtime.act_instance.identity import (
+    ACT_INSTANCE_ROS_DOMAIN_ID, mark_instance, verify_instance_environment)
 from so101_demo.runtime.inference.config import _open_regular, validate_file_ref, calibration_runtime_hash
 from so101_demo.runtime.parallel_ipc.frames import _pairs, canonical_json
 
 
+SPEC_SCHEMA_VERSION = 2
 _FIELDS = {"schema_version", "kind", "workload_kind", "campaign_id", "worker_id", "launch_generation",
-    "execution_generation", "runtime_id", "service_epoch", "service_token", "owned_root", "ros_namespace",
-    "ros_domain_id", "simulation_session_id", "gpu_uuid", "controlled_runtime"}
+    "execution_generation", "runtime_id", "service_epoch", "service_token", "owned_root",
+    "simulation_session_id", "gpu_uuid", "controlled_runtime"}
 _COLLECTION_FIELDS={'business_identity','parallel_runtime','campaign_config','wave_id','deadline_monotonic_s'}
 _BUSINESS_FIELDS={'manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint'}
 
@@ -42,7 +44,7 @@ def load_spec(path):
         collection=document.get('workload_kind')=='act_collection'
         expected=_FIELDS|_COLLECTION_FIELDS if collection else _FIELDS
         if (set(document) != expected
-                or type(document["schema_version"]) is not int or document["schema_version"] != 1
+                or type(document["schema_version"]) is not int or document["schema_version"] != SPEC_SCHEMA_VERSION
                 or document["kind"] != "ACT_CONTAINER_SHARD"
                 or document["workload_kind"] not in ("no_motion_readiness",'act_collection')):
             raise ValueError("shape/kind")
@@ -58,7 +60,6 @@ def load_spec(path):
         root = _path(document["owned_root"], directory=True)
         if root.name != f"g{document['launch_generation']}" or root.parent.name != document["worker_id"]:
             raise ValueError("private root scope")
-        validate_container_namespace(document["ros_namespace"])
         runtime_path = validate_file_ref(document["controlled_runtime"])
         if collection:
             from so101_demo.runtime.inference.config import load_campaign_config
@@ -81,9 +82,8 @@ def load_spec(path):
             runtime = _load_runtime_config(validate_file_ref(document['parallel_runtime']))
         else:
             runtime = _load_runtime_config(runtime_path)
-        if (type(document["ros_domain_id"]) is not int or document["ros_domain_id"] not in runtime.ros_domain_ids
-                or calibration_runtime_hash(runtime_path) != document["controlled_runtime"]["sha256"]):
-            raise ValueError("runtime/domain drift")
+        if calibration_runtime_hash(runtime_path) != document["controlled_runtime"]["sha256"]:
+            raise ValueError("runtime drift")
         return document, runtime
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, UnicodeError) as error:
         raise ValueError("CAMPAIGN_SHARD_SPEC_INVALID") from error
@@ -164,8 +164,8 @@ async def serve_shard(spec, runtime_config, *, process, stack, ready, retirement
             if start_aware.start_task.done():
                 start_aware.start_task.result()
                 if not executor.closing:
-                    _write(root,"runtime-ready.json",canonical_json(dict(schema_version=1,kind="ACT_SHARD_RUNTIME_READY",
-                        generation=spec["launch_generation"],process_owner=asdict(process),ros_namespace=spec["ros_namespace"],
+                    _write(root,"runtime-ready.json",canonical_json(dict(schema_version=2,kind="ACT_SHARD_RUNTIME_READY",
+                        generation=spec["launch_generation"],process_owner=asdict(process),
                         readiness_sha256=hashlib.sha256(ready.readiness_bytes).hexdigest())))
                     _write(root,"stack-readiness.json",ready.readiness_bytes)
                     executor.mark_ready()
@@ -207,20 +207,27 @@ def compose_stack(launch, observer):
     return ready,ready_check,stack
 
 
+def shard_stack_launch(spec, *, ros2, stack_root, environment):
+    """The shard's stack: the plain ACT execution stack at the fixed instance identity, no namespace wrapper."""
+    from so101_teleop.unified.act_stack import ActStackLaunch
+
+    return ActStackLaunch(ros2_executable=ros2,session_id=spec["simulation_session_id"],evidence_root=stack_root,
+        ros_domain_id=ACT_INSTANCE_ROS_DOMAIN_ID,
+        environment=dict(environment) | {"GZ_PARTITION":spec["simulation_session_id"]})
+
+
 async def run_shard(spec, runtime_config):
     if os.getpid() != 1 or sys.executable != "/act/venv/bin/python":
         raise ValueError("CAMPAIGN_SHARD_PRIVATE_CONTAINER_REQUIRED")
     from ament_index_python.packages import get_package_prefix
     from so101_demo.runtime.container_campaign.retirement import NativeShardRetirement, _write
-    from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
     from so101_demo.runtime.container_campaign.gpu_driver import verify_selected_gpu
 
-    if (os.environ.get("ROS_DOMAIN_ID") != str(spec["ros_domain_id"])
-            or os.environ.get("ROS_NAMESPACE") != spec["ros_namespace"]
-            or os.environ.get("MUJOCO_GL") != "egl"):
-        raise ValueError("CAMPAIGN_SHARD_ENVIRONMENT_DRIFT")
-    os.environ['SO101_ACT_CONTAINER_NAMESPACE']=spec['ros_namespace']
-    os.environ['SO101_ACT_CONTAINER_OWNED_ROOT']=spec['owned_root']
+    try:
+        verify_instance_environment(os.environ,session_id=spec["simulation_session_id"])
+    except ValueError as error:
+        raise ValueError("CAMPAIGN_SHARD_ENVIRONMENT_DRIFT") from error
+    mark_instance(spec['owned_root'])
     prefix = Path(get_package_prefix("so101_demo_py"))
     observer = prefix / "lib/so101_demo_py/act_stack_ready"
     ros2 = prefix / "bin/ros2"
@@ -231,14 +238,11 @@ async def run_shard(spec, runtime_config):
     stack_root.mkdir(mode=0o700)
     gpu = verify_selected_gpu(spec["gpu_uuid"])
     _write(root,"gpu-driver.json",canonical_json(gpu))
-    environment = dict(os.environ) | {"GZ_PARTITION":spec["simulation_session_id"]}
-    launch = ContainerActStackLaunch(ros2_executable=ros2,session_id=spec["simulation_session_id"],
-        evidence_root=stack_root,ros_domain_id=spec["ros_domain_id"],environment=environment,
-        ros_namespace=spec["ros_namespace"],readiness_timeout_s=runtime_config.initializing_hard_timeout_s)
+    launch = shard_stack_launch(spec,ros2=ros2,stack_root=stack_root,environment=os.environ)
     ready,ready_check,stack = compose_stack(launch,observer)
     process = read_process_owner(os.getpid())
     retirement = NativeShardRetirement(process_owner=process,launch_generation=spec["launch_generation"],
-        evidence_root=root,stack=stack,ros_namespace=spec["ros_namespace"],
+        evidence_root=root,stack=stack,
         goal_stop_budget_s=runtime_config.heartbeat_timeout_s,stack_stop_budget_s=stack.stop_timeout_s)
     return await serve_shard(spec,runtime_config,process=process,stack=stack,ready=ready,retirement=retirement,
         ready_check=ready_check)

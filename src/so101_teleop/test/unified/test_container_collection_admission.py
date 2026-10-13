@@ -63,8 +63,7 @@ def fixture(tmp_path):
     config_path = root/'campaign.json'
     config_path.write_text(json.dumps(campaign))
     slot = ActWorkerSlot(campaign_id=base.payload['campaign_id'], worker_id='w00',
-        execution_generation=base.execution_generation, ros_domain_id=181, namespace='/act/campaign/w00',
-        controller_name='/act/campaign/w00/arm_controller')
+        execution_generation=base.execution_generation)
     payload = {name:value for name,value in base.payload.items()
                if name not in {'children','preparation_receipt_path','preparation_receipt_sha256', *REMOVED_KEYS}}
     payload.update(worker_slots=[asdict(slot)], qualification_mode=True, qualification_receipt_sha256=None, evidence_root=str(root),
@@ -434,9 +433,8 @@ def formal_start(world, tmp_path, monkeypatch, *, config_edit=None, payload_edit
     if copy_report_into_run:
         report = paths['host']/'qualification-report.json'
         report.write_bytes(world.report_path.read_bytes())
-    slots = [asdict(ActWorkerSlot(campaign_id='campaign-1', worker_id=f'w{index:02d}', execution_generation=1,
-        ros_domain_id=181+index, namespace=f'/act/campaign/w{index:02d}',
-        controller_name=f'/act/campaign/w{index:02d}/arm_controller')) for index in range(8)]
+    slots = [asdict(ActWorkerSlot(campaign_id='campaign-1', worker_id=f'w{index:02d}', execution_generation=1))
+        for index in range(8)]
     payload = dict(campaign_id='campaign-1', backend='mujoco', worker_count=8,
         contact_policy_fingerprint=world.identity['contact_policy_fingerprint'], evidence_root=str(paths['run']),
         service_epoch='epoch-1', resource_binding_id='binding-1', qualification_mode=False,

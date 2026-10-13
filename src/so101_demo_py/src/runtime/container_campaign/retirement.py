@@ -8,13 +8,16 @@ import json
 import math
 import os
 from pathlib import Path
-import re
 
 from so101_demo.runtime.container_campaign.controller_stop import ControllerStopObservation, observe_act_controller_stop
 from so101_demo.runtime.container_campaign.paths import _path
 from so101_demo.runtime.container_campaign.process_identity import ProcessOwnerKey, pid_namespace_inode, process_owner_matches
 from so101_demo.runtime.inference.config import _open_regular
 from so101_demo.runtime.parallel_ipc.frames import _pairs, canonical_json
+
+
+#: 2: the audit carries no ROS namespace (the fixed instance identity).
+AUDIT_SCHEMA_VERSION = 2
 
 
 def _require(value):
@@ -84,15 +87,13 @@ def _goals_stopped(goal,native):
 
 
 class NativeShardRetirement:
-    def __init__(self, *, process_owner, launch_generation, evidence_root, stack, ros_namespace,
+    def __init__(self, *, process_owner, launch_generation, evidence_root, stack,
                  goal_stop_budget_s, stack_stop_budget_s, goal_stop_probe=observe_act_controller_stop):
         from so101_teleop.unified.act_stack import ActStackProcessOwner
 
         if (type(process_owner) is not ProcessOwnerKey or process_owner.pid != os.getpid()
                 or type(launch_generation) is not int or launch_generation <= 0
                 or not isinstance(stack, ActStackProcessOwner) or not callable(goal_stop_probe)
-                or type(ros_namespace) is not str
-                or re.fullmatch(r"(?:/[a-zA-Z_][a-zA-Z0-9_]*)+", ros_namespace) is None
                 or any(type(value) not in (int,float) or not math.isfinite(value) or value <= 0
                        for value in (goal_stop_budget_s, stack_stop_budget_s))
                 or stack_stop_budget_s > 30):
@@ -102,7 +103,6 @@ class NativeShardRetirement:
                 or self.root.stat().st_uid != os.getuid()):
             raise ValueError("SHARD_RETIREMENT_CONFIG_INVALID")
         self.owner, self.generation, self.stack = process_owner, launch_generation, stack
-        self.namespace = ros_namespace
         self.goal_budget, self.stack_budget, self.goal_probe = goal_stop_budget_s, stack_stop_budget_s, goal_stop_probe
         self.namespace_inode = pid_namespace_inode()
         self._task = None
@@ -125,12 +125,10 @@ class NativeShardRetirement:
         errors = []
         try:
             goal_observation = await asyncio.wait_for(asyncio.to_thread(self.goal_probe,
-                ros_namespace=self.namespace, timeout_s=self.goal_budget,
+                timeout_s=self.goal_budget,
                 return_on_empty_ack=True), timeout=self.goal_budget)
             if type(goal_observation) is not ControllerStopObservation:
                 raise ValueError("ACT_CONTROLLER_STOP_OBSERVATION_REQUIRED")
-            if goal_observation.document["ros_namespace"] != self.namespace:
-                raise ValueError("ACT_CONTROLLER_STOP_NAMESPACE_CHANGED")
             _write(audit_root, "controller-stop.json", goal_observation.payload)
             goal_ref = hashlib.sha256(goal_observation.payload).hexdigest()
         except Exception as error:
@@ -157,9 +155,9 @@ class NativeShardRetirement:
             controllers_stopped=native_observation is not None,
             ros_children_exited=native_observation is not None, ros_graph_empty=native_observation is not None,
             forced=native_observation is not None and native_observation["kill_sent"])
-        _write(audit_root, "audit.json", canonical_json(dict(schema_version=1, kind="ACT_SHARD_STOP_AUDIT",
+        _write(audit_root, "audit.json", canonical_json(dict(schema_version=AUDIT_SCHEMA_VERSION, kind="ACT_SHARD_STOP_AUDIT",
             generation=self.generation, process_owner=asdict(self.owner), pid_namespace_inode=self.namespace_inode,
-            ros_namespace=self.namespace, session_id=self.stack.launch.session_id,
+            session_id=self.stack.launch.session_id,
             ros_domain_id=self.stack.launch.ros_domain_id,
             native_owner=None if native_owner is None else asdict(native_owner),
             controller_stop_sha256=goal_ref, native_stop_sha256=native_ref, errors=errors)))
@@ -167,17 +165,14 @@ class NativeShardRetirement:
         return receipt
 
 
-def read_shard_stop_evidence(root, *, process_owner, launch_generation, ros_namespace, session_id, ros_domain_id,
-                             namespace_inode):
+def read_shard_stop_evidence(root, *, process_owner, launch_generation, session_id, ros_domain_id, namespace_inode):
     from so101_teleop.unified.contracts import OwnerKey
 
     try:
         _require(type(process_owner) is ProcessOwnerKey and type(launch_generation) is int and launch_generation > 0
                  and type(namespace_inode) is int and namespace_inode > 0
                  and type(ros_domain_id) is int and 0 <= ros_domain_id <= 232
-                 and type(session_id) is str and bool(session_id)
-                 and type(ros_namespace) is str
-                 and re.fullmatch(r"(?:/[a-zA-Z_][a-zA-Z0-9_]*)+", ros_namespace) is not None)
+                 and type(session_id) is str and bool(session_id))
         root = _path(root, directory=True)
         receipt = _json(_read(root / "shard-stop.json"))
         audit = _json(_read(root / "retirement/audit.json"))
@@ -186,9 +181,10 @@ def read_shard_stop_evidence(root, *, process_owner, launch_generation, ros_name
             "goals_stopped", "controllers_stopped", "ros_children_exited", "ros_graph_empty", "forced"})
         _require(type(receipt["schema_version"]) is int and receipt["schema_version"] == 1
                  and receipt["kind"] == "shard_stop_receipt")
-        _require(type(audit) is dict and set(audit) == {"schema_version", "kind", *expected, "ros_namespace", "session_id",
+        _require(type(audit) is dict and set(audit) == {"schema_version", "kind", *expected, "session_id",
             "ros_domain_id", "native_owner", "controller_stop_sha256", "native_stop_sha256", "errors"})
-        _require(type(audit["schema_version"]) is int and audit["schema_version"] == 1 and audit["kind"] == "ACT_SHARD_STOP_AUDIT")
+        _require(type(audit["schema_version"]) is int and audit["schema_version"] == AUDIT_SCHEMA_VERSION
+                 and audit["kind"] == "ACT_SHARD_STOP_AUDIT")
         _require(type(audit["errors"]) is list)
         for error in audit["errors"]:
             _require(type(error) is dict and set(error) == {"boundary", "error_type", "reason"}
@@ -199,14 +195,13 @@ def read_shard_stop_evidence(root, *, process_owner, launch_generation, ros_name
             _require(type(document["generation"]) is int and type(document["pid_namespace_inode"]) is int
                      and ProcessOwnerKey(**document["process_owner"]) == process_owner)
             _require(all(document[name] == value for name,value in expected.items()))
-        _require(audit["ros_namespace"] == ros_namespace and audit["session_id"] == session_id
+        _require(audit["session_id"] == session_id
                  and type(audit["ros_domain_id"]) is int and audit["ros_domain_id"] == ros_domain_id)
         goal, native = None, None
         if audit["controller_stop_sha256"] is not None:
             raw = _read(root / "retirement/controller-stop.json")
             _require(hashlib.sha256(raw).hexdigest() == audit["controller_stop_sha256"])
             goal = ControllerStopObservation(raw)
-            _require(goal.document["ros_namespace"] == ros_namespace)
         if audit["native_stop_sha256"] is not None:
             raw = _read(root / "retirement/stack-stop.json")
             _require(hashlib.sha256(raw).hexdigest() == audit["native_stop_sha256"])

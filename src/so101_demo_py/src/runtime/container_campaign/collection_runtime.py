@@ -19,7 +19,6 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
                 or (native_owned_root is not None and self.resources.worker_root.is_relative_to(native/'stack'))
                 or existing_stack.launch.evidence_root!=native/'stack'
                 or existing_stack.launch.ros_domain_id!=self.resources.ros_domain_id
-                or getattr(existing_stack.launch,'ros_namespace',None)!=self.resources.controller_namespace
                 or existing_stack.launch.session_id!=self.resources.session_id):
             raise ValueError('COLLECTION_BORROWED_STACK_MISMATCH')
         self.stack=existing_stack

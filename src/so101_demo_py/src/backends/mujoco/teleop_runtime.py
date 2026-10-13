@@ -10,10 +10,7 @@ import time
 import rclpy
 from mujoco_ros2_control_msgs.srv import SetPause
 
-from ...runtime.container_campaign.ros_namespace import (
-    container_ros_global_init_options,
-    container_ros_namespace,
-)
+from ...ros.process_init import global_init_options, in_instance_process
 from .client import FreeJointResetOverride, JointResetOverride, MujocoRosClient
 from ...act.joints import ACT_JOINTS
 from .observer import EvidenceStale, MujocoWorldObserver
@@ -86,18 +83,18 @@ def _log_pause_snapshot_failure(reason, observer, started_s, timeout_s, requests
 class _RosScope:
     """The ROS context one evidence read or reset runs in.
 
-    Outside a container the process-global default context is initialised and shut down here, exactly as before. Inside a
-    container stack other task components keep the default context initialised (the retained RGB-D source), and a second
+    Outside an ACT instance the process-global default context is initialised and shut down here, exactly as before. Inside an
+    instance stack other task components keep the default context initialised (the retained RGB-D source), and a second
     `init` on it raises `Context.init() must only be called once` while a `shutdown` would pull it out from under them. So
-    a container caller gets a private context of its own, with the container addressing, that only it initialises and shuts
-    down. No signal handler is installed either way (`container_ros_global_init_options`)."""
+    an instance caller gets a private context of its own that only it initialises and shuts
+    down. No signal handler is installed either way (`global_init_options`)."""
 
     def __init__(self) -> None:
         self.context = None
         self.executor = None
         self._executor_type = None
-        if container_ros_namespace() is None:
-            rclpy.init(**container_ros_global_init_options())
+        if not in_instance_process():
+            rclpy.init(**global_init_options())
             return
         from rclpy.context import Context
         from rclpy.executors import SingleThreadedExecutor
@@ -105,7 +102,7 @@ class _RosScope:
         self._executor_type = SingleThreadedExecutor
         self.context = Context()
         try:
-            rclpy.init(context=self.context, **container_ros_global_init_options())
+            rclpy.init(context=self.context, **global_init_options())
         except BaseException:
             self.close()
             raise

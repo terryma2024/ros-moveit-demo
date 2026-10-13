@@ -64,16 +64,16 @@ def write_stop_evidence(root, launch, monkeypatch):
         async def stop(self, **kwargs):
             (stack_root/'cleanup-receipt.json').write_bytes(canonical_json(dict(schema_version=1,
                 leader_pid=native.pid, pgid=native.pgid, started_ticks=native.started_ticks,
-                argv_sha256=native.argv_sha256, session_id=launch.session_id, ros_domain_id=launch.ros_domain_id,
+                argv_sha256=native.argv_sha256, session_id=launch.session_id, ros_domain_id=181,
                 group_clear=True, graph_clear=True, physical_stop_confirmed=True, parent_exited=False,
                 term_sent=True, kill_sent=False, finished_at_monotonic_ns=time.monotonic_ns())))
             self.process = self.owner = None
     stack = Stack(ActStackLaunch(ros2_executable=__import__('pathlib').Path('/usr/bin/true'),
-        session_id=launch.session_id, evidence_root=stack_root, ros_domain_id=launch.ros_domain_id, environment={}),
+        session_id=launch.session_id, evidence_root=stack_root, ros_domain_id=181, environment={}),
         ready_probe=lambda: True, stop_probe=lambda: True, graph_clear_probe=lambda: True)
     stack.owner, stack.process = native, SimpleNamespace(pid=501)
     retirement = NativeShardRetirement(process_owner=process, launch_generation=launch.launch_generation,
-        evidence_root=root, stack=stack, ros_namespace=launch.ros_namespace, goal_stop_budget_s=5,
+        evidence_root=root, stack=stack, goal_stop_budget_s=5,
         stack_stop_budget_s=15, goal_stop_probe=lambda **kwargs: goals)
     # A separate thread keeps this usable from inside a running test loop.
     worker = threading.Thread(target=lambda: asyncio.run(retirement.retire(fenced=True)))
@@ -98,8 +98,8 @@ def bound_owner(tmp_path, *, evidence=None, exit_on_signal=True):
     owner.bridge = ContainerBridgeProcessOwner(container_owner=key, control_socket_root=root/'control',
         runtime_id=owner.spec['runtime_id'], service_epoch=owner.context.service_epoch,
         campaign_id=owner.context.campaign_id, worker_id=launch.worker_id,
-        execution_generation=owner.context.execution_generation, ros_namespace=launch.ros_namespace,
-        session_id=launch.session_id, ros_domain_id=launch.ros_domain_id, inspect_container=owner.inspect,
+        execution_generation=owner.context.execution_generation,
+        session_id=launch.session_id, inspect_container=owner.inspect,
         namespace_reader=lambda _pid: pid_namespace_inode())
     owner.bridge.binding = binding
     return owner, registry, root, docker
@@ -109,7 +109,7 @@ def next_generation(launch):
     __import__('pathlib').Path(launch.owned_root+'-next').mkdir(exist_ok=True)
     return ContainerLaunch(launch_id='measurement-w00-g2', role='shard', worker_id='w00', wave_id='measurement',
         launch_generation=2, container_name='so101-campaign-w00-g2', image_digest=launch.image_digest,
-        owned_root=launch.owned_root+'-next', ros_namespace=launch.ros_namespace, ros_domain_id=launch.ros_domain_id,
+        owned_root=launch.owned_root+'-next',
         session_id='campaign-w00-g2')
 
 

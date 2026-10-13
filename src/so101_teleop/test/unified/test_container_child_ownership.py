@@ -59,7 +59,7 @@ def test_host_container_owner_binds_ready_without_comparing_host_and_inner_pids(
                   "Restarting": False, "Status": "running"}}
     owner = module.ContainerBridgeProcessOwner(container_owner=key, control_socket_root=tmp_path,
         runtime_id="runtime", service_epoch="epoch", campaign_id="campaign", worker_id="worker",
-        execution_generation=3, ros_namespace="/act/campaign/w00", session_id="session1", ros_domain_id=181,
+        execution_generation=3, session_id="session1",
         inspect_container=lambda _id: observed,
         namespace_reader=lambda _pid: 200)
     ready = {"schema_version": 1, "kind": "container_child_ready", "generation": 7,
@@ -89,13 +89,12 @@ def write_stop_originals(root, receipt):
     import hashlib
     from so101_demo.runtime.parallel_ipc.frames import canonical_json
 
-    namespace = "/act/campaign/w00"
     endpoints = dict(arm="/arm_controller/follow_joint_trajectory/_action",
         gripper="/gripper_controller/follow_joint_trajectory/_action",
         neck="/neck_controller/follow_joint_trajectory/_action", moveit="/execute_trajectory/_action")
-    goals = canonical_json(dict(schema_version=1, kind="ACT_CONTROLLER_STOP_OBSERVATION",
-        ros_namespace=namespace, started_monotonic_ns=100, completed_monotonic_ns=150,
-        lanes={name:dict(action_prefix=namespace+prefix, cancel_sent_monotonic_ns=110,
+    goals = canonical_json(dict(schema_version=2, kind="ACT_CONTROLLER_STOP_OBSERVATION",
+        started_monotonic_ns=100, completed_monotonic_ns=150,
+        lanes={name:dict(action_prefix=prefix, cancel_sent_monotonic_ns=110,
             cancel_received_monotonic_ns=120, cancel_return_code=0, goals_canceling=[],
             status_received_monotonic_ns=130, statuses=[]) for name,prefix in endpoints.items()}))
     native_owner = dict(pid=2, pgid=2, started_ticks=200, argv_sha256="a"*64, environment_sha256="b"*64)
@@ -107,9 +106,9 @@ def write_stop_originals(root, receipt):
     audit_root.mkdir()
     (audit_root / "controller-stop.json").write_bytes(goals)
     (audit_root / "stack-stop.json").write_bytes(native)
-    (audit_root / "audit.json").write_bytes(canonical_json(dict(schema_version=1, kind="ACT_SHARD_STOP_AUDIT",
+    (audit_root / "audit.json").write_bytes(canonical_json(dict(schema_version=2, kind="ACT_SHARD_STOP_AUDIT",
         generation=receipt["generation"], process_owner=receipt["process_owner"],
-        pid_namespace_inode=receipt["pid_namespace_inode"], ros_namespace=namespace,
+        pid_namespace_inode=receipt["pid_namespace_inode"],
         session_id="session1", ros_domain_id=181, native_owner=native_owner,
         controller_stop_sha256=hashlib.sha256(goals).hexdigest(), native_stop_sha256=hashlib.sha256(native).hexdigest(), errors=[])))
 
