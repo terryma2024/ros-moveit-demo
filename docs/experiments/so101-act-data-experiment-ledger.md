@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3640
-next_experiment: EXP-586 (PLANNED): second native single-worker run, with headless rendering and the corrected stop observation.
+latest_checkpoint: CP-3641
+next_experiment: NONE planned yet; next real runs are a container regression on the restructured instance program and two concurrent containers on the fixed identity.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3641 — EXP-586 VALID: checkpoint B passes, native single worker end to end with a proven stop; one episode refused by the formal coverage rule
+
+- Second native run. Rendering through NVIDIA EGL, seven of eight VALID with QC PASS, wave verified, native stop proven with no leftover, admission settled by design, CLI exit 0. Plan tasks 5 and 6 of the fixed-identity amendment are verified for the native launcher by a real run. The container path, which the same commit restructured, has not been run for real since EXP-584.
+- Open from this run: fn8-05 refused at seal with AUDIT_FORMAL_COVERAGE_INCOMPLETE although its Teacher result is PASS - to be established whether the data lacks a required fact or the rule is too strict; nothing changed. Stall counts not yet measured for this run.
+- Human statements of 2026-10-13 recorded for later work, none executed yet: the three host gate speed-ups are all to be done ("3个colcon耗时优化都做") - scripts written under R/fast-gate by a Sonnet agent without running them, first run pending an idle host; the contract rule that the two images' package source hashes be equal can be removed (recorded in CP-3640). A separate design discussion on making the shard image an isolation shell with a mounted install directory was held in a forked session; its draft is R/shard-shell-image-design-draft.md and it is not part of this plan.
+- Retained: run root, prep directory, logs under R/run-logs. Nothing deleted.
 
 ## CP-3640 — EXP-585 causes: stop observation tripped by a same-user non-dumpable process; native rendered through GLFW on the desktop; fixes, gates PASS; EXP-586 planned
 
@@ -88,7 +95,7 @@ next_experiment: EXP-586 (PLANNED): second native single-worker run, with headle
 
 ```yaml
 experiment_id: EXP-586
-status: PLANNED
+status: VALID
 prior_experiment: EXP-585 (VALID failure; native stop unconfirmed, two episodes INVALID on stalls)
 hypothesis: With the display variables not inherited the native simulator renders through headless EGL as in a container and the excess delivery stalls disappear; with the corrected observation the native stop is confirmed while the coordinator's ssh session is up; the run then verifies its wave and settles admission.
 prediction: Instance log says rendering uses EGL with the NVIDIA vendor, not GLFW. Episodes with joint states ahead of /clock fall to about the container rate of one or two in eight, none inside a window. final-exit.json has marker_survivors empty; the stop is confirmed; the Host verifies the wave; CLI exit 0; slot and lease released by the designed path. Contact publisher rate stays near 454 per second. Per-scene results are reported, not gated; eight scenes cannot establish a rate.
@@ -111,17 +118,28 @@ provenance:
   gz_partition: the instance's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-native-inputs-20261013T144822Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-native-inputs-20261013T144822Z/run-native.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Instance log - "Failed to initialize GLFW. Attempting EGL for headless rendering", "EGL: Vendor: NVIDIA", "Initializing rendering for cameras (using EGL)". Contact publisher about 453 messages per second.
+  - All eight scenes returned business results, each teacher_task_result PASS. Seven are act_data_status VALID with act_data_qc PASS (default, fn8-01, fn8-02, fn8-03, fn8-04, fn8-06, fn8-07).
+  - fn8-05 INVALID, "OFFLINE_PROCESSOR_INVALID: rc=3; RECORDER_SEAL_FAILED: AUDIT_FORMAL_COVERAGE_INCOMPLETE", QC NOT_RUN. First refusal by the Teacher formal coverage rule of an episode whose Teacher result is PASS. Which clause refused is not yet read.
+  - Instance side of the stop - instance-exit.json WAVE_COMPLETE, cleanup_confirmed true; shard-stop.json all four facts true, forced false; retirement/stack-stop.json physical_stop_confirmed, graph_clear, group_clear true; audit without error.
+  - Host side of the stop - final-exit.json leader_state absent, group_members empty, marker_survivors empty, graph_clear true; host-cleanup.json terminated true, no error, no group signalled; no native-leftovers.json. The coordinator's ssh session was connected throughout.
+  - campaign-cleanup.json terminated true for the service and the instance, stop_reason CAMPAIGN_CLOSING. Host wave verification passed (wave-0-verified.json, campaign-result.json); the CLI exited 0. Unified store IDLE with no lease afterwards, settled by the designed path. No container running, no instance, simulator, controller or MoveIt process.
+  - Timing from file times - Teacher ready 22:50:17, results from 22:56:01 to 23:35:01, instance exit 23:35:09, Host stop observation 23:35:12, wave verified 23:50:45 (local). About 45 minutes of collection and 15.5 minutes of Host readback.
+  - Activity on the Host during the run not belonging to it - a forked discussion session of the coordinator ran read-only inspections, including one short container without GPU or network to hash files in the shard image.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The native launcher, the single instance program and the native stop proof work end to end through the same Host flow as a container shard.
+  - With the display variables not inherited the native simulator renders through NVIDIA EGL; the two INPUT_TIMESTAMP_FUTURE episodes of EXP-585 did not recur. Stall counts per episode for this run have not been measured, so the hypothesis that GLFW caused the excess stalls is supported by one run's outcomes only.
+  - The corrected stop observation confirmed the stop with the same kind of same-user non-dumpable process present.
+conclusion: VALID, all success criteria met. Checkpoint B of the design change passes - a non-container single worker runs the same instance program through the same Host flow, seven of eight VALID with QC PASS, wave verified, native stop proven, designed settle. One episode is refused by the formal coverage rule; cause open.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-native-20261013T144822Z (host/campaign-result.json, host/wave-0-verified.json, host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1 with final-exit.json, shard-stop.json, retirement/, native-instance.log, output/tasks)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-native-inputs-20261013T144822Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp586 and exp586-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
