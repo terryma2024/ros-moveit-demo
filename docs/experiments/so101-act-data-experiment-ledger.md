@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7a809c86ad57838ed3ddd151a661e2f7c395da47
+current_commit: 983c1d7b56ae58261adb04fd89a7b964b4d55a74
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,62 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3635
-next_experiment: NONE until the cause of the two lossy episodes of EXP-583 is established.
+latest_checkpoint: CP-3636
+next_experiment: EXP-584 (PLANNED): one worker and eight scenes on the fixed identity after the recorder log fix, the deeper writer histories and the namespace code removal.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3636 — EXP-583 losses analysed (bursts exist on both recorders); recorder log fix, deeper /clock and camera writers, plan task 4 removal; gates PASS; EXP-584 planned
+
+- Analysis by a Sonnet agent over the 24 episodes of EXP-581, EXP-582 and EXP-583 (bags decoded read-only). PROVEN: a whole-recorder loss burst occurs with both recorders - 4 of 16 episodes on the scoped recorder and 3 of 8 on the stock one. Every earlier burst fell within the first 3.4 s of recording, before the episode window, so those episodes were VALID; EXP-581 and EXP-582 being sixteen of sixteen therefore owed something to where the bursts landed. PROVEN for the bursts examined: the simulator did not stall (contiguous physics steps, regular chunk publish times); delivery to subscribers stalled for 0.3 to 0.6 s and then arrived in a clump; in two bursts a second subscriber (the Teacher consumer) stalled at the same time. Topics with a deep writer history arrived late and intact (robot_contacts, physics_step_chunks, evidence); topics with a writer depth of one or a small default lost samples (/clock, scene_state, cameras, joint_states, controller states). HYPOTHESIS, not confirmed: the stall follows a new DDS participant joining - one precedes every burst, but 97 percent of participant creations are followed by none and an idle-host reproduction lost nothing. No participant is created inside an episode window.
+- fn8-06 of EXP-583: the episode window is complete; the burst is about 1.5 s of simulation time after the window end, after the Teacher's terminal event. It is INVALID because the color-frame loss count treats a color frame lost together with its camera_info differently from the other topics (reported in window 3, detected 0). Whether to align that rule is a judgement change and is left to the human; not changed.
+- fn8-03 of EXP-583: two single-tick holes in the gripper controller state inside the window, one on a label instant; not reported as transport loss. Correctly INVALID. HYPOTHESIS: the realtime publisher of the stock controller skips a tick when its non-realtime thread is late; such holes occur in most episodes (15 in the 16 earlier episodes, 23 in the 8 of EXP-583) and are only disqualifying on a label instant.
+- PROVEN difference between the recorders, fixed in commit `77ee79e40` "the stock bag recorder no longer logs every taken message": the stock recorder ran with a global debug level, about 42 MB of log per episode written by the thread that takes messages, against 20 KB before. QoS, depths, cache and storage were already identical. Not shown to be the cause of the two INVALID episodes.
+- Commit `e31361cc1` with a simulator submodule commit: /clock writer depth 1 to 1000, camera color, depth and camera_info 1 to 16; reliable and volatile unchanged. Left shallow, so a burst inside a window still loses them and the episode is still INVALID: scene_state (transient-local depth 1, a deeper history would replay old epochs to late joiners), joint_states and the controller state topics (stock ros2_control, system default QoS, not configurable without a fork). Reusing the retained image source for the terminal capture was examined and not done because it would change which frame is taken.
+- Commit `983c1d7b5`, plan task 4: namespace helpers, namespaced stack launch, bag topic map and logical mapping, and the scoped C++ recorder with its build target and dependencies removed; one recorder path; a source tree test guards the removed names.
+- Host package gates on 983c1d7b5. First run (kept as R/gates/983c1d7b56ae.run1-failed) - build rc 0; so101_demo_py 1 failed (test_task_builder test_lease_deadline_expiry_is_a_fault[exec], revocation log file absent when read); other packages rc 0. That test file passes alone (163 passed). Second run, R/gates/983c1d7b56ae - build rc 0; so101_demo_py rc 0, 12638 passed, 0 failed, 167 skipped; other packages rc 0, 2366 tests, 0 errors, 0 failures, 60 skipped. PASSED on the second run; the intermittent failure is not root-caused (the product write is synchronous, so a test rig race is suspected) and is recorded as open.
+- Images rebuilt on 983c1d7b5: shard R/image-build-20261013T094642Z (331.9 s), inference R/image-build-20261013T095222Z (76.8 s). Readback: the scoped recorder is absent, stock ros2 bag record lists mcap, the recorder entry module imports, middleware rmw_fastrtps_cpp. Inputs under the prep directory act-w1-inputs-20261013T095500Z; validation 27 PASS, 1 informational.
+- Retained: all run roots, prep, gate, image and scratch directories; R/run-logs/exp583. Nothing deleted.
+
+```yaml
+experiment_id: EXP-584
+status: PLANNED
+prior_experiment: EXP-583 (VALID; fixed identity, six of eight VALID)
+hypothesis: With the namespace code removed, the recorder log volume back to kilobytes and deep /clock and camera writers, the fixed-identity shard still collects eight scenes end to end, and losses on /clock and the cameras no longer occur when a delivery stall happens.
+prediction: Structural success as EXP-583. bag-record.log in the kilobyte range and still carrying per-topic loss lines. In any burst episode /clock and camera samples arrive late and intact while scene_state, joint_states and controller states may still lose samples. Single-tick controller state holes at or below the earlier rate of about one per episode. The number of VALID episodes is reported, not gated; eight scenes cannot establish a loss rate.
+single_variable: NOT a single-variable run. It is a regression run over three changes relative to EXP-583 - the recorder log level, the writer depths, the namespace code removal - plus the unchanged host conditions of EXP-583 (new driver and kernel, the remote desktop GPU process if still present). Effects are attributed only where the evidence separates them.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree src, scripts and third_party equal to 983c1d7b5 and clean; no running container, no ROS or MuJoCo process on the host; GPU compute processes other than the remote desktop one noted and recorded; disk above the floor; run root act-w1-20261013T095500Z absent; unified store schema 2, IDLE, no lease, no active slot.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576, on the fixed identity. Per-scene business results are reported, not gated.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle.
+invalid_criteria:
+  - Refusal before admission; worktree source differing from 983c1d7b5; a competing container; the Host CLI process interrupted.
+provenance:
+  source_commit: 983c1d7b56ae58261adb04fd89a7b964b4d55a74 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:92e74bcc84156ac7569564d4c954d072ccd27802a9b89f3c9225419df52134e4 and shard image sha256:888cd843341c18c99270f84832ebdd8fadc7ca74b7ac55cdf700c1391bb718fc; Host R/gates/983c1d7b56ae/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181 (fixed, inside the container only)
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261013T095500Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261013T095500Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3635 — EXP-583 VALID: fixed-identity topology works for one shard; six of eight VALID, two INVALID on loss, cause open
 
