@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3626
-next_experiment: EXP-579 (PLANNED): fourth real functional run, eight scenes with one worker, images of 6a884e23b.
+latest_checkpoint: CP-3627
+next_experiment: NONE can be admitted. EXP-580 (repeat with the three EXP-579 defects fixed) is blocked on the fixes and on the admission state held by EXP-579; releasing it is a human decision.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3627 — EXP-579 VALID failure: first scene runs end to end with Teacher PASS but ACT data INVALID; second reset rejected; stop unproven, admission held
+
+- Fourth real attempt. First business result from a real container: Teacher motion, recording, offline processing, sealing and Host collection all ran for the first time. The episode's ACT data is INVALID (capture start and terminal not found by the offline processor), so no usable episode exists. The second scene's reset was rejected by the reset epoch rule and the instance faulted; the native goal stop reported an invalid controller message, so the stop is unproven and the unified store holds the lease and slot of campaign w1f-20261013T004503Z. The coordinator did not edit the store. The release authorised in CP-3624 named the EXP-577 lease only and is not reused; a new human decision is requested.
+- Root-cause and fix work assigned to a Sonnet writer; nothing retried.
+- Retained: run root, prep directory, logs, exited containers. Nothing deleted.
 
 ## CP-3626 — EXP-578 defects root-caused and fixed; gates PASS and images rebuilt on 6a884e23b; EXP-579 planned
 
@@ -87,7 +93,7 @@ next_experiment: EXP-579 (PLANNED): fourth real functional run, eight scenes wit
 
 ```yaml
 experiment_id: EXP-579
-status: PLANNED
+status: VALID
 prior_experiment: EXP-578 (VALID failure at an rclpy context reuse after frame capture)
 hypothesis: With reset and evidence on a private rclpy context, concurrent goal confirmation and the Recorder accepting the instance's fixed output mount, the production CLI carries eight scenes with one worker through the complete task chain in a real container and settles admission.
 prediction: The first task passes the Teacher context probe and reaches real recording, Teacher inference and motion, stages never run in a container before; the first stage that fails, if any, is the new information. On a fault the goal confirmation settles all lanes, the native stop is confirmed and admission is settled by the designed path. Structural success as in EXP-576.
@@ -110,18 +116,26 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261013T004503Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261013T004503Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Discovery twelve roles READY; freeze, admission, Teacher service and shard start, READY.
+  - First task wave-0-w00-default returned a business result, the first in a real container (host journal collected.json) - status PASSED, teacher_execution_status COMPLETED, teacher_task_result PASS, act_data_status INVALID with reason "OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_BAG_ENDED_WITHOUT_TERMINAL; RECORDER_CAPTURE_NEVER_STARTED", act_data_qc NOT_RUN, export_eligible false. Stages reached for the first time - Teacher inference result used, full Teacher motion, a real recording (raw/bag metadata 249696 messages over 100.9 s, seven lost on the transport, all topics under the container namespace including so101/teacher/events with 57 messages), offline processing (ran and refused; its report lists every topic under not_played), sealing of the attempt directory, Host collection of the result.
+  - Second task wave-0-w00-fn8-01 failed with fault "fresh paused atomic MuJoCo evidence unavailable". Shard log PAUSE_SNAPSHOT_FAILURE - pause accepted, 98 requests, 99 callbacks, 98 rejected with last_rejection "new reset epoch must begin at simulation step zero", latest evidence paused false at simulation_step 60504, reset_epoch 1.
+  - Task revocation for fn8-01 - CONTROLLER_CANCEL_RESULT after 1.28 s with motion_stopped true and controllers_confirmed true, CANCEL_RESULT with broker_fenced true.
+  - Stop - retirement/stack-stop.json has physical_stop_confirmed, graph_clear and group_clear true; retirement/audit.json has one error at boundary goal_stop, ValueError ACT_CONTROLLER_STOP_MESSAGE_INVALID; shard-stop.json has controllers_stopped, ros_children_exited and ros_graph_empty true and goals_stopped false. Container exited with code 1, no process (final-inspect.json). Host host-cleanup.json LAUNCH_STOP_UNCONFIRMED; campaign-cleanup.json services terminated true, shard terminated false. CLI reported CAMPAIGN_RUN_FAILED: CAMPAIGN_SHARD_STOP_UNCONFIRMED and CAMPAIGN_CLEANUP_UNCONFIRMED, exit 1.
+  - Unified store after the run, read-only - VALIDATION_ACTIVE owned by operation d4c96b6313934ef088d76ee542c1c447, parent ACTIVE, one GPU workload lease, slot w00 of campaign w1f-20261013T004503Z active. No container running.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The private-context, concurrent goal confirmation and bag root fixes of d0454ff93 and 6a884e23b hold in a real container - the context error did not recur, the lanes settled, the Recorder recorded.
+  - Three new defects, causes not yet established - the offline processor does not find the capture start and terminal in a container bag; a second reset on the same stack is rejected by the reset epoch rule; the native goal stop judges a controller message invalid after a completed Teacher episode (the same stop was confirmed in EXP-578 before any motion).
+conclusion: VALID failure. One scene ran end to end mechanically with a Teacher PASS but its ACT data is INVALID, so no usable episode was collected. The run stopped at the second scene's reset; the stop is unproven by one fact and the admission stays held by design.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261013T004503Z (host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w00/g1/instance-exit.json, shard-stop.json, retirement/, output/tasks)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261013T004503Z
+  - /tmp/so101-debug-act-data-66c42e4c/w1-20261013T004503Z.log and /tmp/so101-debug-act-data-66c42e4c/exp579-logs
+decision: KEEP
+next_experiment: EXP-580
 ```
 
 ## CP-3625 — EXP-578 VALID failure: initial gate, Recorder, consumer and frame capture pass; task stops at an rclpy context reuse
