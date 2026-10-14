@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3649
-next_experiment: EXP-590 (PLANNED): third eight-shard qualification attempt, at most four shards recording at once, with a host resource sampler.
+latest_checkpoint: CP-3650
+next_experiment: NONE until the eight-shard memory budget is understood and a remedy is chosen by the human.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3650 — EXP-590 VALID failure: host memory exhausted with eight shards, global OOM killed an unrelated user process, all tasks unreachable
+
+- Third eight-shard attempt. The recording cap staggered the assignments as designed. Container memory reached about 27.5 GB of 31 GB; a global OOM at 15:37:10 local killed the user's traceroost.service process (pid 2201) and stalled the host; all eight tasks failed as unreachable. The human was told about the killed process.
+- No further eight-shard run until the memory is understood and the human chooses a remedy. A read-only analysis of the sampler data, the in-container offline processing and QC memory, and the host budget was assigned.
+- Retained: run root, prep directory, logs and sampler data under R/run-logs/exp590, the exited containers. Nothing deleted.
 
 ## CP-3649 — EXP-589 loss analysed (concurrent recordings); human remedy; recording cap 4, sidecar writer, goal-check retry, host sampler; gate PASS; EXP-590 planned
 
@@ -86,7 +92,7 @@ next_experiment: EXP-590 (PLANNED): third eight-shard qualification attempt, at 
 
 ```yaml
 experiment_id: EXP-590
-status: PLANNED
+status: VALID
 prior_experiment: EXP-589 (VALID failure; 3 of 19 VALID at eight concurrent recordings; one execution fault)
 hypothesis: With at most four shards recording at once, the sidecar written off the read loop and the goal check retried, eight shards collect the 40 qualification scenes in two waves within the deadline at the data quality of one to four concurrent recordings, enough for 38 Teacher successes and 34 QC-valid episodes, with every QC-valid episode lossless and continuous, no execution fault and every stop proven.
 prediction: Never more than four shards in the recording part (readable from the status phases and the sampler); controller-state loss per shard-second near the 0.02 to 0.04 of up to four concurrent recordings; no INPUT_STALE from sidecar stalls; no TASK_HELPER_CLEANUP_UNCONFIRMED; wave time near 20 minutes each; the sampler gives per-container CPU, memory and scheduler delay for the first time. Late wrist frames are not addressed and may still cause NO_NEW_ACQUISITION. Any execution fault or unfinished task makes the run NOT_QUALIFIED whatever the rates.
@@ -109,17 +115,25 @@ provenance:
   gz_partition: each shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w8-inputs-20261014T073000Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w8-inputs-20261014T073000Z/run-w8.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - The sampler started before the CLI and stopped after it with rc 0 and a summary (sampler-status.txt); 528 samples.
+  - Assignments were staggered by the recording cap - the first scene assigned at 15:29:01 local, the eighth at 15:31:21 (assigned.json mtimes).
+  - The sum of container memory.current in the sampler rose to about 27.5 GB by 15:36:28; host memory pressure (some avg10) reached 47 percent at the next sample; the sampler has a gap from 15:36:28 to 15:37:17.
+  - Kernel journal - at 15:37:10 a global OOM kill; the process killed was pid 2201 node-MainThread of the user service traceroost.service, not part of the campaign.
+  - All eight tasks failed at 15:37:10 with CONTAINER_INSTANCE_UNREACHABLE: TimeoutError (journal failed.json); no scene finished; the wave verification refused; the CLI exited 1 at 07:37:44Z.
+  - Every shard and the Teacher service terminated with proof; the unified store is IDLE with no lease afterwards.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The host ran out of memory with eight shards in flight; the stall that followed made every status query time out. The recording cap does not bound the memory of the offline processing and QC phases, which run on every shard after recording. Which phase holds the memory is not yet established.
+  - Running eight shards as now can harm unrelated processes on the host through a global OOM.
+conclusion: VALID failure. The recording cap works as designed; the eight-shard run exhausted host memory and the resulting stall failed all eight tasks. A remedy that bounds memory is needed before another eight-shard attempt. Read-only memory analysis assigned.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261014T073000Z (host/campaign-cleanup.json, host/wave-0/task-journal)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261014T073000Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp590 (CLI log, sampler JSONL and summary) and exp590-console.log; kernel journal of 2026-10-14 15:37
+decision: KEEP
 next_experiment: NONE
 ```
 
