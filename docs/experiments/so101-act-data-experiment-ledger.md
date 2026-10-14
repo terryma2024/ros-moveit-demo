@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: d382a675051e471c3ba60099c1496a1379078dd4
+current_commit: dfe91fc0a29b8d6c9126f92fe3c5d5a048d47230
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,60 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3650
-next_experiment: NONE until the eight-shard memory budget is understood and a remedy is chosen by the human.
+latest_checkpoint: CP-3651
+next_experiment: EXP-591 (PLANNED): fourth eight-shard qualification attempt after the offline processing memory work.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3651 — Memory analysis and offline processing 5.4 to 2.2 GiB; scheduling limits optional; Docker cleanup; EXP-591 planned
+
+- Memory analysis of EXP-590 (read-only): the heavy phase is the offline processing after recording, up to 5.6 GiB per shard; the recording cap bounded the wrong phase; the OOM victim had oom_score_adj 200. Human answers of 2026-10-14: the recommended remedy, but "我需要先给一版单次处理内存优化的方案"; proposal saved as R/offline-processing-memory-proposal.md; then "最多 5 个任务同时进行的限制（限制能力先参数化，但运行时先不限定为）。先看看内存优化效果。" and "最多 4 个录制的限制，这个也参数化".
+- Commit `cfd43c6da`: max_concurrent_recordings, max_tasks_in_flight and min_assignment_gap_s are optional hashed campaign config keys at every worker count (the eight-worker requirement for the recording cap is removed); shard containers run with --oom-score-adj 900 (read back as 900 in a real container); no memory limit.
+- Commit `dfe91fc0a`, the approved proposal implemented: on one real episode the processor high-water mark went from 5.38 to 2.15 GiB, processor plus QC child from 5.36 to 2.36 GiB, QC child from 1.70 to 1.54 GiB (target 1.45 not met; the remaining peak is a second parse of records.jsonl in verify_episode_seal, outside the proposal), wall time 194 to 189 s. Sealed outputs, QC report, verdicts and exit codes byte-identical at every step under a harness fixing uuid4, the recorder queue clock and a queue thread race (harness only, no product change); eleven tampered variants identical. Known and left: the bytes-versus-text cache key issue in episode_qc, latent.
+- Human answer "ok" to the next run's limits: recording cap 4, assignment gap (then "改为 30 秒") 30 s, no tasks-in-flight limit.
+- Gate on dfe91fc0a, R/gates/dfe91fc0a29b, serial configuration: build rc 0, so101_demo_py rc 0, colcon stage rc 0, 966 s. PASSED. Images: shard R/image-build-20261014T110621Z, inference R/image-build-20261014T110626Z.
+- Disk: free space was 76 GB against 144 GB needed. Human answer "旧镜像和构建缓存，先存日志": R/docker-cleanup-20261014.py saved stdout, stderr and docker inspect of all 85 exited so101 containers under R/docker-cleanup-20261014/container-logs, then removed those containers, 40 superseded so101-campaign images (the current pair kept) and the dangling build cache; free space 76.1 to 303.2 GB; record in R/docker-cleanup-20261014/record.json. Nothing under the evidence root was deleted. The human then wrote "历史证据也都一并清理了吧"; the scope was put back to the human and nothing has been deleted.
+- Inputs under the prep directory act-w8-inputs-20261014T111500Z; validation 60 PASS, 6 informational, 1 pending (the candidates file). Deadline projection with the 30 s gap is bounded by the 60 s simulation - 66.7 to 88.7 minutes against 90 in the worse reading.
+
+```yaml
+experiment_id: EXP-591
+status: PLANNED
+prior_experiment: EXP-590 (VALID failure; host memory exhausted, all tasks unreachable)
+hypothesis: With the offline processing peak roughly halved, at most four shards recording and 30 s between assignments, eight shards collect the 40 qualification scenes in two waves within the deadline without exhausting host memory, with at least 38 Teacher successes and 34 QC-valid episodes, every QC-valid episode lossless and continuous, no execution fault and every stop proven.
+prediction: Host memory stays below the budget (the sampler shows container memory well under the 27.5 GB of EXP-590 and no OOM); data quality near that of four or fewer concurrent recordings; waves of roughly 20 to 35 minutes; the run may still exceed the 5400 s deadline, which would make it NOT_QUALIFIED. Any execution fault or unfinished task makes the run NOT_QUALIFIED whatever the rates.
+single_variable: The memory work of commit dfe91fc0a and the scheduling limits (recording cap 4, gap 30 s) relative to EXP-590, plus the OOM adjustment of shards. Same scenes and rules; new ids, re-authored contract, rebuilt images.
+lifecycle: ISOLATED_STACK (eight containers per wave)
+preconditions:
+  - Enforced by the run script - as EXP-590 for commit dfe91fc0a, including the sampler running before the CLI starts and the disk projection.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-588.
+failure_criteria:
+  - As EXP-588.
+invalid_criteria:
+  - Refusal before admission; source trees differing from dfe91fc0a; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: dfe91fc0a29b8d6c9126f92fe3c5d5a048d47230 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:a30ac38dc73eed0a9d1cf8cdb28a84d30779d2187cf12e757740b1077fe2a64d and shard image sha256:a27d20f68094288218724e9b795cdec6a47c70e63f79dd83d0355ef2298ee859; Host R/gates/dfe91fc0a29b/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel; the sampler on the Host
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261014T111500Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261014T111500Z/run-w8.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3650 — EXP-590 VALID failure: host memory exhausted with eight shards, global OOM killed an unrelated user process, all tasks unreachable
 
