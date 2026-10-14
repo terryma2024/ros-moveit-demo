@@ -99,6 +99,9 @@ def _service(service, role, *, readback):
 
 
 _RECORDING_CAP = "max_concurrent_recordings"
+_TASKS_IN_FLIGHT = "max_tasks_in_flight"
+_ASSIGNMENT_GAP = "min_assignment_gap_s"
+_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP)
 
 
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
@@ -119,13 +122,19 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
             _require(hashlib.sha256(payload).hexdigest() == expected_sha256)
         document = json.loads(payload.decode("utf-8"), object_pairs_hook=_pairs,
             parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
-        _keys({name: value for name, value in document.items() if name != _RECORDING_CAP},
+        _keys({name: value for name, value in document.items() if name not in _OPTIONAL_LIMITS},
               ("schema_version", "kind", "evidence_root", "controlled_runtime",
                "head_service", "teacher_service", "shard_image", "gpu_uuid",
                "qualification_contract"))
         if _RECORDING_CAP in document:
             # How many shards may be in the recording part of a task at once; the Host reads it, the campaign hash freezes it.
             _require(type(document[_RECORDING_CAP]) is int and 1 <= document[_RECORDING_CAP] <= 8)
+        if _TASKS_IN_FLIGHT in document:
+            # How many shards may hold a task (any phase) at once; the Host reads it, the campaign hash freezes it.
+            _require(type(document[_TASKS_IN_FLIGHT]) is int and 1 <= document[_TASKS_IN_FLIGHT] <= 8)
+        if _ASSIGNMENT_GAP in document:
+            # Minimum Host monotonic seconds between two assignments across shards.
+            _require(type(document[_ASSIGNMENT_GAP]) in (int, float) and 0 <= document[_ASSIGNMENT_GAP] <= 3600)
         _require(type(document["schema_version"]) is int and document["schema_version"] == 1
                  and document["kind"] == "ACT_CONTAINER_CAMPAIGN")
         root = _absolute(document["evidence_root"])

@@ -71,7 +71,7 @@ class PhaseInstance(Instance):
                               task=TaskStatus(task_id=task_id, state='RUNNING', phase=phase))
 
 
-def run_phase_wave(tmp_path, config, *, workers, scenes, cap, report_phase=True, assignment=True):
+def run_phase_wave(tmp_path, config, *, workers, scenes, cap, report_phase=True, assignment=True, in_flight=None, gap=None):
     world = make_world(tmp_path, config, workers=workers, scenes=scenes,
         plan_assignment=reserve_qualification_scenes(tuple(scenes), tuple(workers)) if assignment else None)
     vt, timeline = VirtualTime(), []
@@ -87,6 +87,8 @@ def run_phase_wave(tmp_path, config, *, workers, scenes, cap, report_phase=True,
         control.report_phase, control.timeline, control.vt = report_phase, timeline, vt
     coordinator = ConcurrentCollectionCoordinator(context=world.context, config=config, case_inputs=world.case_inputs,
         scene_manifest=world.manifest, clock=vt, sleep=vt.sleep, max_recording_shards=cap,
+        **({} if in_flight is None else dict(max_tasks_in_flight=in_flight)),
+        **({} if gap is None else dict(min_assignment_gap_s=gap)),
         control_factory=lambda shard: world.controls[shard.launch.worker_id])
 
     async def drive():
@@ -177,3 +179,80 @@ def test_cap_must_be_a_positive_integer(tmp_path, config, cap):
     with pytest.raises(ValueError, match='CONTAINER_COORDINATOR_CONFIG_INVALID'):
         ConcurrentCollectionCoordinator(context=world.context, config=config, case_inputs=world.case_inputs,
                                         scene_manifest=world.manifest, max_recording_shards=cap)
+
+
+TOTAL = PRE+REC+PROC
+
+
+def max_in_flight(timeline, span=TOTAL):
+    return max_recording(timeline, span)   # same sweep: tasks live over [assigned, assigned+span)
+
+
+def gaps(timeline):
+    times = sorted(at for _, at, _ in timeline)
+    return [later-earlier for earlier, later in zip(times, times[1:])]
+
+
+def test_tasks_in_flight_and_gap_bound_a_wave_of_twenty_scenes_on_eight_shards(tmp_path, config, uncapped):
+    world, result, timeline, makespan = run_phase_wave(tmp_path, config, workers=EIGHT_WORKERS, scenes=SCENES, cap=4,
+                                                       in_flight=5, gap=60.)
+    assert result['infra_errors'] == []
+    assert sorted(mapping(timeline)) == sorted(SCENES) and len(timeline) == len(SCENES)   # every scene exactly once
+    assert max_in_flight(timeline) <= 5
+    assert max_recording(timeline, PRE+REC) <= 4
+    assert min(gaps(timeline)) >= 60.
+    reserved = reserve_qualification_scenes(SCENES, EIGHT_WORKERS)['reserved_by_worker']
+    got = mapping(timeline)
+    assert all(got[scene] == worker for worker, scenes in reserved.items() for scene in scenes)
+    assert max_in_flight(timeline) == 5   # the cap binds, so the run really used it
+    print('PROJECTED_WAVE_S=%.0f (%.1f min)' % (makespan, makespan/60))
+    assert makespan <= 2400.   # measured 1847-2210 s (31-37 min; the driver advances the virtual clock while real threads run, so it varies with load)
+
+
+def test_tasks_in_flight_counts_every_phase_even_without_a_reported_phase(tmp_path, config):
+    _, result, timeline, _ = run_phase_wave(tmp_path, config, workers=EIGHT_WORKERS, scenes=SCENES, cap=4,
+                                            in_flight=5, gap=60., report_phase=False)
+    assert result['infra_errors'] == [] and len(timeline) == len(SCENES)
+    assert max_in_flight(timeline) <= 5 and max_recording(timeline, TOTAL) <= 4 and min(gaps(timeline)) >= 60.
+
+
+def test_in_flight_cap_alone_and_gap_alone(tmp_path_factory, config):
+    _, _, only_cap, _ = run_phase_wave(tmp_path_factory.mktemp('a'), config, workers=EIGHT_WORKERS, scenes=SCENES,
+                                       cap=None, in_flight=3)
+    assert max_in_flight(only_cap) == 3 and len(only_cap) == len(SCENES)
+    _, _, only_gap, _ = run_phase_wave(tmp_path_factory.mktemp('b'), config, workers=EIGHT_WORKERS, scenes=SCENES,
+                                       cap=None, gap=45.)
+    assert min(gaps(only_gap)) >= 45. and len(only_gap) == len(SCENES)
+
+
+def test_waiting_for_the_gate_does_not_start_the_task_deadline_with_new_limits(tmp_path, config):
+    _, _, timeline, _ = run_phase_wave(tmp_path, config, workers=EIGHT_WORKERS, scenes=SCENES, cap=4, in_flight=5, gap=60.)
+    span = (config.initializing_hard_timeout_s+config.executing_hard_timeout_s
+            +config.finalizing_hard_timeout_s+config.worker_recovery_timeout_s)
+    prepared = run_phase_wave.prepared
+    assert any(prepared[task] > 1000+4*60 for task, _, _ in timeline)
+    assert all(deadline-prepared[task] == span for task, _, deadline in timeline)
+
+
+@pytest.mark.parametrize('count', [1, 2, 8])
+def test_any_worker_count_without_the_limits_builds_no_gate(tmp_path_factory, config, count, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError('absent keys must mean no gate')
+    monkeypatch.setattr(coordinator_module, 'RecordingGate', forbidden)
+    workers, scenes = EIGHT_WORKERS[:count], SCENES[:6]
+    _, _, timeline, _ = run_phase_wave(tmp_path_factory.mktemp('n'), config, workers=workers, scenes=scenes, cap=None,
+                                       assignment=False)
+    assert len(timeline) == 6
+    # a limit that cannot bind and no gap also builds no gate
+    _, _, timeline, _ = run_phase_wave(tmp_path_factory.mktemp('m'), config, workers=workers, scenes=scenes, cap=None,
+                                       assignment=False, in_flight=count)
+    assert len(timeline) == 6
+
+
+@pytest.mark.parametrize('name,bad', [('max_tasks_in_flight', value) for value in (0, -1, True, 2.5, '5')]
+                         + [('min_assignment_gap_s', value) for value in (-1, True, '60', float('nan'), float('inf'))])
+def test_new_limits_are_validated(tmp_path, config, name, bad):
+    world = make_world(tmp_path, config)
+    with pytest.raises(ValueError, match='CONTAINER_COORDINATOR_CONFIG_INVALID'):
+        ConcurrentCollectionCoordinator(context=world.context, config=config, case_inputs=world.case_inputs,
+                                        scene_manifest=world.manifest, **{name: bad})

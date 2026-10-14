@@ -57,6 +57,21 @@ def build(module, images, paths, role="shard", **changes):
 
 
 @pytest.mark.parametrize("role", ["head", "teacher", "shard"])
+def test_only_shards_are_raised_in_the_kernel_oom_order(tmp_path, role):
+    module, images, paths = fixture(tmp_path, role)
+    argv = build(module, images, paths, role)
+    if role != "shard":
+        assert not any(value.startswith("--oom") for value in argv)   # services keep the default
+        return
+    assert argv.count("--oom-score-adj") == 1
+    adjustment = int(argv[argv.index("--oom-score-adj")+1])
+    assert adjustment == module.SHARD_OOM_SCORE_ADJ == 900
+    assert 500 <= adjustment < 1000          # above other user processes and the default 0, below the kernel's maximum
+    assert argv.index("--oom-score-adj") < argv.index(images["shard"]["digest"])   # a docker option, not a container command
+    assert not any(value.startswith("--memory") for value in argv)   # no memory limit chosen
+
+
+@pytest.mark.parametrize("role", ["head", "teacher", "shard"])
 def test_fixed_image_private_namespaces_and_mounts(tmp_path, role):
     module, images, paths = fixture(tmp_path, role)
     argv = build(module, images, paths, role)

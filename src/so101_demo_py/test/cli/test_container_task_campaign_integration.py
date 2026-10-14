@@ -374,7 +374,7 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
     world.campaign = dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN', evidence_root=str(evidence),
         controlled_runtime=ref(world.runtime), head_service=service, teacher_service=service,
         shard_image=dict(shared.shard_image), gpu_uuid=GPU, qualification_contract=qualification_contract,
-        **(dict(max_concurrent_recordings=4) if plane in ('W8', 'FORMAL') else {}))
+        **(dict(max_concurrent_recordings=4, min_assignment_gap_s=.05) if plane in ('W8', 'FORMAL') else {}))
     world.campaign_path = write_json(inputs / 'campaign.json', world.campaign)
     world.docker = Docker()
     world.docker.report, world.docker.teacher_digest, world.docker.shard_digest = (
@@ -522,6 +522,7 @@ def test_real_cli_builds_four_operation_owner(tmp_path, shared, monkeypatch, cap
     assert binding['sha256'] == sha(frozen_scenes) == sha(world.scenes)
     assert owner.coordinator.scene_manifest == ref(frozen_scenes)
     assert owner.coordinator.max_recording_shards is None   # one shard: the campaign config states no cap
+    assert owner.coordinator.max_tasks_in_flight is None and owner.coordinator.min_assignment_gap_s is None
     assert sorted(owner.coordinator.case_inputs) == sorted(world.scene_ids)
     # Teacher service started once; one shard; both stopped through the original owners
     assert len(world.docker.runs(shard=False)) == 1 and len(world.docker.runs(shard=True)) == 1
@@ -713,6 +714,7 @@ def test_two_waves_start_teacher_once(tmp_path, shared, monkeypatch, capsys):
     (owner,) = spies.owners
     assert owner.coordinator.scene_manifest == ref(run_root / 'inputs/frozen/scene_manifest/scenes.json')
     assert owner.coordinator.max_recording_shards == 4   # the hashed campaign config's cap reaches the wave coordinator
+    assert owner.coordinator.max_tasks_in_flight is None and owner.coordinator.min_assignment_gap_s == .05   # a short gap: this plane runs on the real clock
     assert spies.lease() is None and spies.active_slots() == () and len(spies.finishes) == 1
 
 

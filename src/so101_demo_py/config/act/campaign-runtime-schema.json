@@ -331,6 +331,16 @@
       "minimum": 1,
       "maximum": 8
     },
+    "max_tasks_in_flight": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    },
+    "min_assignment_gap_s": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 3600
+    },
     "qualification_contract": {
       "oneOf": [
         {

@@ -7,6 +7,7 @@ exists here; a lost reply is queried, never resent, and any fault ends that inst
 
 import asyncio
 import hashlib
+import math
 from pathlib import Path
 import re
 import time
@@ -94,20 +95,41 @@ class InstanceFault(RuntimeError):
 
 
 class RecordingGate:
-    """Limits how many instances are in the recording part of a task at once.
+    """Limits when the Host may send an assignment: recording slots, tasks in flight and the gap between assignments.
 
-    An instance is in the recording part from the moment the Host claims a scene for it until its polled status reports that
-    its recorder has stopped, or its task has ended or its instance has faulted or finished. A status without a phase counts
-    as recording until the task ends. The gate only delays when the Host sends an assignment; which scene a worker gets is
-    still decided by `WaveAssignment`. Everything runs on the Host event loop, so a check and the claim that follows it
-    cannot interleave with another instance's."""
+    Three independent limits, all of which must hold; each is optional (None: no such limit).
+    - `cap`: instances in the recording part of a task. An instance is in it from the moment the Host claims a scene for it
+      until its polled status reports that its recorder has stopped, or its task has ended or its instance has faulted or
+      finished. A status without a phase counts as recording until the task ends.
+    - `max_in_flight`: instances with a task between the claim and the task's end, in every phase.
+    - `min_gap_s`: Host monotonic seconds between two assignment sends, across all instances. The gap is measured from the
+      send, and no claim is made while another claimed assignment has not been sent yet, so two sends are never closer.
+    The gate only delays when the Host sends an assignment; which scene a worker gets is still decided by `WaveAssignment`.
+    Everything runs on the Host event loop, so a check and the claim that follows it cannot interleave with another
+    instance's."""
 
-    def __init__(self, cap):
-        self.cap, self.members = cap, []
+    def __init__(self, cap, max_in_flight=None, min_gap_s=None, clock=time.monotonic):
+        self.cap, self.max_in_flight, self.min_gap_s, self.clock = cap, max_in_flight, min_gap_s, clock
+        self.members, self.last_sent = [], None
         self._pulse = asyncio.Event()
 
-    def has_room(self):
-        return sum(1 for member in self.members if member.in_recording_part()) < self.cap
+    def blocked(self):
+        """True while a count limit or an unsent claim prevents a new claim; the next pulse may change that."""
+        if any(member.claiming() for member in self.members):
+            return True
+        if self.cap is not None and sum(1 for member in self.members if member.in_recording_part()) >= self.cap:
+            return True
+        return (self.max_in_flight is not None
+                and sum(1 for member in self.members if member.in_flight()) >= self.max_in_flight)
+
+    def gap_remaining(self):
+        """Seconds until the minimum gap since the last send has elapsed (0. if none or none required)."""
+        if self.min_gap_s is None or self.last_sent is None:
+            return 0.
+        return max(0., self.last_sent+self.min_gap_s-self.clock())
+
+    def sent(self):
+        self.last_sent = self.clock()
 
     def pulse(self):
         pulse, self._pulse = self._pulse, asyncio.Event()
@@ -123,7 +145,7 @@ class InstanceDispatch:
     def __init__(self, *, control, shard, assignment, journal, endpoints, scene_manifest, case_inputs,
                  config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep, gate=None):
         launch = shard.launch
-        self.gate, self.recording_claim, self.done = gate, False, False
+        self.gate, self.recording_claim, self.done, self.unsent = gate, False, False, False
         self.control, self.shard, self.assignment, self.journal = control, shard, assignment, journal
         self.endpoints, self.scene_manifest, self.case_inputs = endpoints, scene_manifest, case_inputs
         self.config, self.context, self.dispatch_allowed = config, context, dispatch_allowed
@@ -167,26 +189,47 @@ class InstanceDispatch:
         if self.gate is not None:
             self.gate.pulse()
 
-    def in_recording_part(self):
-        """Whether this instance still occupies one of the gate's recording slots."""
-        if self.done or self.fault is not None or not self.recording_claim:
-            return False
+    def _seen_current(self):
         seen = None if self.status is None else self.status.task
         if self.current is not None and seen is not None and seen.task_id == self.current[0].task_id:
-            return seen.state not in ('SUCCEEDED', 'FAILED') and seen.phase != 'POST_RECORDING'
-        return True
+            return seen
+        return None
+
+    def in_flight(self):
+        """Whether this instance has a claimed task that has not ended: every phase, from the claim to the task's end."""
+        if self.done or self.fault is not None or not self.recording_claim:
+            return False
+        seen = self._seen_current()
+        return seen is None or seen.state not in ('SUCCEEDED', 'FAILED')
+
+    def in_recording_part(self):
+        """Whether this instance still occupies one of the gate's recording slots."""
+        if not self.in_flight():
+            return False
+        seen = self._seen_current()
+        return seen is None or seen.phase != 'POST_RECORDING'
+
+    def claiming(self):
+        """Whether a claimed assignment has not been sent yet (it is being prepared or journaled)."""
+        return self.unsent and not self.done and self.fault is None
 
     async def _claim_scene(self, stop_reason):
-        """The next scene for this worker, once a recording slot is free; None when there is nothing to do or to dispatch."""
+        """The next scene for this worker, once the gate allows an assignment; None when there is nothing to do or to dispatch."""
         while True:
             if not self.dispatch_allowed() or stop_reason() is not None or self.fault is not None:
                 return None
             if not self.assignment.has_next(self.worker_id):
                 return None
-            if self.gate.has_room():
-                self.recording_claim = True
-                return self.assignment.next_scene(self.worker_id)
-            await self.gate.changed()
+            if self.gate.blocked():
+                await self.gate.changed()
+                continue
+            remaining = self.gate.gap_remaining()
+            if remaining > 0:
+                # bounded so a stop or a fault is noticed within one heartbeat
+                await self.sleep(min(remaining, self.config.heartbeat_interval_s))
+                continue
+            self.recording_claim = self.unsent = True
+            return self.assignment.next_scene(self.worker_id)
 
     async def _wait(self):
         pulse = self._pulse
@@ -246,6 +289,10 @@ class InstanceDispatch:
         output = host_task_output(self.owner_root, task.task_id)
         await asyncio.to_thread(self.journal.assign, instance_id=self.launch_id, task=task, host_output=output)
         self.current = (task, scene)
+        if self.gate is not None:
+            self.gate.sent()
+            self.unsent = False
+            self.gate.pulse()
         try:
             await self.control.assign_task(task)
         except Exception:
@@ -331,14 +378,20 @@ class InstanceDispatch:
 
 class ConcurrentCollectionCoordinator:
     def __init__(self, *, context, config, case_inputs, scene_manifest, control_factory=None,
-                 clock=time.monotonic, sleep=asyncio.sleep, max_recording_shards=None):
+                 clock=time.monotonic, sleep=asyncio.sleep, max_recording_shards=None,
+                 max_tasks_in_flight=None, min_assignment_gap_s=None):
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != 'act_collection_start'
                 or type(config) is not ParallelRuntimeConfigLinuxCuda
                 or type(case_inputs) is not dict or not case_inputs or type(scene_manifest) is not dict
                 or not callable(clock) or not callable(sleep)
                 or (control_factory is not None and not callable(control_factory))
                 or (max_recording_shards is not None
-                    and (type(max_recording_shards) is not int or max_recording_shards < 1))):
+                    and (type(max_recording_shards) is not int or max_recording_shards < 1))
+                or (max_tasks_in_flight is not None
+                    and (type(max_tasks_in_flight) is not int or max_tasks_in_flight < 1))
+                or (min_assignment_gap_s is not None
+                    and (type(min_assignment_gap_s) not in (int, float) or not math.isfinite(min_assignment_gap_s)
+                         or min_assignment_gap_s < 0))):
             raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
         for refs in case_inputs.values():
             if type(refs) is not dict or set(refs) != {'scope', 'inputs_manifest'}:
@@ -346,6 +399,7 @@ class ConcurrentCollectionCoordinator:
         self.context, self.config, self.case_inputs = context, config, case_inputs
         self.scene_manifest = scene_manifest
         self.max_recording_shards = max_recording_shards
+        self.max_tasks_in_flight, self.min_assignment_gap_s = max_tasks_in_flight, min_assignment_gap_s
         self.control_factory = control_factory or (lambda shard: ContainerTaskControl(owner=shard))
         self.clock, self.sleep = clock, sleep
         self.active = None
@@ -391,9 +445,15 @@ class ConcurrentCollectionCoordinator:
                 launch_generation=shard.launch.launch_generation, wave_id=shard.launch.wave_id)
             for shard in shards})
         assignment = WaveAssignment(scene_ids=scene_order, worker_ids=worker_ids, assignment=plan['assignment'])
-        # A cap that cannot bind (at least as large as the shard count) adds no gate: dispatch is exactly the uncapped path.
-        cap = self.max_recording_shards
-        gate = RecordingGate(cap) if cap is not None and cap < len(shards) else None
+        # A limit that cannot bind (a count at least the shard count, or no gap) adds nothing; when none binds there is no gate
+        # and dispatch is exactly the ungated path.
+        count = len(shards)
+        cap = self.max_recording_shards if self.max_recording_shards is not None and self.max_recording_shards < count else None
+        in_flight = (self.max_tasks_in_flight if self.max_tasks_in_flight is not None
+                     and self.max_tasks_in_flight < count else None)
+        gap = self.min_assignment_gap_s if self.min_assignment_gap_s else None
+        gate = (RecordingGate(cap, in_flight, gap, self.clock)
+                if cap is not None or in_flight is not None or gap is not None else None)
         dispatches = [InstanceDispatch(control=self.control_factory(shard), shard=shard, assignment=assignment,
             journal=journal, endpoints=endpoints, scene_manifest=self.scene_manifest,
             case_inputs=self.case_inputs, config=self.config, context=self.context,

@@ -69,8 +69,8 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     config_path = Path(arguments.campaign_config)
     config_digest = _digest(config_path)
     config = load_campaign_config(config_path,roles=('teacher',),expected_sha256=config_digest)
-    if arguments.worker_count == 8 and 'max_concurrent_recordings' not in config:
-        raise ValueError('COLLECTION_RECORDING_CAP_REQUIRED')   # an eight-shard run states its recording cap in the hashed config
+    # max_concurrent_recordings, max_tasks_in_flight and min_assignment_gap_s are optional at every worker count: the hashed
+    # config states them when the run wants them, and absent means no such limit.
     registered = validate_registered_evidence_root(config['evidence_root'],config['evidence_root'],
                                                   registration=workload.root_registration)
     if (not root.is_absolute() or root.resolve(strict=True) != root or not root.is_dir()
@@ -182,6 +182,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
             raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
         coordinator = ConcurrentCollectionCoordinator(context=context, config=runtime, case_inputs=case_inputs,
             scene_manifest=scene_manifest, max_recording_shards=config.get('max_concurrent_recordings'),
+            max_tasks_in_flight=config.get('max_tasks_in_flight'), min_assignment_gap_s=config.get('min_assignment_gap_s'),
             **given(control_factory=control_factory))
         verifier = ContainerWaveResultVerifier(root=paths['run'], registry=registry, case_inputs=case_inputs,
             qualification=qualification)

@@ -80,6 +80,13 @@ def instance_private_environment(owned):
         "ROS_LOG_DIR="+str(owned / "ros-logs")]
 
 
+# A shard is the cheapest thing to lose when the host runs out of memory: its task is retried by the next campaign, an unrelated
+# process is not. 900 ranks above the default 0 of the Teacher and Head services and above other user processes (observed
+# at 200), and stays below 1000 so the kernel's own "always first" value is left to no one. Docker accepts a positive
+# value from an unprivileged client (the daemon applies it); only negative values need CAP_SYS_RESOURCE.
+SHARD_OOM_SCORE_ADJ = 900
+
+
 def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, uid, gid):
     try:
         _require(role in ("head", "teacher", "shard"))
@@ -137,6 +144,8 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
         for mount in mounts:
             value = f"type=bind,src={mount.source},dst={mount.target}"
             argv.extend(["--mount", value+(",readonly" if mount.read_only else "")])
+        if role == "shard":
+            argv.extend(["--oom-score-adj", str(SHARD_OOM_SCORE_ADJ)])
         return argv+[image[role]["digest"]]+command
     except (OSError, ValueError, TypeError, KeyError) as error:
         raise ValueError("CONTAINER_LAUNCH_INVALID") from error

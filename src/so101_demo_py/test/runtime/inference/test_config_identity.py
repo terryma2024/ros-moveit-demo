@@ -142,3 +142,39 @@ def test_published_campaign_schema_accepts_only_a_valid_recording_cap(tmp_path):
     for bad in (0, True, 9, "4", 4.5):
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(document | {"max_concurrent_recordings": bad}, schema)
+
+
+def test_tasks_in_flight_and_assignment_gap_are_optional_validated_and_hashed(tmp_path):
+    document = campaign_fixture(tmp_path)
+    plain = write_config(tmp_path, document)
+    plain_hash = hashlib.sha256(plain.read_bytes()).hexdigest()
+    loaded = config_module().load_campaign_config(plain)
+    assert "max_tasks_in_flight" not in loaded and "min_assignment_gap_s" not in loaded
+    limited = write_config(tmp_path, document | {"max_tasks_in_flight": 5, "min_assignment_gap_s": 60})
+    loaded = config_module().load_campaign_config(limited)
+    assert loaded["max_tasks_in_flight"] == 5 and loaded["min_assignment_gap_s"] == 60
+    limited_hash = hashlib.sha256(limited.read_bytes()).hexdigest()
+    assert limited_hash != plain_hash
+    other = write_config(tmp_path, document | {"max_tasks_in_flight": 5, "min_assignment_gap_s": 61})
+    assert hashlib.sha256(other.read_bytes()).hexdigest() != limited_hash
+    assert config_module().load_campaign_config(
+        write_config(tmp_path, document | {"min_assignment_gap_s": 45.5}))["min_assignment_gap_s"] == 45.5
+    for name, bad_values in (("max_tasks_in_flight", (0, -1, True, 5.0, "5", 9, None)),
+                             ("min_assignment_gap_s", (-1, True, "60", None, 3601))):
+        for bad in bad_values:
+            with pytest.raises(ValueError, match="CAMPAIGN_CONFIG_INVALID"):
+                config_module().load_campaign_config(write_config(tmp_path, document | {name: bad}))
+
+
+def test_published_campaign_schema_accepts_only_valid_tasks_in_flight_and_gap(tmp_path):
+    import jsonschema
+    from paths import PACKAGE_ROOT
+    schema = json.loads((PACKAGE_ROOT / "config/act/campaign-runtime-schema.json").read_text())
+    document = campaign_fixture(tmp_path)
+    jsonschema.validate(document | {"max_tasks_in_flight": 5, "min_assignment_gap_s": 60}, schema)
+    jsonschema.validate(document | {"min_assignment_gap_s": 45.5}, schema)
+    for name, bad_values in (("max_tasks_in_flight", (0, True, 9, "5", 5.5)),
+                             ("min_assignment_gap_s", (-1, True, "60", 3601))):
+        for bad in bad_values:
+            with pytest.raises(jsonschema.ValidationError):
+                jsonschema.validate(document | {name: bad}, schema)
