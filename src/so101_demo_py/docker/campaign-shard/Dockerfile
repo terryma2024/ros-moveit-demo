@@ -42,8 +42,8 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; cd /ac
     /act/venv/bin/python -c '\''import json, pathlib; print("ROS_PACKAGE_READBACK=" + json.dumps(sorted(p.name for p in pathlib.Path("/opt/ros/jazzy/share").iterdir() if p.is_dir())))'\''; \
     /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
       --build-base /act/build --install-base /act/install --merge-install \
-      --packages-select controller_manager hardware_interface_testing mujoco_3d_lidar mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins so101_clock_test_hardware so101_quik \
-      --allow-overriding controller_manager hardware_interface_testing mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
+      --packages-select controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_3d_lidar mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins so101_clock_test_hardware so101_queued_state_publisher so101_quik \
+      --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
       --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
       -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
@@ -61,7 +61,7 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; source
     /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
       --build-base /act/build --install-base /act/install --merge-install \
       --packages-select so101_mujoco_support so101_teleop so101_demo_py \
-      --allow-overriding controller_manager hardware_interface_testing mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
+      --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
       --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
       -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'

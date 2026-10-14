@@ -109,6 +109,13 @@ if(BUILD_TESTING)
   target_include_directories(test_simulation_evidence_plugin PRIVATE include)
   target_link_libraries(test_simulation_evidence_plugin so101_simulation_evidence_plugin)
 
+  ament_add_gtest(test_simulation_evidence_pause_frame
+    test/test_simulation_evidence_pause_frame.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_simulation_evidence_pause_frame PRIVATE cxx_std_17)
+  target_include_directories(test_simulation_evidence_pause_frame PRIVATE include)
+  target_link_libraries(test_simulation_evidence_pause_frame so101_simulation_evidence_plugin)
+
   find_package(moveit_core REQUIRED)
   find_package(moveit_ros_planning REQUIRED)
   find_package(sensor_msgs REQUIRED)

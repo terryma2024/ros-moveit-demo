@@ -265,9 +265,19 @@ public:
 private:
   using Evidence = msg::SimulationEvidence;
   using EvidenceChunk = msg::PhysicsStepEvidenceChunk;
-  void try_publish_snapshot(
+  /// True when the evidence frame was published. A paused snapshot that finds its publisher busy is NOT lost: see
+  /// `retry_paused_snapshot()`.
+  bool try_publish_snapshot(
     const mjModel * model, const mjData * data, bool paused,
     uint64_t reset_generation, bool advance_physics_step);
+  /// The scene-state frame that goes with a snapshot. A paused one that finds its publisher busy is retried.
+  bool publish_scene_snapshot(
+    const mjModel * model, const mjData * data, bool paused, int64_t clock_begin_ns);
+  /// Controller-cycle retry of the authoritative paused frame (evidence and scene state) that the pause/reset hook
+  /// could not publish; each frame is published exactly once and never after the simulation resumed.
+  void retry_paused_snapshot(const mjModel * model, const mjData * data);
+  /// What follows a successfully published reset snapshot: the raw-step state, buffers and fence move to the new epoch.
+  void complete_reset_snapshot(const mjData * data, uint64_t generation, bool reset_pending);
   void try_publish_chunk();
   void publish_hazard_if_needed();
   void acknowledge_cancellation_request(
@@ -305,6 +315,9 @@ private:
   double static_shadow_force_n_{1.1579004532160448};
   double diagnostic_hard_stop_force_n_{11.60};
   bool published_{false};
+  // Set when the pause/reset hook could not publish its (single) paused frame because a publisher was busy.
+  std::atomic<bool> evidence_snapshot_retry_{false};
+  std::atomic<bool> scene_snapshot_retry_{false};
   bool hazard_published_{false};
   std::atomic<uint64_t> reset_generation_{0};
   std::atomic<bool> authoritative_paused_{false};

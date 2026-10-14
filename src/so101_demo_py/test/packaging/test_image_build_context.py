@@ -206,8 +206,8 @@ RUN python3 -m venv --system-site-packages /act/venv \\
 COLCON_COMMON = (
     "--base-paths src third_party",
     "--build-base /act/build --install-base /act/install --merge-install",
-    "--allow-overriding controller_manager hardware_interface_testing mujoco_ros2_control "
-    "mujoco_ros2_control_msgs mujoco_ros2_control_plugins",
+    "--allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster "
+    "joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins",
     "--parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON",
     "-DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python",
     "-DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON",

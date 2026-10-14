@@ -196,6 +196,12 @@ void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
   if (!realtime_publisher_ || model == nullptr || data == nullptr || !std::isfinite(data->time)) {
     return;
   }
+  if (evidence_snapshot_retry_.load(std::memory_order_acquire) ||
+    scene_snapshot_retry_.load(std::memory_order_acquire))
+  {
+    retry_paused_snapshot(model, data);
+    return;
+  }
   const auto reset_generation = reset_generation_.load(std::memory_order_acquire);
   const bool reset_pending = reset_generation != state_.consumed_reset_generation;
   if (reset_pending) {
@@ -260,34 +266,75 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
   }
 }
 
-void SimulationEvidencePlugin::try_publish_snapshot(
+bool SimulationEvidencePlugin::try_publish_snapshot(
   const mjModel * model, const mjData * data,
   bool paused, uint64_t reset_generation,
   bool advance_physics_step)
 {
   if (!realtime_publisher_->trylock()) {
-    return;
+    return false;
   }
   const auto clock_begin_ns = steady_nanoseconds();
   try {
     realtime_publisher_->msg_ =
       builder_.build(model, data, paused, state_, reset_generation, advance_physics_step);
     realtime_publisher_->unlockAndPublish();
-    if (realtime_scene_publisher_ && realtime_scene_publisher_->trylock()) {
-      try {
-        realtime_scene_publisher_->msg_ = scene_builder_.build(model, data,
-          state_.simulation_session_id, state_.reset_epoch, state_.simulation_step,
-          paused, clock_begin_ns);
-        realtime_scene_publisher_->unlockAndPublish();
-      } catch (...) {
-        realtime_scene_publisher_->unlock();
-      }
-    }
+    publish_scene_snapshot(model, data, paused, clock_begin_ns);
     last_publish_grid_ = publish_grid_index(data->time, publish_period_ns_);
     published_ = true;
+    return true;
   } catch (...) {
     realtime_publisher_->unlock();
+    return false;
   }
+}
+
+bool SimulationEvidencePlugin::publish_scene_snapshot(
+  const mjModel * model, const mjData * data, bool paused, int64_t clock_begin_ns)
+{
+  if (!realtime_scene_publisher_) {
+    return true;
+  }
+  bool published = false;
+  if (realtime_scene_publisher_->trylock()) {
+    try {
+      realtime_scene_publisher_->msg_ = scene_builder_.build(model, data,
+        state_.simulation_session_id, state_.reset_epoch, state_.simulation_step,
+        paused, clock_begin_ns);
+      realtime_scene_publisher_->unlockAndPublish();
+      published = true;
+    } catch (...) {
+      realtime_scene_publisher_->unlock();
+    }
+  }
+  if (paused) {
+    // The paused frame is the last one before the simulation stops; it is published once, so it must not be lost.
+    scene_snapshot_retry_.store(!published, std::memory_order_release);
+  }
+  return published;
+}
+
+void SimulationEvidencePlugin::retry_paused_snapshot(const mjModel * model, const mjData * data)
+{
+  if (!authoritative_paused_.load(std::memory_order_acquire)) {
+    // The simulation resumed: the paused frame is stale and the running stream carries on.
+    evidence_snapshot_retry_.store(false, std::memory_order_release);
+    scene_snapshot_retry_.store(false, std::memory_order_release);
+    return;
+  }
+  const auto generation = reset_generation_.load(std::memory_order_acquire);
+  if (evidence_snapshot_retry_.load(std::memory_order_acquire)) {
+    const bool reset_pending = generation != state_.consumed_reset_generation;
+    // The same call the hook made, so the frame is exactly the one the hook would have published.
+    if (!try_publish_snapshot(model, data, true, generation, true)) {
+      return;
+    }
+    evidence_snapshot_retry_.store(false, std::memory_order_release);
+    complete_reset_snapshot(data, generation, reset_pending);
+    return;
+  }
+  // Only the scene frame is missing; the evidence frame it belongs to was published and is not repeated.
+  publish_scene_snapshot(model, data, true, steady_nanoseconds());
 }
 
 void SimulationEvidencePlugin::try_publish_chunk()
@@ -413,12 +460,20 @@ void SimulationEvidencePlugin::on_state_snapshot(
   }
   const auto generation = reset_generation_.load(std::memory_order_acquire);
   const bool reset_pending = generation != state_.consumed_reset_generation;
-  try_publish_snapshot(model, data, true, generation, true);
+  const bool published = try_publish_snapshot(model, data, true, generation, true);
+  // A paused frame that could not be published is retried by the controller cycle (`update`) until it is.
+  evidence_snapshot_retry_.store(!published, std::memory_order_release);
   if (scalar_joint_publisher_) {
     scalar_joint_publisher_->publish(make_scalar_joint_evidence(
         model, data, scalar_joint_names_, state_.simulation_session_id, generation,
         reset_pending ? 0 : state_.simulation_step, true));
   }
+  complete_reset_snapshot(data, generation, reset_pending);
+}
+
+void SimulationEvidencePlugin::complete_reset_snapshot(
+  const mjData * data, uint64_t generation, bool reset_pending)
+{
   if (reset_pending && generation == state_.consumed_reset_generation) {
     physics_state_.publisher_sequence = 0;
     physics_state_.simulation_step = 0;
@@ -440,6 +495,8 @@ void SimulationEvidencePlugin::on_state_snapshot(
 
 void SimulationEvidencePlugin::cleanup()
 {
+  evidence_snapshot_retry_.store(false);
+  scene_snapshot_retry_.store(false);
   realtime_scene_publisher_.reset();
   scene_publisher_.reset();
   scene_builder_ = SceneStateBuilder{};
