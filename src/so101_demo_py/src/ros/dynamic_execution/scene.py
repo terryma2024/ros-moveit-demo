@@ -171,8 +171,10 @@ class SceneOperations:
             "source_physics": asdict(before), "expected_geometry": asdict(expected_geometry),
             "apply_call_id": None, "query_call_id": None, "geometry_verification": None,
         }
+        # No manifest write here: it sat between the physics snapshot this request names and the request itself, and a slow write
+        # (IO pressure) aged the named source past the Recorder's 100 ms window. The transaction is persisted right after the call
+        # (also when the call is refused, times out or raises), so the source still survives every outcome.
         self._document.setdefault("scene_transactions", []).append(transaction)
-        self._write()
         remove = AttachedCollisionObject()
         remove.object.id = "plastic_cup"
         remove.object.operation = CollisionObject.REMOVE
@@ -201,7 +203,7 @@ class SceneOperations:
             calls = getattr(self, "_scene_service_calls", ())
             if len(calls) > start:
                 transaction["apply_call_id"] = calls[start]["call_id"]
-                self._write()
+            self._write()
         calls = getattr(self, "_scene_service_calls", ())
         if not response.success:
             raise RuntimeError("DYNAMIC_DETACH_SYNC_FAILED")

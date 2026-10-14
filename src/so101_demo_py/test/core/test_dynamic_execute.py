@@ -212,6 +212,71 @@ def test_actual_dynamic_detach_verifies_full_source_derived_geometry(change):
     assert retained["expected_geometry"]["objects"][2]["pose"]["values"] == cup_pose
 
 
+def test_the_detach_names_the_source_taken_last_with_no_manifest_write_between_it_and_the_request():
+    """The named physics source is acquired immediately before the apply is dispatched: the manifest write that used to sit between
+    the snapshot and the request (slow under IO load, so the source aged past the Recorder's 100 ms window) now follows the call."""
+    from dataclasses import replace
+    from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
+    from so101_demo.core.simulation.types import SimulationEvidence, ObjectState
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.control.planning_scene.task_scene import make_task_scene
+    from test_task_scene_builder import _geometry
+
+    base = _geometry()
+    cup_pose = (0.04, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
+
+    def evidence(sequence):
+        return SimulationEvidence(
+            simulation_time_s=1.25 + sequence * 0.02, frame_id="world", publisher_sequence=sequence,
+            simulation_step=600 + sequence, reset_epoch=1, simulation_session_id="s", paused=False,
+            object_state=ObjectState(1, "plastic_cup", cup_pose[:3], cup_pose[3:], (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+            has_contact=False, minimum_signed_distance_m=0.0, maximum_normal_force_n=0.0,
+            truncated=False, left_fingertip_contacts=(), right_fingertip_contacts=(), other_object_contacts=())
+
+    expected = replace(base, objects=(*base.objects[:2], replace(base.objects[2], pose=Pose7(cup_pose))))
+    response_scene = make_task_scene(expected)
+    response_scene.robot_state.attached_collision_objects = []
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    adapter._task_geometry = base
+    adapter._apply_scene, adapter._get_scene = object(), object()
+    events, taken = [], []
+
+    def snapshot():
+        taken.append(evidence(len(taken) + 1))
+        events.append(("snapshot", taken[-1].publisher_sequence))
+        return taken[-1]
+
+    adapter._snapshot = snapshot
+    adapter._supported_release_preflight = snapshot
+    adapter._touch_collision_allowed = False
+    adapter._session_id, adapter._expected_reset_epoch = "s", 1
+    adapter._document = {}
+    adapter._write = lambda: events.append(("write",))
+    adapter._release_runtime_policy = {"safety_release": {"support_distance_max_m": 0.002}}
+    adapter._execution_policy = {"state_max_age_s": 0.5}
+    adapter._monotonic = lambda: 10.0
+    from so101_demo.core.simulation.types import ReceivedSimulationEvidence
+    adapter._selected_release_source = ReceivedSimulationEvidence(evidence(1), 10.0)
+    adapter._record = lambda *args, **kwargs: None
+
+    def call(client, request, *_, before_dispatch=None):
+        if client is adapter._apply_scene:
+            events.append(("apply", adapter._scene_op_source["publisher_sequence"]))
+        return (ApplyPlanningScene.Response(success=True) if client is adapter._apply_scene else
+                GetPlanningScene.Response(scene=response_scene))
+
+    adapter._call = call
+    adapter._detach_or_sync(State.DETACH_MOVEIT)
+
+    before_apply = events[:events.index(next(item for item in events if item[0] == "apply"))]
+    named = next(item for item in events if item[0] == "apply")[1]
+    assert before_apply and before_apply[-1][0] == "snapshot", "nothing but the snapshot precedes the request"
+    assert named == before_apply[-1][1], "the request names the source acquired last"
+    assert ("write",) in events[events.index(("apply", named)):], "the transaction is still persisted, after the call"
+    retained, = adapter._document["scene_transactions"]
+    assert retained["source_physics"]["publisher_sequence"] == named
+
+
 def test_finish_records_explicit_no_action_authority_for_idle_failure():
     adapter = _finish_adapter()
     adapter._snapshot = lambda: pytest.fail("pre-action failure must not require physics")
