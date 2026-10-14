@@ -150,7 +150,7 @@ def seal_task(task_dir, lease, scope_path, inputs_path, *, seed, outcome, qc, po
     if qc == 'FAIL':
         fail_teacher_reference(expected, 'TEACHER_REFERENCE_END_AFTER_RECORDING')
     PENDING[str(store.episode_root)] = expected
-    return store.seal(seal, teacher=sealed_teacher(store, outcome))
+    return store.seal(seal, teacher=sealed_teacher(store, outcome, data='VALID'))
 
 
 def stop_evidence(spec, owner, process):

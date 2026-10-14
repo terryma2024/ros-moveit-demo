@@ -421,13 +421,15 @@ class _Run:
 
     def quality(self):
         rows = {name: [] for name in QUALITY_ORDER}
+        member = {}
         for wave in self.verified:
             for row in (wave or {}).get('case_results', ()):
                 scene = row['scene_id']
                 try:
-                    verdicts = evaluate_scene(row['proof'])
+                    verdicts, member[scene] = evaluate_scene(row['proof'])
                 except _RUN_ERRORS:
                     verdicts = {name: ('NO_EVIDENCE', None, 'EVIDENCE_INVALID') for name in QUALITY_ORDER}
+                    member[scene] = (True, None)
                 for name in QUALITY_ORDER:
                     outcome, source, error = verdicts[name]
                     if error is not None:
@@ -438,19 +440,28 @@ class _Run:
         complete = all(item is not None for item in self.verified)
         block = {}
         for name in QUALITY_ORDER:
+            rule = self.rule[name]
+            population = 'ALL_FROZEN_SCENES' if rule is None else rule['population']
             evidence = sorted(rows[name], key=lambda item: order[item['scene_id']])
+            excluded = []
+            if population == 'QC_VALID_EPISODES':
+                # the named population of decision D2: the excluded scenes are listed with their reason, never skipped silently
+                excluded = [dict(scene_id=item['scene_id'], reason=member[item['scene_id']][1]) for item in evidence
+                            if not member[item['scene_id']][0]]
+                evidence = [item for item in evidence if member[item['scene_id']][0]]
             outcomes = [item['outcome'] for item in evidence]
             passed = sum(1 for outcome in outcomes if outcome == 'PASS')
-            if self.rule[name] is None:
+            if rule is None:
                 verdict = 'UNDEFINED'
-            elif not complete or len(evidence) != len(self.scenes):
+            elif not complete or len(evidence)+len(excluded) != len(self.scenes):
                 verdict = 'NOT_EVALUATED'
             else:
-                passed, verdict = apply_rule(self.rule[name], outcomes)
+                passed, verdict = apply_rule(rule, outcomes)
                 if verdict == 'FAIL':
                     self.reasons.add('QUALITY_GATE_FAILED:'+name)
             block[name] = dict(rule=_ref_of(self.contract['quality_rules'][name]), evidence=evidence,
-                               result=dict(population='ALL_FROZEN_SCENES', passed=passed, verdict=verdict))
+                               result=dict(population=population, denominator=len(evidence), passed=passed, verdict=verdict,
+                                           excluded=excluded))
         return block
 
 

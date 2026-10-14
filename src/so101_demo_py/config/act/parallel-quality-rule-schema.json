@@ -35,7 +35,8 @@
     },
     "population": {
       "enum": [
-        "ALL_FROZEN_SCENES"
+        "ALL_FROZEN_SCENES",
+        "QC_VALID_EPISODES"
       ]
     },
     "pass": {
@@ -125,6 +126,45 @@
         "properties": {
           "episode_rule": {
             "const": "teacher_endpoint"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "enum": [
+              "qc_valid_rate",
+              "teacher_physical_success_rate"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "population": {
+            "const": "ALL_FROZEN_SCENES"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "population": {
+            "const": "QC_VALID_EPISODES"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "pass": {
+            "properties": {
+              "kind": {
+                "const": "EVERY"
+              }
+            }
           }
         }
       }

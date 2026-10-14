@@ -124,14 +124,47 @@
           "additionalProperties": false,
           "required": [
             "population",
+            "denominator",
             "passed",
-            "verdict"
+            "verdict",
+            "excluded"
           ],
           "properties": {
             "population": {
               "enum": [
-                "ALL_FROZEN_SCENES"
+                "ALL_FROZEN_SCENES",
+                "QC_VALID_EPISODES"
               ]
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 40
+            },
+            "excluded": {
+              "type": "array",
+              "maxItems": 40,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "scene_id",
+                  "reason"
+                ],
+                "properties": {
+                  "scene_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "enum": [
+                      "NO_QC_EVIDENCE",
+                      "DATA_NOT_VALID",
+                      "QC_NOT_PASS"
+                    ]
+                  }
+                }
+              }
             },
             "passed": {
               "type": "integer",
@@ -304,7 +337,7 @@
               "recorder_lossless": {
                 "properties": {
                   "evidence": {
-                    "minItems": 40
+                    "minItems": 1
                   },
                   "result": {
                     "properties": {
@@ -318,7 +351,7 @@
               "frame_continuity": {
                 "properties": {
                   "evidence": {
-                    "minItems": 40
+                    "minItems": 1
                   },
                   "result": {
                     "properties": {

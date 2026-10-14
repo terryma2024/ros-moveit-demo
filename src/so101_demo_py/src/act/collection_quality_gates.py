@@ -159,16 +159,38 @@ _GATES = dict(recorder_lossless=_lossless, frame_continuity=_continuity, qc_vali
               teacher_physical_success_rate=_teacher)
 
 
-def evaluate_scene(proof):
-    """`{gate: (outcome, source ref or None, error or None)}` for one verified task readback proof.
+#: why a scene is outside the `QC_VALID_EPISODES` population (human decision D2); a closed vocabulary
+EXCLUSION_REASONS = ('NO_QC_EVIDENCE', 'DATA_NOT_VALID', 'QC_NOT_PASS')
 
-    A gate whose evidence cannot be read or contradicts its binding is `NO_EVIDENCE` with the error, so the caller can name it."""
+
+def qc_valid_membership(result, report):
+    """`(member, reason)`: whether the scene is an episode whose data is VALID with QC PASS, and why not when it is not.
+
+    Judged from the re-read result and QC report: `NO_QC_EVIDENCE` (no QC report: a perception no-pose or any result whose data
+    was INVALID before QC), `DATA_NOT_VALID` (the data status is not VALID) and `QC_NOT_PASS` (QC ran and did not pass)."""
+    if report is None:
+        return False, 'NO_QC_EVIDENCE'
+    if result['act_data_status'] != 'VALID':
+        return False, 'DATA_NOT_VALID'
+    if result['act_data_qc'] != 'PASS' or report['status'] != 'PASS':
+        return False, 'QC_NOT_PASS'
+    return True, None
+
+
+def evaluate_scene(proof):
+    """`(verdicts, membership)` for one verified task readback proof.
+
+    `verdicts` is `{gate: (outcome, source ref or None, error or None)}`: a gate whose evidence cannot be read or contradicts its
+    binding is `NO_EVIDENCE` with the error, so the caller can name it. `membership` is `(member, reason)` of
+    `qc_valid_membership`; when the QC evidence itself cannot be read the scene is kept in the population (`(True, None)`), so
+    unreadable evidence is never a way out of a gate."""
     sealed, result = _result(proof)
     try:
         report = _qc_report(sealed, result)
         failure = None
+        membership = qc_valid_membership(result, report)
     except ValueError as error:
-        report, failure = None, error
+        report, failure, membership = None, error, (True, None)
     verdicts = {}
     for name in QUALITY_ORDER:
         try:
@@ -178,7 +200,7 @@ def evaluate_scene(proof):
             verdicts[name] = (outcome, source, None)
         except (OSError, ValueError, TypeError, KeyError) as error:
             verdicts[name] = ('NO_EVIDENCE', None, str(error) or type(error).__name__)
-    return verdicts
+    return verdicts, membership
 
 
 def apply_rule(rule, outcomes):

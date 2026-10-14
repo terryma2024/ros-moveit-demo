@@ -21,9 +21,12 @@ IDENTITY_KEYS = frozenset({'source_sha256','runtime_config_sha256','collection_c
 FUNCTIONAL_KEYS = frozenset({'schema_version','kind','run_id','worker_count','scene_manifest',
                             'controlled_identity'})
 QUALITY_RULE_KEYS = frozenset({'schema_version','kind','name','episode_rule','population','pass'})
-#: Only the denominator the approved documents define: every frozen scene stays in every gate's denominator. A population that
-#: drops FAILED/INVALID/no-evidence scenes is not defined; adding one is an explicit change here, never a rule-file value.
-QUALITY_POPULATIONS = frozenset({'ALL_FROZEN_SCENES'})
+#: The populations a rule file may name. `ALL_FROZEN_SCENES` is every scene of the frozen list: FAILED, INVALID, no-pose and
+#: unevidenced scenes stay in the denominator. `QC_VALID_EPISODES` (human decision D2, 2026-10-14) is the scenes whose data is
+#: VALID with QC PASS; the scenes it leaves out are listed with a closed reason in the report, never skipped silently. Which gate
+#: may name which population is fixed here, not in the rule file: a rate always runs over every frozen scene.
+QUALITY_POPULATIONS = frozenset({'ALL_FROZEN_SCENES', 'QC_VALID_EPISODES'})
+EPISODE_GATES = frozenset({'recorder_lossless', 'frame_continuity'})
 QUALIFICATION_KEYS = frozenset({'schema_version','kind','qualification_run_id','worker_count',
     'scene_manifest','functional_manifest','formal_split_manifest','controlled_identity','quality_rules'})
 
@@ -109,6 +112,7 @@ def validate_quality_rule(name, document):
                  and document['kind'] == 'ACT_COLLECTION_QUALITY_RULE' and document['name'] == name)
         _require(document['episode_rule'] == quality_episode_rule(name))
         _require(document['population'] in QUALITY_POPULATIONS)
+        _require(name in EPISODE_GATES or document['population'] == 'ALL_FROZEN_SCENES')
         rule = document['pass']
         _require(type(rule) is dict and rule.get('kind') in ('EVERY','AT_LEAST'))
         if rule['kind'] == 'EVERY':
@@ -117,6 +121,8 @@ def validate_quality_rule(name, document):
             _require(set(rule) == {'kind','numerator','denominator'}
                      and type(rule['numerator']) is int and type(rule['denominator']) is int
                      and 0 < rule['numerator'] <= rule['denominator'])
+        # every valid episode must satisfy a per-episode gate: a count over them would loosen the judgement
+        _require(document['population'] != 'QC_VALID_EPISODES' or rule['kind'] == 'EVERY')
         return copy.deepcopy(document)
     except (ValueError,TypeError,KeyError,ImportError) as error:
         raise ValueError('QUALITY_RULE_INVALID') from error

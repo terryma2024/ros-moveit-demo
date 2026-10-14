@@ -138,7 +138,7 @@ def test_every_gate_episode_rule_is_the_code_constant():
     assert EPISODE_RULE_OF == {'recorder_lossless':topic_loss.RULE_VERSION,'frame_continuity':episode_qc.QC_RULE_VERSION,
         'qc_valid_rate':episode_qc.QC_RULE_VERSION,'teacher_physical_success_rate':dynamic_manifest.RULE_VERSION}
     assert {name:module().quality_episode_rule(name) for name in NAMES} == EPISODE_RULE_OF
-    assert module().QUALITY_POPULATIONS == frozenset({'ALL_FROZEN_SCENES'})
+    assert module().QUALITY_POPULATIONS == frozenset({'ALL_FROZEN_SCENES','QC_VALID_EPISODES'})
 
 
 @pytest.mark.parametrize('name',NAMES)

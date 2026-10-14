@@ -37,3 +37,21 @@ def write_rule(directory, name, document):
 def write_synthetic_rules(directory, **per_name):
     """The four TEST-ONLY rule files of `directory` as contract refs; `per_name[name]` is a document replacing the default."""
     return {name: write_rule(directory, name, per_name.get(name, synthetic_rule(name))) for name in NAMES}
+
+
+#: The pass rules the human decided on 2026-10-14 (D1 "Teacher >=38/40, QC >=34/40", D2 "only over valid episodes"): these ARE the
+#: real values, unlike SYNTHETIC_PASS. The two rates are over all 40 frozen scenes; lossless and continuity are over the
+#: episodes whose data is VALID with QC PASS, and every such episode must satisfy them.
+DECIDED = {'recorder_lossless': ('QC_VALID_EPISODES', {'kind': 'EVERY'}),
+           'frame_continuity': ('QC_VALID_EPISODES', {'kind': 'EVERY'}),
+           'qc_valid_rate': ('ALL_FROZEN_SCENES', {'kind': 'AT_LEAST', 'numerator': 34, 'denominator': 40}),
+           'teacher_physical_success_rate': ('ALL_FROZEN_SCENES', {'kind': 'AT_LEAST', 'numerator': 38, 'denominator': 40})}
+
+
+def decided_rule(name, **changes):
+    population, rule = DECIDED[name]
+    return synthetic_rule(name, **{'population': population, 'pass': dict(rule), **changes})
+
+
+def write_decided_rules(directory, **per_name):
+    return {name: write_rule(directory, name, per_name.get(name, decided_rule(name))) for name in NAMES}
