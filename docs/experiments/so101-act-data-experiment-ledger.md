@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3645
-next_experiment: EXP-588 (PLANNED): exact-W8 qualification, 40 scenes in two waves on eight container shards.
+latest_checkpoint: CP-3646
+next_experiment: EXP-589 (to be planned after the fix): repeat of the eight-shard qualification with the contract file visible to the shards.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3646 — EXP-588 VALID failure: all eight shards refuse their spec at start; lease released under the standing authorisation
+
+- First eight-shard attempt. The eight shard containers exited with code 2 and CAMPAIGN_SHARD_SPEC_INVALID before anything started; no scene ran. Cause as read from the code: the campaign config's qualification contract file ref, present only for eight workers, is validated inside the shard and the file is not mounted there. Assigned to a Sonnet writer: verify, fix with tests including a general check that every file ref reachable from the spec and the campaign config is mounted, and propose, without implementing, a proof for an instance that exited before starting anything.
+- Manual release of the held admission state, applied once by R/manual-lease-release-20261014-exp588.py under the standing human authorisation of CP-3628. Preconditions checked by the script: all eight shard containers exited with no process (docker state), no container running, the store in exactly the held state (one parent ACTIVE, one GPU lease, active slots exactly w00 to w07 of that campaign, no child, no lease operation). Byte backup, one transaction with the designed settle's row changes and the parent of operation 2045f149f8884ce382467fd99b66c86c written CANCELLED. Read back: IDLE, no lease, no active slot. Record in R/manual-lease-release-20261014-exp588. A human-authorised override of the fence, not a proof.
+- Retained: run root, prep directory, logs, the nine exited containers of this run. Nothing deleted.
 
 ## CP-3645 — Native single-worker entries; qualification decisions implemented; Host readback 5x cheaper plus a process pool; gates; EXP-588 planned
 
@@ -91,7 +97,7 @@ next_experiment: EXP-588 (PLANNED): exact-W8 qualification, 40 scenes in two wav
 
 ```yaml
 experiment_id: EXP-588
-status: PLANNED
+status: VALID
 prior_experiment: EXP-587 (VALID; two containers, eight of eight)
 hypothesis: Eight container shards on the fixed identity, sharing one GPU and one Teacher service, collect the 40 qualification scenes in two waves within the campaign deadline, with at least 38 Teacher successes and 34 QC-valid episodes, every QC-valid episode lossless and continuous, both waves verified and every stop proven.
 prediction: This is the first measurement of eight concurrent shards - CPU and memory of unbounded containers on 32 logical CPUs and 31 GB, real-time factor, Teacher service queueing with eight requesters, loss and stall rates at that load, wave readback with the pool, the total against 5400 s. Expected if per-scene time stays near one-shard speed - about 17 minutes per wave of collection, about 2.5 minutes per wave of readback, about 50 minutes in total. The data-valid rate over the last four eight-scene runs was 30 of 32; a lower rate at eight shards is plausible. Any execution fault or unfinished task makes the run NOT_QUALIFIED whatever the rates. The first stage that fails, if any, is the new information.
@@ -114,18 +120,25 @@ provenance:
   gz_partition: each shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w8-inputs-20261014T030000Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w8-inputs-20261014T030000Z/run-w8.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Discovery twelve roles READY; pre-flight passed; admission accepted eight workers; the Teacher service container started and later exited 0; eight shard containers were launched for wave 0.
+  - All eight shard containers exited with code 2 at start. Each printed its image readback line and then CAMPAIGN_SHARD_SPEC_INVALID (docker logs). No runtime-ready record, no task assigned, no scene run.
+  - The Host raised SHARD_START_FENCED for the shard starts; campaign-cleanup.json has the service terminated true and every shard terminated false with LAUNCH_STOP_UNCONFIRMED; the CLI exited 1 about three minutes after the start (w8-end 03:03:14Z).
+  - The shard spec differs from a working two-container spec only in values; the campaign config it references has a non-null qualification_contract file ref (gate-contract.json in the prep directory), null for one and two workers. The shard launch argv mounts the owned root, the output directory, the run's frozen inputs, the runtime YAML, the weights, the campaign config and the spec, and not that contract file.
+  - Unified store after the run - VALIDATION_ACTIVE with the lease and slots w00 to w07 of campaign w8q-20261014T030000Z held. No container running.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The spec loader in the shard validates the campaign config, whose loader opens the qualification contract file ref; the file is not mounted into the shard, so the spec is refused. Read from the code (inference/config.py validate_file_ref on qualification_contract; act_instance/spec.py load_spec); to be verified by the writer. This path was never run before - worker counts one and two carry a null contract - and the input validation used the Host's view of the files.
+  - A shard that exits before it ever starts anything cannot write a stop receipt, so its stop is unconfirmed by construction and the admission stays held. A proof for an instance that never started is missing from the design.
+conclusion: VALID failure at shard start, before any collection. Nothing was measured about eight concurrent shards. The cause is a code defect of the eight-worker path, not a resource limit.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261014T030000Z (host/campaign-cleanup.json, shard-wave-0-w0N-g1.json, wave-0/w0N/g1/launch-argv.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261014T030000Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp588 and exp588-console.log; the eight exited containers so101-act-ae0b28c2aafab6e2-w00-g1 to w07-g1 are retained
+decision: KEEP
+next_experiment: EXP-589
 ```
 
 ## CP-3644 — EXP-587 VALID: two concurrent containers on the fixed identity, eight of eight VALID, no cross-talk evidence
