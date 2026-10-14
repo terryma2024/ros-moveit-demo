@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 3654ec80fd2314c6ecdf4ed09052f6c9f2835307
+current_commit: 02ca8318e2542a6e1fde027b96e3cf8e0f3a57a3
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,78 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3658
-next_experiment: NONE until the human decides on the pre-motion unreachable classification and on the remaining data-quality causes.
+latest_checkpoint: CP-3659
+next_experiment: EXP-594 (PLANNED): sixth eight-shard qualification attempt, with the unreachable classification, the rule-gap fixes and the reachability-filtered scenes.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3659 — Fixes committed, gate PASS, images rebuilt, scenes regenerated; EXP-594 planned
+
+- Code (Sonnet writer, reviewed inline):
+  - `ffcfb8e70`: a reachability-preflight UNREACHABLE writes a FAILED Teacher manifest (FAILED and UNCONFIRMED, no physical action), so the task is collected and sealed but not exportable, and the campaign continues.
+  - `a29d0be7a` (test only): the qualification readback scores it NO_EVIDENCE, never a pass, kept in the denominator and excluded from QC_VALID_EPISODES with the reason NO_QC_EVIDENCE.
+  - `07119cfb5` and `02ca8318e`: a scene read between an apply and its readback is accepted only on that apply's exact geometry, and it waits while that association is not yet built.
+  - `d7e5dd68b`: the manifest write between the physics snapshot and the detach request moved after the call; the cause is inferred.
+  - Every 100 ms threshold is unchanged.
+- Wrist-camera analysis, read-only (R/exp593-wrist-camera-delay-analysis.md):
+  - The delay is in delivery, not production: the head frame of the same stamp, published later, arrives on time.
+  - 16 wrist-only holds in 38 episodes at eight shards, none in 24 single-shard episodes.
+  - Candidate mechanism: reliable-delivery repair. It is unproven, and no change was made; the hold count per episode is the post-run measurement.
+- Gate on 02ca8318e, R/gates/02ca8318e254, serial: build rc 0, 255 s; so101_demo_py 12889 passed, 187 skipped, 390 s; colcon 2173 tests, 0 errors, 0 failures, 60 skipped, 388 s (upstream controller suites skipped as unchanged). PASSED.
+- Images from 02ca8318e, both build logs reading back that commit, identical source snapshots:
+  - inference sha256:ecb230c9f4e3bd1a83364c6d0fe814d11dcdc24911a2438606f980fec6d76a33 (R/image-build-20261014T231336Z)
+  - shard sha256:c7b53bf6c9a4b695e1d054cca09136ba0e63812a34e5c55f5d06dce16ee65318 (R/image-build-20261014T231456Z)
+- Scenes REG/act-w8-scenes-20261014T224234Z (Sonnet, one container on the 3654ec80f shard image, removed afterwards):
+  - Same method and seeds, plus the Teacher's own reachability check at the true pose and at ±0.01 m in x and y.
+  - Qualification: 40 rows from 74 draws, 4 rejected as unreachable. Formal: 70 rows, 21 draws rejected as unreachable.
+  - Readback ALL PASS, and a second pass over all 550 poses found no rejection.
+  - Of the old 110 scenes, qual-20, qual-25, qual-35, frm-018 and frm-035 would be rejected.
+  - Limits: planning at the boundary is not fully deterministic (one disagreement in 531 repeated poses); the start state differs from the live Teacher's.
+- Inputs REG/act-w8-inputs-20261014T231900Z: validation 70 of 70 PASS after inspect.zsh, with the reach-filter container gone.
+
+```yaml
+experiment_id: EXP-594
+status: PLANNED
+prior_experiment: EXP-593 (VALID failure; two pre-motion unreachable faults, 23 of 40 QC-valid)
+hypothesis: With pre-motion unreachable results sealed as Teacher failures, the rule gaps closed and reachable scenes only, eight shards finish both waves without an execution fault and reach the qualification pass counts - Teacher at least 38 of 40, QC at least 34 of 40.
+prediction:
+  - No execution fault.
+  - No LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID.
+  - RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW much rarer than 10 of 38 if the manifest write was the cause.
+  - NO_NEW_ACQUISITION from wrist-only holds still present, at about 5 of 40.
+  - The QC count may fall short of 34 because of those holds; overflow 0; memory near 24 GiB.
+single_variable: Commits ffcfb8e70 to 02ca8318e and the regenerated scene lists relative to EXP-593; same scheduling limits, rules and launcher.
+lifecycle: ISOLATED_STACK (eight containers per wave)
+preconditions:
+  - Enforced by the run script, as EXP-593, for commit 02ca8318e.
+success_criteria:
+  - As EXP-588.
+failure_criteria:
+  - As EXP-593.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 02ca8318e; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 02ca8318e2542a6e1fde027b96e3cf8e0f3a57a3 (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/02ca8318e254/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel; the sampler on the Host
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261014T231900Z/inspect.zsh
+    exit_code: 0
+  - command: zsh <registered root>/act-w8-inputs-20261014T231900Z/run-w8.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3658 — Human decisions after EXP-593: unreachable scenes become Teacher failures and the scene lists are regenerated with a reachability filter; rule gaps fixed with thresholds unchanged
 
