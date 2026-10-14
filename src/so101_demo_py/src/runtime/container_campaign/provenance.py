@@ -15,6 +15,16 @@ from so101_demo.runtime.inference.config import _open_regular
 from so101_demo.runtime.parallel_ipc.frames import _pairs, canonical_json
 
 
+INFERENCE_PACKAGES = ("so101_demo_py",)
+#: the shard's ament packages whose resolved prefix is read back; the lossless queued-state overlay
+#: (joint_trajectory_controller, joint_state_broadcaster, so101_queued_state_publisher) must resolve inside
+#: /act/install, so an apt fallback to /opt/ros/jazzy is refused
+SHARD_PACKAGES = INFERENCE_PACKAGES + ("so101_teleop", "so101_quik", "so101_mujoco_support",
+    "controller_manager", "joint_trajectory_controller", "joint_state_broadcaster",
+    "so101_queued_state_publisher", "mujoco_ros2_control", "mujoco_ros2_control_msgs",
+    "mujoco_ros2_control_plugins")
+
+
 def _require(condition):
     if not condition:
         raise ValueError("IMAGE_PROVENANCE_INVALID")
@@ -185,9 +195,7 @@ def write_build_freeze(role):
 
     _require(role in ("inference", "shard"))
     modules = ["so101_demo"] + (["so101_teleop", "so101_quik"] if role == "shard" else [])
-    packages = ["so101_demo_py"] + (["so101_teleop", "so101_quik", "so101_mujoco_support",
-        "controller_manager", "mujoco_ros2_control", "mujoco_ros2_control_msgs",
-        "mujoco_ros2_control_plugins"] if role == "shard" else [])
+    packages = list(SHARD_PACKAGES if role == "shard" else INFERENCE_PACKAGES)
     versions = {distribution.metadata["Name"]: importlib.metadata.version(distribution.metadata["Name"])
                 for distribution in importlib.metadata.distributions() if distribution.metadata.get("Name")}
     runtime = runtime_readback(dict(interpreter="/act/venv/bin/python", dependencies=versions,

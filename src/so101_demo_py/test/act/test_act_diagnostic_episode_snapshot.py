@@ -30,6 +30,20 @@ def test_frozen_scene_loads_without_original_asset_tree(tmp_path):
         (PACKAGE / "src/cli/dynamic_cup_pick_place.py").read_bytes()).hexdigest()
 
 
+def test_snapshot_freezes_the_patched_controller_overlay_sources(tmp_path):
+    source_files = _snapshot(tmp_path)["source_files"]
+    overlay = "third_party/ros2_controllers/"
+    for relative in (
+            "joint_trajectory_controller/src/joint_trajectory_controller.cpp",
+            "joint_trajectory_controller/CMakeLists.txt",
+            "joint_state_broadcaster/src/joint_state_broadcaster.cpp",
+            "joint_state_broadcaster/package.xml",
+            "so101_queued_state_publisher/include/so101_queued_state_publisher/queued_state_publisher.hpp",
+            "so101_queued_state_publisher/CMakeLists.txt"):
+        assert source_files[overlay + relative]["sha256"] == hashlib.sha256(
+            (SOURCE / overlay / relative).read_bytes()).hexdigest(), relative
+
+
 def test_targets_derive_from_reset_and_place_recipe_before_execution(tmp_path):
     from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
     from so101_demo.core.dynamic_pick_policy import load_dynamic_pick_template

@@ -23,6 +23,12 @@ _SOURCE_ROOTS = (
     "third_party/mujoco_ros2_control/mujoco_ros2_control/src",
     "third_party/mujoco_ros2_control/mujoco_ros2_control/include",
     "third_party/mujoco_ros2_control/mujoco_ros2_control_msgs",
+    # the lossless queued-state controller overlay that replaces the apt controllers
+    "third_party/ros2_controllers/joint_trajectory_controller/src",
+    "third_party/ros2_controllers/joint_trajectory_controller/include",
+    "third_party/ros2_controllers/joint_state_broadcaster/src",
+    "third_party/ros2_controllers/joint_state_broadcaster/include",
+    "third_party/ros2_controllers/so101_queued_state_publisher/include",
 )
 _SOURCE_SUFFIXES = {".py", ".cpp", ".hpp", ".h", ".yaml", ".json", ".xml", ".srdf", ".msg", ".srv", ".action"}
 
@@ -161,7 +167,10 @@ def freeze_execution_snapshot(source_root: Path, output: Path) -> dict:
             payloads[path.relative_to(package).as_posix()] = _regular(path, source)
     for package_path in ("src/so101_demo_py", "src/so101_teleop", "src/so101_mujoco_support",
                          "third_party/mujoco_ros2_control/mujoco_ros2_control",
-                         "third_party/mujoco_ros2_control/mujoco_ros2_control_msgs"):
+                         "third_party/mujoco_ros2_control/mujoco_ros2_control_msgs",
+                         "third_party/ros2_controllers/joint_trajectory_controller",
+                         "third_party/ros2_controllers/joint_state_broadcaster",
+                         "third_party/ros2_controllers/so101_queued_state_publisher"):
         for filename in ("package.xml", "CMakeLists.txt", "setup.py", "setup.cfg"):
             path = source / package_path / filename
             if path.is_file():

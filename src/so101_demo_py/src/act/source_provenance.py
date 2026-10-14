@@ -47,6 +47,21 @@ _ROLE_SPECS = (
     ("mujoco_ros2_control_plugin", "compiled",
      "third_party/mujoco_ros2_control/mujoco_ros2_control/src",
      "mujoco_ros2_control/lib/libmujoco_ros2_control.so", "dependency"),
+    # the lossless queued-state overlay (third_party/ros2_controllers) replaces the apt joint_trajectory_controller and
+    # joint_state_broadcaster; each is built by its own package into the dependency overlay, so the libraries the stack
+    # really loads are pinned like the vendored MuJoCo plugin, and the header-only queued publisher both link against is
+    # pinned byte for byte
+    ("joint_trajectory_controller_plugin", "compiled",
+     "third_party/ros2_controllers/joint_trajectory_controller/src",
+     "joint_trajectory_controller/lib/libjoint_trajectory_controller.so", "dependency"),
+    ("joint_state_broadcaster_plugin", "compiled",
+     "third_party/ros2_controllers/joint_state_broadcaster/src",
+     "joint_state_broadcaster/lib/libjoint_state_broadcaster.so", "dependency"),
+    ("queued_state_publisher_header", "verbatim_install",
+     "third_party/ros2_controllers/so101_queued_state_publisher/include/so101_queued_state_publisher/"
+     "queued_state_publisher.hpp",
+     "so101_queued_state_publisher/include/so101_queued_state_publisher/so101_queued_state_publisher/"
+     "queued_state_publisher.hpp", "dependency"),
     ("ros_runtime", "external_runtime", None, None, "external"),
     ("model_weights", "external_runtime", None, None, "external"),
 )

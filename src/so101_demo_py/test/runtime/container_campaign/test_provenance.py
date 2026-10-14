@@ -96,3 +96,19 @@ def test_docker_readback_binds_live_image_identity_and_actual_probe(tmp_path, pr
     else:
         with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
             module.read_container_provenance(container_id, docker_runner=docker_runner)
+
+
+def test_shard_prefix_readback_covers_the_patched_controller_overlay():
+    """The overlay must resolve inside /act/install; an apt fallback would read back /opt/ros/jazzy and be refused."""
+    module = importlib.import_module("so101_demo.runtime.container_campaign.provenance")
+    shard = set(module.SHARD_PACKAGES)
+    assert {"joint_trajectory_controller", "joint_state_broadcaster", "so101_queued_state_publisher",
+            "controller_manager"} <= shard
+    assert module.INFERENCE_PACKAGES == ("so101_demo_py",)
+    runtime = dict(interpreter="/act/venv/bin/python", dependencies={"numpy": "1.26.4"},
+        module_origins={"so101_demo": "/act/install/lib/so101_demo/__init__.py"},
+        package_prefixes={name: "/act/install" for name in module.SHARD_PACKAGES})
+    module._runtime_contract(runtime)
+    runtime["package_prefixes"]["joint_trajectory_controller"] = "/opt/ros/jazzy"
+    with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
+        module._runtime_contract(runtime)

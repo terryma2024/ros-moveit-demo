@@ -73,7 +73,13 @@ def test_the_c_plus_plus_broker_chain_is_gone_and_the_evidence_plugin_stays():
 def test_the_vendored_jtc_is_not_in_the_worktree_and_the_snapshot_does_not_read_it():
     assert not (REPOSITORY / "src/third_party").exists()
     from so101_demo.act import execution_snapshot
-    assert "third_party/ros2_controllers" not in inspect.getsource(execution_snapshot)
+    # the retired broker's vendored controller is gone; the only third_party/ros2_controllers content the snapshot
+    # may read is the lossless queued-state overlay of exactly these three packages
+    roots = {root.split("/")[2] for root in execution_snapshot._SOURCE_ROOTS
+             if root.startswith("third_party/ros2_controllers/")}
+    assert roots == {"joint_trajectory_controller", "joint_state_broadcaster", "so101_queued_state_publisher"}
+    assert sorted(path.name for path in (REPOSITORY / "third_party/ros2_controllers").iterdir()
+                  if path.is_dir()) == sorted(roots)
 
 
 def test_the_console_script_and_the_receipt_plumbing_are_gone():

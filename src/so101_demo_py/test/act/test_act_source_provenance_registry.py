@@ -53,3 +53,33 @@ def test_the_worktree_plugins_stay_in_the_worktree_overlay():
 def test_the_broker_rows_are_gone_from_the_registry():
     names = {spec[0] for spec in runtime_role_specs()}
     assert "command" + "_broker" not in names and "broker_owned" + "_controller_plugin" not in names
+
+
+OVERLAY = "third_party/ros2_controllers/"
+
+
+def test_the_patched_controller_libraries_are_compiled_roles_of_the_dependency_overlay():
+    """The queued-state overlay replaces the apt controllers, so the libraries the stack loads must be pinned."""
+    for name, package, library in (
+            ("joint_trajectory_controller_plugin", "joint_trajectory_controller", "libjoint_trajectory_controller.so"),
+            ("joint_state_broadcaster_plugin", "joint_state_broadcaster", "libjoint_state_broadcaster.so")):
+        spec = _by_name(name)
+        assert spec[1] == "compiled", spec
+        assert spec[4] == "dependency", spec
+        assert spec[2] == f"{OVERLAY}{package}/src", spec[2]
+        assert spec[3] == f"{package}/lib/{library}", spec[3]
+        assert (REPOSITORY / spec[2]).is_dir(), spec[2]
+
+
+def test_the_header_only_queued_publisher_is_pinned_as_a_verbatim_install():
+    spec = _by_name("queued_state_publisher_header")
+    header = "so101_queued_state_publisher/queued_state_publisher.hpp"
+    assert spec[1] == "verbatim_install" and spec[4] == "dependency", spec
+    assert spec[2] == f"{OVERLAY}so101_queued_state_publisher/include/{header}", spec[2]
+    assert spec[3] == f"so101_queued_state_publisher/include/so101_queued_state_publisher/{header}", spec[3]
+    assert (REPOSITORY / spec[2]).is_file(), spec[2]
+
+
+def test_the_registry_stays_closed_over_the_overlay_roles():
+    names = [spec[0] for spec in runtime_role_specs()]
+    assert len(names) == len(set(names)) == 11, names
