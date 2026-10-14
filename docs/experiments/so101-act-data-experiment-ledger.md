@@ -69,11 +69,54 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3655
-next_experiment: EXP-593 (to be planned): eight-shard qualification with the controller overlay, recording cap 4, assignment gap 30 s.
+latest_checkpoint: CP-3656
+next_experiment: EXP-593 (PLANNED): fifth eight-shard qualification attempt, with the queued controller-state overlay.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3656 — EXP-593 planned: eight shards with the controller overlay
+
+- Inputs under the prep directory act-w8-inputs-20261014T151000Z on commit 3654ec80f, the gate install and images of EXP-592; campaign config with recording cap 4 and assignment gap 30 s, no tasks-in-flight limit; contract re-authored for the run id; validation 63 PASS, 6 informational, 1 pending (the candidates file); overlay readbacks in the image and the Host gate pass.
+
+```yaml
+experiment_id: EXP-593
+status: PLANNED
+prior_experiment: EXP-591 (VALID failure; 4 of 19 VALID at eight shards, mostly controller-state gaps) and EXP-592 (VALID; the overlay in one container, no gaps)
+hypothesis: With the controller state published losslessly, eight shards under the same scheduling limits as EXP-591 reach the qualification pass counts - at least 38 Teacher successes and 34 QC-valid episodes of 40 - with every QC-valid episode lossless and continuous, no execution fault, within the deadline, and every stop proven.
+prediction: No OFFLINE_SOURCE_GAP and no COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE; would_have_skipped_by_try_publish counts in the hundreds per shard, showing what the stock publisher would have lost, with overflowed 0; memory peak near the 19 GiB of EXP-591; remaining INVALID causes are late camera frames (NO_NEW_ACQUISITION) and scene-state loss, at a rate that may or may not stay within 6 of 40. The deadline margin is thin. Any execution fault or unfinished task makes the run NOT_QUALIFIED.
+single_variable: The controller overlay and paused-frame retry relative to EXP-591; same scheduling limits, scenes and rules; new ids, re-authored contract.
+lifecycle: ISOLATED_STACK (eight containers per wave)
+preconditions:
+  - Enforced by the run script - as EXP-591 for commit 3654ec80f, sampler before the CLI, disk projection.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-588.
+failure_criteria:
+  - As EXP-588; also an overflow of any queued state publisher.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 3654ec80f; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 3654ec80fd2314c6ecdf4ed09052f6c9f2835307 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:2c1e1b3a52ea841ba968603c1a65511f280a5dba35e262e7ffe299946050f511 and shard image sha256:2f32fba0f341de6e64b2270c8742ac38caa2e761fb4b5f72267069ad2ca50316; Host R/gates/3654ec80fd23/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel; the sampler on the Host
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261014T151000Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261014T151000Z/run-w8.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3655 — EXP-592 VALID: queued controller state works in a container, no overflow, no source gaps; one late camera frame
 
