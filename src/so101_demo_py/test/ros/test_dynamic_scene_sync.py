@@ -421,6 +421,7 @@ class _FakeExecution:
         self.observer = object()
 
     def finish(self, _result) -> None:
+        self.finished_with = _result
         self._events.append("execution.finish")
         if "execution.finish" in self._faults:
             raise RuntimeError("execution finish failed")
@@ -496,9 +497,12 @@ def _runtime(
         events.append("targets.resolve")
         return SimpleNamespace(input_pose=sample, targets={})
 
+    executions: list[_FakeExecution] = []
+
     def execution_factory(_node, _template, _targets, **_kwargs):
         events.append("execution.create")
-        return _FakeExecution(events, faults)
+        executions.append(_FakeExecution(events, faults))
+        return executions[-1]
 
     def reachability_preflight(_node, sample_arg, template_arg, scene_revision):
         assert sample_arg is sample
@@ -545,6 +549,7 @@ def _runtime(
         resolve_motion_targets=resolve,
         reachability_preflight=reachability_preflight,
         execution=execution_factory,
+        executions=executions,
         build_actions=build_actions,
         runner=runner_factory,
     )
@@ -951,10 +956,50 @@ def test_unreachable_preflight_writes_evidence_and_never_constructs_motion(
     )
     assert document["reports"][0]["status"] == "UNREACHABLE"
     assert "reachability.check" in events
-    assert "execution.create" not in events
     assert "actions.build" not in events
+    assert "runner.create" not in events
     assert "runner.run" not in events
     assert "DYNAMIC_TARGET_UNREACHABLE" in capsys.readouterr().out
+
+
+def test_unreachable_preflight_finishes_the_execution_with_a_pre_motion_idle_to_error_result(tmp_path) -> None:
+    """The terminal manifest is written by the execution itself: the result it is finished with is the real
+    no-action shape (IDLE -> ERROR, one transition) naming the unreachable code, so the manifest verifies."""
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    runtime = _runtime(
+        events,
+        observations=(_observation(simulator_x=-0.03, moveit_x=-0.03),) * 3,
+        scene=RecordingTaskScenePort(),
+        reachability_status=ReachabilityStatus.UNREACHABLE,
+    )
+
+    assert run_dynamic_execute(_options(tmp_path), _runtime=runtime) == 1
+
+    (execution,) = runtime.executions
+    result = execution.finished_with
+    assert result.status.value == "ERROR"
+    assert tuple(result.state_trace) == (State.IDLE, State.ERROR)
+    assert result.transition_count == 1
+    assert result.failure.code == "DYNAMIC_TARGET_UNREACHABLE"
+    assert events.index("execution.finish") < events.index("execution.close")
+
+
+def test_unknown_reachability_still_constructs_no_execution(tmp_path, capsys) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    runtime = _runtime(
+        events,
+        observations=(_observation(simulator_x=-0.03, moveit_x=-0.03),) * 3,
+        scene=RecordingTaskScenePort(),
+        reachability_status=ReachabilityStatus.UNKNOWN,
+    )
+
+    assert run_dynamic_execute(_options(tmp_path), _runtime=runtime) == 1
+    assert "execution.create" not in events
+    assert "DYNAMIC_TARGET_REACHABILITY_UNKNOWN" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

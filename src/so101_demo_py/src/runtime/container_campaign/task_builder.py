@@ -669,6 +669,11 @@ def classify_task_fault(decision,facts):
         return ('TEACHER_RESULT_UNVERIFIED: '+reason)[:200]
     if decision.act_data_status=='VALID':
         return None
+    if (reason=='DYNAMIC_TARGET_UNREACHABLE' and decision.act_data_status=='INVALID'
+            and decision.teacher_execution_status=='FAILED' and decision.teacher_task_result=='UNCONFIRMED'
+            and decision.physical_action_proven_absent is True):
+        # The Teacher's own pre-motion decision, verified from its manifest: a sealed Teacher failure with nothing recorded.
+        return None
     if decision.act_data_status=='INVALID' and reason.startswith('OFFLINE_PROCESSOR_INVALID: rc=3') and _data_verdict(facts,reason):
         return None
     return ('DATA_PIPELINE_FAULT: '+decision.act_data_status+' '+reason)[:200]

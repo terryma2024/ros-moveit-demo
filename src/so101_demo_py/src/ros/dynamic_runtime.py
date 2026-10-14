@@ -19,7 +19,7 @@ from ..application.dynamic_plan_only import (
     plan_dynamic_state_with_scene_gates,
 )
 from ..cli.cup_pose_subscriber import status_line
-from ..core.domain import RunMode, RunRequest, State
+from ..core.domain import Failure, FailureCategory, RunMode, RunRequest, RunResult, RunStatus, State
 from ..core.dynamic_pick import resolve_motion_targets
 from ..core.dynamic_pick_policy import (
     LoadedDynamicPolicy,
@@ -522,6 +522,18 @@ def _cleanup_dynamic_execute(
     return _CleanupOutcome(tuple(failures))
 
 
+def _unreachable_pre_motion_result() -> RunResult:
+    """The Teacher's terminal result when the reachability preflight decided UNREACHABLE: the first transition fails and no
+    action ran, which is the shape the execution's failure evidence proves physical action absent from."""
+    return RunResult(
+        status=RunStatus.ERROR,
+        current_state=State.ERROR,
+        failure=Failure(FailureCategory.PRECONDITION, "DYNAMIC_TARGET_UNREACHABLE", "DYNAMIC_TARGET_UNREACHABLE"),
+        transition_count=1,
+        state_trace=(State.IDLE, State.ERROR),
+    )
+
+
 def _finish_failed_execution(execution: Any, error: Exception) -> None:
     class FailedResult:
         status = type("Status", (), {"value": "ERROR"})()
@@ -888,9 +900,11 @@ def run_dynamic_execute(
             reachability,
             ik_backend=ik_backend,
         )
-        if reachability.status.value == "UNREACHABLE":
-            raise RuntimeError("DYNAMIC_TARGET_UNREACHABLE")
-        if reachability.status.value != "REACHABLE":
+        # UNREACHABLE is the Teacher's own decision, taken before any motion: the execution is constructed only to write its
+        # terminal manifest (IDLE -> ERROR, no action), so the host reads a sealed Teacher failure instead of a missing receipt.
+        # Any other non-REACHABLE status (UNKNOWN) is not a decision and stays an error that writes no manifest.
+        target_unreachable = reachability.status.value == "UNREACHABLE"
+        if not target_unreachable and reachability.status.value != "REACHABLE":
             raise RuntimeError("DYNAMIC_TARGET_REACHABILITY_UNKNOWN")
         mark("execution.construct.begin")
         execution = runtime.execution(
@@ -962,32 +976,36 @@ def run_dynamic_execute(
         if teacher_run:
             from ..core.workflow import TEACHER_WORKFLOW
             workflow_options = {"workflow": TEACHER_WORKFLOW}
-        mark("build_actions.begin")
-        actions = profile_actions(
-            runtime.build_actions(execution, targets, **workflow_options),
-            profiler,
-        )
-        mark("build_actions.end")
-        runner = runtime.runner(
-            actions,
-            session_id=options.session_id,
-            policy_bundle_sha256=loaded.sha256,
-            # The runner reads the Teacher's own observer directly. It used to be wrapped by a recorder that appended every
-            # observation to a list nothing ever read (an unbounded Teacher-side data copy with no consumer, removed in A4a).
-            world_observer=execution.observer,
-            **workflow_options,
-        )
-        finish_setup("accepted")
-        # The attempt deadline is frozen here, from the frozen execution policy. The watchdog thread only sets a flag:
-        # the monitor, the gripper hook and the state machine read it on the executing thread.
-        deadline_s = (getattr(execution, "_execution_policy", None) or {}).get("execution_deadline_s")
-        if deadline_s is not None:
-            stop_flags.arm_deadline(deadline_s)
-            watchdog = DeadlineWatchdog(stop_flags)
-            watchdog.start()
-        stop_flags.raise_if_stopped()
-        mark("runner.run.begin")
-        result = runner.run(RunRequest(mode=RunMode.EXECUTE))
+        if target_unreachable:
+            finish_setup("accepted")
+            result = _unreachable_pre_motion_result()
+        else:
+            mark("build_actions.begin")
+            actions = profile_actions(
+                runtime.build_actions(execution, targets, **workflow_options),
+                profiler,
+            )
+            mark("build_actions.end")
+            runner = runtime.runner(
+                actions,
+                session_id=options.session_id,
+                policy_bundle_sha256=loaded.sha256,
+                # The runner reads the Teacher's own observer directly. It used to be wrapped by a recorder that appended every
+                # observation to a list nothing ever read (an unbounded Teacher-side data copy with no consumer, removed in A4a).
+                world_observer=execution.observer,
+                **workflow_options,
+            )
+            finish_setup("accepted")
+            # The attempt deadline is frozen here, from the frozen execution policy. The watchdog thread only sets a flag:
+            # the monitor, the gripper hook and the state machine read it on the executing thread.
+            deadline_s = (getattr(execution, "_execution_policy", None) or {}).get("execution_deadline_s")
+            if deadline_s is not None:
+                stop_flags.arm_deadline(deadline_s)
+                watchdog = DeadlineWatchdog(stop_flags)
+                watchdog.start()
+            stop_flags.raise_if_stopped()
+            mark("runner.run.begin")
+            result = runner.run(RunRequest(mode=RunMode.EXECUTE))
     except Exception as error:
         finish_setup("rejected", _failure_code(error))
         primary_failure = _failure_code(error)

@@ -22,6 +22,9 @@ from so101_demo.runtime.parallel_worker_parts.receipts import (
 )
 
 
+TARGET_UNREACHABLE = "DYNAMIC_TARGET_UNREACHABLE"
+
+
 class ExecutionPorts:
     def _planning_adapter(self):
         if self._planner is not None:
@@ -347,6 +350,21 @@ class ExecutionPorts:
                       teacher_task_result=task["result"], act_data_status=data_status, act_data_reason=None)
         if outcome is AttemptStatus.PASSED:
             return outcome, "OK", fields
+        evidence = document.get("failure_evidence")
+        if (
+            status == "ERROR"
+            and failure == TARGET_UNREACHABLE
+            and outcome is AttemptStatus.FAILED
+            and document["teacher_execution_status"] == "FAILED"
+            and type(evidence) is dict
+            and evidence.get("physical_action_proven_absent") is True
+        ):
+            # The Teacher decided before any motion that the target cannot be reached. The manifest has just been verified as a
+            # no-action IDLE -> ERROR failure, so the run is a sealed Teacher failure with nothing to record: the data side is
+            # INVALID for that reason and the Recorder's processor is not asked to judge an episode that never started.
+            fields.update(act_data_status="INVALID", act_data_reason=TARGET_UNREACHABLE,
+                          physical_action_proven_absent=True)
+            return outcome, failure, fields
         if document["teacher_execution_status"] == "COMPLETED":
             first = task["reasons"][0].split(":", 1)[0] if task["reasons"] else task["result"]
             prefix = "TEACHER_TASK_FAIL" if outcome is AttemptStatus.FAILED else "TEACHER_TASK_UNCONFIRMED"
@@ -388,10 +406,11 @@ class ExecutionPorts:
                            act_data_status="INVALID", act_data_reason="DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE")
         # The decision carries the Teacher's own result and the data verdict of its child side by side: the attempt
         # status is derived from the Teacher fields alone, and the result store grades the data separately.
+        absent = teacher.pop("physical_action_proven_absent", False)
         decision = RuntimeDecision(
             outcome,
             reason,
-            physical_action_proven_absent=False,
+            physical_action_proven_absent=absent,
             **teacher,
         )
         return ExecutionCompletionReceipt(decision, time.monotonic(), teacher_child_exited=status is not None)

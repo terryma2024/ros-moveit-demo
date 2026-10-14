@@ -597,6 +597,26 @@ def test_valid_data_is_a_business_result_whatever_the_teacher_said(tmp_path):
         assert builder().classify_task_fault(decision,facts) is None,(execution,result)
 
 
+def unreachable_decision(**changes):
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
+    from so101_demo.runtime.parallel_worker_parts.receipts import RuntimeDecision
+    values=dict(status=AttemptStatus.FAILED,reason='DYNAMIC_TARGET_UNREACHABLE',physical_action_proven_absent=True,
+        teacher_execution_status='FAILED',teacher_task_result='UNCONFIRMED',act_data_status='INVALID',
+        act_data_reason='DYNAMIC_TARGET_UNREACHABLE')
+    return RuntimeDecision(**(values|changes))
+
+
+def test_pre_motion_unreachable_is_a_business_result():
+    assert builder().classify_task_fault(unreachable_decision(),None) is None
+
+
+@pytest.mark.parametrize('changes',[dict(physical_action_proven_absent=False),dict(act_data_reason='DYNAMIC_TARGET_UNREACHABLE: x'),
+    dict(act_data_reason='DYNAMIC_TARGET_REACHABILITY_UNKNOWN'),dict(act_data_status='DISABLED',act_data_reason=None),
+    dict(teacher_execution_status='INDETERMINATE')])
+def test_only_the_proven_pre_motion_unreachable_form_is_a_business_result(changes):
+    assert type(builder().classify_task_fault(unreachable_decision(**changes),None)) is str
+
+
 def test_qc_invalid_is_business_result(tmp_path):
     from test_offline_recording_switch import FakeProcesses
     cases={'engine_invalid':FakeProcesses(returncode=3,outputs='invalid'),
@@ -912,12 +932,18 @@ class Rig:
     def execute_result(self,lease,admitted,child):
         self.note_lease('execute')
         self.stage('execute')
-        execution,task=OUTCOMES[self.teacher]
+        unreachable=self.teacher=='UNREACHABLE'
+        execution,task=OUTCOMES['FAILED_EXECUTION' if unreachable else self.teacher]
         fields=dict(execution_status=execution,task_result=task)
         if self.manifest:
             write_manifest(self.task_root/'attempts'/lease.point_id/lease.attempt_id/'working',fields)
-        decision=RuntimeDecision(teacher_attempt_status(execution,task),'OK',False,teacher_execution_status=execution,
-                                 teacher_task_result=task,act_data_status='DISABLED')
+        if unreachable:   # what `_dynamic_manifest_outcome` returns for the Teacher's pre-motion DYNAMIC_TARGET_UNREACHABLE manifest
+            decision=RuntimeDecision(teacher_attempt_status(execution,task),'DYNAMIC_TARGET_UNREACHABLE',True,
+                teacher_execution_status=execution,teacher_task_result=task,act_data_status='INVALID',
+                act_data_reason='DYNAMIC_TARGET_UNREACHABLE')
+        else:
+            decision=RuntimeDecision(teacher_attempt_status(execution,task),'OK',False,teacher_execution_status=execution,
+                                     teacher_task_result=task,act_data_status='DISABLED')
         return ExecutionCompletionReceipt(decision,time.monotonic()+1.0)
 
     def cancelled(self,lease):
@@ -963,6 +989,23 @@ def test_teacher_failure_seals_and_run_returns_summary(flow,monkeypatch):
     assert summary['act_data_status']=='INVALID' and summary['act_data_reason'].startswith('OFFLINE_PROCESSOR_INVALID: rc=3')
     assert summary['act_data_qc']=='NOT_RUN' and summary['export_eligible'] is False
     assert rig.sealed().is_dir() and (rig.sealed()/'result.json').is_file()
+    write_task_result(flow.output,rig.task_id,summary)
+    assert read_task_result(flow.output,rig.task_id)['result']==summary
+
+
+def test_pre_motion_unreachable_is_a_collected_sealed_teacher_failure_not_a_fault(flow,monkeypatch):
+    """The Teacher decided DYNAMIC_TARGET_UNREACHABLE before any motion: the task completes normally (collected, never failed),
+    the result is a sealed FAILED Teacher with INVALID data that cannot be exported, and no processor judges an episode."""
+    from so101_demo.runtime.container_campaign.task_results import read_task_result,write_task_result
+    rig=Rig(flow,monkeypatch,teacher='UNREACHABLE')
+    summary=rig.execution.run()
+    assert (summary['status'],summary['teacher_execution_status'],summary['teacher_task_result']) == (
+        'FAILED','FAILED','UNCONFIRMED')
+    assert (summary['act_data_status'],summary['act_data_reason'],summary['act_data_qc']) == (
+        'INVALID','DYNAMIC_TARGET_UNREACHABLE','NOT_RUN')
+    assert summary['export_eligible'] is False and rig.sealed().is_dir() and (rig.sealed()/'result.json').is_file()
+    assert ('processor_start',) not in rig.events and ('seal',) in rig.events
+    assert rig.execution.decision.physical_action_proven_absent is True
     write_task_result(flow.output,rig.task_id,summary)
     assert read_task_result(flow.output,rig.task_id)['result']==summary
 

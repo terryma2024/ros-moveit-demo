@@ -265,6 +265,47 @@ def test_exact_dynamic_manifest_maps_terminal_business_outcome(
     assert receipt.decision.reason == expected_reason
 
 
+def test_pre_motion_unreachable_manifest_is_a_failed_teacher_with_invalid_data_and_no_action(tmp_path, monkeypatch):
+    """The Teacher's own terminal decision before any motion: FAILED, data INVALID for that reason, action proven absent."""
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy, status="ERROR")
+        document["failure"] = "DYNAMIC_TARGET_UNREACHABLE"
+        return document
+
+    receipt = _execute_with_manifest(tmp_path, monkeypatch, build, wait_status=256)
+
+    decision = receipt.decision
+    assert decision.status.value == "FAILED"
+    assert decision.reason == "DYNAMIC_TARGET_UNREACHABLE"
+    assert (decision.teacher_execution_status, decision.teacher_task_result) == ("FAILED", "UNCONFIRMED")
+    assert (decision.act_data_status, decision.act_data_reason) == ("INVALID", "DYNAMIC_TARGET_UNREACHABLE")
+    assert decision.physical_action_proven_absent is True
+
+
+def test_other_pre_motion_errors_keep_their_data_side_and_do_not_prove_absence(tmp_path, monkeypatch):
+    def build(lease, policy):
+        return _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy, status="ERROR")
+
+    decision = _execute_with_manifest(tmp_path, monkeypatch, build, wait_status=256).decision
+
+    assert decision.status.value == "FAILED"
+    assert (decision.act_data_status, decision.act_data_reason) == ("DISABLED", None)
+    assert decision.physical_action_proven_absent is False
+
+
+def test_unreachable_manifest_that_does_not_prove_the_absence_of_action_is_not_special(tmp_path, monkeypatch):
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy, status="ERROR")
+        document["failure"] = "DYNAMIC_TARGET_UNREACHABLE"
+        document["failure_evidence"]["physical_action_proven_absent"] = False
+        return document
+
+    receipt = _execute_with_manifest(tmp_path, monkeypatch, build, wait_status=256)
+
+    assert receipt.decision.status.value == "INDETERMINATE"
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
 @pytest.mark.parametrize(
     "failure",
     ["GRIPPER_GOAL_TIMEOUT", "GRIPPER_RESULT_TIMEOUT"],
