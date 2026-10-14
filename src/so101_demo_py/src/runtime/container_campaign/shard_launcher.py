@@ -40,10 +40,19 @@ class ContainerShardLauncher:
             container_name='so101-act-'+short+'-'+slot.worker_id+'-g'+str(generation),
             image_digest=self.config['shard_image']['digest'],owned_root=str(root),session_id=session)
 
+    def _contract_paths(self):
+        """The campaign config's qualification contract, when it has one.
+
+        The shard's spec loader reads the campaign config back, and that read validates every file ref in it, this one
+        included; so the container must see the file or its loader refuses the spec (`CAMPAIGN_SHARD_SPEC_INVALID`).
+        It is mounted read-only like the config, at its own host path. Worker counts without a contract add nothing."""
+        contract=self.config['qualification_contract']
+        return () if contract is None else (Path(contract['path']),)
+
     def _owner(self,*,launch,entry,spec_path,token,images,endpoints):
         return ContainerShardOwner(admitted_context=self.context,launch=launch,entry=entry,
             images=images,paths=self.paths,registry=self.registry,approved_inputs=self.approved_inputs,
-            config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path))),service_token=token,
+            config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path,*self._contract_paths()))),service_token=token,
             startup_timeout_s=self.runtime.initializing_hard_timeout_s,
             status_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
             stop_timeout_s=self.runtime.worker_recovery_timeout_s,
