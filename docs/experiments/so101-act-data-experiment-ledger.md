@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3656
-next_experiment: EXP-593 (PLANNED): fifth eight-shard qualification attempt, with the queued controller-state overlay.
+latest_checkpoint: CP-3657
+next_experiment: NONE until the human decides on the pre-motion unreachable classification and on the remaining data-quality causes.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3657 — EXP-593 VALID failure: controller gaps gone, Teacher 38 of 38 executed; two pre-motion unreachable scenes faulted without a receipt; 23 of 40 QC-valid
+
+- Fifth eight-shard attempt. Overflow 0 everywhere, no OOM, every stop proven, store IDLE, 54 minutes for two waves. NOT_QUALIFIED. The two faults are reachability-preflight refusals on scenes at y about -0.35 that leave no Teacher manifest; data quality (23 of 40) is now the binding limit, led by the live physical scene geometry check, late camera frames and stale inputs.
+- Retained: run root, prep directory, 16 shard logs, teacher log, CLI log and sampler data under R/run-logs/exp593. Nothing deleted.
 
 ## CP-3656 — EXP-593 planned: eight shards with the controller overlay
 
@@ -81,7 +86,7 @@ next_experiment: EXP-593 (PLANNED): fifth eight-shard qualification attempt, wit
 
 ```yaml
 experiment_id: EXP-593
-status: PLANNED
+status: VALID
 prior_experiment: EXP-591 (VALID failure; 4 of 19 VALID at eight shards, mostly controller-state gaps) and EXP-592 (VALID; the overlay in one container, no gaps)
 hypothesis: With the controller state published losslessly, eight shards under the same scheduling limits as EXP-591 reach the qualification pass counts - at least 38 Teacher successes and 34 QC-valid episodes of 40 - with every QC-valid episode lossless and continuous, no execution fault, within the deadline, and every stop proven.
 prediction: No OFFLINE_SOURCE_GAP and no COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE; would_have_skipped_by_try_publish counts in the hundreds per shard, showing what the stock publisher would have lost, with overflowed 0; memory peak near the 19 GiB of EXP-591; remaining INVALID causes are late camera frames (NO_NEW_ACQUISITION) and scene-state loss, at a rate that may or may not stay within 6 of 40. The deadline margin is thin. Any execution fault or unfinished task makes the run NOT_QUALIFIED.
@@ -104,17 +109,26 @@ provenance:
   gz_partition: each shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w8-inputs-20261014T151000Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w8-inputs-20261014T151000Z/run-w8.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run about 15:08Z to 16:02Z, two waves, 40 scenes. CLI CAMPAIGN_RUN_FAILED CONTAINER_WAVE_COMMIT_READBACK_INVALID, because wave 1 held two failed tasks.
+  - Teacher - 38 COMPLETED PASS. Two execution faults, wave-1-w02-qual-25 and wave-1-w07-qual-35, both CONTAINER_INSTANCE_REPORTED_FAULT TEACHER_RESULT_UNVERIFIED DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE. In both the dynamic child printed status=ERROR failure=DYNAMIC_TARGET_UNREACHABLE; reachability-observed.json reports DYNAMIC_IK_HORIZON_FAILED at MOVE_ABOVE_OBJECT for the perceived cup (qual-25 perceived y -0.3406, frozen y -0.3574; qual-35 frozen y -0.3528) before any motion; dynamic_runtime.py raises at the reachability preflight before the execution object exists, so no dynamic-execute-manifest.json is written and execution.py classifies the missing manifest as INDETERMINATE.
+  - Data - 23 VALID with QC PASS of 38 completed (wave 0 10 of 20, wave 1 13 of 18). INVALID reasons by episode - RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW 10, of which 5 with LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID (live_physical_audit.py _verify_scene - planning-scene read geometry differs from the association receipt); NO_NEW_ACQUISITION 5; INPUT_STALE 3; one with OFFLINE_SOURCE_GAP on gripper controller state, a joint_states loss and INPUT_TIMESTAMP_FUTURE (wave-0-w02-qual-05); one with joint_states and scene_state loss, DYNAMIC_WORLD_SOURCE_SCENE_MISSING (wave-0-w06-qual-13).
+  - Queued state publishers - overflowed 0 and sink_errors 0 in every line of all 16 shard logs; would_have_skipped_by_try_publish for the arm controller 107 to 156 per wave-0 shard and 55 to 76 per wave-1 shard.
+  - Sampler - 3252 samples; peak sum of container memory 23.89 GiB; memory pressure some avg10 at most 4.81; CPU pressure some avg10 median 1.7, at most 12.02. No kernel OOM kill.
+  - Stops - all 16 shards and the Teacher service exited 0 with terminated true; campaign-cleanup.json CAMPAIGN_RUN_INTERRUPTED terminated true; store IDLE afterwards, no manual release needed.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The controller overlay removed controller-state gaps as the main cause (one residual gap in 38 episodes, against most INVALID episodes in EXP-591); the stock publisher would have dropped about a hundred messages per shard.
+  - The two faults are real Teacher failures on boundary scenes, refused before motion, which the runtime cannot report as a sealed Teacher result. Counted as Teacher failures the Teacher pass count would be 38 of 40, at the threshold.
+  - Data quality is the binding limit - 23 of 40 against 34. The leading causes are the live physical scene geometry check, late camera frames and stale inputs; their mechanisms are not established.
+conclusion: VALID failure. NOT_QUALIFIED - two execution faults (pre-motion unreachable without a Teacher receipt) and 23 QC-valid episodes against 34. Memory, stops, deadline and controller-state loss are no longer limits.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261014T151000Z (host/campaign-cleanup.json, host/wave-*/task-journal, wave-1/w02/g2 and wave-1/w07/g2 task outputs)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261014T151000Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp593 (CLI log, 16 shard logs, teacher log, sampler) and exp593-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
