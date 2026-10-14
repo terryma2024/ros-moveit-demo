@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 150e9a64975cf4508a518f9924b92cb3a3b1dd66
+current_commit: 1c47eab032201b1e075d084d0bb3865cfdddd318
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,57 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3646
-next_experiment: EXP-589 (to be planned after the fix): repeat of the eight-shard qualification with the contract file visible to the shards.
+latest_checkpoint: CP-3647
+next_experiment: EXP-589 (PLANNED): second eight-shard qualification attempt, with the contract mounted into the shards.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3647 — EXP-588 cause verified and fixed (contract not mounted into the shard); gate PASS; EXP-589 planned
+
+- Commit `1c47eab03` (Sonnet-written, Opus-reviewed). Cause verified by reading the call chain: inference/config.py validates the campaign config's qualification_contract file ref by opening it; the shard's spec loader loads the campaign config; the file lay in the prep directory, not in any mount, so the open failed in the container and surfaced as CAMPAIGN_SHARD_SPEC_INVALID with exit code 2. The Teacher service never loads the campaign config. Fix: the launcher mounts the contract read-only at its own path, through the campaign config's path rules, when it is non-null; nothing changes for a null contract. New test: the container's view of the filesystem is derived from the real launch argv, the real spec loader runs under it, and every file ref reachable from the spec and the campaign config must be covered by a mount; red before the fix for the contract and no other unmounted ref found. Not reproduced in a container; this run is the confirmation.
+- Proposal accepted by the coordinator for implementation after this run, not implemented: a "never started" proof for an instance that exits before starting anything. The instance writes a begin marker, durably, right after its spec and shell checks and before any other action, and aborts if it cannot; the Host accepts "never started" only with the owner proven exited and matching, exit code 2, not OOM-killed, no binding, the begin marker absent and the owned root pristine; any instance with the marker falls through to the existing rule unchanged. Reported to the human.
+- Gate on 1c47eab03, R/gates/1c47eab03220, serial configuration of the fast gate: build rc 0, 189 s; so101_demo_py rc 0, 404 s; colcon stage rc 0, 368 s; 961 s in total; tests of controller_manager and hardware_interface_testing skipped by the baseline rule. Worktree unchanged and clean. PASSED.
+- Images on 1c47eab03: shard R/image-build-20261014T033151Z (152.5 s), inference R/image-build-20261014T033155Z (77.4 s). Inputs under the prep directory act-w8-inputs-20261014T034000Z: contract re-authored for the new run id and images; validation 55 PASS, 6 informational, 1 pending (the candidates file). New checks there: for all sixteen launches of the two waves the real spec loader accepts the launcher's spec under the container view derived from the argv, each argv has exactly one read-only mount of the contract, the same argv without that mount is refused with the EXP-588 code, and every file ref of each spec and of the campaign config is covered by a mount.
+
+```yaml
+experiment_id: EXP-589
+status: PLANNED
+prior_experiment: EXP-588 (VALID failure at shard start, nothing measured)
+hypothesis: As EXP-588 - eight container shards on the fixed identity, sharing one GPU and one Teacher service, collect the 40 qualification scenes in two waves within the campaign deadline, with at least 38 Teacher successes and 34 QC-valid episodes, every QC-valid episode lossless and continuous, both waves verified and every stop proven.
+prediction: The eight shards now pass their spec check and reach READY. Everything after that is the first measurement of eight concurrent shards, as listed for EXP-588. Any execution fault or unfinished task makes the run NOT_QUALIFIED whatever the rates. The first stage that fails, if any, is the new information.
+single_variable: The contract mount of commit 1c47eab03 relative to EXP-588; new run and campaign ids, re-authored contract, rebuilt images.
+lifecycle: ISOLATED_STACK (eight containers per wave)
+preconditions:
+  - Enforced by the run script - run root, log and exit record absent; src, scripts and third_party with no diff against 1c47eab03 and not dirty; gate green at that commit; no container running; no ROS, simulator or ACT process on the Host; no GPU compute process; unified store schema 2, IDLE, no lease, slots w00 to w07 unused; both images present; free disk minus a 90 GB projection above the floor.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-588.
+failure_criteria:
+  - As EXP-588.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 1c47eab03; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 1c47eab032201b1e075d084d0bb3865cfdddd318 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:0a832af2f3a56ab2e8049b7e11826c0bed6ab89d942a8438f1c0d3e6bb30c98e and shard image sha256:54d8a08fb40ffed97c5a241614862a415c2fbb62ff45a577c3e83de1df1c98cf; Host R/gates/1c47eab03220/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261014T034000Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261014T034000Z/run-w8.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3646 — EXP-588 VALID failure: all eight shards refuse their spec at start; lease released under the standing authorisation
 
