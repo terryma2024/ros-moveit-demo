@@ -2,7 +2,10 @@
 
 import contextlib
 from dataclasses import asdict, dataclass
+import fcntl
 import json
+import os
+from pathlib import Path
 import re
 
 #: How an instance of a slot runs; only `native` has no isolation and so needs the host to itself.
@@ -29,13 +32,54 @@ class ActWorkerSlot:
             raise ValueError('WORKER_SLOT_INVALID')
 
 
+#: The ROS domain a native ACT instance runs on; the native batch worker uses the same one.
+NATIVE_INSTANCE_ROS_DOMAIN_ID = 181
+
+
+def batch_domain_claim_held(claim_root, domain_id=NATIVE_INSTANCE_ROS_DOMAIN_ID) -> bool:
+    """True while a native batch (`so101_parallel_batch`) holds its flock on the claim file of ``domain_id``.
+
+    A hand-launched batch worker runs on the same fixed domain as a native instance and is invisible to the ACT
+    tables. The batch allocator takes ``LOCK_EX`` on ``domain-<id>.lock`` for the life of the batch and the kernel drops
+    it when the process dies, so asking for the lock is exact: a stale file nobody holds reads as free. A claim
+    directory or file that cannot be inspected fails closed.
+    """
+    path = Path(claim_root) / f'domain-{int(domain_id)}.lock'
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError:
+            return True
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(descriptor)
+
+
+def default_batch_domain_claim_probe():
+    """The installed probe: the batch allocator's own claim root for the current host."""
+    from so101_demo.parallel_batch.resource_allocation.models import runtime_ipc_base
+
+    return batch_domain_claim_held(runtime_ipc_base() / 'so101-parallel-domain-claims')
+
+
 def _canonical(slot):
     return json.dumps(asdict(slot), sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
 class ActWorkerSlotRegistry:
-    def __init__(self, store, *, child_registry=None):
+    def __init__(self, store, *, child_registry=None, batch_domain_claim_probe=None):
         self.store, self.child_registry = store, child_registry
+        #: Callable returning True while a native batch worker holds the fixed ROS domain; None means "not asked".
+        self.batch_domain_claim_probe = batch_domain_claim_probe
 
     def slots(self, *, active=True):
         if type(active) is not bool:
@@ -72,6 +116,8 @@ class ActWorkerSlotRegistry:
                 raise ValueError('NATIVE_INSTANCE_SINGLE_WORKER_ONLY')
             if active or (self.child_registry is not None and self.child_registry.launches()):
                 raise ValueError('NATIVE_INSTANCE_EXCLUSIVE')
+            if self.batch_domain_claim_probe is not None and self.batch_domain_claim_probe():
+                raise ValueError('NATIVE_INSTANCE_BATCH_DOMAIN_CLAIMED')
         elif active and {slot.campaign_id for slot in active} & self.native_campaign_ids():
             raise ValueError('NATIVE_INSTANCE_EXCLUSIVE')
 

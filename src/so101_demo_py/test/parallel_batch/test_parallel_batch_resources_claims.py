@@ -136,7 +136,7 @@ def test_allocator_fixture_does_not_reuse_retained_cli_claim_namespace(
     original.write_bytes(b'{"role":"earlier-cli-claim"}\n')
     owner = allocator(tmp_path, config, suffix='after-cli')
     try:
-        manifest = owner.allocate()
+        manifest = owner.allocate(worker_count=2)
         assert [worker.ros_domain_id for worker in manifest.workers] == [181, 182]
         assert manifest.evidence_root != retained
         assert original.read_bytes() == b'{"role":"earlier-cli-claim"}\n'
@@ -240,27 +240,27 @@ def test_prelaunch_allocation_failure_releases_persistent_claim(tmp_path, config
     assert record['no_processes_started'] is True
 
 
-def test_production_cli_composes_three_workers_with_an_admitted_exact_n_gate(tmp_path):
-    """Version two composes N=3 through the exact-N gate, not the retired evidence chain."""
+def test_production_cli_composes_one_worker_with_an_admitted_exact_n_gate(tmp_path):
+    """Version two composes N=1 through the exact-N gate, not the retired evidence chain (N>1 is refused)."""
 
     from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
     from so101_demo.cli.mujoco_batch.request import prepare_batch
 
-    root = resource_root(tmp_path, 'cli-three-valid')
+    root = resource_root(tmp_path, 'cli-one-valid')
     prepared = prepare_batch(
-        production_batch_argv(root, worker_count='3'),
+        production_batch_argv(root, worker_count='1'),
         provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
     )
     composition = ProductionBatchComposition(
         prepared, resource_probe=FakeProbe(), claim_root=claim_root())
     try:
-        assert composition.resource_manifest.worker_count == 3
-        assert composition.resource_manifest.requested_worker_count == 3
+        assert composition.resource_manifest.worker_count == 1
+        assert composition.resource_manifest.requested_worker_count == 1
     finally:
         composition._release_partial()
 
 
-def test_production_cli_needs_no_budget_authority_for_three_workers(tmp_path, monkeypatch):
+def test_production_cli_needs_no_budget_authority_for_one_worker(tmp_path, monkeypatch):
     """The retired default-gate hook no longer decides anything: the guard does."""
 
     import so101_demo.cli.mujoco_batch.request as parallel_cli
@@ -268,20 +268,20 @@ def test_production_cli_needs_no_budget_authority_for_three_workers(tmp_path, mo
 
     monkeypatch.setattr(parallel_cli, '_DEFAULT_START_GUARD', None)
     prepared = prepare_batch(
-        production_batch_argv(resource_root(tmp_path, 'cli-three-guarded')),
+        production_batch_argv(resource_root(tmp_path, 'cli-one-guarded')),
         provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
     )
     assert prepared.start_guard is not None
     assert prepared.start_guard_evidence['status'] in ('PASS', 'WARN')
 
 
-def test_production_cli_refuses_retired_headroom_authority_for_any_n(tmp_path, config):
-    """The retired three-worker evidence chain is refused before it is even read."""
+def test_production_cli_refuses_retired_headroom_authority(tmp_path, config):
+    """The retired headroom evidence chain is refused before it is even read (N>1 never gets this far)."""
 
     from so101_demo.cli.mujoco_batch.common import CliError
     from so101_demo.cli.mujoco_batch.request import prepare_batch
 
-    for worker_count in ('2', '3'):
+    for worker_count in ('1',):
         with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
             prepare_batch(
                 production_batch_argv(

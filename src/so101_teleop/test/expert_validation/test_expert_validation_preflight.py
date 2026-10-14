@@ -71,7 +71,7 @@ class Resources:
         return self.admitted, self.reasons, dict(self.observations)
 
 
-def _request(tmp_path, mode="PARALLEL", count=4, **changes):
+def _request(tmp_path, mode="SEQUENTIAL", count=4, **changes):
     values = dict(
         campaign_id="campaign-1",
         batch_id="b001",
@@ -129,7 +129,7 @@ def _macos_request(tmp_path, schema_version, *, count=4, claim=None, **changes):
 
 def test_fixed_selection_capacity_is_shared_and_quota_free(tmp_path):
     receipt = PreflightEngine(Resources()).preflight(
-        _request(tmp_path, mode="PARALLEL", count=5, worker_count=2)
+        _request(tmp_path, mode="SEQUENTIAL", count=5, worker_count=1)
     )
     assert receipt.admitted
     assert not hasattr(receipt.execution_config, "max_points_per_worker")
@@ -140,8 +140,9 @@ def test_fixed_selection_capacity_is_shared_and_quota_free(tmp_path):
     ("mode", "worker_count", "error"),
     [
         ("SEQUENTIAL", 2, "SEQUENTIAL_WORKER_COUNT"),
-        ("PARALLEL", 1, "PARALLEL_WORKER_COUNT"),
-        ("PARALLEL", 9, "PARALLEL_WORKER_COUNT"),
+        ("PARALLEL", 1, "NATIVE_MULTI_WORKER_UNSUPPORTED"),
+        ("PARALLEL", 2, "NATIVE_MULTI_WORKER_UNSUPPORTED"),
+        ("PARALLEL", 9, "NATIVE_MULTI_WORKER_UNSUPPORTED"),
     ],
 )
 def test_fixed_worker_count_is_closed(tmp_path, mode, worker_count, error):
@@ -154,34 +155,22 @@ def test_fixed_worker_count_is_closed(tmp_path, mode, worker_count, error):
 def test_fixed_legacy_quota_is_refused_without_downgrade(tmp_path):
     resources = Resources(admitted=False, reasons=("GPU_HEADROOM",))
     receipt = PreflightEngine(resources).preflight(
-        _request(tmp_path, count=5, worker_count=2, max_points_per_worker=2)
+        _request(tmp_path, count=5, worker_count=1, max_points_per_worker=2)
     )
     assert not receipt.admitted
     assert receipt.reason_codes == (
         "LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED", "GPU_HEADROOM")
-    assert receipt.execution_config.worker_count == 2
+    assert receipt.execution_config.worker_count == 1
 
 
-def test_adaptive_rejects_k_and_invalid_ladder(tmp_path):
+def test_adaptive_is_refused_before_any_ladder_is_read(tmp_path):
     engine = PreflightEngine(Resources())
-    with pytest.raises(PreflightRejected, match="ADAPTIVE_FIXED_FIELD"):
-        engine.require_admitted(_request(tmp_path, mode="ADAPTIVE", max_points_per_worker=3))
-    with pytest.raises(PreflightRejected, match="ADAPTIVE_FALLBACK_TIERS"):
+    with pytest.raises(PreflightRejected, match="NATIVE_MULTI_WORKER_UNSUPPORTED"):
+        engine.require_admitted(_request(tmp_path, mode="ADAPTIVE"))
+    with pytest.raises(PreflightRejected, match="NATIVE_MULTI_WORKER_UNSUPPORTED"):
         engine.require_admitted(
             _request(tmp_path, mode="ADAPTIVE", fallback_worker_counts=(6, 6, 1))
         )
-
-
-def test_adaptive_resource_observations_do_not_reject_start(tmp_path):
-    resources = Resources(
-        admitted=False,
-        reasons=("GPU_HEADROOM",),
-        observations={"gpu_headroom": "LOW", "memory_pressure": "HIGH"},
-    )
-    receipt = PreflightEngine(resources).preflight(_request(tmp_path, mode="ADAPTIVE", count=20))
-    assert receipt.admitted is True
-    assert receipt.reason_codes == ()
-    assert receipt.resource_observations["memory_pressure"] == "HIGH"
 
 
 def test_receipt_binds_canonical_request_session_and_expiry(tmp_path):
@@ -195,23 +184,22 @@ def test_receipt_binds_canonical_request_session_and_expiry(tmp_path):
     assert len(receipt.canonical_start_request_sha256) == 64
 
 
-@pytest.mark.parametrize("workers,maximum,capacity", [(2, 10, 20), (8, 3, 24)])
-def test_fixed_twenty_points_keeps_exact_requested_capacity(tmp_path, workers, maximum, capacity):
+def test_twenty_points_keeps_exact_requested_capacity(tmp_path):
     receipt = PreflightEngine(Resources()).preflight(
-        _request(tmp_path, count=20, worker_count=workers))
+        _request(tmp_path, count=20, worker_count=1))
     assert receipt.admitted
     assert receipt.capacity == 20
-    assert receipt.execution_config.worker_count == workers
+    assert receipt.execution_config.worker_count == 1
     assert not hasattr(receipt.execution_config, "max_points_per_worker")
 
 
-def test_eight_worker_resource_rejection_keeps_supported_count(tmp_path):
+def test_resource_rejection_keeps_the_single_worker_count(tmp_path):
     receipt = PreflightEngine(Resources(False, ("CPU_HEADROOM",))).preflight(
-        _request(tmp_path, count=20, worker_count=8))
+        _request(tmp_path, count=20, worker_count=1))
     assert not receipt.admitted
     assert receipt.reason_codes == ("CPU_HEADROOM",)
     assert receipt.capacity == 20
-    assert receipt.execution_config.worker_count == 8
+    assert receipt.execution_config.worker_count == 1
 
 
 def test_host_fixed_eight_without_a_guard_is_refused():
@@ -392,7 +380,7 @@ def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("schema_version", [4, 5, 6])
+@pytest.mark.parametrize("schema_version", [5, 6])
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_a_macos_document_admits_only_its_own_routing_key(tmp_path, schema_version):
     profile, schema, mode, workers, batch_kind = MATRIX[schema_version]
@@ -415,6 +403,16 @@ def test_a_macos_document_admits_only_its_own_routing_key(tmp_path, schema_versi
     assert observations["execution_batch_kind"] == batch_kind
     assert observations["execution_config_sha256"] == receipt.parallel_config_sha256
     assert observations["execution_worker_count"] == workers
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_the_macos_two_worker_route_is_refused_as_a_native_multi_worker_request(tmp_path):
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 4)
+    )
+
+    assert receipt.admitted is False
+    assert "NATIVE_MULTI_WORKER_UNSUPPORTED" in receipt.reason_codes
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
@@ -471,7 +469,7 @@ def test_adaptive_is_refused_on_a_macos_document(tmp_path):
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(tmp_path):
-    """Four points do not mean W1 and twenty points do not mean W2."""
+    """Four points do not mean one profile and twenty points do not mean another."""
 
     from so101_teleop.expert_validation.preflight import (
         EXECUTION_PROFILE_REQUIRED,
@@ -480,22 +478,22 @@ def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(t
 
     for count in (4, 5, 8, 20):
         receipt = PreflightEngine(Resources(), platform="darwin").preflight(
-            _macos_request(tmp_path, 4, count=count)
+            _macos_request(tmp_path, 6, count=count)
         )
         assert receipt.admitted, (count, receipt.reason_codes)
-        assert receipt.execution_config.worker_count == 2
-        assert receipt.execution_config.execution_mode == "PARALLEL"
+        assert receipt.execution_config.worker_count == 1
+        assert receipt.execution_config.execution_mode == "SEQUENTIAL"
 
     # Without the explicit routing key nothing is inferred, however many points were selected.
     unclaimed = PreflightEngine(Resources(), platform="darwin").preflight(
-        _macos_request(tmp_path, 4, count=8, claim={})
+        _macos_request(tmp_path, 6, count=8, claim={})
     )
     assert unclaimed.admitted is False
     assert EXECUTION_PROFILE_REQUIRED in unclaimed.reason_codes
 
-    # N>2 is refused with the stable platform reason, claim or no claim.
+    # N>1 is refused with the stable platform reason, claim or no claim.
     oversized = PreflightEngine(Resources(), platform="darwin").preflight(
-        _macos_request(tmp_path, 4, count=20, worker_count=8)
+        _macos_request(tmp_path, 6, count=20, worker_count=8)
     )
     assert oversized.admitted is False
     assert UNSUPPORTED_ON_MACOS in oversized.reason_codes
@@ -512,21 +510,21 @@ def test_a_declared_config_hash_that_does_not_match_the_document_is_refused(tmp_
 
 
 def test_a_linux_cuda_document_keeps_the_existing_fixed_semantics(tmp_path):
-    """The Linux v3 fixture is untouched: no matrix, no profile, the same counts as before."""
+    """The Linux v3 fixture is untouched: no matrix, no profile, one SEQUENTIAL worker."""
 
     receipt = PreflightEngine(Resources()).preflight(
         _request(
             tmp_path,
-            mode="PARALLEL",
+            mode="SEQUENTIAL",
             count=20,
-            worker_count=8,
+            worker_count=1,
             parallel_config_path=LINUX_CUDA_DOCUMENT,
             parallel_config_sha256=hashlib.sha256(LINUX_CUDA_DOCUMENT.read_bytes()).hexdigest(),
         )
     )
 
     assert receipt.admitted, receipt.reason_codes
-    assert receipt.execution_config.worker_count == 8
+    assert receipt.execution_config.worker_count == 1
     assert receipt.execution_profile is None
     assert "execution_profile" not in receipt.resource_observations
 

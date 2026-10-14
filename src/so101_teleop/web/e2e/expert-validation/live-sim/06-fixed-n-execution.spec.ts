@@ -23,9 +23,10 @@ import {
  *
  * `05-functional-manifest.spec.ts` asks the deployed service what it advertises; this file takes
  * the same manifest and, for every case, either executes it through the console or proves the
- * console cannot offer it. On macOS the execution contract is W1/W2 only: PARALLEL N=2 is the W2
- * route (schema v4) and SEQUENTIAL N=1 is the W1 first-pass route (schema v6). PARALLEL N=1,
- * N=3..N8 and ADAPTIVE are not routes, so the console has to refuse them and say why.
+ * console cannot offer it. On macOS the execution contract is W1 only: SEQUENTIAL N=1 is the W1
+ * first-pass route (schema v6). A native campaign is one worker, so there is no mode selector and
+ * no worker-count control, and a first-pass route missing from the matrix leaves the console
+ * unable to start.
  *
  * A capability check is not an execution result, so each executed case asserts its own claimed
  * profile, worker count, selected-only evidence, seam of sealed physical evidence, watermark and
@@ -34,7 +35,7 @@ import {
 
 type FunctionalCase = {
   id: string;
-  mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+  mode: "SEQUENTIAL";
   worker_count: number;
   point_count: number;
   lifecycle: string;
@@ -75,26 +76,11 @@ async function deployedFirstPassRoutes(baseURL: string): Promise<Map<string, Mat
   return routes;
 }
 
-/** A case the matrix does not carry must be unavailable in the console, with its own reason. */
+/** A case the matrix does not carry must not be startable in the console. */
 async function expectRefusedInConsole(page: Page, entry: FunctionalCase): Promise<void> {
-  const modeSelect = page.getByLabel("Execution mode");
-  const modes = await modeSelect.locator("option").allTextContents();
-  expect(modes, "advertised execution modes").toEqual(["SEQUENTIAL", "PARALLEL"]);
-  expect(modes, `${entry.id} must not offer an adaptive route`).not.toContain("ADAPTIVE");
-  if (entry.mode === "ADAPTIVE") return;
-
-  await modeSelect.selectOption(entry.mode);
-  const option = page.getByLabel("Worker count").locator(`option[value="${entry.worker_count}"]`);
-  await expect(option, `${entry.id} option`).toBeDisabled();
-  if (entry.mode === "PARALLEL" && entry.worker_count === 1) {
-    // One worker is the sequential route, never a parallel one.
-    await expect(option).toContainText("SEQUENTIAL");
-  } else {
-    await expect(option).toContainText("UNSUPPORTED_ON_MACOS");
-    await expect(
-      page.getByText(`N${entry.worker_count} unavailable · UNSUPPORTED_ON_MACOS`),
-    ).toBeVisible();
-  }
+  // There is no mode or worker-count control to refuse with: the page offers exactly one execution.
+  await expect(page.getByLabel("Execution mode"), `${entry.id} must offer no mode selector`).toHaveCount(0);
+  await expect(page.getByLabel("Worker count"), `${entry.id} must offer no worker control`).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Start validation" }),
     `${entry.id} must not be startable`,
@@ -175,8 +161,7 @@ for (const entry of executions) {
       selectedPointIds,
     };
 
-    if (entry.mode === "PARALLEL") await app.configureParallel(entry.worker_count);
-    else await app.configureSequential();
+    await app.configureSequential();
 
     const [preflightResponse] = await Promise.all([
       page.waitForResponse(

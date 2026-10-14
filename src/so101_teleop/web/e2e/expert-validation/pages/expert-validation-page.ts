@@ -183,28 +183,15 @@ export class ExpertValidationPage {
     await expect(this.page.getByRole("img", { name: "Expert validation top view" })).toBeVisible();
   }
 
-  async configureSequential(): Promise<void> {
-    await this.page.getByLabel("Execution mode").selectOption("SEQUENTIAL");
-  }
-
   /**
-   * The worker-count control.
-   *
-   * The macOS console renders both the `Worker count` select and an `Unavailable worker counts`
-   * list, so a non-exact label query resolves to two elements and Playwright's strict mode refuses
-   * it. The exact label names the one control this page object can select from.
+   * A native campaign is one SEQUENTIAL worker and the page has no mode selector or worker-count control
+   * any more, so there is nothing to select: this asserts the single-worker statement instead. Specs that
+   * used to pick SEQUENTIAL keep their call site.
    */
-  workerCountSelect(): Locator {
-    return this.page.getByLabel("Worker count", { exact: true });
-  }
-
-  async configureParallel(workerCount: number): Promise<void> {
-    await this.page.getByLabel("Execution mode").selectOption("PARALLEL");
-    await this.workerCountSelect().selectOption(String(workerCount));
-  }
-
-  async configureAdaptive(): Promise<void> {
-    await this.page.getByLabel("Execution mode").selectOption("ADAPTIVE");
+  async configureSequential(): Promise<void> {
+    await expect(this.page.getByLabel("Execution mode")).toHaveCount(0);
+    await expect(this.page.getByLabel("Worker count")).toHaveCount(0);
+    await expect(this.page.getByLabel("Execution", { exact: true })).toContainText("SEQUENTIAL");
   }
 
   async runPreflight(): Promise<void> {

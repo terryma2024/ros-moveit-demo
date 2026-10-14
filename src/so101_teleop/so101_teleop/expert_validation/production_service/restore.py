@@ -22,7 +22,35 @@ from so101_teleop.expert_validation.statistics import (
 from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 
 
+#: Native multi-worker execution was removed. Campaigns of these modes that are stored but not cleanly
+#: finished cannot be adopted by a single-worker service; they are fenced to operator recovery instead.
+MULTI_WORKER_MODES = frozenset({"PARALLEL", "ADAPTIVE"})
+_CLEAN_TERMINAL_STATUSES = frozenset({"COMPLETED", "COMPLETED_WITH_FAILURES", "INFRA_FAILED", "CANCELLED"})
+MULTI_WORKER_REMOVED_FENCE_REASON = "NATIVE_MULTI_WORKER_REMOVED"
+
+
 class CampaignRestore:
+    def _fence_removed_multi_worker_campaign(self, request, projection):
+        """Fence a stored non-terminal PARALLEL or ADAPTIVE campaign; never relaunch it.
+
+        A clean terminal campaign (a terminal status with its batch cleanup confirmed) stays readable as stored.
+        Anything else may still own processes or unconfirmed cleanup, which only an operator can account for.
+        """
+        clean_terminal = (
+            projection.get("status") in _CLEAN_TERMINAL_STATUSES
+            and projection.get("batch_cleanup_complete") is True
+        )
+        if clean_terminal:
+            return projection
+        if self.store.recovery_fence(request.campaign_id) is None:
+            self.store.record_recovery_fence(
+                request.campaign_id,
+                request.batch_id,
+                reason=MULTI_WORKER_REMOVED_FENCE_REASON,
+                command_id=f"restore-fence-{request.campaign_id}",
+            )
+        return {**projection, "status": "NEEDS_OPERATOR_RECOVERY"}
+
     def _restore_campaigns(self) -> None:
         """Rebind durable campaigns after a restart so reads reconcile."""
         for row in self.store.campaign_records():
@@ -48,17 +76,21 @@ class CampaignRestore:
                     for point_id in request.selection.point_ids
                 ),
             }
-            if request.execution_mode != "ADAPTIVE":
-                try:
+            try:
+                if request.execution_mode == "ADAPTIVE":
+                    projected = self._adaptive_campaign_projection(request)
+                else:
                     projected = self._fixed_campaign_projection(request)
-                except (
-                    CoordinatorProjectionError,
-                    ContractError,
-                    StatisticsProjectionError,
-                ):
-                    projected = None
-                if projected is not None:
-                    projection = projected
+            except (
+                CoordinatorProjectionError,
+                ContractError,
+                StatisticsProjectionError,
+            ):
+                projected = None
+            if projected is not None:
+                projection = projected
+            if request.execution_mode in MULTI_WORKER_MODES:
+                projection = self._fence_removed_multi_worker_campaign(request, projection)
             self._campaigns[campaign_id] = projection
 
     def _restored_request(self, row) -> CampaignStartRequest:

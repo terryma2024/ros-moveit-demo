@@ -111,6 +111,7 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
         )
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
     from so101_demo.cli.mujoco_batch.request import prepare_batch
 
@@ -126,6 +127,7 @@ def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
     assert "max_points_per_worker" not in prepared.manifest
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
     from so101_demo.cli.mujoco_batch.request import prepare_batch
 
@@ -142,6 +144,7 @@ def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
     assert "max_points_per_worker" not in prepared.manifest
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 def test_adaptive_cli_reuses_registered_root_but_reserves_short_runtime(tmp_path):
     from so101_demo.cli.mujoco_batch.common import CliError
     from so101_demo.cli.mujoco_batch.request import prepare_batch
@@ -192,6 +195,7 @@ def test_adaptive_readiness_probe_does_not_treat_a_missing_socket_as_success(
     assert control.release_start() is False
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
     from so101_demo.cli.mujoco_batch.request import prepare_batch
 
@@ -225,6 +229,7 @@ def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
     }
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 @pytest.mark.parametrize("value", ["0", "3", "8", "true"])
 def test_adaptive_cli_rejects_invalid_yolo_executor_count(tmp_path, value):
     from so101_demo.cli.mujoco_batch.common import CliError
@@ -251,6 +256,7 @@ def test_nonadaptive_cli_rejects_yolo_executor_count(tmp_path):
         )
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 @pytest.mark.parametrize(
     ("worker_count", "levels"),
     [("6", (6, 4, 2, 1)), ("1", (1,))],
@@ -268,6 +274,7 @@ def test_adaptive_cli_filters_default_fallbacks_below_preferred_count(
     assert prepared.adaptive_request.options.levels == levels
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 def test_adaptive_cli_accepts_w16_and_rejects_w17(tmp_path):
     """The CLI exposes W16 as optional capacity without changing its W8 default."""
 
@@ -290,6 +297,7 @@ def test_adaptive_cli_accepts_w16_and_rejects_w17(tmp_path):
         )
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 @pytest.mark.parametrize("fallbacks", ["6,4", "8,4", "4,6", "4,4", "4,,2"])
 def test_adaptive_cli_rejects_invalid_explicit_fallbacks(tmp_path, fallbacks):
     from so101_demo.cli.mujoco_batch.common import CliError
@@ -306,6 +314,7 @@ def test_adaptive_cli_rejects_invalid_explicit_fallbacks(tmp_path, fallbacks):
         )
 
 
+@pytest.mark.skip(reason="the adaptive pool entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED, see test_native_multi_worker_refused.py); this test is deleted with the pool in the removal plan Task 5")
 @pytest.mark.parametrize(
     ("changes", "extra", "error"),
     [

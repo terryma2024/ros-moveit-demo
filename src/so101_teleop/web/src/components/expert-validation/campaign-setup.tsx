@@ -4,16 +4,22 @@ import type {
   ExecutionMode,
   StartGuardStatus,
 } from "@/api/expert-validation-types";
-import { workerOption, type QualificationView } from "@/api/qualification-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+/**
+ * What the operator chooses. A native campaign is always one SEQUENTIAL worker (multi-worker collection
+ * exists only as container shards), so the point count is the only setup choice left.
+ */
 export type SetupState = {
   pointCount: number;
-  executionMode: ExecutionMode;
-  workerCount: number;
 };
+
+/** The one execution a native campaign has. It is a constant, not a control. */
+export type ExecutionSelection = { executionMode: ExecutionMode; workerCount: number };
+
+export const SINGLE_WORKER: ExecutionSelection = { executionMode: "SEQUENTIAL", workerCount: 1 };
 
 /**
  * The published capability document. The generated schema is the authority for it - including the
@@ -88,27 +94,13 @@ export function platformSupportMatrix(
 }
 
 /**
- * The execution modes this host may select. The support matrix bounds the set; when the service
- * also declares an order, that order is kept so the selector matches the advertised document.
- */
-export function matrixExecutionModes(capabilities?: PlatformCapabilities): ExecutionMode[] {
-  const offered = new Set<ExecutionMode>(
-    platformSupportMatrix(capabilities)
-      .filter((row) => row.selectable !== false)
-      .map((row) => row.execution_mode),
-  );
-  const declared = (capabilities?.execution_modes ?? []).filter((mode) => offered.has(mode));
-  return declared.length > 0 ? declared : [...offered];
-}
-
-/**
  * The exact matrix row for one selection, or nothing. This is the only place a profile is
  * resolved: a selection the matrix does not carry has no profile, and no point count, budget
  * view or qualification takes part in the answer.
  */
 export function matrixRowFor(
   capabilities: PlatformCapabilities | undefined,
-  state: Pick<SetupState, "executionMode" | "workerCount">,
+  state: ExecutionSelection,
   batchKind: ExecutionBatchKind = "FIRST_PASS",
 ): SupportMatrixRow | undefined {
   return platformSupportMatrix(capabilities).find(
@@ -123,7 +115,7 @@ export function matrixRowFor(
 /** The routing key a request for this selection must claim, or `null` when it cannot. */
 export function executionClaim(
   capabilities: PlatformCapabilities | undefined,
-  state: Pick<SetupState, "executionMode" | "workerCount">,
+  state: ExecutionSelection,
   batchKind: ExecutionBatchKind = "FIRST_PASS",
 ): ExecutionClaim | null {
   const row = matrixRowFor(capabilities, state, batchKind);
@@ -139,12 +131,6 @@ export function executionClaim(
 
 type Props = {
   capabilities?: PlatformCapabilities;
-  /**
-   * The read-only per-N qualification view, consulted only for a host that publishes no support
-   * matrix. A platform-bound host (macOS W1/W2) is answered by the matrix alone: a qualification
-   * view can neither enable nor disable one of its options.
-   */
-  qualifications?: QualificationView[];
   state: SetupState;
   leaseHeld: boolean;
   leaseRenewing?: boolean;
@@ -164,7 +150,6 @@ type Props = {
 
 export function CampaignSetup({
   capabilities,
-  qualifications,
   state,
   leaseHeld,
   leaseRenewing = false,
@@ -182,83 +167,12 @@ export function CampaignSetup({
   const matrix = platformSupportMatrix(capabilities);
   const platformBound = matrix.length > 0;
   const validCount = state.pointCount >= 4 && state.pointCount <= 20;
-  const adaptive = !platformBound && state.executionMode === "ADAPTIVE";
-  const modes: ExecutionMode[] = platformBound
-    ? matrixExecutionModes(capabilities)
-    : capabilities?.execution_modes ?? ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"];
-  const fixedWorkerCounts = capabilities?.fixed_worker_counts ?? [];
-  const availabilityList = capabilities?.worker_count_availability ?? [];
-  const availability = availabilityList.find((entry) => entry.worker_count === state.workerCount);
-
-  // -- platform-bound (macOS W1/W2) rules -------------------------------------------------------
-  const selectedRow = platformBound ? matrixRowFor(capabilities, state) : undefined;
-  const firstPassCounts = new Set(
-    matrix.filter((row) => row.batch_kind === "FIRST_PASS" && row.selectable !== false)
-      .map((row) => row.worker_count),
-  );
-  const unavailableCounts = platformBound
-    ? fixedWorkerCounts.filter((count) => !firstPassCounts.has(count))
-    : [];
-  const availabilityReason = (count: number): string => {
-    const entry = availabilityList.find((candidate) => candidate.worker_count === count);
-    return (entry?.reason_codes ?? []).join(", ") || entry?.status || "UNSUPPORTED_ON_MACOS";
-  };
-
-  // -- Linux v3 configured counts and legacy qualification views -------------------------------
-  const qualification = platformBound
-    ? undefined
-    : qualifications?.find((view) => view.selected_n === state.workerCount);
-  const qualificationOption = qualification ? workerOption(qualification) : null;
-  const configuredWithoutBudget = availability?.selectable === true
-    && availability.status === "CONFIGURED";
-  const validFixedWorkers = platformBound
+  // A platform-bound host (macOS) is answered by its matrix: the single-worker row must exist. A Linux host
+  // is startable once the service has published its one fixed worker count.
+  const selectedRow = platformBound ? matrixRowFor(capabilities, SINGLE_WORKER) : undefined;
+  const startable = platformBound
     ? Boolean(selectedRow)
-    : fixedWorkerCounts.includes(state.workerCount)
-      && (state.executionMode === "SEQUENTIAL" ? state.workerCount === 1 : state.workerCount >= 2);
-  const exactNSelectable = platformBound
-    ? Boolean(selectedRow)
-    : state.executionMode === "SEQUENTIAL"
-      || configuredWithoutBudget
-      || ((availability?.selectable ?? false) && !(qualificationOption?.disabled ?? false));
-  const exactNReason = platformBound
-    ? selectedRow
-      ? null
-      : availabilityReason(state.workerCount) || "UNSUPPORTED_ON_MACOS"
-    : configuredWithoutBudget
-      ? null
-      : qualificationOption?.disabled
-      ? qualificationOption.reason
-      : availability && !availability.selectable
-        ? (availability.reason_codes ?? []).join(", ") || "EXACT_N_UNQUALIFIED"
-        : null;
-
-  const optionDisabled = (count: number): boolean => platformBound
-    ? !matrix.some(
-      (row) =>
-        row.batch_kind === "FIRST_PASS"
-        && row.selectable !== false
-        && row.execution_mode === state.executionMode
-        && row.worker_count === count,
-    )
-    : (state.executionMode === "PARALLEL" && count === 1)
-      || Boolean(
-        qualifications?.some(
-          (view) => view.selected_n === count
-            && !availabilityList.some(
-              (entry) => entry.worker_count === count
-                && entry.selectable && entry.status === "CONFIGURED",
-            )
-            && workerOption(view).disabled,
-        ),
-      );
-
-  const optionLabel = (count: number): string => {
-    if (count === 1 && state.executionMode === "PARALLEL") return "1 (SEQUENTIAL only)";
-    if (platformBound && !firstPassCounts.has(count)) {
-      return `${count} · ${availabilityReason(count)}`;
-    }
-    return String(count);
-  };
+    : (capabilities?.fixed_worker_counts ?? []).includes(SINGLE_WORKER.workerCount);
 
   return (
     <section aria-label="Campaign setup" className="space-y-3 rounded-lg border border-border bg-card p-4 text-card-foreground">
@@ -277,75 +191,15 @@ export function CampaignSetup({
           className="ml-2 w-20 bg-muted px-2"
         />
       </Label>
-      <Label className="block">Execution mode
-        <select
-          aria-label="Execution mode"
-          value={state.executionMode}
-          onChange={(event) => {
-            const executionMode = event.target.value as ExecutionMode;
-            onChange({
-              ...state,
-              executionMode,
-              workerCount: executionMode === "SEQUENTIAL" ? 1 : executionMode === "PARALLEL" ? 2 : 8,
-            }, "executionMode");
-          }}
-          className="ml-2 bg-muted px-2"
-        >
-          {modes.map((mode) => (
-            <option key={mode} value={mode}>{mode}</option>
-          ))}
-        </select>
-      </Label>
-      {!adaptive ? (
-        <>
-          <Label className="block">Worker count
-            <select
-              aria-label="Worker count"
-              value={state.workerCount}
-              disabled={!capabilities || state.executionMode === "SEQUENTIAL"}
-              onChange={(event) => onChange({ ...state, workerCount: Number(event.target.value) }, "workerCount")}
-              className="ml-2 bg-muted px-2"
-            >
-              {fixedWorkerCounts.map((count) => (
-                <option key={count} value={count} disabled={optionDisabled(count)}>
-                  {optionLabel(count)}
-                </option>
-              ))}
-            </select>
-          </Label>
-          <p>共享队列 · 每 worker 一次一任务</p>
-          {platformBound ? (
-            <>
-              <p aria-live="polite" aria-label="Execution profile">
-                {selectedRow
-                  ? `${selectedRow.status} · ${selectedRow.profile}`
-                    + ` · schema v${selectedRow.schema_version} · ${selectedRow.batch_kind}`
-                  : `${availability?.status ?? "UNSUPPORTED_ON_MACOS"}`
-                    + ` · ${exactNReason ?? "UNSUPPORTED_ON_MACOS"}`}
-              </p>
-              {unavailableCounts.length > 0 ? (
-                <ul aria-label="Unavailable worker counts">
-                  {unavailableCounts.map((count) => (
-                    <li key={count}>{`N${count} unavailable · ${availabilityReason(count)}`}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          ) : (
-            <p aria-live="polite">
-              {availability
-                ? `${availability.status}${configuredWithoutBudget ? " · resource check required" : exactNReason ? ` · ${exactNReason}` : ""}`
-                : `EXACT_N_UNQUALIFIED · ${exactNReason ?? "BUDGET_PROFILE_UNAVAILABLE"}`}
-            </p>
-          )}
-        </>
-      ) : (
-        <div className="space-y-1">
-          <p>W8 -&gt; W6 -&gt; W4 -&gt; W2 -&gt; W1</p>
-          <p>Initial affinity 3 · startup 120 s · infrastructure attempts 5</p>
-          <p className="text-warning">Resource observations only</p>
-        </div>
-      )}
+      <p aria-label="Execution">One worker, one point at a time (SEQUENTIAL)</p>
+      {platformBound ? (
+        <p aria-live="polite" aria-label="Execution profile">
+          {selectedRow
+            ? `${selectedRow.status} · ${selectedRow.profile}`
+              + ` · schema v${selectedRow.schema_version} · ${selectedRow.batch_kind}`
+            : "UNSUPPORTED_ON_MACOS · no single-worker profile in the support matrix"}
+        </p>
+      ) : null}
       {preflightMessage ? <p aria-live="polite">{preflightMessage}</p> : null}
       {startGuardSummary
         ? <p aria-live="polite" aria-label="Start guard">{startGuardSummary}</p>
@@ -363,8 +217,8 @@ export function CampaignSetup({
       <div className="flex flex-wrap gap-2">
         <Button onClick={onAcquireLease} disabled={leaseHeld || leaseRenewing}>Acquire lease</Button>
         <Button onClick={onGenerate} disabled={!validCount}>Generate points</Button>
-        <Button onClick={onPreflight} disabled={!leaseHeld || leaseRenewing || !manifestReady || !adaptive && !validFixedWorkers}>Check resources</Button>
-        <Button onClick={onStart} disabled={!leaseHeld || leaseRenewing || !manifestReady || (!adaptive && (!validFixedWorkers || !exactNSelectable))}>Start validation</Button>
+        <Button onClick={onPreflight} disabled={!leaseHeld || leaseRenewing || !manifestReady || !startable}>Check resources</Button>
+        <Button onClick={onStart} disabled={!leaseHeld || leaseRenewing || !manifestReady || !startable}>Start validation</Button>
       </div>
     </section>
   );

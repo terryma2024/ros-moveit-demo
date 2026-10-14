@@ -281,17 +281,14 @@ def _preflight_body(client, lease, **changes):
     return body
 
 
-def test_capabilities_list_configured_counts_without_a_budget_profile(service):
+def test_capabilities_list_one_worker_count_and_no_budget_profile(service):
     client = _Client(service)
     payload = client.get("/expert-validation/capabilities").json()
-    availability = payload["worker_count_availability"]
-    assert availability, payload
-    for entry in availability:
-        assert entry["status"] == "CONFIGURED"
-        assert entry["selectable"] is True
-        assert entry["profile_sha256"] is None
-        assert entry["qualification_sha256"] is None
-        assert "BUDGET" not in " ".join(entry["reason_codes"])
+    # One native worker: there is no per-N availability to publish and no count above one.
+    assert payload["fixed_worker_counts"] == [1]
+    assert payload["worker_count_availability"] == []
+    assert payload["execution_modes"] == ["SEQUENTIAL"]
+    assert "BUDGET" not in " ".join(str(value) for value in payload.values())
     assert payload["start_guard_policy"]["timeout_s"] == 2.0
     assert payload["start_guard_policy"]["ram_minimum_bytes"] == 1 << 30
 

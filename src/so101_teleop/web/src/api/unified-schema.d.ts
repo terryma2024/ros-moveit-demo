@@ -823,6 +823,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/teleop/head-camera/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture */
+        post: operations["capture_teleop_head_camera_capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teleop/head-camera/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_teleop_head_camera_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teleop/head-camera/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop */
+        post: operations["stop_teleop_head_camera_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teleop/head-camera/target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Target */
+        post: operations["target_teleop_head_camera_target_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflow/{operation}": {
         parameters: {
             query?: never;
@@ -973,9 +1041,9 @@ export interface components {
             contract_version: 3;
             /**
              * Execution Mode
-             * @enum {string}
+             * @constant
              */
-            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            execution_mode: "SEQUENTIAL";
             /** Execution Profile */
             execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
@@ -1102,6 +1170,8 @@ export interface components {
             sequence: number;
             /** Status */
             status?: string | null;
+            /** Terminal Reason */
+            terminal_reason?: string | null;
             /**
              * Valid Failed
              * @default 0
@@ -1131,9 +1201,9 @@ export interface components {
             contract_version: 3;
             /**
              * Execution Mode
-             * @enum {string}
+             * @constant
              */
-            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            execution_mode: "SEQUENTIAL";
             /** Execution Profile */
             execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
@@ -1324,13 +1394,7 @@ export interface components {
         CapabilitiesResponse: {
             /**
              * Adaptive Default Ladder
-             * @default [
-             *       8,
-             *       6,
-             *       4,
-             *       2,
-             *       1
-             *     ]
+             * @default []
              */
             adaptive_default_ladder: number[];
             /** Available */
@@ -1355,14 +1419,7 @@ export interface components {
             /**
              * Fixed Worker Counts
              * @default [
-             *       1,
-             *       2,
-             *       3,
-             *       4,
-             *       5,
-             *       6,
-             *       7,
-             *       8
+             *       1
              *     ]
              */
             fixed_worker_counts: number[];
@@ -4102,6 +4159,124 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_teleop_head_camera_capture_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    status_teleop_head_camera_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    stop_teleop_head_camera_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                } | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    target_teleop_head_camera_target_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

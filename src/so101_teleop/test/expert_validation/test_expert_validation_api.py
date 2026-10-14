@@ -329,7 +329,7 @@ def test_retry_requires_lease_command_and_confirmation(tmp_path):
     assert response.json()["code"] == "CONFIRMATION_REQUIRED"
 
 
-def test_parallel_start_requires_matching_preflight_and_capacity(tmp_path):
+def test_start_requires_matching_preflight(tmp_path):
     client = _client(tmp_path)
     body = {
         "contract_version": 3,
@@ -337,22 +337,36 @@ def test_parallel_start_requires_matching_preflight_and_capacity(tmp_path):
         "lease_id": "lease-a",
         "lease_generation": 1,
         "manifest_id": "manifest-20",
-        "execution_mode": "PARALLEL",
-        "worker_count": 2,
+        "execution_mode": "SEQUENTIAL",
+        "worker_count": 1,
     }
     receipt = client.post("/expert-validation/campaigns/preflight", json=body).json()
-    # Version two has no lifetime quota, so the mismatching variable is the exact N.
+    # Version two has no lifetime quota and one worker, so the mismatching variable is the manifest.
     response = client.post(
         "/expert-validation/campaigns",
         json={
             **body,
             "command_id": "start-1",
-            "worker_count": 3,
+            "manifest_id": "manifest-21",
             "preflight_receipt_id": receipt["receipt_id"],
         },
     )
     assert response.status_code == 409
     assert response.json()["code"] == "PREFLIGHT_REQUEST_MISMATCH"
+
+
+def test_parallel_and_multi_worker_requests_are_refused_by_the_contract(tmp_path):
+    client = _client(tmp_path)
+    base = dict(contract_version=3, service_session_id="s", lease_id="l",
+                lease_generation=1, manifest_id="m")
+    for mode, workers in (("PARALLEL", 2), ("PARALLEL", 8), ("SEQUENTIAL", 2)):
+        response = client.post("/expert-validation/campaigns/preflight",
+                               json={**base, "execution_mode": mode, "worker_count": workers})
+        assert response.status_code == 422, (mode, workers, response.text)
+        response = client.post("/expert-validation/campaigns",
+                               json={**base, "execution_mode": mode, "worker_count": workers,
+                                     "command_id": "c", "preflight_receipt_id": "r"})
+        assert response.status_code == 422, (mode, workers, response.text)
 
 
 def test_adaptive_start_rejects_k_and_freezes_ladder(tmp_path):
@@ -413,12 +427,12 @@ def test_manifest_response_exposes_declared_point_source(tmp_path):
 
 def test_fixed_capability_range_and_api_boundaries(tmp_path):
     client = _client(tmp_path)
-    assert client.get("/expert-validation/capabilities").json()["fixed_worker_counts"] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert client.get("/expert-validation/capabilities").json()["fixed_worker_counts"] == [1]
     base = dict(contract_version=3, service_session_id="s", lease_id="l",
                 lease_generation=1, manifest_id="m")
     for mode, workers, expected in (("SEQUENTIAL", 1, 200), ("SEQUENTIAL", 2, 422),
-                                     ("PARALLEL", 1, 422), ("PARALLEL", 2, 200),
-                                     ("PARALLEL", 8, 200), ("PARALLEL", 9, 422)):
+                                     ("PARALLEL", 1, 422), ("PARALLEL", 2, 422),
+                                     ("PARALLEL", 8, 422), ("PARALLEL", 9, 422)):
         response = client.post("/expert-validation/campaigns/preflight",
                                json={**base, "execution_mode": mode, "worker_count": workers})
         assert response.status_code == expected, response.text
@@ -482,15 +496,10 @@ def test_capabilities_expose_exact_n_availability_without_quota(tmp_path):
     client = _client(tmp_path)
     capabilities = client.get('/expert-validation/capabilities').json()
     assert 'fixed_max_points_per_worker' not in capabilities
-    availability = capabilities['worker_count_availability']
-    assert [item['worker_count'] for item in availability] == [2, 3, 4, 5, 6, 7, 8]
-    for item in availability:
-        # The static DTO default is unknown, never a budget rejection; the real service
-        # reports CONFIGURED counts (see test_expert_validation_start_guard.py).
-        assert item['selectable'] is False
-        assert item['reason_codes'] == ['CAPABILITIES_NOT_LOADED']
-        assert item['status'] == 'UNKNOWN'
-        assert item['profile_sha256'] is None and item['qualification_sha256'] is None
+    # One native worker: there is no per-N availability to publish.
+    assert capabilities['worker_count_availability'] == []
+    assert capabilities['fixed_worker_counts'] == [1]
+    assert capabilities['adaptive_default_ladder'] == []
 
 
 # --------------------------------------------------------------------------------------
@@ -513,12 +522,13 @@ def test_the_api_accepts_a_closed_profile_claim():
     assert claim.execution_profile == "MPS_SINGLE_WORKER_FIRST_PASS"
     assert claim.batch_kind == "FIRST_PASS"
 
-    w2 = CampaignConfiguration(
-        contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
-        manifest_id="m", execution_mode="PARALLEL", worker_count=2,
-        execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS",
-    )
-    assert w2.execution_profile == "MPS_TWO_WORKER_FIRST_PASS"
+    # The two-worker profile is no longer a startable combination: its mode is refused.
+    with pytest.raises(Exception):
+        CampaignConfiguration(
+            contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
+            manifest_id="m", execution_mode="PARALLEL", worker_count=2,
+            execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS",
+        )
 
     retry = CampaignConfiguration(
         contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
@@ -553,12 +563,11 @@ def test_the_api_refuses_a_claim_that_contradicts_its_mode_or_worker_count():
     with pytest.raises(ValidationError):
         CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
                               execution_profile="MPS_W8_FIRST_PASS", batch_kind="FIRST_PASS")
-    # N>2 is a platform-support refusal, not a shape error: the API carries it to preflight,
-    # which refuses it with the stable UNSUPPORTED_ON_MACOS reason.
-    oversized = CampaignConfiguration(
-        **base, execution_mode="PARALLEL", worker_count=8,
-        execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS")
-    assert oversized.worker_count == 8
+    # A multi-worker count is a shape error now: one native worker is the whole contract.
+    with pytest.raises(ValidationError):
+        CampaignConfiguration(
+            **base, execution_mode="PARALLEL", worker_count=8,
+            execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS")
 
 
 def test_the_preflight_route_refuses_a_cross_profile_claim(tmp_path):
@@ -590,7 +599,7 @@ def test_the_preflight_route_forwards_a_closed_profile_claim(tmp_path):
     assert payload["execution_config"]["worker_count"] == 1
 
 
-def test_the_capability_document_models_single_worker_two_worker_and_the_no_qualification_note():
+def test_the_capability_document_models_single_worker_rows_and_the_no_qualification_note():
     from so101_teleop.expert_validation.api import (
         CapabilitiesResponse,
         ExecutionProfileResponse,
@@ -600,15 +609,12 @@ def test_the_capability_document_models_single_worker_two_worker_and_the_no_qual
 
     payload = CapabilitiesResponse(
         available=True,
-        execution_modes=("SEQUENTIAL", "PARALLEL"),
+        execution_modes=("SEQUENTIAL",),
         platform="macos",
-        execution_profile="MPS_TWO_WORKER_FIRST_PASS",
-        execution_schema_version=4,
+        execution_profile="MPS_SINGLE_WORKER_FIRST_PASS",
+        execution_schema_version=6,
         execution_config_sha256="a" * 64,
         support_matrix=(
-            ExecutionProfileResponse(
-                profile="MPS_TWO_WORKER_FIRST_PASS", schema_version=4, execution_mode="PARALLEL",
-                worker_count=2, batch_kind="FIRST_PASS"),
             ExecutionProfileResponse(
                 profile="MPS_SINGLE_WORKER_FULL_RESTART_RETRY", schema_version=5,
                 execution_mode="SEQUENTIAL", worker_count=1,
@@ -619,10 +625,6 @@ def test_the_capability_document_models_single_worker_two_worker_and_the_no_qual
         ),
         worker_count_availability=(
             WorkerCountAvailability(worker_count=1, selectable=True, status="SUPPORTED"),
-            WorkerCountAvailability(worker_count=2, selectable=True, status="SUPPORTED"),
-            WorkerCountAvailability(
-                worker_count=3, selectable=False, status="UNSUPPORTED_ON_MACOS",
-                reason_codes=("UNSUPPORTED_ON_MACOS",)),
         ),
         start_guard_note=START_GUARD_NOT_A_QUALIFICATION,
     )
@@ -630,13 +632,11 @@ def test_the_capability_document_models_single_worker_two_worker_and_the_no_qual
     document = payload.model_dump()
     assert document["platform"] == "macos"
     assert document["worker_count_availability"][0]["worker_count"] == 1
-    assert document["worker_count_availability"][2]["status"] == "UNSUPPORTED_ON_MACOS"
     rows = {row["profile"]: row for row in document["support_matrix"]}
-    assert set(rows) == {
-        "MPS_TWO_WORKER_FIRST_PASS", "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"}
-    assert (rows["MPS_TWO_WORKER_FIRST_PASS"]["schema_version"],
-            rows["MPS_TWO_WORKER_FIRST_PASS"]["worker_count"],
-            rows["MPS_TWO_WORKER_FIRST_PASS"]["batch_kind"]) == (4, 2, "FIRST_PASS")
+    assert set(rows) == {"MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"}
+    assert (rows["MPS_SINGLE_WORKER_FIRST_PASS"]["schema_version"],
+            rows["MPS_SINGLE_WORKER_FIRST_PASS"]["worker_count"],
+            rows["MPS_SINGLE_WORKER_FIRST_PASS"]["batch_kind"]) == (6, 1, "FIRST_PASS")
     assert "not a resource qualification proof" in document["start_guard_note"]
     assert list(document["worker_qualifications"]) == []
 

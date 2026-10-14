@@ -101,27 +101,29 @@ def test_the_durable_root_rule_is_platform_bound_and_still_fails_closed():
         assert code in fixture, code
 
 
-def test_live_config_keeps_the_reviewed_projects_and_adds_the_unified_one():
-    """The plan named four projects (sequential/parallel/adaptive/unified). The reviewed
-    suite on this branch has eight, owned by the parallel-budget task. Renaming or removing
-    them would break another task's live workflow, so the unified project is added and the
-    existing names are kept; the producer dependency is the reviewed ``r01-sequential``.
+def test_live_config_keeps_the_single_worker_projects_and_adds_the_unified_one():
+    """The multi-worker projects (parallel and adaptive) are gone with the multi-worker native path;
+    the single-worker reviewed projects keep their names and the unified project depends on r01.
     """
     config = LIVE_CONFIG.read_text()
     for project in (
         "live-preflight",
         "r01-sequential",
-        "parallel-resource",
-        "adaptive",
+        "start-guard",
         "unified",
     ):
         assert f'name: "{project}"' in config, project
+    for removed in ("parallel-resource", "adaptive"):
+        assert f'name: "{removed}"' not in config, removed
     unified = config.split('name: "unified"')[1]
     assert "unified/live-sim.spec.ts" in unified
     assert 'dependencies: ["r01-sequential"]' in unified
     assert "01-sequential.spec.ts" in config
-    assert "02-parallel.spec.ts" in config or "02-parallel|04-start-guard" in config
-    assert "03-adaptive.spec.ts" in config
+    assert "04-start-guard.spec.ts" in config
+    assert "02-parallel" not in config
+    assert "03-adaptive" not in config
+    assert not (PACKAGE / "web/e2e/expert-validation/live-sim/02-parallel.spec.ts").exists()
+    assert not (PACKAGE / "web/e2e/expert-validation/live-sim/03-adaptive.spec.ts").exists()
 
 
 def test_unified_live_spec_exists_and_uses_the_shared_fixture():

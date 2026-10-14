@@ -149,10 +149,9 @@ from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 root = pathlib.Path(os.environ["TOY_BATCH_ROOT"])
 journal = CoordinatorJournal.create(root / "coordinator", "b001")
-request = BatchRequest("b001", RunMode.EXECUTE, ("p1", "p2"), 2, root, BatchKind.FIRST_PASS)
+request = BatchRequest("b001", RunMode.EXECUTE, ("p1", "p2"), 1, root, BatchKind.FIRST_PASS)
 coordinator = BatchCoordinator(journal, request, config=load_parallel_runtime_config_linux_cuda(os.environ["TOY_CONFIG"]), result_port=None)
 coordinator.register_worker("w1", generation=1)
-coordinator.register_worker("w2", generation=1)
 path = pathlib.Path(os.environ["SO101_FIXED_CONTROL_SOCKET"])
 # The canonical control root is shared by every run of this suite, so it is created once and
 # reused. `mkdir` without `exist_ok` raised on the second run and killed this child before it could
@@ -287,19 +286,19 @@ def test_cancel_for_reason_still_delegates_to_the_live_exact_adaptive_wrapper(tm
         store.close()
 
 
-def test_sequential_and_parallel_use_same_coordinator_path(tmp_path):
+def test_every_campaign_uses_the_single_worker_coordinator_path(tmp_path):
     supervisor, owner, store = _supervisor(tmp_path)
     try:
         asyncio.run(supervisor.start_first_pass(_request(tmp_path / "seq", "SEQUENTIAL")))
         asyncio.run(
             supervisor.start_first_pass(
                 _request(
-                    tmp_path / "par",
-                    "PARALLEL",
+                    tmp_path / "seq2",
+                    "SEQUENTIAL",
                     campaign_id="campaign-2",
                     batch_id="b002",
                     manifest_id="manifest-2",
-                    worker_count=2,
+                    worker_count=1,
                 )
             )
         )
@@ -310,7 +309,7 @@ def test_sequential_and_parallel_use_same_coordinator_path(tmp_path):
         assert [
             (request.worker_count, request.max_points_per_worker)
             for request in owner.requests
-        ] == [(1, None), (2, None)]
+        ] == [(1, None), (1, None)]
         assert [request.selected_point_ids for request in owner.requests] == [
             tuple(f"point_{index}" for index in range(1, 5)),
             tuple(f"point_{index}" for index in range(1, 5)),
@@ -343,28 +342,13 @@ def test_installed_coordinator_is_discoverable_on_child_path(tmp_path):
         store.close()
 
 
-def test_parallel_rejection_never_spawns_or_downgrades(tmp_path):
-    supervisor, owner, store = _supervisor(
-        tmp_path, Resources(admitted=False, reasons=("GPU_HEADROOM",))
-    )
-    try:
-        with pytest.raises(PreflightRejected, match="GPU_HEADROOM"):
-            asyncio.run(supervisor.start_first_pass(_request(tmp_path, "PARALLEL")))
-        assert owner.requests == []
-    finally:
-        store.close()
-
-
-def test_adaptive_uses_one_wrapper_request_without_k(tmp_path):
+@pytest.mark.parametrize("mode", ["PARALLEL", "ADAPTIVE"])
+def test_multi_worker_modes_never_spawn_or_downgrade(tmp_path, mode):
     supervisor, owner, store = _supervisor(tmp_path)
     try:
-        asyncio.run(
-            supervisor.start_first_pass(_request(tmp_path, "ADAPTIVE", count=20))
-        )
-        request = owner.requests[-1]
-        assert type(request).__name__ == "AdaptiveStartRequest"
-        assert request.levels == (8, 6, 4, 2, 1)
-        assert "--max-points-per-worker" not in request.argv
+        with pytest.raises(PreflightRejected, match="NATIVE_MULTI_WORKER_UNSUPPORTED"):
+            asyncio.run(supervisor.start_first_pass(_request(tmp_path, mode, count=20)))
+        assert owner.requests == []
     finally:
         store.close()
 

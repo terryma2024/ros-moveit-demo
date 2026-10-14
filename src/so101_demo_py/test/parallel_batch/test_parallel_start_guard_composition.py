@@ -148,11 +148,11 @@ def test_budget_modules_are_absent_from_the_composition_import_graph():
         assert not any(retired in name for name in modules), modules
 
 
-def test_fixed_request_keeps_every_slot_when_points_are_fewer(tmp_path):
+def test_fixed_request_keeps_the_single_worker_when_points_are_fewer(tmp_path):
     request = BatchRequest(batch_id="lg-t5-fixed", run_mode=RunMode.EXECUTE,
-                             selected_point_ids=("p1",), worker_count=4,
+                             selected_point_ids=("p1",), worker_count=1,
                              evidence_root=tmp_path, batch_kind=BatchKind.FIRST_PASS)
-    assert request.worker_count == 4  # never min(worker_count, points)
+    assert request.worker_count == 1  # never min(worker_count, points)
     assert len(request.selected_point_ids) == 1
 
 

@@ -401,7 +401,7 @@ def test_adaptive_worker_process_classifies_recovered_invalid_as_infrastructure(
 @pytest.mark.parametrize(
     "changes,error",
     [
-        ({"worker_count": "9"}, "WORKER_COUNT"),
+        ({"worker_count": "9"}, "NATIVE_MULTI_WORKER_UNSUPPORTED"),
         ({"evidence_root": "relative"}, "ABSOLUTE"),
         ({"run_mode": "unknown"}, "MODE"),
         ({"worker_count": "true"}, "INTEGER"),
@@ -549,7 +549,7 @@ def test_selection_uses_catalog_order_and_hash_and_omission_selects_all(tmp_path
     selected = prepare_batch(
         argv(
             tmp_path / "selected",
-            worker_count="2",
+            worker_count="1",
                         point_id=("sample_16_far_right", "task_start"),
         ),
         provenance_verifier=verified,
@@ -563,7 +563,7 @@ def test_selection_uses_catalog_order_and_hash_and_omission_selects_all(tmp_path
     assert len(complete.request.selected_point_ids) == 20
     assert complete.request.selected_point_ids[0] == "task_start"
     assert complete.request.selected_point_ids[-1] == "sample_16_far_right"
-    assert complete.manifest["worker_count"] == 2
+    assert complete.manifest["worker_count"] == 1
     assert "fixed_partitions" not in complete.manifest
 
 

@@ -76,39 +76,15 @@ class ExecutorRegistry:
 
     @classmethod
     def v1(cls, probes: QualificationProbes) -> "ExecutorRegistry":
-        # Availability is a statement about the *deployed* composition, not about a retired
-        # per-N budget: what a mode needs is the executor, the shared queue, the broker and
-        # the adaptive runner files actually being installed. The removed acceptance
-        # aggregates and performance tiers were budget qualifications; requiring them made a
-        # correctly deployed service advertise only SEQUENTIAL while fixed counts 1..8 were
-        # selectable, which is exactly the mismatch this correction reports.
+        # Availability is a statement about the *deployed* composition. A native campaign runs one worker
+        # (multi-worker collection exists only as container shards), so SEQUENTIAL is the only mode the
+        # service advertises, whatever multi-worker files are still installed; the PARALLEL and ADAPTIVE
+        # probes are accepted for call-site compatibility and decide nothing.
         fixed = probes.fixed_upstream and probes.parallel_config
-        parallel = all(
-            (
-                fixed,
-                probes.broker_image,
-                probes.resource_probe,
-            )
-        )
-        adaptive = all(
-            (
-                probes.adaptive_runner,
-                probes.adaptive_pool,
-                probes.adaptive_wrapper,
-                probes.adaptive_cleanup,
-                probes.adaptive_config,
-            )
-        )
         modes = MappingProxyType(
             {
                 "SEQUENTIAL": ModeAvailability(
                     fixed, None if fixed else "FIXED_NOT_QUALIFIED"
-                ),
-                "PARALLEL": ModeAvailability(
-                    parallel, None if parallel else "PARALLEL_COMPOSITION_UNAVAILABLE"
-                ),
-                "ADAPTIVE": ModeAvailability(
-                    adaptive, None if adaptive else "ADAPTIVE_COMPOSITION_UNAVAILABLE"
                 ),
             }
         )
@@ -117,7 +93,7 @@ class ExecutorRegistry:
             operation_id="validate_pick_place",
             request_model=MoveItValidationRequest,
             evidence_schema_id="so101.moveit-expert.evidence.v1",
-            execution_modes=("SEQUENTIAL", "PARALLEL", "ADAPTIVE"),
+            execution_modes=("SEQUENTIAL",),
             batch_kinds=("FIRST_PASS", "FULL_RESTART_RETRY"),
             mode_availability=modes,
             success_contract_id="so101.moveit-expert.success.v1",

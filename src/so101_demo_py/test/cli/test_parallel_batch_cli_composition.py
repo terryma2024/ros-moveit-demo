@@ -23,20 +23,20 @@ from so101_demo.parallel_batch.contracts.common import (
 )
 
 
-def test_fixed_four_worker_starts_without_any_budget_authority(tmp_path):
+def test_fixed_one_worker_starts_without_any_budget_authority(tmp_path):
     """The plain v3 default path needs no profile, no promotion and no budget environment."""
 
     from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.contracts.linux_cuda import ParallelRuntimeConfigLinuxCuda
 
-    prepared = prepare_batch(argv(tmp_path / "w4", worker_count="4"),
+    prepared = prepare_batch(argv(tmp_path / "w1", worker_count="1"),
                              provenance_verifier=verified)
     assert isinstance(prepared.config, ParallelRuntimeConfigLinuxCuda)
     assert prepared.start_guard is not None
     assert prepared.start_guard_evidence["status"] in ("PASS", "WARN")
     assert prepared.start_guard_evidence["cleanup_state"] == "CLEAR"
     assert prepared.start_guard_evidence["checks"]["ram"]["unit"] == "bytes"
-    assert prepared.request.worker_count == 4
+    assert prepared.request.worker_count == 1
     assert prepared.manifest["schema_version"] == 3
     assert prepared.manifest["start_guard"]["policy"] == {
         key: prepared.start_guard_evidence["policy"][key]
@@ -66,12 +66,13 @@ def test_a_failing_guard_refuses_the_start_instead_of_allocating(tmp_path):
     probe_module.ProbeCoordinator.check = refusing_check
     try:
         with pytest.raises(CliError, match="GPU_TARGET_NOT_VISIBLE"):
-            prepare_batch(argv(tmp_path / "w4-refused", worker_count="4"),
+            prepare_batch(argv(tmp_path / "w1-refused", worker_count="1"),
                           provenance_verifier=verified)
     finally:
         probe_module.ProbeCoordinator.check = original
 
 
+@pytest.mark.skip(reason="the adaptive entry is refused (NATIVE_MULTI_WORKER_UNSUPPORTED); this test is deleted with the pool in the removal plan Task 5")
 def test_production_adaptive_factory_builds_an_internal_eight_worker_pool(tmp_path, monkeypatch):
     from dataclasses import replace
 

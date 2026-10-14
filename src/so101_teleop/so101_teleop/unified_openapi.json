@@ -384,11 +384,7 @@
             "type": "integer"
           },
           "execution_mode": {
-            "enum": [
-              "SEQUENTIAL",
-              "PARALLEL",
-              "ADAPTIVE"
-            ],
+            "const": "SEQUENTIAL",
             "title": "Execution Mode",
             "type": "string"
           },
@@ -483,7 +479,7 @@
           "worker_count": {
             "anyOf": [
               {
-                "maximum": 8.0,
+                "maximum": 1.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -757,6 +753,17 @@
             ],
             "title": "Status"
           },
+          "terminal_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminal Reason"
+          },
           "valid_failed": {
             "default": 0,
             "title": "Valid Failed",
@@ -812,11 +819,7 @@
             "type": "integer"
           },
           "execution_mode": {
-            "enum": [
-              "SEQUENTIAL",
-              "PARALLEL",
-              "ADAPTIVE"
-            ],
+            "const": "SEQUENTIAL",
             "title": "Execution Mode",
             "type": "string"
           },
@@ -916,7 +919,7 @@
           "worker_count": {
             "anyOf": [
               {
-                "maximum": 8.0,
+                "maximum": 1.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -1335,13 +1338,7 @@
         "description": "Capability payload: the original read-only fields plus worker qualification.\n\nThe model keeps the reviewed contract name that the generated TypeScript client already\nimports, widens ``extra`` to ``allow`` so unknown read-only fields survive, and requires\nthe per-N qualification list so it is a real, reachable part of the schema.",
         "properties": {
           "adaptive_default_ladder": {
-            "default": [
-              8,
-              6,
-              4,
-              2,
-              1
-            ],
+            "default": [],
             "items": {
               "type": "integer"
             },
@@ -1410,14 +1407,7 @@
           },
           "fixed_worker_counts": {
             "default": [
-              1,
-              2,
-              3,
-              4,
-              5,
-              6,
-              7,
-              8
+              1
             ],
             "items": {
               "type": "integer"
@@ -4062,7 +4052,7 @@
             "type": "string"
           },
           "worker_count": {
-            "maximum": 8.0,
+            "maximum": 1.0,
             "minimum": 1.0,
             "title": "Worker Count",
             "type": "integer"
@@ -8249,6 +8239,136 @@
           }
         },
         "summary": "Recovery"
+      }
+    },
+    "/teleop/head-camera/capture": {
+      "post": {
+        "operationId": "capture_teleop_head_camera_capture_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capture Teleop Head Camera Capture Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Capture"
+      }
+    },
+    "/teleop/head-camera/status": {
+      "get": {
+        "operationId": "status_teleop_head_camera_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Status Teleop Head Camera Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status"
+      }
+    },
+    "/teleop/head-camera/stop": {
+      "post": {
+        "operationId": "stop_teleop_head_camera_stop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Stop Teleop Head Camera Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop"
+      }
+    },
+    "/teleop/head-camera/target": {
+      "post": {
+        "operationId": "target_teleop_head_camera_target_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Target Teleop Head Camera Target Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Target"
       }
     },
     "/workflow/{operation}": {

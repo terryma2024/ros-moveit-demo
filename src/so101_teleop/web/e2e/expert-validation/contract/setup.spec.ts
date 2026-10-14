@@ -83,13 +83,19 @@ test("C04 config changes invalidate credentials precisely", async ({ page, scrip
   expect(manifestB.manifest_id).not.toBe(manifestA.manifest_id);
   await expect(page.locator("[data-point-id]")).toHaveCount(5);
 
-  await app.configureParallel(2);
-  await expect(page.locator("[data-point-id]")).toHaveCount(5);
-
   await app.runPreflight();
-  await expect(app.notice("Parallel admission passed")).toBeVisible();
+  await expect(app.notice("Preflight passed")).toBeVisible();
 
-  await page.getByLabel("Worker count").selectOption("3");
+  // A new point count invalidates the manifest and with it the receipt: the next start re-checks.
+  await app.setPointCount(6);
+  await expect(page.locator("[data-point-id]")).toHaveCount(0);
+  const thirdManifest = page.waitForResponse(
+    (response) =>
+      response.url().includes("/expert-validation/manifests")
+      && response.request().method() === "POST",
+  );
+  await app.generateManifest();
+  const manifestC = await (await thirdManifest).json();
   await app.startValidation();
 
   const commands = await scriptedServer.control.commands();
@@ -97,17 +103,20 @@ test("C04 config changes invalidate credentials precisely", async ({ page, scrip
   const starts = commands.filter((command) => command.operation === "start_campaign");
   expect(preflights.length).toBe(2);
   expect(starts.length).toBe(1);
-  expect(preflights[0].body.worker_count).toBe(2);
-  expect(preflights[1].body.worker_count).toBe(3);
+  expect(preflights[0].body.manifest_id).toBe(manifestB.manifest_id);
+  expect(preflights[1].body.manifest_id).toBe(manifestC.manifest_id);
+  for (const preflight of preflights) {
+    expect(preflight.body.execution_mode).toBe("SEQUENTIAL");
+    expect(preflight.body.worker_count).toBe(1);
+  }
 });
 
-test("C05 sequential request shape", async ({ page, scriptedServer }) => {
+test("C05 single-worker request shape", async ({ page, scriptedServer }) => {
   const app = new ExpertValidationPage(page);
   await app.goto();
   await app.acquireLease();
   await app.generateManifest(4);
   await app.configureSequential();
-  await expect(page.getByLabel("Worker count")).toBeDisabled();
   await expect(page.getByText(/W8 ->/)).toHaveCount(0);
   await app.runPreflight();
   await app.startValidation();
@@ -119,49 +128,30 @@ test("C05 sequential request shape", async ({ page, scriptedServer }) => {
   expect(preflight.body).not.toHaveProperty("fallback_worker_counts");
 });
 
-test("C06 fixed parallel admission is explicit scenario:parallel-unavailable", async ({ page, scriptedServer }) => {
+test("C06 the page offers no multi-worker control and the server refuses one", async ({ page, scriptedServer }) => {
   const app = new ExpertValidationPage(page);
   await app.goto();
   await app.acquireLease();
   await app.generateManifest(20);
 
-  await app.configureParallel(2);
-  await expect(page.getByText("共享队列 · 每 worker 一次一任务")).toBeVisible();
-  await expect(page.getByText(/NOT_MEASURED · BUDGET_PROFILE_UNAVAILABLE/)).toBeVisible();
-  await expect(app.startButton()).toBeDisabled();
+  await expect(page.getByLabel("Execution mode")).toHaveCount(0);
+  await expect(page.getByLabel("Worker count")).toHaveCount(0);
   await expect(page.getByLabel("Max points per worker")).toHaveCount(0);
-  await expect(page.getByText(/^Capacity/)).toHaveCount(0);
+  await expect(page.getByText(/W8 ->|Resource observations only|共享队列/)).toHaveCount(0);
 
-  await app.runPreflight();
-  await expect(app.notice("PARALLEL_NOT_QUALIFIED")).toBeVisible();
+  // A hand-written multi-worker preflight is refused by the contract before it reaches the executor.
+  const capabilities = await (await page.request.get("/expert-validation/capabilities")).json();
+  expect(capabilities.execution_modes).toEqual(["SEQUENTIAL"]);
+  expect(capabilities.fixed_worker_counts).toEqual([1]);
+  const refused = await page.request.post("/expert-validation/campaigns/preflight", {
+    data: {
+      service_session_id: "forged", contract_version: 3, lease_id: "lease-forged", lease_generation: 1,
+      manifest_id: "manifest-none", execution_mode: "PARALLEL", worker_count: 2,
+    },
+  });
+  expect(refused.status()).toBe(422);
   const commands = await scriptedServer.control.commands();
   expect(commands.filter((command) => command.operation === "start_campaign")).toEqual([]);
-});
-
-test("C07 adaptive request shape and defaults", async ({ page, scriptedServer }) => {
-  const app = new ExpertValidationPage(page);
-  await app.goto();
-  await app.acquireLease();
-  await app.generateManifest(20);
-  await app.configureAdaptive();
-  await expect(page.getByText("W8 -> W6 -> W4 -> W2 -> W1")).toBeVisible();
-  await expect(page.getByText("Resource observations only")).toBeVisible();
-  await expect(page.getByLabel("Max points per worker")).toHaveCount(0);
-  await expect(page.getByText(/Capacity \d+ \//)).toHaveCount(0);
-  await app.runPreflight();
-  await app.startValidation();
-  const commands = await scriptedServer.control.commands();
-  const preflight = commands.find((command) => command.operation === "preflight");
-  expect(preflight.body.contract_version).toBe(2);
-  expect(preflight.body.execution_mode).toBe("ADAPTIVE");
-  expect(preflight.body.preferred_worker_count).toBe(8);
-  expect(preflight.body.fallback_worker_counts).toEqual([6, 4, 2, 1]);
-  expect(preflight.body.initial_points_per_worker).toBe(3);
-  expect(preflight.body.worker_start_timeout_s).toBe(120);
-  expect(preflight.body.max_infra_attempts_per_point).toBe(5);
-  expect(preflight.body.yolo_executor_count).toBe(2);
-  expect(preflight.body).not.toHaveProperty("max_points_per_worker");
-  expect(preflight.body).not.toHaveProperty("worker_count");
 });
 
 test("C08 lease and preflight gates block start scenario:preflight-rejected", async ({ page, scriptedServer }) => {
@@ -258,38 +248,4 @@ test("C22 renewed lease invalidates the preflight receipt scenario:short-lease",
 
   const reread = await page.request.get(`/expert-validation/manifests/${manifest.manifest_id}`);
   expect((await reread.json()).manifest_sha256).toBe(manifest.manifest_sha256);
-});
-
-test("N8 exact twenty-point fixed preview and rejected admission scenario:parallel-unavailable", async ({ page, scriptedServer, consoleErrors }) => {
-  const app = new ExpertValidationPage(page);
-  await app.goto();
-  await app.acquireLease();
-  await app.generateManifest(20);
-  await page.getByLabel("Execution mode").selectOption("PARALLEL");
-  const options = page.getByLabel("Worker count").locator("option");
-  await expect(options).toHaveCount(8);
-  expect(await options.evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value)))
-    .toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
-  await expect(options.first()).toHaveJSProperty("disabled", true);
-  await expect(options.first()).toHaveText("1 (SEQUENTIAL only)");
-  await expect(page.getByText("共享队列 · 每 worker 一次一任务")).toBeVisible();
-  await page.getByLabel("Worker count").selectOption("8");
-  await expect(page.getByText(/NOT_MEASURED · BUDGET_PROFILE_UNAVAILABLE/)).toBeVisible();
-  await expect(page.getByLabel("Max points per worker")).toHaveCount(0);
-  const responsePromise = page.waitForResponse(response =>
-    response.url().endsWith("/expert-validation/campaigns/preflight")
-      && response.request().method() === "POST");
-  await app.runPreflight();
-  const response = await responsePromise;
-  await expect(app.notice("PARALLEL_NOT_QUALIFIED")).toBeVisible();
-  expect(response.status()).toBe(409);
-  expect(await response.json()).toEqual({ code: "PARALLEL_NOT_QUALIFIED" });
-  const request = response.request().postDataJSON();
-  expect(request).toMatchObject({ contract_version: 2, execution_mode: "PARALLEL", worker_count: 8 });
-  expect(request).not.toHaveProperty("max_points_per_worker");
-  expect(request).not.toHaveProperty("preferred_worker_count");
-  const commands = await scriptedServer.control.commands();
-  expect(commands.filter(command => command.operation === "start_campaign")).toEqual([]);
-  const expectedRejection = `Failed to load resource: the server responded with a status of 409 (Conflict) (${response.url()})`;
-  expect(consoleErrors.filter(error => error !== expectedRejection)).toEqual([]);
 });

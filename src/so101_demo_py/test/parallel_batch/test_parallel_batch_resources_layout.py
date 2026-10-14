@@ -37,7 +37,7 @@ from so101_demo.parallel_batch.resources import WorkerResourceAllocator
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='headless EGL worker contract is Linux-only')
 def test_worker_slots_have_unique_headless_egl_context_resources(tmp_path, config):
-    manifest = allocator(tmp_path, config).allocate()
+    manifest = allocator(tmp_path, config).allocate(worker_count=2)
     documents = [worker.to_dict() for worker in manifest.workers]
 
     assert {item.get('render_backend') for item in documents} == {'headless_egl'}
@@ -58,7 +58,7 @@ def test_evidence_root_rejects_symlink_ancestor(tmp_path, config):
         WorkerResourceAllocator(
             config, link / 'batch', probe=FakeProbe(), claim_root=claim_root(),
             start_guard=_start_guard_for(config),
-        ).allocate()
+        ).allocate(worker_count=2)
 
 
 def test_evidence_root_rejects_unsafe_parent_mode(tmp_path, config):
@@ -70,7 +70,7 @@ def test_evidence_root_rejects_unsafe_parent_mode(tmp_path, config):
         WorkerResourceAllocator(
             config, unsafe / 'batch', probe=FakeProbe(), claim_root=claim_root(),
             start_guard=_start_guard_for(config),
-        ).allocate()
+        ).allocate(worker_count=2)
 
 
 def test_evidence_root_rejects_wrong_parent_owner(tmp_path, config, monkeypatch):
@@ -84,7 +84,7 @@ def test_evidence_root_rejects_wrong_parent_owner(tmp_path, config, monkeypatch)
             probe=FakeProbe(),
             claim_root=claim_root(),
             start_guard=_start_guard_for(config),
-        ).allocate()
+        ).allocate(worker_count=2)
 
 
 def test_new_directory_with_wrong_mode_fails_closed(tmp_path, config, monkeypatch):
@@ -98,7 +98,7 @@ def test_new_directory_with_wrong_mode_fails_closed(tmp_path, config, monkeypatc
 
     monkeypatch.setattr(os, 'mkdir', unsafe_mkdir)
     with pytest.raises(ResourceAllocationError, match='UNSAFE_DIRECTORY_MODE'):
-        allocator(tmp_path, config, suffix='wrong-new-mode').allocate()
+        allocator(tmp_path, config, suffix='wrong-new-mode').allocate(worker_count=2)
 
 
 def test_partial_directory_failure_releases_domain_claims(tmp_path, config, monkeypatch):
@@ -112,18 +112,18 @@ def test_partial_directory_failure_releases_domain_claims(tmp_path, config, monk
     monkeypatch.setattr(os, 'mkdir', interrupted_mkdir)
     resource_allocator = allocator(tmp_path, config, suffix='partial-directory')
     with pytest.raises(ResourceAllocationError, match='DIRECTORY_CREATION_FAILED'):
-        resource_allocator.allocate()
+        resource_allocator.allocate(worker_count=2)
     assert not (resource_allocator.evidence_root / 'resource_manifest.json').exists()
 
     monkeypatch.setattr(os, 'mkdir', original)
     retry = allocator(tmp_path, config, suffix='partial-directory-retry')
-    assert retry.allocate().worker_count == 2
+    assert retry.allocate(worker_count=2).worker_count == 2
     retry.close()
 
 
 def test_manifest_write_uses_held_root_and_rejects_path_replacement(tmp_path, config):
     resource_allocator = allocator(tmp_path, config)
-    resource_allocator.allocate()
+    resource_allocator.allocate(worker_count=2)
     root = resource_allocator.evidence_root
     displaced = root.with_name(root.name + '-displaced')
     root.rename(displaced)
@@ -144,7 +144,7 @@ def test_manifest_write_uses_held_root_and_rejects_path_replacement(tmp_path, co
 
 def test_manifest_write_revalidates_held_root_mode_before_publish(tmp_path, config):
     resource_allocator = allocator(tmp_path, config, suffix='manifest-root-mode')
-    resource_allocator.allocate()
+    resource_allocator.allocate(worker_count=2)
     resource_allocator.evidence_root.chmod(0o777)
 
     with pytest.raises(ResourceAllocationError, match='UNSAFE_DIRECTORY_MODE'):
@@ -157,7 +157,7 @@ def test_partial_manifest_write_is_not_published_and_releases_claims(
     tmp_path, config, monkeypatch
 ):
     resource_allocator = allocator(tmp_path, config, suffix='manifest-partial')
-    resource_allocator.allocate()
+    resource_allocator.allocate(worker_count=2)
     original_write = os.write
     failed = False
 
@@ -175,13 +175,13 @@ def test_partial_manifest_write_is_not_published_and_releases_claims(
     assert list(resource_allocator.evidence_root.glob('.resource_manifest.*.tmp')) == []
 
     retry = allocator(tmp_path, config, suffix='manifest-partial-retry')
-    assert retry.allocate().worker_count == 2
+    assert retry.allocate(worker_count=2).worker_count == 2
     retry.close()
 
 
 def test_concurrent_reader_never_observes_partial_manifest(tmp_path, config, monkeypatch):
     resource_allocator = allocator(tmp_path, config, suffix='manifest-visible')
-    resource_allocator.allocate()
+    resource_allocator.allocate(worker_count=2)
     root = resource_allocator.evidence_root
     final = root / 'resource_manifest.json'
     write_started = Event()
@@ -288,15 +288,15 @@ def test_manifest_publish_is_no_replace_and_cleans_temporary(tmp_path):
 
 def test_successful_publish_holds_claims_until_explicit_close(tmp_path, config):
     first = allocator(tmp_path, config, suffix='manifest-claim-owner')
-    first.allocate()
+    first.allocate(worker_count=2)
     first.write_manifest()
     second = allocator(tmp_path, config, suffix='manifest-claim-contender')
     with pytest.raises(ResourceAllocationError, match='ROS_DOMAIN_CLAIMED'):
-        second.allocate()
+        second.allocate(worker_count=2)
     first.close()
 
     retry = allocator(tmp_path, config, suffix='manifest-claim-retry')
-    assert retry.allocate().worker_count == 2
+    assert retry.allocate(worker_count=2).worker_count == 2
     retry.close()
 
 
@@ -367,7 +367,7 @@ def test_system_probe_fails_closed_when_meminfo_cannot_be_read(tmp_path, monkeyp
 
 
 def test_default_two_slots_have_unique_real_resources_and_mujoco_literals(tmp_path, config):
-    manifest = allocator(tmp_path, config).allocate()
+    manifest = allocator(tmp_path, config).allocate(worker_count=2)
 
     assert manifest.requested_worker_count == manifest.worker_count == 2
     assert manifest.admission.admitted is True
@@ -393,7 +393,7 @@ def test_default_two_slots_have_unique_real_resources_and_mujoco_literals(tmp_pa
 
 
 def test_manifest_and_nested_resources_are_immutable(tmp_path, config):
-    manifest = allocator(tmp_path, config).allocate()
+    manifest = allocator(tmp_path, config).allocate(worker_count=2)
 
     with pytest.raises(FrozenInstanceError):
         manifest.worker_count = 1

@@ -548,9 +548,9 @@ export interface components {
             contract_version: 3;
             /**
              * Execution Mode
-             * @enum {string}
+             * @constant
              */
-            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            execution_mode: "SEQUENTIAL";
             /** Execution Profile */
             execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
@@ -677,6 +677,8 @@ export interface components {
             sequence: number;
             /** Status */
             status?: string | null;
+            /** Terminal Reason */
+            terminal_reason?: string | null;
             /**
              * Valid Failed
              * @default 0
@@ -706,9 +708,9 @@ export interface components {
             contract_version: 3;
             /**
              * Execution Mode
-             * @enum {string}
+             * @constant
              */
-            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            execution_mode: "SEQUENTIAL";
             /** Execution Profile */
             execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
@@ -899,13 +901,7 @@ export interface components {
         CapabilitiesResponse: {
             /**
              * Adaptive Default Ladder
-             * @default [
-             *       8,
-             *       6,
-             *       4,
-             *       2,
-             *       1
-             *     ]
+             * @default []
              */
             adaptive_default_ladder: number[];
             /** Available */
@@ -930,14 +926,7 @@ export interface components {
             /**
              * Fixed Worker Counts
              * @default [
-             *       1,
-             *       2,
-             *       3,
-             *       4,
-             *       5,
-             *       6,
-             *       7,
-             *       8
+             *       1
              *     ]
              */
             fixed_worker_counts: number[];
@@ -1859,6 +1848,10 @@ export interface components {
         };
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */

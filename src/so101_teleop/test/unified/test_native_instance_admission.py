@@ -178,3 +178,55 @@ def test_finish_does_not_settle_a_native_instance_whose_stop_is_unproven(tmp_pat
         assert store._query_one('SELECT * FROM gpu_workload_leases') is not None
     finally:
         store.close()
+
+
+def test_a_native_instance_is_refused_while_a_batch_worker_holds_the_fixed_domain_claim(tmp_path):
+    """A hand-launched `so101_parallel_batch` worker also runs on domain 181 and never appears in the ACT tables.
+
+    The batch allocator holds a flock on the domain claim file for as long as the batch lives, so admission asks
+    that lock instead of only reading its own tables.
+    """
+
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        workload.slot_registry.batch_domain_claim_probe = lambda: True
+        with pytest.raises(ValueError, match='NATIVE_INSTANCE_BATCH_DOMAIN_CLAIMED'):
+            workload.start(native(spec), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is None
+        workload.slot_registry.batch_domain_claim_probe = lambda: False
+        workload.start(native(spec), allow_existing=False)
+    finally:
+        store.close()
+
+
+def test_a_container_instance_ignores_the_batch_domain_claim(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        workload.slot_registry.batch_domain_claim_probe = lambda: True
+        workload.start(spec, allow_existing=False)
+    finally:
+        store.close()
+
+
+def test_the_real_domain_claim_probe_follows_the_flock_of_the_batch_allocator(tmp_path):
+    import fcntl
+    import os
+
+    from so101_teleop.unified.worker_slots import batch_domain_claim_held
+
+    claims = tmp_path / 'so101-parallel-domain-claims'
+    assert batch_domain_claim_held(claims, 181) is False  # no claim directory
+    claims.mkdir(mode=0o700)
+    assert batch_domain_claim_held(claims, 181) is False  # no claim file
+    lock = claims / 'domain-181.lock'
+    lock.write_text('{}')
+    assert batch_domain_claim_held(claims, 181) is False  # a stale file nobody holds
+    descriptor = os.open(lock, os.O_RDWR)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert batch_domain_claim_held(claims, 181) is True
+        assert batch_domain_claim_held(claims, 182) is False
+    finally:
+        os.close(descriptor)
+    assert batch_domain_claim_held(claims, 181) is False  # released with the process

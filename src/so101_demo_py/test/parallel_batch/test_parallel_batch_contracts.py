@@ -487,8 +487,9 @@ def test_validation_pass_requires_normal_points_complete_terminal_reason(run_mod
     assert summary.validation_passed is False
 
 
-@pytest.mark.parametrize("workers", [1, 2, 8])
-def test_fixed_batch_contract_supports_exact_count_through_eight(tmp_path, workers):
+@pytest.mark.parametrize("workers", [1])
+def test_fixed_batch_contract_supports_exactly_one_worker(tmp_path, workers):
+    # Counts of 2 and more are refused (NATIVE_MULTI_WORKER_UNSUPPORTED); see test_native_multi_worker_refused.py.
     from so101_demo.parallel_batch.contracts.common import RunMode
     from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
     request = BatchRequest("eight", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
@@ -507,7 +508,7 @@ def test_request_has_no_lifetime_quota_and_keeps_retry_single_point(tmp_path):
     from so101_demo.parallel_batch.contracts.common import ContractError, RunMode
     from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
     request = BatchRequest("batch-a", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
-                             2, tmp_path, BatchKind.FIRST_PASS)
+                             1, tmp_path, BatchKind.FIRST_PASS)
     assert request.schema_version == 2
     assert not hasattr(request, "max_points_per_worker")
     retry = BatchRequest("batch-retry", RunMode.EXECUTE, ("p1",), 1, tmp_path,

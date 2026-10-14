@@ -233,12 +233,11 @@ def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
     root = (tmp_path if sys.platform != "darwin" else _short_private_root("u")).resolve()
     journal = CoordinatorJournal.create(root / "coordinator", "batch-a")
     try:
-        request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1", "p2"), 2, root, BatchKind.FIRST_PASS)
+        request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1", "p2"), 1, root, BatchKind.FIRST_PASS)
         demo_root = SOURCE_ROOT / "so101_demo_py"
         config = load_parallel_runtime_config_linux_cuda(demo_root / "config/mujoco/parallel_batch_linux_cuda.yaml")
         coordinator = BatchCoordinator(journal, request, config=config, result_port=UnusedResultPort())
         coordinator.register_worker("w1", generation=1)
-        coordinator.register_worker("w2", generation=1)
         control_root = root
         token = "9a" * 32
         binding = CoordinatorBinding(
@@ -257,7 +256,6 @@ def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
             assert result.batch_cleanup_complete is False
             assert coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
             assert coordinator.grant_lease("w1", generation=1) is None
-            assert coordinator.grant_lease("w2", generation=1) is None
             assert [event.type for event in journal.replay().events].count("BATCH_STOPPING") == 1
         finally:
             server.close()

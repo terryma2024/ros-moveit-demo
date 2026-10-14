@@ -11,7 +11,7 @@ import sys
 from types import MappingProxyType
 from typing import Mapping
 
-_DEFAULT_WORKER_COUNT = 2
+_DEFAULT_WORKER_COUNT = 1
 
 
 _NOT_APPLICABLE = 'not_applicable'

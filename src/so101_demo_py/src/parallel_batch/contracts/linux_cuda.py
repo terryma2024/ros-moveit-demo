@@ -63,6 +63,10 @@ class BatchRequest:
         )
         if self.worker_count > _FROZEN_MAX_WORKER_COUNT:
             raise ContractError("MAX_WORKER_COUNT")
+        if self.worker_count != 1:
+            # A native batch is one worker. Multi-worker collection exists only as container shards, whose
+            # cap is `max_worker_count` of the runtime document (a different field, unchanged).
+            raise ContractError("NATIVE_MULTI_WORKER_UNSUPPORTED")
         object.__setattr__(
             self,
             "evidence_root",

@@ -216,7 +216,7 @@ def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypa
         assert composition._release_runtime_ipc_root() is True
 
 
-def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
+def test_physical_worker_launch_receives_the_exact_isolated_environment(tmp_path):
     from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
     from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resource_allocation.models import ResourceSnapshot
@@ -238,7 +238,7 @@ def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
     scratch = _scratch_root()
     spec = prepare_batch(
         argv(
-            scratch / "e", worker_count="2",             point_id=("task_start", "sample_01_near_left"), run_mode="plan_only",
+            scratch / "e", worker_count="1",             point_id=("task_start", "sample_01_near_left"), run_mode="plan_only",
         ),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
@@ -261,7 +261,7 @@ def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
     assert [env["SO101_SESSION_ID"] for env in environments] == [
         item.session_id for item in resources
     ]
-    assert len(set(env["ROS_DOMAIN_ID"] for env in environments)) == 2
+    assert len(set(env["ROS_DOMAIN_ID"] for env in environments)) == 1 == len(environments)
     composition._release_partial()
 
 

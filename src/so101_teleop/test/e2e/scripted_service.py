@@ -96,24 +96,13 @@ class _WorkerCountAvailabilityModel(_ClosedModel):
 
 class _CapabilitiesModel(_ClosedModel):
     available: bool = True
-    execution_modes: tuple[str, ...] = ("SEQUENTIAL", "PARALLEL", "ADAPTIVE")
+    execution_modes: tuple[str, ...] = ("SEQUENTIAL",)
     default_execution_mode: str = "SEQUENTIAL"
     minimum_points: int = 4
     maximum_points: int = 20
-    fixed_worker_counts: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
-    worker_count_availability: tuple[_WorkerCountAvailabilityModel, ...] = (
-        _WorkerCountAvailabilityModel(
-            worker_count=2, selectable=True, status="APPROVED"),
-        _WorkerCountAvailabilityModel(
-            worker_count=3, selectable=True, status="APPROVED"),
-        *(
-            _WorkerCountAvailabilityModel(
-                worker_count=count, selectable=False, status="NOT_MEASURED",
-                reason_codes=("BUDGET_PROFILE_UNAVAILABLE",))
-            for count in range(4, 9)
-        ),
-    )
-    adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
+    fixed_worker_counts: tuple[int, ...] = (1,)
+    worker_count_availability: tuple[_WorkerCountAvailabilityModel, ...] = ()
+    adaptive_default_ladder: tuple[int, ...] = ()
 
 
 class _EventModel(_ClosedModel):

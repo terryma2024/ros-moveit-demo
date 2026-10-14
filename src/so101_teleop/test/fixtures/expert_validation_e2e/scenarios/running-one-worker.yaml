@@ -1,14 +1,14 @@
 schema_version: 1
-scenario_id: running-two-workers
-description: Running fixed parallel campaign with interleaved worker events and broker pause/recovery.
+scenario_id: running-one-worker
+description: Running single-worker campaign with worker progress and broker pause/recovery.
 manifest_point_count: 4
 initial_campaign:
-  campaign_id: campaign-running-2w
-  manifest_id: manifest-running-2w
+  campaign_id: campaign-running-1w
+  manifest_id: manifest-running-1w
   sequence: 1
-  execution_mode: PARALLEL
+  execution_mode: SEQUENTIAL
   owner_kind: COORDINATOR
-  batch_id: batch-2w
+  batch_id: batch-1w
   status: RUNNING
   requested: 4
   evaluated: 0
@@ -25,22 +25,15 @@ initial_campaign:
       state: READY
       current_point_id: null
       lease_count: 0
-    - worker_id: worker-02
-      generation: 1
-      state: READY
-      current_point_id: null
-      lease_count: 0
 event_script:
   - sequence: 2
     hint: WORKER_PROGRESS
     patch:
       workers:
         worker-01: {state: EXECUTING, current_point_id: task_start, lease_count: 1}
-        worker-02: {state: EXECUTING, current_point_id: cup_test_forward_5cm, lease_count: 1}
       points:
         task_start: {status: RUNNING, active_worker_id: worker-01}
-        cup_test_forward_5cm: {status: RUNNING, active_worker_id: worker-02}
-      execution_started: 2
+      execution_started: 1
   - sequence: 3
     hint: BROKER_HEALTH
     patch:
@@ -50,8 +43,9 @@ event_script:
     patch:
       points:
         task_start: {status: PASSED, active_worker_id: null}
+        cup_test_forward_5cm: {status: RUNNING, active_worker_id: worker-01}
       workers:
-        worker-01: {state: READY, current_point_id: null}
+        worker-01: {state: EXECUTING, current_point_id: cup_test_forward_5cm, lease_count: 2}
       valid_succeeded: 1
       evaluated: 1
   - sequence: 5
@@ -67,8 +61,7 @@ event_script:
         cup_test_left_5cm: {status: PASSED}
         cup_test_right_5cm: {status: PASSED}
       workers:
-        worker-01: {state: STOPPED, lease_count: 2}
-        worker-02: {state: STOPPED, current_point_id: null, lease_count: 2}
+        worker-01: {state: STOPPED, current_point_id: null, lease_count: 4}
       requested: 4
       evaluated: 4
       execution_started: 4

@@ -4,20 +4,13 @@ description: Four-point sequential happy path; every state is declared, none is 
 lease_duration_s: 30
 capabilities:
   available: true
-  execution_modes: [SEQUENTIAL, PARALLEL, ADAPTIVE]
+  execution_modes: [SEQUENTIAL]
   default_execution_mode: SEQUENTIAL
   minimum_points: 4
   maximum_points: 20
-  fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8]
-  worker_count_availability:
-    - {worker_count: 2, selectable: true, status: APPROVED, reason_codes: []}
-    - {worker_count: 3, selectable: true, status: APPROVED, reason_codes: []}
-    - {worker_count: 4, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
-    - {worker_count: 5, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
-    - {worker_count: 6, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
-    - {worker_count: 7, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
-    - {worker_count: 8, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
-  adaptive_default_ladder: [8, 6, 4, 2, 1]
+  fixed_worker_counts: [1]
+  worker_count_availability: []
+  adaptive_default_ladder: []
 expected_commands:
   - acquire_lease
   - create_manifest

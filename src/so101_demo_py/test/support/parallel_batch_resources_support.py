@@ -95,7 +95,7 @@ _COMPOSED_START_GUARD = object()
 
 
 def allocator(
-    tmp_path, config, probe=None, environment=None, suffix='batch', start_guard=_COMPOSED_START_GUARD
+    tmp_path, config, probe=None, environment=None, suffix='batch', start_guard=_COMPOSED_START_GUARD,
 ):
     return WorkerResourceAllocator(
         config,
@@ -171,7 +171,7 @@ def claim_root():
 def production_batch_argv(
     root,
     *,
-    worker_count='3',
+    worker_count='1',
     evidence=None,
     acceptance=None,
     current_provenance_root=None,

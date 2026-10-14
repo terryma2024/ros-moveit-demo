@@ -319,6 +319,11 @@ def prepare_batch(
 ) -> PreparedBatch:
     _reject_legacy_quota_flag(argv)
     options = build_parser().parse_args(argv)
+    # Before any resource work: a native batch is one worker (container shards are the only multi-worker path).
+    if options.adaptive_workers:
+        raise CliError("NATIVE_MULTI_WORKER_UNSUPPORTED")
+    if options.worker_count is not None and _integer("worker_count", options.worker_count) != 1:
+        raise CliError("NATIVE_MULTI_WORKER_UNSUPPORTED")
     retry_names = (
         "original_selection_sha256", "original_result_sha256",
         "original_catalog_sha256", "original_batch_id",
@@ -372,7 +377,7 @@ def prepare_batch(
             raise CliError("ADAPTIVE_OPTIONS_REQUIRE_FLAG")
         adaptive_worker_options = None
         adaptive_config_path = None
-        worker_count = _integer("worker_count", options.worker_count or "2")
+        worker_count = _integer("worker_count", options.worker_count or "1")
     evidence_root = _absolute("evidence_root", options.evidence_root)
     if options.resume:
         try:

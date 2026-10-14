@@ -156,11 +156,8 @@ def test_a_platform_bound_capability_document_does_not_consult_the_budget_source
             return {
                 "available": True,
                 "platform": "macos",
-                "execution_modes": ["SEQUENTIAL", "PARALLEL"],
+                "execution_modes": ["SEQUENTIAL"],
                 "support_matrix": [
-                    {"profile": "MPS_TWO_WORKER_FIRST_PASS", "schema_version": 4,
-                     "execution_mode": "PARALLEL", "worker_count": 2,
-                     "batch_kind": "FIRST_PASS", "selectable": True, "status": "SUPPORTED"},
                     {"profile": "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "schema_version": 5,
                      "execution_mode": "SEQUENTIAL", "worker_count": 1,
                      "batch_kind": "FULL_RESTART_RETRY", "selectable": True,
@@ -171,9 +168,6 @@ def test_a_platform_bound_capability_document_does_not_consult_the_budget_source
                 ],
                 "worker_count_availability": [
                     {"worker_count": 1, "selectable": True, "status": "SUPPORTED"},
-                    {"worker_count": 2, "selectable": True, "status": "SUPPORTED"},
-                    {"worker_count": 8, "selectable": False, "status": "UNSUPPORTED_ON_MACOS",
-                     "reason_codes": ["UNSUPPORTED_ON_MACOS"]},
                 ],
             }
 
@@ -190,5 +184,5 @@ def test_a_platform_bound_capability_document_does_not_consult_the_budget_source
     assert payload["worker_qualifications"] == []
     assert payload["platform"] == "macos"
     assert [row["profile"] for row in payload["support_matrix"]] == [
-        "MPS_TWO_WORKER_FIRST_PASS", "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"]
-    assert payload["worker_count_availability"][-1]["status"] == "UNSUPPORTED_ON_MACOS"
+        "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"]
+    assert [entry["worker_count"] for entry in payload["worker_count_availability"]] == [1]

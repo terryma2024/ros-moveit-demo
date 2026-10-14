@@ -1,24 +1,21 @@
 /**
  * Functional-acceptance case selection, derived from the deployed capabilities document.
  *
- * `build-functional-manifest.ts` registers the cases the live Playwright projects run, and a host
- * can answer in two ways:
+ * `build-functional-manifest.ts` registers the cases the live Playwright projects run. A native
+ * campaign is one SEQUENTIAL worker (multi-worker collection exists only as container shards), so
+ * every case is SEQUENTIAL at one worker and a host can answer in two ways:
  *
- * - Platform-bound (macOS): the capabilities document carries a closed support matrix - W2 on v4
- *   (PARALLEL/N2, FIRST_PASS), W1 retry on v5 (SEQUENTIAL/N1, FULL_RESTART_RETRY) and W1 first-pass
- *   on v6 (SEQUENTIAL/N1, FIRST_PASS) - and no ADAPTIVE route at all. The sweep is derived from
- *   those rows: a case exists only where the matrix carries that exact (mode, worker count, batch
- *   kind), and every other shape is recorded as skipped with its own reason instead of being
- *   downgraded to something the host does run.
- * - Legacy (Linux): per-N availability plus the ADAPTIVE ladder. A host that advertises ADAPTIVE
- *   and N>2 keeps exactly the cases it has always had; the matrix rules do not apply because there
- *   is no matrix to be outside of.
+ * - Platform-bound (macOS): the capabilities document carries a closed support matrix - W1 retry on
+ *   v5 (SEQUENTIAL/N1, FULL_RESTART_RETRY) and W1 first-pass on v6 (SEQUENTIAL/N1, FIRST_PASS). A
+ *   case exists only where the matrix carries that exact (mode, worker count, batch kind), and any
+ *   other shape is recorded as skipped with its own reason instead of being downgraded.
+ * - Legacy (Linux): no matrix; the service has to advertise SEQUENTIAL and the one worker count.
  *
  * Nothing here is a resource qualification: a case is "run this mode at this worker count with
  * this many points". A requested case the host does not advertise is refused with the reason.
  */
 
-export type FunctionalCaseMode = "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+export type FunctionalCaseMode = "SEQUENTIAL";
 export type FunctionalBatchKind = "FIRST_PASS" | "FULL_RESTART_RETRY";
 
 export type FunctionalCase = {
@@ -96,10 +93,9 @@ export type FunctionalSelection = {
 
 export const CASE_BATCH_TIMEOUT_S = 5400;
 export const CASE_POINT_COUNTS = [4, 20] as const;
-/** The modes a legacy host has to advertise; a platform-bound host is answered by its matrix. */
-export const LEGACY_REQUIRED_MODES = ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"] as const;
+/** The mode a legacy host has to advertise; a platform-bound host is answered by its matrix. */
+export const LEGACY_REQUIRED_MODES = ["SEQUENTIAL"] as const;
 const MAXIMUM_ATTEMPTS = 1;
-const ADAPTIVE_CASE_ID = "adaptive-ladder-p20";
 const RETRY_CASE_POINT_COUNT = 1;
 
 type Candidate = FunctionalCase & { reason: string | null; route?: FunctionalCaseRoute };
@@ -144,37 +140,33 @@ export function selectFunctionalCases(
   options: { requestedIds?: string[] } = {},
 ): FunctionalSelection {
   const modes = capabilities.execution_modes ?? [];
-  const selectable = (capabilities.worker_count_availability ?? [])
-    .filter((entry) => entry.selectable === true)
-    .map((entry) => entry.worker_count)
-    .sort((first, second) => first - second);
+  // One native worker: the only count a host can offer is the one its fixed list names.
+  const selectable = (capabilities.fixed_worker_counts ?? []).filter((count) => count === 1);
   if (selectable.length === 0) throw new Error("NO_SELECTABLE_WORKER_OPTION");
   if (!capabilities.start_guard_policy?.timeout_s) throw new Error("START_GUARD_POLICY_MISSING");
 
   const matrix = (capabilities.support_matrix ?? []).filter((row) => row.selectable !== false);
   const platformBound = (capabilities.support_matrix ?? []).length > 0;
   const route = (
-    mode: "SEQUENTIAL" | "PARALLEL",
     workerCount: number,
     batchKind: FunctionalBatchKind,
   ): SupportMatrixRow | undefined => matrix.find(
     (row) =>
-      row.execution_mode === mode
+      row.execution_mode === "SEQUENTIAL"
       && row.worker_count === workerCount
       && row.batch_kind === batchKind,
   );
 
-  const fixedCandidate = (
+  const sequentialCandidate = (
     id: string,
-    mode: FunctionalCaseMode,
     workerCount: number,
     pointCount: number,
     lifecycle: FunctionalBatchKind,
     row: SupportMatrixRow | undefined,
   ): Candidate => ({
-    ...caseOf(id, mode, workerCount, pointCount, lifecycle),
+    ...caseOf(id, "SEQUENTIAL", workerCount, pointCount, lifecycle),
     reason: platformBound && row === undefined
-      ? `EXECUTION_ROUTE_NOT_IN_SUPPORT_MATRIX: ${mode}/N${workerCount}/${lifecycle}`
+      ? `EXECUTION_ROUTE_NOT_IN_SUPPORT_MATRIX: SEQUENTIAL/N${workerCount}/${lifecycle}`
       : null,
     ...(row === undefined ? {} : {
       route: {
@@ -185,36 +177,12 @@ export function selectFunctionalCases(
     }),
   });
 
-  const adaptiveCandidate = (): Candidate => ({
-    ...caseOf(
-      ADAPTIVE_CASE_ID, "ADAPTIVE", capabilities.adaptive_default_ladder?.[0] ?? 8, 20, "FIRST_PASS",
-    ),
-    reason: modes.includes("ADAPTIVE") ? null : "MODE_NOT_ADVERTISED: ADAPTIVE",
-  });
-
   const candidates: Candidate[] = [];
   if (platformBound) {
-    // Every selectable count is a candidate for both fixed modes, so a request for a pair the
-    // matrix does not carry is answered with that pair's reason instead of disappearing.
-    const fixedCounts = [...new Set([
-      ...selectable,
-      ...matrix.map((row) => row.worker_count),
-    ])].sort((first, second) => first - second);
-    for (const workerCount of fixedCounts) {
-      for (const pointCount of CASE_POINT_COUNTS) {
-        candidates.push(fixedCandidate(
-          `fixed-n${workerCount}-p${pointCount}`, "PARALLEL", workerCount, pointCount,
-          "FIRST_PASS", route("PARALLEL", workerCount, "FIRST_PASS"),
-        ));
-      }
-    }
-    for (const workerCount of fixedCounts) {
-      for (const pointCount of CASE_POINT_COUNTS) {
-        candidates.push(fixedCandidate(
-          `sequential-n${workerCount}-p${pointCount}`, "SEQUENTIAL", workerCount, pointCount,
-          "FIRST_PASS", route("SEQUENTIAL", workerCount, "FIRST_PASS"),
-        ));
-      }
+    for (const pointCount of CASE_POINT_COUNTS) {
+      candidates.push(sequentialCandidate(
+        `sequential-n1-p${pointCount}`, 1, pointCount, "FIRST_PASS", route(1, "FIRST_PASS"),
+      ));
     }
     const retryRow = matrix.find((row) => row.batch_kind === "FULL_RESTART_RETRY");
     if (retryRow !== undefined && (retryRow.execution_mode !== "SEQUENTIAL" || retryRow.worker_count !== 1)) {
@@ -225,34 +193,20 @@ export function selectFunctionalCases(
         + `${retryRow.execution_mode}/N${retryRow.worker_count}, the frozen record is SEQUENTIAL/N1`,
       );
     }
-    candidates.push(fixedCandidate(
-      `n${retryRow?.worker_count ?? 1}-full-restart-single-point`,
-      retryRow?.execution_mode ?? "SEQUENTIAL",
-      retryRow?.worker_count ?? 1,
-      RETRY_CASE_POINT_COUNT,
-      "FULL_RESTART_RETRY",
-      retryRow,
+    candidates.push(sequentialCandidate(
+      "n1-full-restart-single-point", 1, RETRY_CASE_POINT_COUNT, "FULL_RESTART_RETRY", retryRow,
     ));
-    candidates.push(adaptiveCandidate());
   } else {
     for (const required of LEGACY_REQUIRED_MODES) {
       if (!modes.includes(required)) throw new Error(`MODE_NOT_ADVERTISED: ${required}`);
     }
-    for (const workerCount of selectable) {
-      for (const pointCount of CASE_POINT_COUNTS) {
-        candidates.push(fixedCandidate(
-          `fixed-n${workerCount}-p${pointCount}`, "PARALLEL", workerCount, pointCount,
-          "FIRST_PASS", undefined,
-        ));
-      }
+    for (const pointCount of CASE_POINT_COUNTS) {
+      candidates.push(sequentialCandidate(
+        `sequential-n1-p${pointCount}`, 1, pointCount, "FIRST_PASS", undefined,
+      ));
     }
-    candidates.push(fixedCandidate(
-      "sequential-n1-p4", "SEQUENTIAL", 1, 4, "FIRST_PASS", undefined,
-    ));
-    candidates.push(adaptiveCandidate());
-    candidates.push(fixedCandidate(
-      "n1-full-restart-single-point", "SEQUENTIAL", 1, RETRY_CASE_POINT_COUNT,
-      "FULL_RESTART_RETRY", undefined,
+    candidates.push(sequentialCandidate(
+      "n1-full-restart-single-point", 1, RETRY_CASE_POINT_COUNT, "FULL_RESTART_RETRY", undefined,
     ));
   }
 

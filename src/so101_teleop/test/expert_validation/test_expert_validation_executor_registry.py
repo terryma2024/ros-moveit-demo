@@ -27,41 +27,35 @@ def _probes(**changes):
     return QualificationProbes(**values)
 
 
-def test_registry_exposes_three_explicit_modes():
+def test_registry_exposes_the_one_native_mode():
     registry = ExecutorRegistry.v1(_probes())
     capability = registry.require("moveit_expert", "validate_pick_place")
-    assert capability.execution_modes == ("SEQUENTIAL", "PARALLEL", "ADAPTIVE")
+    assert capability.execution_modes == ("SEQUENTIAL",)
+    assert set(capability.mode_availability) == {"SEQUENTIAL"}
     assert capability.batch_kinds == ("FIRST_PASS", "FULL_RESTART_RETRY")
     assert capability.default_execution_mode == "SEQUENTIAL"
     with pytest.raises(UnknownOperation):
         registry.require("act_collect", "collect_demonstration")
 
 
-def test_parallel_capability_fails_closed_without_the_broker():
+def test_sequential_capability_fails_closed_without_the_fixed_upstream():
     """Availability states a functional prerequisite, not a retired budget qualification."""
 
-    capability = ExecutorRegistry.v1(
-        _probes(broker_image=False)
+    broken = ExecutorRegistry.v1(
+        _probes(fixed_upstream=False)
     ).require("moveit_expert", "validate_pick_place")
-    assert capability.mode_availability["PARALLEL"].available is False
-    assert capability.mode_availability["PARALLEL"].reason == "PARALLEL_COMPOSITION_UNAVAILABLE"
+    assert broken.mode_availability["SEQUENTIAL"].available is False
+    assert broken.mode_availability["SEQUENTIAL"].reason == "FIXED_NOT_QUALIFIED"
 
     complete = ExecutorRegistry.v1(_probes()).require("moveit_expert", "validate_pick_place")
-    assert complete.mode_availability["PARALLEL"].available is True
-    assert complete.mode_availability["PARALLEL"].reason is None
+    assert complete.mode_availability["SEQUENTIAL"].available is True
+    assert complete.mode_availability["SEQUENTIAL"].reason is None
 
 
-def test_adaptive_capability_is_independent_from_fixed_modes():
-    """The adaptive ladder needs its runner files installed; fixed modes stay available."""
-
-    missing = ExecutorRegistry.v1(
-        _probes(adaptive_pool=False)
-    ).require("moveit_expert", "validate_pick_place")
-    assert missing.mode_availability["SEQUENTIAL"].available is True
-    assert missing.mode_availability["PARALLEL"].available is True
-    assert missing.mode_availability["ADAPTIVE"].reason == "ADAPTIVE_COMPOSITION_UNAVAILABLE"
+def test_multi_worker_files_never_make_a_multi_worker_mode_available():
+    """The broker, the adaptive pool and the runner files are installed and still decide nothing."""
 
     complete = ExecutorRegistry.v1(_probes()).require("moveit_expert", "validate_pick_place")
-    assert complete.mode_availability["ADAPTIVE"].available is True
-    assert complete.mode_availability["ADAPTIVE"].reason is None
+    assert "PARALLEL" not in complete.mode_availability
+    assert "ADAPTIVE" not in complete.mode_availability
     assert complete.contract_supported_live_unqualified_tiers == (16,)

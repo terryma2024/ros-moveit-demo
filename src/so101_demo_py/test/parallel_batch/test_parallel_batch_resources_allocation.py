@@ -115,7 +115,7 @@ def test_environment_is_whitelisted_and_does_not_inherit_arbitrary_ros_values(tm
         'UNRELATED_SECRET': 'do-not-copy',
     }
 
-    worker = allocator(tmp_path, config, environment=base).allocate().workers[0]
+    worker = allocator(tmp_path, config, environment=base).allocate(worker_count=2).workers[0]
 
     assert worker.environment['PATH'] == '/usr/bin'
     assert worker.environment['AMENT_PREFIX_PATH'] == '/opt/ros/jazzy'
@@ -134,7 +134,7 @@ def test_environment_is_whitelisted_and_does_not_inherit_arbitrary_ros_values(tm
 
 def test_worker_replacement_reuses_slot_resources_and_advances_generation(tmp_path, config):
     resource_allocator = allocator(tmp_path, config)
-    original = resource_allocator.allocate().workers[0]
+    original = resource_allocator.allocate(worker_count=2).workers[0]
 
     replacement = resource_allocator.replace('worker-01', expected_generation=1)
 
@@ -170,7 +170,7 @@ def test_worker_replacement_rejects_wrong_slot_or_generation(
     tmp_path, config, worker_id, generation, message
 ):
     resource_allocator = allocator(tmp_path, config)
-    resource_allocator.allocate()
+    resource_allocator.allocate(worker_count=2)
 
     with pytest.raises(ResourceAllocationError, match=message):
         resource_allocator.replace(worker_id, expected_generation=generation)
@@ -206,7 +206,7 @@ def test_each_guard_failure_fails_closed_without_creating_directories(
 ):
     resource_allocator = refusing_allocator(tmp_path, config, reason)
     with pytest.raises(ResourceAllocationError, match=reason):
-        resource_allocator.allocate()
+        resource_allocator.allocate(worker_count=2)
     assert not resource_allocator.evidence_root.exists()
 
 
@@ -215,7 +215,7 @@ def test_admission_records_the_start_guard_decision(tmp_path, config):
 
     from so101_demo.parallel_batch.resource_allocation.manifest import StartGuardAdmission
 
-    manifest = allocator(tmp_path, config).allocate()
+    manifest = allocator(tmp_path, config).allocate(worker_count=2)
 
     admission = manifest.admission
     assert isinstance(admission, StartGuardAdmission)
@@ -234,7 +234,7 @@ def test_existing_ros_domain_fails_before_any_directory_is_created(tmp_path, con
     resource_allocator = allocator(tmp_path, config, probe)
 
     with pytest.raises(ResourceAllocationError, match='ROS_DOMAIN_IN_USE: 182'):
-        resource_allocator.allocate()
+        resource_allocator.allocate(worker_count=2)
     assert probe.domain_calls == [181, 182]
     assert not resource_allocator.evidence_root.exists()
 
@@ -339,7 +339,7 @@ def test_existing_evidence_or_worker_directory_fails_closed(tmp_path, config):
         WorkerResourceAllocator(
             config, root, probe=FakeProbe(), claim_root=claim_root(),
             start_guard=_start_guard_for(config),
-        ).allocate()
+        ).allocate(worker_count=2)
 
 
 def test_existing_socket_reservation_fails_before_directory_creation(tmp_path, config):
@@ -355,7 +355,7 @@ def test_existing_socket_reservation_fails_before_directory_creation(tmp_path, c
         WorkerResourceAllocator(
             config, root, probe=probe, claim_root=claim_root(),
             start_guard=_start_guard_for(config),
-        ).allocate()
+        ).allocate(worker_count=2)
     assert not root.exists()
 
 
@@ -378,7 +378,7 @@ def test_socket_path_must_fit_unix_domain_limit(tmp_path, config, monkeypatch):
     monkeypatch.setattr(resource_allocator, '_paths', paths_with_long_socket)
 
     with pytest.raises(ResourceAllocationError, match='UNIX_SOCKET_PATH_TOO_LONG'):
-        resource_allocator.allocate()
+        resource_allocator.allocate(worker_count=2)
     assert not root.exists()
 
 
@@ -430,7 +430,7 @@ def test_probe_exceptions_fail_closed_without_allocating(tmp_path, config):
 
     with pytest.raises(ResourceAllocationError, match='PROBE_FAILED'):
         resource_allocator = allocator(tmp_path, config, BrokenProbe())
-        resource_allocator.allocate()
+        resource_allocator.allocate(worker_count=2)
     assert not resource_allocator.evidence_root.exists()
 
 
@@ -443,7 +443,7 @@ def test_allocation_uses_exclusive_directory_creation(tmp_path, config, monkeypa
         return original(path, *args, **kwargs)
 
     monkeypatch.setattr(os, 'mkdir', observed_mkdir)
-    allocator(tmp_path, config).allocate()
+    allocator(tmp_path, config).allocate(worker_count=2)
 
     # The allocator creates its own directories exclusively at a dir_fd with mode 0700.
     # The guard's private state root is also 0700 but is created through pathlib, so it is
@@ -455,7 +455,7 @@ def test_allocation_uses_exclusive_directory_creation(tmp_path, config, monkeypa
 
 
 def test_manifest_document_is_json_safe_and_contains_no_numeric_ports(tmp_path, config):
-    manifest = allocator(tmp_path, config).allocate()
+    manifest = allocator(tmp_path, config).allocate(worker_count=2)
     document = manifest.to_dict()
 
     assert json.loads(json.dumps(document)) == document
@@ -519,7 +519,7 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
     assert [worker['ros_domain_id'] for worker in document['workers']] == [181, 182]
 
 
-def test_default_three_worker_cli_refuses_retired_self_signed_evidence(tmp_path, config):
+def test_default_single_worker_cli_refuses_retired_self_signed_evidence(tmp_path, config):
     """The CLI refuses the retired evidence chain with the explicit retired error."""
 
     from so101_demo.cli.mujoco_batch.common import CliError
@@ -528,8 +528,8 @@ def test_default_three_worker_cli_refuses_retired_self_signed_evidence(tmp_path,
     with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
         prepare_batch(
             production_batch_argv(
-                resource_root(tmp_path, 'dry-three'),
-                worker_count='3',
+                resource_root(tmp_path, 'dry-one'),
+                worker_count='1',
             ) + ['--live-headroom-evidence', str(tmp_path / 'retired.json')],
             provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
         )

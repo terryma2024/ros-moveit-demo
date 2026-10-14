@@ -66,7 +66,7 @@ def test_concurrent_batches_cannot_claim_the_same_ros_domains(tmp_path, config):
     def attempt(resource_allocator):
         barrier.wait()
         try:
-            resource_allocator.allocate()
+            resource_allocator.allocate(worker_count=2)
         except ResourceAllocationError as error:
             outcomes.put(('rejected', resource_allocator, str(error)))
             return
@@ -104,7 +104,7 @@ def test_concurrent_batches_cannot_claim_the_same_ros_domains(tmp_path, config):
         claim_root=claim_root(),
         start_guard=_start_guard_for(config),
     )
-    assert retry.allocate().worker_count == 2
+    assert retry.allocate(worker_count=2).worker_count == 2
     retry.close()
 
 
@@ -128,7 +128,7 @@ def test_domain_flocks_are_held_before_process_scan(tmp_path, config):
         claim_root=locks,
         start_guard=_start_guard_for(config),
     )
-    assert resource_allocator.allocate().worker_count == 2
+    assert resource_allocator.allocate(worker_count=2).worker_count == 2
     resource_allocator.close()
 
 
@@ -151,7 +151,7 @@ def test_partial_domain_claim_does_not_publish_any_new_claim_record(tmp_path, co
                 probe=FakeProbe(),
                 claim_root=locks,
                 start_guard=_start_guard_for(config),
-            ).allocate()
+            ).allocate(worker_count=2)
     finally:
         os.close(blocked_fd)
 
@@ -206,7 +206,7 @@ def test_protected_systemd_user_is_recorded_as_frozen_non_candidate(
         claim_root=claim_root(),
         start_guard=_start_guard_for(config),
     )
-    manifest = resource_allocator.allocate()
+    manifest = resource_allocator.allocate(worker_count=2)
     assert manifest.to_dict()['process_scan']['skipped_processes'] == report[
         'skipped_processes'
     ]

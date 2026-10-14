@@ -7,7 +7,6 @@ import { ExpertValidationClient } from "@/api/expert-validation-client";
 import type {
   CampaignProjection,
   Capabilities,
-  ExecutionMode,
   Lease,
   LeaseAuthority,
   Manifest,
@@ -19,6 +18,7 @@ import { CampaignProgress, type CampaignView } from "@/components/expert-validat
 import {
   CampaignSetup,
   executionClaim,
+  SINGLE_WORKER,
   type PlatformCapabilities,
   type SetupState,
 } from "@/components/expert-validation/campaign-setup";
@@ -66,7 +66,7 @@ function mapPointState(status: string | undefined, campaign: CampaignView | null
     || status === "INFRA_FAILED_REMAINDER") return status;
   if (status === "INFRA_INTERRUPTED" || status === "INFRA_INTERRUPTED_REQUEUEABLE") {
     if (terminal) return "INFRA_FAILED_REMAINDER";
-    return campaign?.execution_mode === "ADAPTIVE" ? "INFRA_INTERRUPTED_REQUEUEABLE" : "INVALID_BLOCKED";
+    return "INVALID_BLOCKED";
   }
   if (status === "LEASED") return "LEASED";
   if (status === "RUNNING" || status === "EXECUTING") return "EXECUTING";
@@ -194,11 +194,7 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
   const campaignRef = useRef<CampaignView | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string>();
   const [notice, setNotice] = useState("");
-  const [setup, setSetup] = useState<SetupState>({
-    pointCount: 20,
-    executionMode: "SEQUENTIAL",
-    workerCount: 1,
-  });
+  const [setup, setSetup] = useState<SetupState>({ pointCount: 20 });
   const sessionId = useMemo(stableSessionId, []);
 
   const replaceCampaign = (next: CampaignView) => {
@@ -340,25 +336,13 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
    * the console selected. A host without a support matrix keeps the previous request untouched.
    */
   const preflightInput = (): PreflightInput => {
-    const base: PreflightInput = setup.executionMode === "ADAPTIVE"
-      ? {
-        contract_version: 3,
-        manifest_id: manifest!.manifest_id,
-        execution_mode: "ADAPTIVE",
-        preferred_worker_count: 8,
-        fallback_worker_counts: [6, 4, 2, 1],
-        initial_points_per_worker: 3,
-        worker_start_timeout_s: 120,
-        max_infra_attempts_per_point: 5,
-        yolo_executor_count: 2,
-      }
-      : {
-        contract_version: 3,
-        manifest_id: manifest!.manifest_id,
-        execution_mode: setup.executionMode,
-        worker_count: setup.workerCount,
-      };
-    const claim = executionClaim(capabilities, setup);
+    const base: PreflightInput = {
+      contract_version: 3,
+      manifest_id: manifest!.manifest_id,
+      execution_mode: SINGLE_WORKER.executionMode as "SEQUENTIAL",
+      worker_count: SINGLE_WORKER.workerCount,
+    };
+    const claim = executionClaim(capabilities, SINGLE_WORKER);
     return claim ? { ...base, ...claim } : base;
   };
 
@@ -372,7 +356,7 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
     receiptGeneration.current = boundAuthority.lease_generation;
     setReceipt(result);
     setNotice(result.admitted
-      ? setup.executionMode === "PARALLEL" ? "Parallel admission passed" : "Preflight passed"
+      ? "Preflight passed"
       : `Preflight rejected: ${result.reason_codes.join(", ")}`);
     return result;
   };

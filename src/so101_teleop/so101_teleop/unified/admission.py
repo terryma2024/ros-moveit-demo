@@ -289,13 +289,15 @@ class UnifiedWorkloadService:
         resource_binding_id: str, owner_pid: int, owner_started_ticks: int,
         clock_ns, owner_identity_valid=_real_owner, gpu_inventory_probe=None,
         calibration_identity_probe=None, root_registration=None, container_inspect=None,
+        batch_domain_claim_probe=None,
     ) -> None:
         if gpu_arbiter.store is not arbiter.store:
             raise ValueError("WORKLOAD_STORE_MISMATCH")
         self.arbiter = arbiter
         self.gpu_arbiter = gpu_arbiter
         self.child_registry = child_registry
-        self.slot_registry = ActWorkerSlotRegistry(arbiter.store, child_registry=child_registry)
+        self.slot_registry = ActWorkerSlotRegistry(arbiter.store, child_registry=child_registry,
+                                                   batch_domain_claim_probe=batch_domain_claim_probe)
         self.root_registration = root_registration
         self.container_inspect = container_inspect or self._inspect_container
         self.service_epoch = service_epoch
@@ -554,6 +556,10 @@ class UnifiedWorkloadService:
         else:
             if not isinstance(payload["children"], list) or len(payload["children"]) != payload["worker_count"]:
                 raise ValueError("CHILD_COUNT_MISMATCH")
+            if len(payload["children"]) != 1 or self.child_registry.launches():
+                # Native pick-place is one child on the host: multi-worker collection exists only as container
+                # shards, and a second native child would share the fixed ROS domain with the first.
+                raise ValueError("NATIVE_MULTI_WORKER_UNSUPPORTED")
             proposed = ActChildRegistry()
             for item in self.child_registry.launches():
                 proposed.register(item)

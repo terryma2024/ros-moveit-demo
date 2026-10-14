@@ -130,7 +130,7 @@ def argv(root: Path, **changes):
         "points": str(POINTS),
         "config": str(CONFIG),
         "batch_id": "batch-1",
-        "worker_count": "2",
+        "worker_count": "1",
         "evidence_root": str(root),
         "broker_image": "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
         "yolo_weights": "/models/yolo.pt",

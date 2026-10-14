@@ -16,7 +16,10 @@ import uuid
 from .catalog import PointSelection
 
 
-FIXED_WORKER_COUNTS = tuple(range(1, 9))
+#: A native campaign runs one worker. Multi-worker collection exists only as container shards, so the
+#: closed count set is exactly ``(1,)``; PARALLEL and ADAPTIVE are refused with ``NATIVE_MULTI_WORKER_UNSUPPORTED``.
+FIXED_WORKER_COUNTS = (1,)
+NATIVE_MULTI_WORKER_UNSUPPORTED = "NATIVE_MULTI_WORKER_UNSUPPORTED"
 
 #: The platform-bound macOS support matrix (design section 6). macOS exposes exactly three
 #: combinations and nothing else; every other count, mode or profile is refused with a stable
@@ -475,11 +478,9 @@ class PreflightEngine:
                     reason for reason in self._macos_key_reasons(request, profile)
                     if reason not in reasons
                 )
-        if request.execution_mode in {"SEQUENTIAL", "PARALLEL"}:
-            if request.execution_mode == "SEQUENTIAL" and request.worker_count != 1:
+        if request.execution_mode == "SEQUENTIAL":
+            if request.worker_count != 1:
                 reasons.append("SEQUENTIAL_WORKER_COUNT")
-            if request.execution_mode == "PARALLEL" and request.worker_count not in FIXED_WORKER_COUNTS[1:]:
-                reasons.append("PARALLEL_WORKER_COUNT")
             if request.max_points_per_worker is not None:
                 # The legacy lifetime quota is never part of a version-two request.
                 reasons.append("LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED")
@@ -492,32 +493,15 @@ class PreflightEngine:
             )
             if not resource_admitted:
                 reasons.extend(reason for reason in resource_reasons if reason not in reasons)
-        elif request.execution_mode == "ADAPTIVE":
-            if request.max_points_per_worker is not None:
-                reasons.append("ADAPTIVE_FIXED_FIELD")
-            levels = (request.worker_count, *request.fallback_worker_counts)
-            if (
-                not 1 <= request.worker_count <= 16
-                or any(not 1 <= level <= 16 for level in request.fallback_worker_counts)
-                or any(next_level >= level for level, next_level in zip(levels, levels[1:]))
-            ):
-                reasons.append("ADAPTIVE_FALLBACK_TIERS")
-            if _SHORT_BATCH.fullmatch(request.batch_id) is None:
-                reasons.append("ADAPTIVE_BATCH_ID")
-            config = AdaptiveExecutionConfig(
-                preferred_worker_count=request.worker_count,
-                fallback_worker_counts=tuple(request.fallback_worker_counts),
-                initial_points_per_worker=request.initial_points_per_worker,
-                worker_start_timeout_s=request.worker_start_timeout_s,
-                max_infra_attempts_per_point=request.max_infra_attempts_per_point,
-                yolo_executor_count=request.yolo_executor_count,
-                adaptive_config_sha256=request.adaptive_config_sha256 or "",
-            )
-            capacity = point_count
-            _, _, observations = self._resources.probe(request, config)
+        elif request.execution_mode in {"PARALLEL", "ADAPTIVE"}:
+            # Refused before any resource probe: nothing is allocated for a campaign that cannot run.
+            reasons.append(NATIVE_MULTI_WORKER_UNSUPPORTED)
+            config = FixedExecutionConfig(request.execution_mode, request.worker_count)
+            capacity = request.worker_count
+            observations = {}
         else:
             reasons.append("EXECUTION_MODE")
-            config = FixedExecutionConfig(request.execution_mode, request.worker_count, 1)
+            config = FixedExecutionConfig(request.execution_mode, request.worker_count)
             capacity = request.worker_count
             observations = {}
         if not self._singleton_probe():

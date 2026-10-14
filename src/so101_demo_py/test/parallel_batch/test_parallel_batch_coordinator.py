@@ -63,7 +63,10 @@ def make(tmp_path):
         root = tmp_path / str(len(journals))
         journal = CoordinatorJournal.create(root, 'batch-a')
         journals.append(journal)
-        if adaptive:
+        if adaptive or workers != 1:
+            # A native BatchRequest is one worker (NATIVE_MULTI_WORKER_UNSUPPORTED). The Coordinator itself still
+            # schedules N workers until the multi-worker code is removed, and its multi-worker behavior is
+            # exercised through the pool request, which is not a native batch contract.
             from so101_demo.parallel_batch.adaptive_contracts import (
                 _new_pool_request_for_production_factory,
             )

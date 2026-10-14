@@ -22,7 +22,7 @@ from scripted_service import (  # noqa: E402
 
 FIXTURES = TEST_ROOT / "fixtures" / "expert_validation_e2e"
 EXPECTED_BASELINE_SHA256 = (
-    "c8199fb430624f4c23cdcff6e646bdc51367b0f51e597e83286719f1240a964e"
+    "6a11c377b0d476ec888dbca35e5e1dc81fec817a8a38440151d9e767cace1b78"
 )
 
 

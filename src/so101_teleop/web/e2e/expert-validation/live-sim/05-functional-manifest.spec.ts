@@ -68,13 +68,9 @@ for (const entry of manifest.cases) {
     expect(capabilities.execution_modes, `${entry.id}: mode ${entry.mode}`).toContain(entry.mode);
     expect(capabilities.start_guard_policy?.timeout_s).toBeGreaterThan(0);
 
-    if (entry.mode === "PARALLEL") {
-      const selectable = (capabilities.worker_count_availability ?? [])
-        .filter((item: any) => item.selectable === true)
-        .map((item: any) => item.worker_count);
-      expect(selectable, `${entry.id}: worker count ${entry.worker_count}`)
-        .toContain(entry.worker_count);
-    }
+    expect(entry.mode, `${entry.id}: only the single-worker mode exists`).toBe("SEQUENTIAL");
+    expect(entry.worker_count, `${entry.id}: worker count`).toBe(1);
+    expect(capabilities.fixed_worker_counts, `${entry.id}: fixed worker counts`).toContain(1);
     expect(entry.point_count).toBeGreaterThanOrEqual(1);
     expect(entry.batch_timeout_s).toBeGreaterThan(0);
     expect(entry.maximum_attempts).toBeGreaterThanOrEqual(1);

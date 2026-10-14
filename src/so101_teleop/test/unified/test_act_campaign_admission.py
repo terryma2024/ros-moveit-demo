@@ -781,8 +781,9 @@ def test_campaign_lifecycle_start_failure_settles_only_after_owned_cleanup(tmp_p
         store.close()
 
 
-def test_campaign_lifecycle_composes_exact_eight_admitted_children(tmp_path):
-    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+@pytest.mark.parametrize("count", [2, 8])
+def test_a_second_native_child_is_refused_for_the_pick_place_kinds(tmp_path, count):
+    """Native pick-place runs one child; more than one is refused before any resource is taken."""
 
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
@@ -791,9 +792,29 @@ def test_campaign_lifecycle_composes_exact_eight_admitted_children(tmp_path):
         service = _service(store)
         base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
         children = [launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
-                    for index in range(8)]
+                    for index in range(count)]
         spec = replace(base, kind="pick_place_validation_full", payload={**base.payload,
-            "worker_count": 8, "children": children})
+            "worker_count": count, "children": children})
+        with pytest.raises(ValueError, match="NATIVE_MULTI_WORKER_UNSUPPORTED"):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_a_single_native_child_is_still_composed_and_stopped(tmp_path):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        children = [launch("w00", 40, "session-0").__dict__]
+        spec = replace(base, kind="pick_place_validation_full", payload={**base.payload,
+            "worker_count": 1, "children": children})
         started, stopped = [], []
 
         class FakeOwner:
@@ -817,10 +838,8 @@ def test_campaign_lifecycle_composes_exact_eight_admitted_children(tmp_path):
             object(), owner_factory=FakeOwner)
         lifecycle = bridge_module.ActCampaignLifecycle(service, child_owner)
         context, ports = asyncio.run(lifecycle.start(spec))
-        assert len(ports) == len(started) == 8
-        assert {port.launch.ros_domain_id for port in ports} == set(range(40, 48))
-        assert {port.launch.mujoco_session_id for port in ports} == {
-            f"session-{index}" for index in range(8)}
+        assert len(ports) == len(started) == 1
+        assert {port.launch.ros_domain_id for port in ports} == {40}
         assert {item.environment["SO101_ACT_OPERATION_ID"] for item in started} == {
             context.operation_id}
         assert all(ActArtifactBinding.verify_environment(item.environment).policy_fingerprint

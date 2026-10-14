@@ -121,11 +121,14 @@ class ServiceCapabilities:
         return {
             "available": True,
             "platform": profile.platform,
-            "execution_modes": ("SEQUENTIAL", "PARALLEL"),
-            "default_execution_mode": profile.execution_mode,
+            # One native worker only: the two-worker profile row is no longer startable, so it is not advertised.
+            "execution_modes": ("SEQUENTIAL",),
+            "default_execution_mode": "SEQUENTIAL",
             "fixed_worker_counts": FIXED_WORKER_COUNTS,
             "worker_count_availability": availability,
-            "support_matrix": tuple(row.to_document() for row in MACOS_EXECUTION_PROFILES),
+            "support_matrix": tuple(
+                row.to_document() for row in MACOS_EXECUTION_PROFILES if row.execution_mode == "SEQUENTIAL"
+            ),
             "execution_profile": profile.profile,
             "execution_schema_version": document.schema_version,
             "execution_config_sha256": document.config_sha256,

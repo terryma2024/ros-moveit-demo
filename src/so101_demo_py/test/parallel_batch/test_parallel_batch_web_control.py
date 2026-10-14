@@ -18,7 +18,7 @@ from test_parallel_batch_coordinator import make  # noqa: F401 - real journal fi
 def endpoint(make):
     @contextmanager
     def open_endpoint():
-        coordinator, _, _, journal, request = make(workers=2, k=2)
+        coordinator, _, _, journal, request = make(workers=1, k=2)
         root = request.evidence_root / "control"
         root.mkdir(mode=0o700)
         token = "9a" * 32
