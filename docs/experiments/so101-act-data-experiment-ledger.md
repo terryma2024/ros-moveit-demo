@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3651
-next_experiment: EXP-591 (PLANNED): fourth eight-shard qualification attempt after the offline processing memory work.
+latest_checkpoint: CP-3652
+next_experiment: NONE until the eight-shard data loss under load is resolved or the human changes the qualification shape.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3652 — EXP-591 VALID failure: memory held (19 GiB peak, no OOM) but only 4 of 19 VALID; one execution fault; lease released under the standing authorisation
+
+- Fourth eight-shard attempt, the first after the offline processing memory work and with recording cap 4 and a 30 s assignment gap. Memory is no longer the limit. Data quality is: controller-state gaps remain the main INVALID reason. The faulted shard's stop was unconfirmed and the store held the lease.
+- Manual release applied once by R/manual-lease-release-20261014-exp591.py under the standing human authorisation of CP-3628, same preconditions as CP-3646 (all eight shard containers exited with no process, none running, the store in exactly the held state); parent of operation c8280bc86ec84e8ba8ad55cbf55ff29b written CANCELLED; read back IDLE, no lease, no active slot. A human-authorised override, not a proof.
+- Human decision of 2026-10-14 on historical evidence: "历史证据的清理范围，按你的建议删除" - delete superseded evidence after listing it; a read-only inventory is in progress; nothing deleted yet.
+- Retained: run root, prep directory, logs and sampler data under R/run-logs/exp591. Nothing deleted.
 
 ## CP-3651 — Memory analysis and offline processing 5.4 to 2.2 GiB; scheduling limits optional; Docker cleanup; EXP-591 planned
 
@@ -87,7 +94,7 @@ next_experiment: EXP-591 (PLANNED): fourth eight-shard qualification attempt aft
 
 ```yaml
 experiment_id: EXP-591
-status: PLANNED
+status: VALID
 prior_experiment: EXP-590 (VALID failure; host memory exhausted, all tasks unreachable)
 hypothesis: With the offline processing peak roughly halved, at most four shards recording and 30 s between assignments, eight shards collect the 40 qualification scenes in two waves within the deadline without exhausting host memory, with at least 38 Teacher successes and 34 QC-valid episodes, every QC-valid episode lossless and continuous, no execution fault and every stop proven.
 prediction: Host memory stays below the budget (the sampler shows container memory well under the 27.5 GB of EXP-590 and no OOM); data quality near that of four or fewer concurrent recordings; waves of roughly 20 to 35 minutes; the run may still exceed the 5400 s deadline, which would make it NOT_QUALIFIED. Any execution fault or unfinished task makes the run NOT_QUALIFIED whatever the rates.
@@ -110,17 +117,24 @@ provenance:
   gz_partition: each shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w8-inputs-20261014T111500Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w8-inputs-20261014T111500Z/run-w8.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run 11:34:05Z to 11:58:12Z; wave 0 only. Twenty scenes - 4 VALID with QC PASS, 15 INVALID, 1 execution fault (wave-0-w07-qual-16, CONTAINER_INSTANCE_REPORTED_FAULT final transaction evidence is not paused).
+  - INVALID reasons as read during the run - mostly OFFLINE_SOURCE_GAP on the arm and gripper controller state (1 to 6 gaps); also NO_NEW_ACQUISITION, COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE, INPUT_TIMESTAMP_FUTURE, and one RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW with LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID.
+  - Sampler - 1448 samples; peak sum of container memory 19.08 GiB at 19:43:39 local (27.5 in EXP-590); memory pressure some avg10 at most 15.5; CPU pressure some avg10 median 2.89, at most 12.18. No kernel OOM kill in the run window.
+  - Stops - seven shards and the Teacher service terminated with proof; shard w07 (the faulted one, exit code 1) LAUNCH_STOP_UNCONFIRMED; CLI CAMPAIGN_RUN_FAILED CAMPAIGN_SHARD_STOP_UNCONFIRMED and CAMPAIGN_CLEANUP_UNCONFIRMED; the store held the lease and slots w00 to w07.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The memory work held - no OOM and a peak well below the budget.
+  - Data quality did not recover with at most four recordings while the other shards process; controller-state single-tick gaps remain the main cause. The mechanism (stock realtime publisher dropping a tick when its thread is late) is still a hypothesis, and CPU contention from concurrent offline processing is a candidate.
+  - The execution fault is a new code path; cause not established.
+conclusion: VALID failure. Memory is no longer the limit; data quality at eight shards still fails the qualification (4 of 19 VALID) and one execution fault stopped the run after wave 0.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261014T111500Z (host/campaign-cleanup.json, host/wave-0/task-journal)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261014T111500Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp591 (CLI log, shard and teacher logs, sampler) and exp591-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
