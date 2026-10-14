@@ -4,10 +4,18 @@ import copy
 import json
 import math
 from pathlib import Path
+import time
 
 from so101_demo.parallel_batch.contracts.common import RunMode
 from so101_demo.runtime.act_worker_runtime import ActWorkerRuntime
 from so101_teleop.unified.act_stack import ActStackProcessOwner
+
+
+GOAL_CHECK_PAUSE_S = 0.5
+
+
+def _pause_between_goal_checks(seconds):
+    time.sleep(seconds)
 
 
 class ContainerCollectionRuntime(ActWorkerRuntime):
@@ -93,10 +101,30 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
         except Exception:
             return False
 
-    def retire_case(self,lease,*,cancelled,absent):
+    def _goal_absent(self,lease,budget_s):
+        """The independent controller-goal check, repeated until one attempt proves it or `budget_s` is spent. One attempt is
+        the unchanged proof (a fresh participant, statuses terminal or empty, cancel answers). A fresh participant can need
+        a second or more to discover the cancel services, so an unsettled attempt is a transient negative and is tried again;
+        an attempt that raises counts as unproven. No attempt starts after the budget; `None` is one attempt. The answer is
+        True only if some attempt proved it."""
+        deadline=None if budget_s is None else self._monotonic()+budget_s
+        while True:
+            try:
+                if self._confirm_no_controller_goal(lease) is True:
+                    return True
+            except Exception:
+                pass
+            if deadline is None or self._monotonic()>=deadline:
+                return False
+            _pause_between_goal_checks(min(GOAL_CHECK_PAUSE_S,max(0.,deadline-self._monotonic())))
+            if self._monotonic()>=deadline:
+                return False
+
+    def retire_case(self,lease,*,cancelled,absent,goal_budget_s=None):
         """Stop this case's helpers and name what is proven. `cancelled` is None on the clean path; on the stop or
         fault path it is whether the revocation proved motion stopped and controllers confirmed. Only an exact
-        True counts; a failed or missing check is False, never inferred."""
+        True counts; a failed or missing check is False, never inferred. `goal_budget_s` bounds how long the goal
+        check may be repeated (None: one attempt)."""
         proofs={}
 
         def check(name,call):
@@ -122,9 +150,9 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
         if not started:
             proofs['controller_proven']=True   # reset never began: no motion or goal can exist for this case
         elif cancelled is None:
-            check('controller_proven',lambda:absent is True or self._confirm_no_controller_goal(lease) is True)
+            check('controller_proven',lambda:absent is True or self._goal_absent(lease,goal_budget_s) is True)
         else:
-            check('controller_proven',lambda:cancelled is True and self._confirm_no_controller_goal(lease) is True)
+            check('controller_proven',lambda:cancelled is True and self._goal_absent(lease,goal_budget_s) is True)
         if lease is not None and self._lease_key(lease) in self._physics_held:
             # before the runtime closes its pause control: native retirement must find the simulation running
             check('physics_resumed',lambda:self.release_physics_hold(lease))

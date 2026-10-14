@@ -98,6 +98,9 @@ def _service(service, role, *, readback):
         _require(service["max_inflight_requests"] == 8)
 
 
+_RECORDING_CAP = "max_concurrent_recordings"
+
+
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
     """Validate one format and read hashes only for roles actually launched.
 
@@ -116,9 +119,13 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
             _require(hashlib.sha256(payload).hexdigest() == expected_sha256)
         document = json.loads(payload.decode("utf-8"), object_pairs_hook=_pairs,
             parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
-        _keys(document, ("schema_version", "kind", "evidence_root", "controlled_runtime",
-                         "head_service", "teacher_service", "shard_image", "gpu_uuid",
-                         "qualification_contract"))
+        _keys({name: value for name, value in document.items() if name != _RECORDING_CAP},
+              ("schema_version", "kind", "evidence_root", "controlled_runtime",
+               "head_service", "teacher_service", "shard_image", "gpu_uuid",
+               "qualification_contract"))
+        if _RECORDING_CAP in document:
+            # How many shards may be in the recording part of a task at once; the Host reads it, the campaign hash freezes it.
+            _require(type(document[_RECORDING_CAP]) is int and 1 <= document[_RECORDING_CAP] <= 8)
         _require(type(document["schema_version"]) is int and document["schema_version"] == 1
                  and document["kind"] == "ACT_CONTAINER_CAMPAIGN")
         root = _absolute(document["evidence_root"])

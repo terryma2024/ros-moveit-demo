@@ -1194,7 +1194,8 @@ def test_shutdown_true_only_with_empty_manifest_recorder_and_controller_proof(fl
 
 @pytest.mark.parametrize('problem',['controller','recorder','close_runtime','stack_dead','not_ready'])
 def test_shutdown_false_without_a_named_proof(flow,monkeypatch,problem):
-    rig=Rig(flow,monkeypatch,confirm=problem!='controller')
+    # the goal check is retried for the recovery budget, so a check that never settles needs a short one here
+    rig=Rig(flow,monkeypatch,confirm=problem!='controller',recovery_timeout_s=.3)
     summary=rig.execution.run()
     assert summary['status']=='FAILED'
     if problem=='recorder':rig.runtime._recorders[rig.runtime._lease_key(rig.execution.state.lease)]=object()
@@ -1332,3 +1333,14 @@ def test_fault_after_reset_began_needs_the_controller_proof(flow,monkeypatch,por
         'confirm_false':(True,False),'confirm_raises':(True,False)}[port]
     assert rig.execution.shutdown_owned() is False
     assert rig.execution.retire_proofs['controller_proven'] is False
+
+
+def test_shutdown_owned_caches_only_a_proven_true(flow,monkeypatch):
+    answers=iter([False,True])
+    rig=Rig(flow,monkeypatch,confirm=lambda lease:next(answers,True),recovery_timeout_s=.2)
+    rig.execution.run()
+    first=rig.execution.shutdown_owned()
+    assert first is False and rig.execution.retire_proofs['controller_proven'] is False
+    assert rig.execution._shutdown_result is None
+    assert rig.execution.shutdown_owned() is True      # a later proof is used
+    assert rig.execution.shutdown_owned() is True      # and a proven True is cached, not recomputed

@@ -126,9 +126,23 @@ class ContainerTaskExecutor:
         if not self._closing:
             self._last_poll = self.clock()
             self._changed.set()
-        if task_id is not None:
-            return self._status.model_copy(update={'task': self._task_status[task_id]})
-        return self._status
+        task_status = self._task_status[task_id] if task_id is not None else self._status.task
+        if task_status is None:
+            return self._status
+        return self._status.model_copy(update={'task': self._with_phase(task_status)})
+
+    def _with_phase(self, status):
+        """The answer carries the recording phase while the task runs. An execution that cannot report one leaves it None."""
+        if status.state not in ('ACCEPTED', 'RUNNING') or self._current is None or self._current.task_id != status.task_id:
+            return status
+        if self._execution is None:
+            return status.model_copy(update={'phase': 'RECORDING'})   # nothing built yet, so nothing has been recorded
+        report = getattr(self._execution, 'recording_phase', None)
+        try:
+            phase = report() if callable(report) else None
+        except Exception:
+            phase = None
+        return status.model_copy(update={'phase': phase})
 
     def _set_task(self, task, state, reason=None):
         status = TaskStatus(task_id=task.task_id, state=state, fault_reason=reason)

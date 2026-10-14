@@ -790,3 +790,35 @@ def test_execute_expert_replaces_only_the_data_fields_with_the_processors_verdic
     assert decision.status is AttemptStatus.PASSED
     assert (decision.teacher_execution_status, decision.teacher_task_result) == ("COMPLETED", "PASS")
     assert decision.act_data_status == "INVALID" and "OFFLINE_PROCESSOR_INVALID" in decision.act_data_reason
+
+
+def test_the_recorder_stopped_callback_fires_once_the_bag_is_closed_and_before_processing(tmp_path):
+    order = []
+    class OrderedPilot(FakePilot):
+        def finish(self):
+            order.append("pilot_finished")
+            return super().finish()
+    processes = FakeProcesses()
+    collection, _point, _clock = collection_for(tmp_path, processes=processes, pilot=OrderedPilot,
+                                                on_recorder_stopped=lambda: order.append("recorder_stopped"))
+    collection.start_before_teacher()
+    collection.teacher_started_now()
+    collection.finish(lease=LEASE)
+    assert order == ["pilot_finished", "recorder_stopped"]
+
+
+def test_a_failing_recorder_stopped_callback_never_changes_the_data_verdict(tmp_path):
+    def boom():
+        raise RuntimeError("status side channel")
+    collection, _point, _clock = collection_for(tmp_path, on_recorder_stopped=boom)
+    collection.start_before_teacher()
+    collection.teacher_started_now()
+    assert collection.finish(lease=LEASE).data_status == "VALID"
+
+
+def test_a_retired_collection_also_reports_the_recorder_stopped(tmp_path):
+    fired = []
+    collection, _point, _clock = collection_for(tmp_path, on_recorder_stopped=lambda: fired.append(1))
+    collection.start_before_teacher()
+    collection.retire()
+    assert fired == [1]

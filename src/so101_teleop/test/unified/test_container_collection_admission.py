@@ -58,7 +58,8 @@ def fixture(tmp_path):
         queue_timeout_s=10., inference_timeout_s=20.)
     campaign = dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN', evidence_root=str(tmp_path),
         controlled_runtime=dict(path=str(runtime), sha256=runtime_sha),
-        head_service=service, teacher_service=service, shard_image=image, gpu_uuid=GPU, qualification_contract=None)
+        head_service=service, teacher_service=service, shard_image=image, gpu_uuid=GPU, qualification_contract=None,
+        max_concurrent_recordings=4)
     config_path = root/'campaign.json'
     config_path.write_text(json.dumps(campaign))
     slot = ActWorkerSlot(campaign_id=base.payload['campaign_id'], worker_id='w00',

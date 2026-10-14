@@ -188,3 +188,63 @@ def test_the_camera_topics_have_deep_reliable_queues_in_the_bag_overrides(tmp_pa
     for topic in ("/head_camera/camera_info", "/wrist_camera/camera_info", "/head_camera/color", "/wrist_camera/color"):
         assert overrides[topic] == {"history": "keep_last", "depth": DEEP_RELIABLE[topic], "reliability": "reliable",
                                     "durability": "volatile"}
+
+
+def test_a_one_second_stall_in_the_file_write_never_delays_the_read_loop(tmp_path, isolated_ros_domain, monkeypatch):
+    """EXP-589: a 0.5 s filesystem stall stopped the read loop on five shards at once. The file write is on the writer thread."""
+    from so101_demo.act.offline.scene_read_writer import SceneReadWriter
+
+    real = SceneReadWriter._write
+    state = {"stalled": 0}
+
+    def stalling(self, record):
+        if self.written == 10 and not state["stalled"]:
+            state["stalled"] = 1
+            time.sleep(1.0)
+        return real(self, record)
+
+    monkeypatch.setattr(SceneReadWriter, "_write", stalling)
+    if not rclpy.ok():
+        rclpy.init()
+    node, close = _scene_service("raw_write_stall_service")
+    sidecar = SceneReadSidecar(node, tmp_path / "scene-reads.jsonl")
+    try:
+        sidecar.start()
+        deadline = time.monotonic() + 15.0
+        while sidecar.count < 70 and time.monotonic() < deadline:
+            time.sleep(0.05)
+    finally:
+        sidecar.stop()
+        close()
+    assert state["stalled"] == 1 and sidecar.count >= 70 and sidecar.failure is None, (sidecar.count, sidecar.failure)
+    lines = (tmp_path / "scene-reads.jsonl").read_text().splitlines()
+    assert len(lines) == sidecar.count, "stop flushed every queued read"
+    stamps = [json.loads(line)["recorded_monotonic_ns"] / 1e6 for line in lines]
+    gaps = [b - a for a, b in zip(stamps[5:], stamps[6:])]
+    assert max(gaps) < 200.0, sorted(gaps)[-5:]
+
+
+def test_a_failing_sidecar_write_is_a_recorder_failure(tmp_path, isolated_ros_domain, monkeypatch):
+    from so101_demo.act.offline.scene_read_writer import SceneReadWriter
+
+    def broken(self, record):
+        raise OSError(5, "Input/output error")
+
+    monkeypatch.setattr(SceneReadWriter, "_write", broken)
+    if not rclpy.ok():
+        rclpy.init()
+    node, close = _scene_service("raw_write_failure_service")
+    sidecar = SceneReadSidecar(node, tmp_path / "scene-reads.jsonl")
+    try:
+        sidecar.start()
+        deadline = time.monotonic() + 8.0
+        while sidecar.failure is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+    finally:
+        sidecar.stop()
+        close()
+    assert sidecar.failure is not None and sidecar.failure.startswith("RAW_SCENE_SIDECAR_WRITE_FAILED")
+    recorder = RawRecorder(tmp_path / "bag", scene_reads=tmp_path / "scene-reads.jsonl")
+    recorder._sidecar = sidecar
+    stats = recorder.stop()
+    assert stats["failure"] == sidecar.failure and recorder.failure == sidecar.failure

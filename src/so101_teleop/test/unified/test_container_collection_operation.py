@@ -232,3 +232,24 @@ def test_qualification_run_naming_a_report_is_refused(tmp_path,monkeypatch):
             prepare(module,args,workload,spec)
     finally:
         store.close()
+
+
+def test_eight_worker_preparation_requires_the_recording_cap_in_the_campaign_config(tmp_path,monkeypatch):
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
+    report = tmp_path/'report-bytes.json'
+    report.write_bytes(b'{}')
+    config = Path(spec.payload['campaign_config_path'])
+    document = json.loads(config.read_bytes())
+    assert document['max_concurrent_recordings'] == 4
+    try:
+        assert prepare(module,formal_arguments(spec,report),workload,spec).payload['campaign_config_sha256'] == hashlib.sha256(config.read_bytes()).hexdigest()
+        del document['max_concurrent_recordings']
+        config.write_text(json.dumps(document))
+        with pytest.raises(ValueError,match='COLLECTION_RECORDING_CAP_REQUIRED'):
+            prepare(module,formal_arguments(spec,report),workload,spec)
+        args = arguments(spec)   # one worker needs no cap
+        assert prepare(module,args,workload,spec).payload['worker_count'] == 1
+        assert store.execution_generation(Domain.VALIDATION) == 0
+    finally:
+        store.close()

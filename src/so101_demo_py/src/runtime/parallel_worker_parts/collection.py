@@ -15,6 +15,12 @@ from so101_demo.runtime.task_stack import (
 
 
 class CollectionRecorder:
+    _recorder_stopped_callback: Callable[[], None] | None = None
+
+    def bind_recorder_stopped(self, callback: Callable[[], None] | None) -> None:
+        """The owner's callback for the moment this runtime's bag recorder has stopped (status data; it never decides a result)."""
+        self._recorder_stopped_callback = callback
+
     def _offline_identity(self, lease: Any, reset_epoch: object) -> dict:
         return {"session_id": self.resources.session_id, "reset_epoch": self._reset_epoch_integer(reset_epoch),
                 "attempt_id": lease.attempt_id}
@@ -34,7 +40,8 @@ class CollectionRecorder:
             fault=self._collection.fault, environment=dict(self.resources.environment),
             spec_factory=lambda role, argv: StackProcessSpec(role, tuple(argv)),
             inputs_manifest=self.episode_inputs_manifest, scope=self.episode_scope_path, identity=identity,
-            policy=self._recorder_policy, clock=self._recorder_clock, sleep=self._recorder_sleep)
+            policy=self._recorder_policy, clock=self._recorder_clock, sleep=self._recorder_sleep,
+            on_recorder_stopped=self._recorder_stopped_callback)
         self._recorders[key] = collection
         collection.start_before_teacher()
 

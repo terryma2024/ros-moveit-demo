@@ -373,7 +373,8 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
         world.qualification_world = qualification
     world.campaign = dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN', evidence_root=str(evidence),
         controlled_runtime=ref(world.runtime), head_service=service, teacher_service=service,
-        shard_image=dict(shared.shard_image), gpu_uuid=GPU, qualification_contract=qualification_contract)
+        shard_image=dict(shared.shard_image), gpu_uuid=GPU, qualification_contract=qualification_contract,
+        **(dict(max_concurrent_recordings=4) if plane in ('W8', 'FORMAL') else {}))
     world.campaign_path = write_json(inputs / 'campaign.json', world.campaign)
     world.docker = Docker()
     world.docker.report, world.docker.teacher_digest, world.docker.shard_digest = (
@@ -520,6 +521,7 @@ def test_real_cli_builds_four_operation_owner(tmp_path, shared, monkeypatch, cap
     frozen_scenes = run_root / 'inputs/frozen/scene_manifest/scenes.json'
     assert binding['sha256'] == sha(frozen_scenes) == sha(world.scenes)
     assert owner.coordinator.scene_manifest == ref(frozen_scenes)
+    assert owner.coordinator.max_recording_shards is None   # one shard: the campaign config states no cap
     assert sorted(owner.coordinator.case_inputs) == sorted(world.scene_ids)
     # Teacher service started once; one shard; both stopped through the original owners
     assert len(world.docker.runs(shard=False)) == 1 and len(world.docker.runs(shard=True)) == 1
@@ -710,6 +712,7 @@ def test_two_waves_start_teacher_once(tmp_path, shared, monkeypatch, capsys):
         f'wave-{wave}-w{worker:02d}-g{wave + 1}' for wave in (0, 1) for worker in range(8))
     (owner,) = spies.owners
     assert owner.coordinator.scene_manifest == ref(run_root / 'inputs/frozen/scene_manifest/scenes.json')
+    assert owner.coordinator.max_recording_shards == 4   # the hashed campaign config's cap reaches the wave coordinator
     assert spies.lease() is None and spies.active_slots() == () and len(spies.finishes) == 1
 
 

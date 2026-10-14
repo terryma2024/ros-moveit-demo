@@ -71,6 +71,12 @@ class WaveAssignment:
                 return scene if self.states[scene] == PENDING else None
         return next((scene for scene in self.surplus if self.states[scene] == PENDING), None)
 
+    def has_next(self, worker_id):
+        """Whether `next_scene` would claim a scene for this worker right now; claims nothing."""
+        if worker_id not in self.worker_ids:
+            raise ValueError('WAVE_ASSIGNMENT_WORKER_UNKNOWN')
+        return self._choose(worker_id) is not None
+
     def _move(self, scene, state):
         if self.states.get(scene) != ASSIGNED:
             raise ValueError('WAVE_ASSIGNMENT_STATE_INVALID')
@@ -87,12 +93,37 @@ class InstanceFault(RuntimeError):
     pass
 
 
+class RecordingGate:
+    """Limits how many instances are in the recording part of a task at once.
+
+    An instance is in the recording part from the moment the Host claims a scene for it until its polled status reports that
+    its recorder has stopped, or its task has ended or its instance has faulted or finished. A status without a phase counts
+    as recording until the task ends. The gate only delays when the Host sends an assignment; which scene a worker gets is
+    still decided by `WaveAssignment`. Everything runs on the Host event loop, so a check and the claim that follows it
+    cannot interleave with another instance's."""
+
+    def __init__(self, cap):
+        self.cap, self.members = cap, []
+        self._pulse = asyncio.Event()
+
+    def has_room(self):
+        return sum(1 for member in self.members if member.in_recording_part()) < self.cap
+
+    def pulse(self):
+        pulse, self._pulse = self._pulse, asyncio.Event()
+        pulse.set()
+
+    async def changed(self):
+        await self._pulse.wait()
+
+
 class InstanceDispatch:
     """The per-instance loop. `control` has the four-operation `ContainerTaskControl` shape."""
 
     def __init__(self, *, control, shard, assignment, journal, endpoints, scene_manifest, case_inputs,
-                 config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep):
+                 config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep, gate=None):
         launch = shard.launch
+        self.gate, self.recording_claim, self.done = gate, False, False
         self.control, self.shard, self.assignment, self.journal = control, shard, assignment, journal
         self.endpoints, self.scene_manifest, self.case_inputs = endpoints, scene_manifest, case_inputs
         self.config, self.context, self.dispatch_allowed = config, context, dispatch_allowed
@@ -133,6 +164,29 @@ class InstanceDispatch:
     def _tick(self):
         pulse, self._pulse = self._pulse, asyncio.Event()
         pulse.set()
+        if self.gate is not None:
+            self.gate.pulse()
+
+    def in_recording_part(self):
+        """Whether this instance still occupies one of the gate's recording slots."""
+        if self.done or self.fault is not None or not self.recording_claim:
+            return False
+        seen = None if self.status is None else self.status.task
+        if self.current is not None and seen is not None and seen.task_id == self.current[0].task_id:
+            return seen.state not in ('SUCCEEDED', 'FAILED') and seen.phase != 'POST_RECORDING'
+        return True
+
+    async def _claim_scene(self, stop_reason):
+        """The next scene for this worker, once a recording slot is free; None when there is nothing to do or to dispatch."""
+        while True:
+            if not self.dispatch_allowed() or stop_reason() is not None or self.fault is not None:
+                return None
+            if not self.assignment.has_next(self.worker_id):
+                return None
+            if self.gate.has_room():
+                self.recording_claim = True
+                return self.assignment.next_scene(self.worker_id)
+            await self.gate.changed()
 
     async def _wait(self):
         pulse = self._pulse
@@ -219,13 +273,17 @@ class InstanceDispatch:
         self.assignment.mark_collected(scene)
         self.collected.append(task.task_id)
         self.current = None
+        self.recording_claim = False
+        if self.gate is not None:
+            self.gate.pulse()
 
     async def run(self, stop_reason):
         """Dispatch scenes until none remain, dispatch is fenced or the instance faults; then terminate it."""
         reason = None
         try:
             while self.dispatch_allowed() and stop_reason() is None and self.fault is None:
-                scene = self.assignment.next_scene(self.worker_id)
+                scene = (self.assignment.next_scene(self.worker_id) if self.gate is None
+                         else await self._claim_scene(stop_reason))
                 if scene is None:
                     break
                 try:
@@ -253,6 +311,9 @@ class InstanceDispatch:
 
     async def finish(self, reason):
         """Stop polling, then terminate this instance and nothing else."""
+        self.done = True
+        if self.gate is not None:
+            self.gate.pulse()
         if self._poller is not None:
             self._poller.cancel()
             await asyncio.gather(self._poller, return_exceptions=True)
@@ -270,18 +331,21 @@ class InstanceDispatch:
 
 class ConcurrentCollectionCoordinator:
     def __init__(self, *, context, config, case_inputs, scene_manifest, control_factory=None,
-                 clock=time.monotonic, sleep=asyncio.sleep):
+                 clock=time.monotonic, sleep=asyncio.sleep, max_recording_shards=None):
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != 'act_collection_start'
                 or type(config) is not ParallelRuntimeConfigLinuxCuda
                 or type(case_inputs) is not dict or not case_inputs or type(scene_manifest) is not dict
                 or not callable(clock) or not callable(sleep)
-                or (control_factory is not None and not callable(control_factory))):
+                or (control_factory is not None and not callable(control_factory))
+                or (max_recording_shards is not None
+                    and (type(max_recording_shards) is not int or max_recording_shards < 1))):
             raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
         for refs in case_inputs.values():
             if type(refs) is not dict or set(refs) != {'scope', 'inputs_manifest'}:
                 raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
         self.context, self.config, self.case_inputs = context, config, case_inputs
         self.scene_manifest = scene_manifest
+        self.max_recording_shards = max_recording_shards
         self.control_factory = control_factory or (lambda shard: ContainerTaskControl(owner=shard))
         self.clock, self.sleep = clock, sleep
         self.active = None
@@ -327,10 +391,16 @@ class ConcurrentCollectionCoordinator:
                 launch_generation=shard.launch.launch_generation, wave_id=shard.launch.wave_id)
             for shard in shards})
         assignment = WaveAssignment(scene_ids=scene_order, worker_ids=worker_ids, assignment=plan['assignment'])
+        # A cap that cannot bind (at least as large as the shard count) adds no gate: dispatch is exactly the uncapped path.
+        cap = self.max_recording_shards
+        gate = RecordingGate(cap) if cap is not None and cap < len(shards) else None
         dispatches = [InstanceDispatch(control=self.control_factory(shard), shard=shard, assignment=assignment,
             journal=journal, endpoints=endpoints, scene_manifest=self.scene_manifest,
             case_inputs=self.case_inputs, config=self.config, context=self.context,
-            dispatch_allowed=dispatch_allowed, clock=self.clock, sleep=self.sleep) for shard in shards]
+            dispatch_allowed=dispatch_allowed, clock=self.clock, sleep=self.sleep, gate=gate)
+            for shard in shards]
+        if gate is not None:
+            gate.members = dispatches
         self.active = dispatches
         self.waves[wave] = journal
         try:

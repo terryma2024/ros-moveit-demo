@@ -356,6 +356,14 @@ class CollectionTaskExecution:
         self._deadline_hit=False
         self._shutdown_lock=threading.Lock()
         self._shutdown_result=None
+        self._recorder_finished=threading.Event()
+        bind=getattr(runtime,'bind_recorder_stopped',None)
+        if callable(bind):
+            bind(self._recorder_finished.set)
+
+    def recording_phase(self):
+        """RECORDING until the bag recorder has stopped (or the run is over), then POST_RECORDING; the instance reports it in status."""
+        return 'POST_RECORDING' if self._recorder_finished.is_set() or self._run_done.is_set() else 'RECORDING'
 
     # ---- causes, guards and boundaries -------------------------------------------------------------------------------------
 
@@ -589,14 +597,18 @@ class CollectionTaskExecution:
         self._start_revocation()
 
     def shutdown_owned(self):
-        """Single-flight, cached: True only when every named cleanup fact is exactly True. Never raises."""
+        """Single-flight: True only when every named cleanup fact is exactly True. Never raises. Only a proven True is
+        cached; a False is the answer of that call alone, so a later call can still prove cleanup."""
         with self._shutdown_lock:
-            if self._shutdown_result is None:
-                try:
-                    self._shutdown_result=self._shutdown() is True
-                except BaseException:
-                    self._shutdown_result=False
-            return self._shutdown_result
+            if self._shutdown_result is True:
+                return True
+            try:
+                proven=self._shutdown() is True
+            except BaseException:
+                proven=False
+            if proven:
+                self._shutdown_result=True
+            return proven
 
     def _shutdown(self):
         runtime,state=self.runtime,self.state
@@ -616,7 +628,8 @@ class CollectionTaskExecution:
         if record is not None:
             cancelled=record['stopped'] is True and record['confirmed'] is True
         absent=self.decision is not None and getattr(self.decision,'physical_action_proven_absent',None) is True
-        self.retire_proofs=runtime.retire_case(state.lease,cancelled=cancelled,absent=absent)
+        self.retire_proofs=runtime.retire_case(state.lease,cancelled=cancelled,absent=absent,
+                                               goal_budget_s=self.recovery_timeout_s)
         return bool(self.retire_proofs) and all(value is True for value in self.retire_proofs.values())
 
 

@@ -269,3 +269,55 @@ def test_retire_case_controller_proof_follows_the_path_taken(tmp_path,monkeypatc
     runtime._active_lease=None
     before=len(calls)
     assert runtime.retire_case(None,cancelled=None,absent=False)['controller_proven'] is True and len(calls)==before
+
+
+def _goal_check_rig(tmp_path,monkeypatch,answers,*,step=5.):
+    """A real runtime whose goal check answers from `answers` (one per attempt, the last repeats) on a fake clock that each attempt advances."""
+    module=importlib.import_module('so101_demo.runtime.container_campaign.collection_runtime')
+    clock=[0.]
+    attempts=[]
+    def confirm(lease):
+        attempts.append(clock[0])
+        clock[0]+=step
+        answer=answers[min(len(attempts),len(answers))-1]
+        if isinstance(answer,Exception):raise answer
+        return answer
+    monkeypatch.setattr(module,'_pause_between_goal_checks',lambda seconds:clock.__setitem__(0,clock[0]+seconds))
+    runtime,lease,tree,stack,data=_retire_rig(tmp_path,monkeypatch,confirm_no_controller_goal=confirm,monotonic=lambda:clock[0])
+    return runtime,lease,attempts
+
+
+def test_goal_check_unsettled_then_settled_proves_the_controller(tmp_path,monkeypatch):
+    runtime,lease,attempts=_goal_check_rig(tmp_path,monkeypatch,[False,False,True])
+    proofs=runtime.retire_case(lease,cancelled=None,absent=False,goal_budget_s=60.)
+    assert proofs['controller_proven'] is True and len(attempts)==3
+
+
+def test_goal_check_never_settled_is_false_and_the_budget_is_honoured(tmp_path,monkeypatch):
+    runtime,lease,attempts=_goal_check_rig(tmp_path,monkeypatch,[False])
+    proofs=runtime.retire_case(lease,cancelled=None,absent=False,goal_budget_s=12.)
+    assert proofs['controller_proven'] is False
+    assert len(attempts)>=2 and all(started<12. for started in attempts), attempts   # no attempt begins after the budget
+
+
+def test_goal_check_exception_is_an_unproven_attempt_not_the_end(tmp_path,monkeypatch):
+    runtime,lease,attempts=_goal_check_rig(tmp_path,monkeypatch,[RuntimeError('rclpy'),None,True])
+    assert runtime.retire_case(lease,cancelled=None,absent=False,goal_budget_s=60.)['controller_proven'] is True
+    assert len(attempts)==3
+
+
+def test_without_a_budget_the_goal_check_is_one_attempt(tmp_path,monkeypatch):
+    runtime,lease,attempts=_goal_check_rig(tmp_path,monkeypatch,[False,True])
+    assert runtime.retire_case(lease,cancelled=None,absent=False)['controller_proven'] is False and len(attempts)==1
+
+
+def test_a_later_retirement_can_still_prove_after_an_earlier_false(tmp_path,monkeypatch):
+    runtime,lease,attempts=_goal_check_rig(tmp_path,monkeypatch,[False,True])
+    assert runtime.retire_case(lease,cancelled=None,absent=False,goal_budget_s=0.)['controller_proven'] is False
+    assert runtime.retire_case(lease,cancelled=None,absent=False,goal_budget_s=0.)['controller_proven'] is True
+
+
+def test_the_goal_check_is_not_repeated_when_the_cancel_did_not_stop_motion(tmp_path,monkeypatch):
+    runtime,lease,attempts=_goal_check_rig(tmp_path,monkeypatch,[False,True])
+    assert runtime.retire_case(lease,cancelled=False,absent=False,goal_budget_s=60.)['controller_proven'] is False
+    assert attempts==[]

@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 from so101_demo.runtime.act_instance.identity import instance_output, instance_root
 from .bag_root import bag_root_decision
+from .scene_read_writer import CLOSE_TIMEOUT_S, SceneReadWriter, SceneReadWriterError
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
 STATS_SCHEMA = "SO101_RAW_RECORD_STATS"
@@ -173,8 +174,8 @@ class SceneReadSidecar:
         #: matched its subscription (a read published earlier is not in the bag, which the bag/sidecar count would show as a loss)
         self._publish_ready = threading.Event()
         self.published = 0
-        self._fsync_wanted = threading.Event()
-        self._fsync_thread = None
+        #: Set when the sidecar file can no longer be written (the writer's code); the recorder reports it as its failure.
+        self.failure = None
 
     def start(self):
         self._thread = threading.Thread(target=self._loop, name="so101-raw-scene-reads", daemon=True)
@@ -185,22 +186,12 @@ class SceneReadSidecar:
         self._publish_ready.set()
 
     def stop(self):
+        """Stop reading and wait until every queued read is written and fsync'd (or a failure says it could not be)."""
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(3.0)
-
-    def _fsync_loop(self, descriptor: int) -> None:
-        """Makes the sidecar durable off the read loop: an `fsync` on a busy filesystem takes up to hundreds of milliseconds, and the
-        read loop (about 20 Hz, and the Recorder's causal join needs every read) must not wait for it."""
-        while True:
-            self._fsync_wanted.wait()
-            self._fsync_wanted.clear()
-            try:
-                os.fsync(descriptor)
-            except OSError:
-                pass
-            if self._stop.is_set():
-                return
+            self._thread.join(CLOSE_TIMEOUT_S + 5.0)
+            if self._thread.is_alive() and self.failure is None:
+                self.failure = "RAW_SCENE_SIDECAR_DRAIN_TIMEOUT"
 
     def _loop(self):
         from collections import deque
@@ -218,24 +209,29 @@ class SceneReadSidecar:
                                          | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
                                          | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
                                          | PlanningSceneComponents.OBJECT_COLORS)
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "ab") as stream:
-            self._fsync_thread = threading.Thread(target=self._fsync_loop, args=(stream.fileno(),),
-                                                  name="so101-raw-scene-reads-fsync", daemon=True)
-            self._fsync_thread.start()
-
+        # The read loop only queues each finished line: the file write, flush and fsync are on the writer's own thread, so a
+        # filesystem stall (hundreds of milliseconds under load) cannot stop the reads. A queue or write failure is `failure`.
+        writer = SceneReadWriter(self._path)
+        try:
+            writer.start()
+        except SceneReadWriterError as error:
+            self.failure = str(error)
+            return
+        try:
             def write(record, call_request, response):
                 payload = scene_operation_payload(record, call_request, response, state="RAW_READ")
                 line = json.dumps({"recorded_monotonic_ns": time.monotonic_ns(), "recorded_system_ns": time.time_ns(),
                                    "payload": payload}, sort_keys=True, allow_nan=False)
-                stream.write(line.encode() + b"\n")
+                try:
+                    writer.put(line.encode() + b"\n")
+                except SceneReadWriterError as error:
+                    self.failure = str(error)
+                    self._stop.set()
+                    raise
                 if self._publish_ready.is_set():
                     self._publisher.publish(String(data=line))
                     self.published += 1
                 self.count += 1
-                if self.count % 20 == 0:
-                    stream.flush()
-                    self._fsync_wanted.set()        # the durable write happens on its own thread
 
             def invoke():
                 if not client.wait_for_service(timeout_sec=1.0):
@@ -249,6 +245,9 @@ class SceneReadSidecar:
                 return future.result()
 
             while not self._stop.is_set():
+                if writer.failure is not None:
+                    self.failure = writer.failure
+                    break
                 began = time.monotonic()
                 try:
                     record_scene_service_call(request=request, phase="RAW_SCENE_READ", service="/get_planning_scene",
@@ -257,10 +256,10 @@ class SceneReadSidecar:
                 except Exception:   # a refused or timed-out read is a gap the offline processor will see
                     self.errors += 1
                 self._stop.wait(max(0.0, self.PERIOD_S - (time.monotonic() - began)))
-            stream.flush()
-            self._fsync_wanted.set()
-            self._fsync_thread.join(5.0)
-            os.fsync(stream.fileno())
+        finally:
+            writer.close(CLOSE_TIMEOUT_S)
+            if writer.failure is not None and self.failure is None:
+                self.failure = writer.failure
 
 
 class RawRecorder:
@@ -355,6 +354,8 @@ class RawRecorder:
             state = self.subscription_state()
             if self._recorder is not None and self._recorder.poll() is not None:
                 self.failure = f"RAW_BAG_PROCESS_EXITED: {self._recorder.returncode}"
+            if self._sidecar is not None and self._sidecar.failure is not None and self.failure is None:
+                self.failure = self._sidecar.failure
             core_ok = all(state[topic]["publishers"] > 0 and state[topic]["recording"]
                           and state[topic]["received_after_match"] > 0 for topic in self.core_topics)
             others_ok = all(item["recording"] for topic, item in state.items() if item["publishers"] > 0)
@@ -422,6 +423,8 @@ class RawRecorder:
         try:
             if self._sidecar is not None:
                 self._sidecar.stop()
+                if self._sidecar.failure is not None and self.failure is None:
+                    self.failure = self._sidecar.failure
             if self._recorder is not None:
                 deadline = time.monotonic() + 5.0
                 while (not self.bag_dir.exists() and self._recorder.poll() is None and time.monotonic() < deadline):

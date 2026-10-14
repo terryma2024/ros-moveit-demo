@@ -118,3 +118,27 @@ def test_published_campaign_schema_rejects_authority_and_old_format(tmp_path):
     for invalid in (document | {"schema_version": 2}, document | {"lease": {}}):
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(invalid, schema)
+
+
+def test_recording_cap_is_optional_validated_and_part_of_the_campaign_hash(tmp_path):
+    document = campaign_fixture(tmp_path)
+    plain = write_config(tmp_path, document)
+    assert "max_concurrent_recordings" not in config_module().load_campaign_config(plain)
+    plain_hash = hashlib.sha256(plain.read_bytes()).hexdigest()
+    capped = write_config(tmp_path, document | {"max_concurrent_recordings": 4})
+    assert config_module().load_campaign_config(capped)["max_concurrent_recordings"] == 4
+    assert hashlib.sha256(capped.read_bytes()).hexdigest() != plain_hash   # the cap is frozen by the campaign config hash
+    for bad in (0, -1, True, 4.0, "4", 9, None):
+        with pytest.raises(ValueError, match="CAMPAIGN_CONFIG_INVALID"):
+            config_module().load_campaign_config(write_config(tmp_path, document | {"max_concurrent_recordings": bad}))
+
+
+def test_published_campaign_schema_accepts_only_a_valid_recording_cap(tmp_path):
+    import jsonschema
+    from paths import PACKAGE_ROOT
+    schema = json.loads((PACKAGE_ROOT / "config/act/campaign-runtime-schema.json").read_text())
+    document = campaign_fixture(tmp_path)
+    jsonschema.validate(document | {"max_concurrent_recordings": 4}, schema)
+    for bad in (0, True, 9, "4", 4.5):
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document | {"max_concurrent_recordings": bad}, schema)

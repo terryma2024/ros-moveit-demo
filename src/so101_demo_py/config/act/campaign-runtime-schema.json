@@ -326,6 +326,11 @@
       "type": "string",
       "pattern": "^GPU-.+$"
     },
+    "max_concurrent_recordings": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    },
     "qualification_contract": {
       "oneOf": [
         {

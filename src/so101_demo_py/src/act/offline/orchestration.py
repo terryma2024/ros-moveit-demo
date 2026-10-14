@@ -113,8 +113,9 @@ class OfflineCollection:
                  scope, identity: dict, policy: dict, clock=time.monotonic, sleep=time.sleep,
                  python: str | None = None, pilot_factory=None, bag_fault=None,
                  processing_timeout_s: float = PROCESSING_TIMEOUT_S, late_delay_s: float = LATE_START_DELAY_S,
-                 memo_check=None) -> None:
+                 memo_check=None, on_recorder_stopped=None) -> None:
         self._processes = processes
+        self._on_recorder_stopped = on_recorder_stopped
         self._point_root = Path(point_root)
         self._fault = fault
         self._sandbox_root = None if sandbox_root is None else Path(sandbox_root)
@@ -230,6 +231,15 @@ class OfflineCollection:
         except Exception as error:   # noqa: BLE001
             return {"bag_first_stamp_error": repr(error)[:120]}
 
+    def _recorder_stopped(self) -> None:
+        """Tell the owner the bag recorder has stopped (a status side channel). It never changes the data verdict."""
+        callback = self._on_recorder_stopped
+        if callback is not None:
+            try:
+                callback()
+            except Exception:   # noqa: BLE001
+                pass
+
     def retire(self) -> bool:
         """A cancelled attempt ends its bag recorder too, best effort. Returns whether the recorder is PROVEN stopped: its process
         exited and its stop stats were written (design 2026-10-10 section 1.2). Nothing started is vacuously proven."""
@@ -244,6 +254,8 @@ class OfflineCollection:
             facts = pilot.finish()
         except Exception:   # noqa: BLE001
             return False
+        finally:
+            self._recorder_stopped()
         failure = facts.get("failure") if isinstance(facts, dict) else None
         return (isinstance(facts, dict) and facts.get("rc") is not None and facts.get("schema") == STATS_SCHEMA
                 and not str(failure or "").startswith("RAW_PILOT_STOP_FAILED"))
@@ -268,7 +280,10 @@ class OfflineCollection:
         if self._late_thread is not None:
             self._late_thread.join(timeout=float(self._policy["ready_timeout_s"]) + 5.0)
         pilot = self._pilot
-        recorded = {} if pilot is None else pilot.finish()
+        try:
+            recorded = {} if pilot is None else pilot.finish()
+        finally:
+            self._recorder_stopped()
         facts["raw_pilot"] = recorded
         if pilot is None:
             reason = self.start_error or ("RECORDER_ABSENT" if self._fault == "recorder_absent" else "RECORDER_NEVER_STARTED")
