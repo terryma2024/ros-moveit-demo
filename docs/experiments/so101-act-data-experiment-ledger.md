@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1c47eab032201b1e075d084d0bb3865cfdddd318
+current_commit: d382a675051e471c3ba60099c1496a1379078dd4
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,59 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3648
-next_experiment: NONE until the eight-shard data loss is understood; no eight-shard rerun before that.
+latest_checkpoint: CP-3649
+next_experiment: EXP-590 (PLANNED): third eight-shard qualification attempt, at most four shards recording at once, with a host resource sampler.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3649 — EXP-589 loss analysed (concurrent recordings); human remedy; recording cap 4, sidecar writer, goal-check retry, host sampler; gate PASS; EXP-590 planned
+
+- Read-only analysis of the nineteen EXP-589 episodes, saved as R/exp589-eight-shard-loss-analysis.md. PROVEN from the bags: about 94 percent of the lost controller state samples are single ticks scattered through the episodes, about 3 percent of them reported by rosbag2 as transport loss, about 90 percent independent per publisher; loss per shard-second against shards recording at once - 0.016 to 0.038 at one to four, 0.72 at five, 0.55 at six, 1.25 at seven, 3.6 at eight, 0.015 in EXP-587; round one had eight simultaneous recordings and all eight of its episodes were INVALID. One simultaneous 0.5 s gap of the recorder's planning-scene read sidecar on five shards at 03:46:26 caused four INPUT_STALE verdicts. NO_NEW_ACQUISITION in seven episodes came from wrist color frames delivered 121 to 140 ms late (96 frames late against 0 in EXP-587). The execution fault came from the helper cleanup's goal check (three cancel services to be discovered within 5 s, result cached) failing once under load while a follow-up path confirmed the controllers within 1.8 s. From sysstat: run queue 59 on 32 logical CPUs (1 to 2 in EXP-587), free memory down to 1.1 GB and swap full. The simulator rate stayed near real time and the Teacher service was not a bottleneck. HYPOTHESIS for the controller-state mechanism: the stock realtime publisher hands off through a single slot to a normal-priority thread and drops a tick when that thread is late.
+- Human decision of 2026-10-14 through the question prompt, option label verbatim "限制同时录制数并修三个缺陷", then "限制为同时4个录制".
+- Commit `d382a6750` (Sonnet-written, Opus-reviewed): the Host assigns a scene to an idle shard only while fewer than the cap are in the recording part of a task, read from a phase field the shard returns in its status answer (RECORDING or POST_RECORDING; no phase counts as recording until the task ends); reserved and surplus mapping unchanged; task deadlines start after the wait; the cap is the campaign config key max_concurrent_recordings, hashed with the config, required for eight workers, absent for one and two workers whose dispatch is unchanged. Projected wave of twenty scenes on eight shards with cap 4 about 1170 s, as without a cap. The recorder's sidecar is written by a separate thread through a bounded queue with identical bytes and order, fsync before close, overflow or write error reported as a recorder failure. The helper cleanup's goal check is retried within the frozen recovery timeout (120 s) and only a proven result is cached; the proof is unchanged; a check that never settles now fails after the timeout instead of about 5 s.
+- Host sampler (tooling, not product code): R/run-tools/host_sampler.py, 1 Hz per container cgroup CPU, memory, IO and pressure, per-thread scheduler delay of the controller and recorder processes, host CPU, pressure, memory, swap, dirty pages and disk, GPU every 5 s; 20 s idle test, worst sample cost 1.8 ms.
+- Gate on d382a6750, R/gates/d382a675051e, serial configuration: build rc 0; so101_demo_py rc 0; colcon stage rc 0; 916 s. PASSED. Images: shard R/image-build-20261014T071945Z (179.0 s), inference R/image-build-20261014T071950Z (62.3 s).
+- Inputs under the prep directory act-w8-inputs-20261014T073000Z: campaign config with max_concurrent_recordings 4, contract re-authored; validation 60 PASS, 6 informational, 1 pending (the candidates file); the run script starts the sampler before the CLI into R/run-logs/exp590/sampler and stops it after, refusing to start the CLI if the sampler is not running.
+
+```yaml
+experiment_id: EXP-590
+status: PLANNED
+prior_experiment: EXP-589 (VALID failure; 3 of 19 VALID at eight concurrent recordings; one execution fault)
+hypothesis: With at most four shards recording at once, the sidecar written off the read loop and the goal check retried, eight shards collect the 40 qualification scenes in two waves within the deadline at the data quality of one to four concurrent recordings, enough for 38 Teacher successes and 34 QC-valid episodes, with every QC-valid episode lossless and continuous, no execution fault and every stop proven.
+prediction: Never more than four shards in the recording part (readable from the status phases and the sampler); controller-state loss per shard-second near the 0.02 to 0.04 of up to four concurrent recordings; no INPUT_STALE from sidecar stalls; no TASK_HELPER_CLEANUP_UNCONFIRMED; wave time near 20 minutes each; the sampler gives per-container CPU, memory and scheduler delay for the first time. Late wrist frames are not addressed and may still cause NO_NEW_ACQUISITION. Any execution fault or unfinished task makes the run NOT_QUALIFIED whatever the rates.
+single_variable: The recording cap and the two fixes of commit d382a6750 relative to EXP-589, plus the sampler process on the Host. Same scenes and rules; new run and campaign ids, re-authored contract, rebuilt images.
+lifecycle: ISOLATED_STACK (eight containers per wave)
+preconditions:
+  - Enforced by the run script - as EXP-589 for commit d382a6750, plus the sampler running before the CLI starts.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-588.
+failure_criteria:
+  - As EXP-588.
+invalid_criteria:
+  - Refusal before admission; source trees differing from d382a6750; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: d382a675051e471c3ba60099c1496a1379078dd4 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:1d00ce010e9e314ebe9f6a914722861d08d31101192388dcb15470aa88c8e161 and shard image sha256:c2bc070a99301d0dc74fed42bef7e046007b8c6b91e91c02cbaa1075cacb59b2; Host R/gates/d382a675051e/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel; the sampler R/run-tools/host_sampler.py on the Host
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261014T073000Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261014T073000Z/run-w8.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3648 — EXP-589 VALID failure: eight shards run wave 0 end to end, but only 3 of 19 episodes are VALID and one execution fault stops the run
 
