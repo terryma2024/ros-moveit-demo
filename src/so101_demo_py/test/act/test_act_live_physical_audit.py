@@ -325,6 +325,32 @@ def test_the_offline_hook_offers_the_association_of_an_apply_that_finished_befor
     assert documents == []
 
 
+def test_the_offline_hook_makes_the_row_wait_for_an_apply_that_finished_before_the_read_and_is_not_admitted_yet():
+    import time as time_module
+    from types import SimpleNamespace
+
+    from so101_demo.act.offline import sources
+
+    cls = next(value for value in vars(sources).values() if isinstance(value, type) and hasattr(value, "_concurrent_apply_for"))
+    host = object.__new__(cls)
+    base = time_module.monotonic_ns() - 10**9     # long past the settle time: only the unadmitted apply can make the row wait
+    applied = {"call_id": "apply-a", "service": "/apply_planning_scene", "request_ros_clock": {"begin_monotonic_ns": base - 20},
+               "response_ros_clock": {"end_monotonic_ns": base}, "response": {"success": True}}
+    read = {"request_ros_clock": {"begin_monotonic_ns": base + 11}, "response_ros_clock": {"end_monotonic_ns": base + 16}}
+    host.tracker = SimpleNamespace(records=[applied])
+    host.associations = SimpleNamespace(history=[])
+    assert host._concurrent_apply_for(read) == ([], True), "not built yet: wait, do not raise"
+    # the association exists and began its read-back after the read: offered, no wait
+    document = {"association_id": "A", "apply": {"record": applied},
+                "query": {"record": {"request_ros_clock": {"begin_monotonic_ns": base + 50}}}}
+    host.associations = SimpleNamespace(history=[{"association": document}])
+    assert host._concurrent_apply_for(read) == ([document], False)
+    # its read-back began before the read: nothing is offered and nothing is pending, so a differing scene is a real mismatch
+    late = dict(document, query={"record": {"request_ros_clock": {"begin_monotonic_ns": base + 5}}})
+    host.associations = SimpleNamespace(history=[{"association": late}])
+    assert host._concurrent_apply_for(read) == ([], False)
+
+
 def test_the_offline_hook_finds_the_teachers_overlapping_applies_in_the_tracker():
     """The Teacher's applies are in the scene-operation tracker, not among the Recorder's own reads; an overlapping apply with
     an admitted association is offered, one without is `pending`, a failed or disjoint one is ignored."""
@@ -346,7 +372,7 @@ def test_the_offline_hook_finds_the_teachers_overlapping_applies_in_the_tracker(
     read = {"request_ros_clock": {"begin_monotonic_ns": 1900}, "response_ros_clock": {"end_monotonic_ns": 1950}}
     documents, pending = host._concurrent_apply_for(read)
     assert [document["association_id"] for document in documents] == ["A"] and pending is True, "apply-b has no association yet"
-    disjoint = {"request_ros_clock": {"begin_monotonic_ns": 3000}, "response_ros_clock": {"end_monotonic_ns": 3100}}
+    disjoint = {"request_ros_clock": {"begin_monotonic_ns": 500}, "response_ros_clock": {"end_monotonic_ns": 600}}
     assert host._concurrent_apply_for(disjoint) == ([], False)
     # the Teacher event of an apply concurrent with the read is replayed after the read: until the replay is a settle time past
     # the read, "no overlapping apply" is not yet proof
@@ -354,5 +380,6 @@ def test_the_offline_hook_finds_the_teachers_overlapping_applies_in_the_tracker(
     base = time_module.monotonic_ns()
     young = {"request_ros_clock": {"begin_monotonic_ns": base - 1000}, "response_ros_clock": {"end_monotonic_ns": base - 500}}
     assert host._concurrent_apply_for(young) == ([], True)
+    host.tracker = SimpleNamespace(records=[admitted])    # the unadmitted apply-b would now make an old read wait (see the test above)
     old = {"request_ros_clock": {"begin_monotonic_ns": base - 10**9}, "response_ros_clock": {"end_monotonic_ns": base - 10**9 + 1}}
     assert host._concurrent_apply_for(old) == ([], False)

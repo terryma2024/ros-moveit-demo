@@ -354,7 +354,15 @@ class OfflineRosSources:
         # An apply concurrent with this read is only known once its Teacher event has been replayed (the event is published when
         # the apply returns, after the read did): until the replay has moved a settle time past the read, no overlap is not yet proof.
         unseen = time.monotonic_ns() < read["response_ros_clock"]["end_monotonic_ns"] + self.APPLY_SETTLE_NS
-        return documents, bool(overlapping - known) or (not overlapping and unseen)
+        # An apply that already finished before the read began, whose association is not admitted yet (built or being built during
+        # a live recording): the scene may already be its result while the previous association still governs, so the row waits.
+        admitted = {association_anchor(bound["association"])["call_id"] for bound in self.associations.history}
+        unbuilt = {call["call_id"] for call in list(self.tracker.records)
+                   if call["service"] == "/apply_planning_scene" and call.get("response_ros_clock") is not None
+                   and isinstance(call.get("response"), dict) and call["response"].get("success") is True
+                   and call["response_ros_clock"]["end_monotonic_ns"] <= read["request_ros_clock"]["begin_monotonic_ns"]
+                   and call["call_id"] not in admitted}
+        return documents, bool(overlapping - known) or bool(unbuilt) or (not overlapping and unseen)
 
     def _planning_source_at(self, at_s):
         """The Recorder's own read-only scene query that joins the grid instant, after the governing association.
