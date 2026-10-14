@@ -4,6 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from so101_demo.act.result_store import verify_container_task_registration
+from so101_demo.runtime.container_campaign.readback_pool import DEFAULT_TIMEOUT_S, resolve_readback_workers, run_readbacks
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.task_journal import read_task_journal
 from so101_demo.runtime.inference.config import validate_file_ref
@@ -38,7 +39,8 @@ def check_wave_scheduling(plan, by_scene, roots, qualification):
             raise ValueError('SURPLUS_BEFORE_RESERVED:'+scene)
 
 
-def verify_wave_records(root, plan, launch_records, case_inputs, qualification, *, case_rows=None):
+def verify_wave_records(root, plan, launch_records, case_inputs, qualification, *, case_rows=None, readback_workers=1,
+                        readback_timeout_s=DEFAULT_TIMEOUT_S):
     """Recompute one wave's verified record from registry records and the task journal alone; no live owner is involved.
 
     `launch_records` are the registry records of the wave's shard launches. Without `case_rows` the rows are the collected
@@ -85,7 +87,11 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
                 raise ValueError('journal identity')
             by_scene[collected['scene_id']] = collected
         verified = {}
-        for row in rows:
+        readback_workers = resolve_readback_workers(readback_workers)
+        pooled = readback_workers > 1 and len(rows) > 1
+        prepared, early = [], None
+
+        def prepare(row):
             if type(row) is not dict or set(row) != _ROW or row['scene_id'] in verified:
                 raise ValueError('case identity')
             collected = by_scene.get(row['scene_id'])
@@ -94,15 +100,43 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
                     or row['launch_id'] != collected['instance_id']):
                 raise ValueError('row differs from the collected record')
             refs = case_inputs[row['scene_id']]
-            paths = {name: validate_file_ref(ref) for name, ref in refs.items()}
-            proof = verify_container_task_registration(journal_root/row['task_id']/'collected.json',
-                scope=paths['scope'], inputs_manifest=paths['inputs_manifest'])
+            return {name: validate_file_ref(ref) for name, ref in refs.items()}
+
+        def finish(row, paths, proof):
             if proof['task_id'] != row['task_id'] or proof['worker_id'] != row['worker_id']:
                 raise ValueError('readback identity')
             # Keep FAILED Teacher and INVALID/QC-failed data in the frozen denominator.
             verified[row['scene_id']] = dict(row, proof=proof, registration=str(journal_root/row['task_id']/'collected.json'),
                 owner_root=str(roots[row['worker_id']]), scope_path=str(paths['scope']),
                 inputs_manifest=str(paths['inputs_manifest']))
+
+        if not pooled:
+            for row in rows:
+                paths = prepare(row)
+                finish(row, paths, verify_container_task_registration(journal_root/row['task_id']/'collected.json',
+                    scope=paths['scope'], inputs_manifest=paths['inputs_manifest']))
+        else:
+            # The cheap identity checks run first, in row order. A row that fails one ends the list, so the scenes before it are
+            # still read back (and may fail first, as they would serially); workers only compute, this thread decides and records.
+            seen = set()
+            for row in rows:
+                try:
+                    if type(row) is dict and row.get('scene_id') in seen:
+                        raise ValueError('case identity')
+                    prepared.append((row, prepare(row)))
+                    seen.add(row['scene_id'])
+                except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+                    early = error
+                    break
+            answers = run_readbacks([dict(scene_id=row['scene_id'], registration=str(journal_root/row['task_id']/'collected.json'),
+                scope=str(paths['scope']), inputs_manifest=str(paths['inputs_manifest'])) for row, paths in prepared],
+                workers=readback_workers, timeout_s=readback_timeout_s)
+            for (row, paths), answer in zip(prepared, answers, strict=True):
+                if isinstance(answer, Exception):
+                    raise answer
+                finish(row, paths, answer)
+            if early is not None:
+                raise early
         if set(verified) != set(scene_order):
             raise ValueError('missing scene')
         check_wave_scheduling(plan, by_scene, roots, qualification)
@@ -113,12 +147,15 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
 
 
 class ContainerWaveResultVerifier:
-    def __init__(self, *, root, registry, case_inputs, qualification=False):
+    def __init__(self, *, root, registry, case_inputs, qualification=False, readback_workers=None,
+                 readback_timeout_s=DEFAULT_TIMEOUT_S):
         root = Path(root)
         if (not root.is_absolute() or root.resolve(strict=True) != root or not root.is_dir()
                 or type(registry) is not ContainerLaunchRegistry or type(case_inputs) is not dict
                 or not case_inputs or type(qualification) is not bool):
             raise ValueError('CONTAINER_WAVE_VERIFIER_INVALID')
+        resolve_readback_workers(readback_workers)
+        self.readback_workers, self.readback_timeout_s = readback_workers, readback_timeout_s
         inputs = {}
         for scene_id, refs in case_inputs.items():
             if (type(scene_id) is not str or not scene_id or type(refs) is not dict
@@ -150,7 +187,8 @@ class ContainerWaveResultVerifier:
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
             raise ValueError('CONTAINER_WAVE_COMMIT_READBACK_INVALID') from error
         return verify_wave_records(self.root, plan, launch_records, self.case_inputs, self.qualification,
-                                   case_rows=outcome['case_results'])
+                                   case_rows=outcome['case_results'], readback_workers=self.readback_workers,
+                                   readback_timeout_s=self.readback_timeout_s)
 
     def _check_scheduling(self, plan, by_scene, roots):
         check_wave_scheduling(plan, by_scene, roots, self.qualification)

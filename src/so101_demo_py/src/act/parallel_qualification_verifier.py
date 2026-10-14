@@ -20,7 +20,7 @@ _REPORT_KEYS = frozenset({"schema_version", "kind", "status", "qualification_run
 _QUALITY_NAMES = frozenset({"recorder_lossless", "frame_continuity", "qc_valid_rate", "teacher_physical_success_rate"})
 
 
-def build_collection_qualification_report(run_root, *, contract) -> Path:
+def build_collection_qualification_report(run_root, *, contract, readback_workers=None) -> Path:
     """Recompute the run from its originals and write `<run>/host/qualification-report.json`, once and never over an old one.
 
     `contract` is the gate contract file the campaign config names. A run that does not qualify still gets a report: status
@@ -33,7 +33,7 @@ def build_collection_qualification_report(run_root, *, contract) -> Path:
     target = run / REPORT_RELATIVE
     if target.exists() or target.is_symlink():
         raise ValueError("QUALIFICATION_REPORT_EXISTS")
-    payload = canonical(recompute(run, contract))
+    payload = canonical(recompute(run, contract, readback_workers=readback_workers))
     try:
         descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError as error:
@@ -86,7 +86,7 @@ def _closed_report(document):
         raise ValueError("COLLECTION_QUALIFICATION_REPORT_INVALID")
 
 
-def verify_collection_qualification(report_path, *, registered_root, expected_identity) -> dict:
+def verify_collection_qualification(report_path, *, registered_root, expected_identity, readback_workers=None) -> dict:
     """Recompute the whole run behind a report and return the in-memory proof; nothing is written, nothing the report says is used.
 
     A legacy `PASSED` receipt or a pick-place live document fails the closed kind and field check before anything else is read.
@@ -114,7 +114,7 @@ def verify_collection_qualification(report_path, *, registered_root, expected_id
         raise ValueError("COLLECTION_QUALIFICATION_NOT_QUALIFIED")
     try:
         contract_path = campaign_contract_path(run)
-        recomputed = recompute(run, contract_path)
+        recomputed = recompute(run, contract_path, readback_workers=readback_workers)
         _, contract = contract_documents(contract_path)
     except ValueError as error:
         raise ValueError("COLLECTION_QUALIFICATION_RECOMPUTE_INVALID") from error

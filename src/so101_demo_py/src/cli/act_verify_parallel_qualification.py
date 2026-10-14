@@ -35,6 +35,8 @@ def _parser():
     parser.add_argument('--runtime-config', type=Path)
     parser.add_argument('--collection-config', type=Path)
     parser.add_argument('--contact-policy-fingerprint')
+    parser.add_argument('--readback-workers', type=int, default=None,
+                        help='concurrent per-scene readbacks (default: derived from available memory, at most 4; 1 is serial)')
     return parser
 
 
@@ -84,7 +86,8 @@ def main(argv=None) -> int:
     except (OSError, ValueError, KeyError, TypeError) as error:
         return _fail('REFUSED: ' + _describe(error), 2)
     try:
-        proof = verify_collection_qualification(args.report, registered_root=args.registered_root, expected_identity=identity)
+        proof = verify_collection_qualification(args.report, registered_root=args.registered_root, expected_identity=identity,
+                                        readback_workers=args.readback_workers)
     except ValueError as error:
         message = _describe(error)
         if not str(error).startswith(_REFUSED):

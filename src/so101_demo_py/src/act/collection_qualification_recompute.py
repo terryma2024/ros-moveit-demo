@@ -156,7 +156,8 @@ def _image_problem(document, image):
 class _Run:
     """The state of one recomputation; every method appends reason codes and never raises on a bad original."""
 
-    def __init__(self, run, layout, contract_path, raw, contract):
+    def __init__(self, run, layout, contract_path, raw, contract, readback_workers=None, readback_timeout_s=None):
+        self.readback_workers, self.readback_timeout_s = readback_workers, readback_timeout_s
         self.run, self.layout, self.contract_path, self.contract = run, layout, Path(contract_path), contract
         self.contract_sha = sha256(raw)
         self.identity = contract['controlled_identity']
@@ -345,7 +346,8 @@ class _Run:
             manifest = _ref(self.run/'inputs'/'frozen'/'inputs-manifest.json')
             case_inputs = {scene: dict(scope=_ref(self.run/'inputs'/'scopes'/(scene+'.json')), inputs_manifest=dict(manifest))
                            for scene in plan['scene_ids']}
-            return verify_wave_records(self.run, plan, launch_records, case_inputs, True)
+            return verify_wave_records(self.run, plan, launch_records, case_inputs, True,
+                readback_workers=self.readback_workers, readback_timeout_s=self.readback_timeout_s)
         except _RUN_ERRORS as error:
             cause = str(error.__cause__ or '')
             for prefix in ('INSTANCE_SHORT', 'SURPLUS_BEFORE_RESERVED', 'RESERVED_COLLECTED_ELSEWHERE'):
@@ -469,11 +471,14 @@ def _ref_of(reference):
     return dict(path=reference['path'], sha256=reference['sha256'])
 
 
-def recompute(run_root, contract_path):
-    """The report document of the run: `status` QUALIFIED only with no reason. Raises when the run or contract cannot be read."""
+def recompute(run_root, contract_path, *, readback_workers=None, readback_timeout_s=None):
+    """The report document of the run: `status` QUALIFIED only with no reason. Raises when the run or contract cannot be read.
+
+    `readback_workers` bounds the concurrent per-scene readbacks (None: the memory-derived default, 1: the serial path); the
+    document does not depend on it."""
     run, layout = run_layout(run_root)
     raw, contract = contract_documents(contract_path)
-    state = _Run(run, layout, contract_path, raw, contract)
+    state = _Run(run, layout, contract_path, raw, contract, readback_workers, readback_timeout_s)
     try:
         state.plan()
     except _RUN_ERRORS as error:

@@ -110,6 +110,9 @@ def install_controlled_qc(patch):
 
     patch.setattr(episode_qc, 'recompute_native_qc', recompute)
     patch.setattr(result_store, '_verify_result_qc', verified)
+    # These doubles live in this process; a readback worker process would run the real QC. The pool has its own tests.
+    from so101_demo.runtime.container_campaign import readback_pool
+    patch.setattr(readback_pool, 'default_readback_workers', lambda **kwargs: 1)
 
 
 def seal_task(task_dir, lease, scope_path, inputs_path, *, seed, outcome, qc, pose=True, loss=False):

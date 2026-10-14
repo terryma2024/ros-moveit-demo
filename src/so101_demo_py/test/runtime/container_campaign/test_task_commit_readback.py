@@ -372,7 +372,7 @@ class Schedule:
         self.registry = ContainerLaunchRegistry(self.run/'host/launches.sqlite3')
         self.shards = tuple(register(self.registry, self.run, worker, index+1) for index, worker in enumerate(self.owners))
         self.verifier = ContainerWaveResultVerifier(root=self.run, registry=self.registry, case_inputs=self.case_inputs,
-                                                    qualification=qualification)
+                                                    qualification=qualification, readback_workers=1)
         self.scenes, self.assignment = list(scenes), assignment
         monkeypatch.setattr(result_verifier, 'verify_container_task_registration', controlled_readback)
         controlled_readback.calls.clear()

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Mapping
 import uuid
 
+from .qc_session import joined_session
 from .recorder import verify_episode_seal
 from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
@@ -1105,6 +1106,15 @@ def _finite_number(value):
     return type(value) in (int, float) and math.isfinite(value)
 
 
+def _parity_physical_audit(verdict, episode_root, scope, *, trust_independent_qc_memo):
+    if (not trust_independent_qc_memo and verdict['act_data_status'] in ('VALID', 'PENDING_QC')
+            and verdict['episode_seal_sha256'] is not None
+            and json.loads(_read_regular(episode_root/'seal.json'))['status'] == 'PASSED'):
+        # The journal-bound verifier makes this call; without a journal it is made here for parity.
+        from .episode_qc import verify_episode_physical_audit
+        verify_episode_physical_audit(episode_root, episode_root/'audit'/'audit-manifest.json', scope)
+
+
 def verify_container_task_registration(registration_path, *, scope, inputs_manifest, trust_independent_qc_memo=False):
     """Data readback of one collected container task; attribution (task_id only) was settled when it was collected.
 
@@ -1163,19 +1173,17 @@ def verify_container_task_registration(registration_path, *, scope, inputs_manif
             raise ValueError('original input binding')
         verifier = ActCollectionResultVerifier({record['worker_id']: task_dir}, scope=scope, inputs_manifest=inputs_manifest,
                                                trust_independent_qc_memo=trust_independent_qc_memo)
-        verdict = verifier.verify(lease, str(sealed), RunMode.EXECUTE)
-        binding = ('qc_report_sha256', 'inputs_sha256', 'scope_sha256', 'audit_manifest_sha256', 'collection_mode',
-                   'episode_seal_sha256')
-        if (verdict['sha256'] != stated['result']['sha256'] or verdict['status'] != summary['status']
-                or any(verdict[key] != summary[key] for key in (*_DATA_FIELDS, *binding))):
-            raise ValueError('summary differs from the verified result')
-        episode_root = sealed/'episode'
-        if (not trust_independent_qc_memo and verdict['act_data_status'] in ('VALID', 'PENDING_QC')
-                and verdict['episode_seal_sha256'] is not None
-                and json.loads(_read_regular(episode_root/'seal.json'))['status'] == 'PASSED'):
-            # The journal-bound verifier makes this call; without a journal it is made here for parity.
-            from .episode_qc import verify_episode_physical_audit
-            verify_episode_physical_audit(episode_root, episode_root/'audit'/'audit-manifest.json', scope)
+        with joined_session():
+            # One session for the whole readback: the verifier's QC recomputation has already run the physical audit over exactly
+            # these files, so the parity call below hits the session instead of recomputing it. A verifier that raised is never
+            # remembered, so a failing audit still raises here.
+            verdict = verifier.verify(lease, str(sealed), RunMode.EXECUTE)
+            binding = ('qc_report_sha256', 'inputs_sha256', 'scope_sha256', 'audit_manifest_sha256', 'collection_mode',
+                       'episode_seal_sha256')
+            if (verdict['sha256'] != stated['result']['sha256'] or verdict['status'] != summary['status']
+                    or any(verdict[key] != summary[key] for key in (*_DATA_FIELDS, *binding))):
+                raise ValueError('summary differs from the verified result')
+            _parity_physical_audit(verdict, sealed/'episode', scope, trust_independent_qc_memo=trust_independent_qc_memo)
         return dict(kind='ACT_CONTAINER_TASK_READBACK', schema_version=1, status='PASS', result_schema_version=3,
             result_status=verdict['status'], **{key: verdict[key] for key in (*_DATA_FIELDS, *binding)},
             result_sha256=verdict['sha256'], task_result_sha256=record['task_result_sha256'], task_id=task_id,

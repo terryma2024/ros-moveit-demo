@@ -60,6 +60,11 @@ def active() -> QcSession | None:
     return _STACK[-1] if _STACK else None
 
 
+def joined_session():
+    """A session scope that joins the enclosing session when one is open and otherwise opens (and closes) a fresh one."""
+    return contextlib.nullcontext() if active() is not None else qc_session()
+
+
 def assert_export_path_allowed() -> None:
     """Called at the top of the export functions: a session that is not a readback entry point's is refused there."""
     session = active()

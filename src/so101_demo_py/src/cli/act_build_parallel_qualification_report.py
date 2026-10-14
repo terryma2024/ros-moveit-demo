@@ -26,6 +26,8 @@ def _parser():
     parser.add_argument('--contract', type=Path, required=True, help='the gate contract file the run\'s campaign config names')
     parser.add_argument('--campaign-root', type=Path, required=True, help='the finished qualification run directory')
     parser.add_argument('--registered-root', type=Path, required=True, help='the registered evidence root that holds the run')
+    parser.add_argument('--readback-workers', type=int, default=None,
+                        help='concurrent per-scene readbacks (default: derived from available memory, at most 4; 1 is serial)')
     return parser
 
 
@@ -72,7 +74,7 @@ def main(argv=None) -> int:
     except (OSError, ValueError) as error:
         return _fail('REFUSED: ' + _describe(error), 2)
     try:
-        report = build_collection_qualification_report(run, contract=contract)
+        report = build_collection_qualification_report(run, contract=contract, readback_workers=args.readback_workers)
     except ValueError as error:    # every ValueError of the builder precedes the exclusive create
         return _fail('REFUSED: ' + _describe(error), 2)
     except Exception as error:  # noqa: BLE001 - reported with the exit code for an unexpected failure
