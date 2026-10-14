@@ -69,11 +69,15 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3654
-next_experiment: EXP-592 (PLANNED): one container, eight scenes, with the queued controller-state overlay.
+latest_checkpoint: CP-3655
+next_experiment: EXP-593 (to be planned): eight-shard qualification with the controller overlay, recording cap 4, assignment gap 30 s.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3655 — EXP-592 VALID: queued controller state works in a container, no overflow, no source gaps; one late camera frame
+
+- One-container check of the overlay: counters present and consistent, overflow 0, no controller-state source gaps, seven of eight VALID, the eighth INVALID on NO_NEW_ACQUISITION. Host readback of the wave in under a minute. Next: the eight-shard qualification with the same scheduling limits as EXP-591.
 
 ## CP-3654 — Controller-state loss mechanism supported; queued publishing overlay and paused-frame retry; gate PASS; EXP-592 planned
 
@@ -85,7 +89,7 @@ next_experiment: EXP-592 (PLANNED): one container, eight scenes, with the queued
 
 ```yaml
 experiment_id: EXP-592
-status: PLANNED
+status: VALID
 prior_experiment: EXP-584 (VALID; one container, eight of eight)
 hypothesis: With the queued controller-state publishing overlay the stack behaves as before in one container - eight of eight VALID - and the counters show what the stock publisher would have dropped.
 prediction: Each controller's queued state publisher logs enqueued equal to published with overflowed 0; would_have_skipped is small but non-zero at one shard; no controller-state source gaps; no change in Teacher behaviour; eight of eight VALID with QC PASS; stop and settle by design.
@@ -108,18 +112,24 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261014T143000Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261014T143000Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - The shard log carries the queued state publisher lines for arm, gripper and neck controller state (about 500 msg/s) and for joint_states and dynamic_joint_states (about 100 msg/s), every 5 s, about 500 lines each; enqueued equal to published throughout; overflowed 0 in every line; would_have_skipped_by_try_publish at most 4 per publisher over the run.
+  - Eight scenes, all Teacher PASS. Seven VALID with QC PASS (default, fn8-01 to fn8-06). fn8-07 INVALID, "OFFLINE_PROCESSOR_INVALID: rc=3; NO_NEW_ACQUISITION; RECORDER_SEAL_FAILED: NO_NEW_ACQUISITION". No OFFLINE_SOURCE_GAP in any episode.
+  - Instance exit WAVE_COMPLETE, cleanup confirmed; stop proven; campaign-cleanup.json terminated true, CAMPAIGN_CLOSING; wave verified; CLI exit 0; store IDLE afterwards.
+  - Timing - Teacher ready 22:21:23 local, results 22:26:47 to 23:03:37, wave verified 23:04:36 - Host readback under one minute with the process pool.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The overlay is the controller that runs in the container, and it loses nothing at one shard; the stock publisher would have refused a handful of messages even here.
+  - NO_NEW_ACQUISITION (a late camera frame) remains the residual data-quality cause, not addressed by this change; it appeared once at one shard.
+conclusion: VALID. The queued controller-state publishing works in a real container with no overflow; seven of eight VALID, the eighth INVALID on a late camera frame.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261014T143000Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261014T143000Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp592 (shard log with the counters, CLI log, sampler)
+decision: KEEP
+next_experiment: EXP-593
 ```
 
 ## CP-3653 — Superseded historical evidence deleted by human decision; 345 ledger citations now point at deleted paths
