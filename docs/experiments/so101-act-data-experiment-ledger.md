@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3657
+latest_checkpoint: CP-3658
 next_experiment: NONE until the human decides on the pre-motion unreachable classification and on the remaining data-quality causes.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3658 — Human decisions after EXP-593: unreachable scenes become Teacher failures and the scene lists are regenerated with a reachability filter; rule gaps fixed with thresholds unchanged
+
+- Read-only analysis (Sonnet) of the 15 INVALID episodes, R/exp593-data-quality-analysis.md: 13 of 15 come from checks stricter than the data, not from data loss. The five LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID episodes are periodic planning-scene reads that begin after the Teacher's attach or detach apply ends but before its readback, a gap the concurrent-apply rule does not cover. RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW is the same event: the physics source named in the apply request was 77 to 1397 ms old (VALID 35 to 88 ms) against the 100 ms window. All five NO_NEW_ACQUISITION are wrist-camera frames 106 to 122 ms late against the 100 ms limit, with every frame present in the bag; mechanism unknown. INPUT_STALE is partly a 252 ms planning-scene read gap under IO pressure. Only qual-05 and qual-13 show real recorder topic loss.
+- Human answer "失败 + 重新生成场景": a reachability-preflight UNREACHABLE becomes a sealed Teacher FAIL (not exportable), counted against the Teacher pass count and not aborting the campaign. Both scene lists are regenerated with the same method plus a filter.
+- Human answer "用 Teacher 自己的预检过滤": the filter is the Teacher's own reachability check (task_reachability, native IK) at the true pose and at ±0.01 m in x and y. Same seeds and quotas; the new lists are written to a new scene directory.
+- Human answer "修正规则缺口，阈值不变": accept a planning-scene read between an apply's end and its readback only when it shows exactly that apply's geometry; re-acquire the physics source right before the attach or detach request; investigate the wrist-camera delay read-only. Every 100 ms threshold stays.
+- Work started: one Sonnet code writer (three commits), one Sonnet scene-filter run in a single container writing evidence only, one Sonnet read-only camera analysis.
 
 ## CP-3657 — EXP-593 VALID failure: controller gaps gone, Teacher 38 of 38 executed; two pre-motion unreachable scenes faulted without a receipt; 23 of 40 QC-valid
 
