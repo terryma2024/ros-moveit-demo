@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3647
-next_experiment: EXP-589 (PLANNED): second eight-shard qualification attempt, with the contract mounted into the shards.
+latest_checkpoint: CP-3648
+next_experiment: NONE until the eight-shard data loss is understood; no eight-shard rerun before that.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3648 — EXP-589 VALID failure: eight shards run wave 0 end to end, but only 3 of 19 episodes are VALID and one execution fault stops the run
+
+- Second eight-shard attempt. The contract mount fix holds. All twenty scenes ran, Teacher PASS throughout, stops proven and admission settled by design. Data quality collapsed - sixteen INVALID on source gaps, topic loss, stale input and missing acquisitions - while the simulators ran near real time. One execution fault (TASK_HELPER_CLEANUP_UNCONFIRMED) refused the wave verification. Not retried.
+- A read-only investigation of the nineteen episodes was assigned: losses per episode and across shards on one wall-clock timeline, meaning of each reason code, the execution fault, what resource facts can be reconstructed, disk throughput, ranked remedies and the minimum instrumentation for a next run. No eight-shard rerun until then; a decision on remedies (resource limits per container, fewer concurrent shards, deferring offline processing, deepening the remaining shallow writers) is expected to need the human.
+- Retained: run root, prep directory, logs, the exited containers. Nothing deleted.
 
 ## CP-3647 — EXP-588 cause verified and fixed (contract not mounted into the shard); gate PASS; EXP-589 planned
 
@@ -84,7 +90,7 @@ next_experiment: EXP-589 (PLANNED): second eight-shard qualification attempt, wi
 
 ```yaml
 experiment_id: EXP-589
-status: PLANNED
+status: VALID
 prior_experiment: EXP-588 (VALID failure at shard start, nothing measured)
 hypothesis: As EXP-588 - eight container shards on the fixed identity, sharing one GPU and one Teacher service, collect the 40 qualification scenes in two waves within the campaign deadline, with at least 38 Teacher successes and 34 QC-valid episodes, every QC-valid episode lossless and continuous, both waves verified and every stop proven.
 prediction: The eight shards now pass their spec check and reach READY. Everything after that is the first measurement of eight concurrent shards, as listed for EXP-588. Any execution fault or unfinished task makes the run NOT_QUALIFIED whatever the rates. The first stage that fails, if any, is the new information.
@@ -107,17 +113,26 @@ provenance:
   gz_partition: each shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w8-inputs-20261014T034000Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w8-inputs-20261014T034000Z/run-w8.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - The eight shards passed their spec check and ran wave 0 (the contract mount of 1c47eab03 holds in a real container). Run from 03:38:23Z to 03:57:56Z.
+  - Twenty scenes of wave 0 - nineteen returned business results, all teacher_task_result PASS; three act_data_status VALID with QC PASS (qual-16, qual-18, qual-19); sixteen INVALID. Reasons among the sixteen - OFFLINE_SOURCE_GAP on the arm and gripper controller state (one to six gaps), OFFLINE_TOPIC_LOSS on scene_state and joint_states, INPUT_STALE, NO_NEW_ACQUISITION, a RECORDER_SOURCE_ALIGN reason, COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE (journal collected.json; reason texts truncated in the coordinator's read).
+  - One scene, qual-12 on w06, failed with CONTAINER_INSTANCE_REPORTED_FAULT TASK_HELPER_CLEANUP_UNCONFIRMED.
+  - The wave verification refused (CONTAINER_WAVE_COMMIT_READBACK_INVALID); the CLI reported CAMPAIGN_RUN_FAILED and exited 1; wave 1 was not started.
+  - Every shard and the Teacher service terminated with proof (campaign-cleanup.json, no error); the unified store is IDLE with no lease afterwards - settled by the designed path.
+  - Simulator rate from the shard logs - median of the robot_contacts publisher rate while running 488.6 to 492.7 messages per second per shard (p10 462 to 474), against 458 in a two-container shard of EXP-587.
+  - Host resource use was not recorded (host/resources.jsonl samples disk only).
 inferred:
-  - NONE
-conclusion: PENDING
+  - At eight concurrent shards the simulators keep near real time while data delivery, recording or consumption does not - the loss and staleness codes rarely appeared with one or two shards (the two-container run had eight of eight VALID). Cause not established.
+  - The run cannot qualify on this host as it stands (3 of 19 valid against a pass count of 34 of 40), independently of the execution fault.
+conclusion: VALID failure. The eight-shard path runs end to end mechanically - start, collection, stops, settle - but data quality collapses at eight shards and one execution fault stopped the run after wave 0. Investigation assigned (read-only).
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261014T034000Z (host/campaign-cleanup.json, host/wave-0/task-journal, wave-0/w0N/g1)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261014T034000Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp589 (CLI log, eight shard logs, teacher log) and exp589-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
