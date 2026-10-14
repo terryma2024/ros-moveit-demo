@@ -140,20 +140,35 @@ def session_memo(key_function, *, copy_result: bool = True):
     return decorate
 
 
-def cached_lines(path, parse, kind="strict"):
+def cached_lines(path, parse, kind="strict", *, text_origin=False, reuse_text_strict=False):
     """`parse(path)` for a file, remembered per file signature inside a session. `kind` names the parse ("strict": every line is
     JSON; "lenient": blank lines are skipped): parses of the same kind must give the same value. The returned object is shared
-    between callers, so callers must treat it as read-only."""
+    between callers, so callers must treat it as read-only.
+
+    `text_origin=True` says the strict `parse` is `Path.read_text().splitlines()` over JSON lines, and the session notes that beside
+    the entry. `reuse_text_strict=True` lets a "lenient" read of the same file signature take that entry instead of parsing again.
+    This is sound only because the two are the same text read the same way: a strict parse that succeeded found every line to be a
+    JSON document, and `json.loads` refuses a line that is empty or only whitespace, so the lenient filter would have removed
+    nothing. A strict entry whose origin is not noted (the QC's bytes reader) is never taken, and a read without the flag never
+    looks at the note."""
     session = active()
     if session is None:
         return parse(path)
-    key = ("lines", kind, file_signature(path))
+    signature = file_signature(path)
+    key = ("lines", kind, signature)
     if key in session.cache:
         session.hits += 1
         return session.cache[key]
+    if reuse_text_strict and kind == "lenient" and session.cache.get(("lines-origin", "strict", signature)) == "text":
+        shared = session.cache.get(("lines", "strict", signature))
+        if shared is not None:
+            session.hits += 1
+            return shared
     result = parse(path)
     session.misses += 1
     session.cache[key] = result
+    if text_origin and kind == "strict":
+        session.cache[("lines-origin", kind, signature)] = "text"
     return result
 
 

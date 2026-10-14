@@ -77,6 +77,36 @@ def test_a_complete_bag_gives_a_valid_sealed_episode_and_a_passing_fresh_process
         assert item["gap_count"] == 0 and item["covers_window"] and item["in_window"] > 0, topic
 
 
+# ---- memory: what the replay held is gone before the fresh-process QC starts ---------------------------------------------
+
+def test_the_replay_objects_are_released_before_the_fresh_process_qc_starts(tmp_path):
+    import weakref
+
+    bag = build_bag(tmp_path / "raw")
+    out = tmp_path / "sealed"
+    refs = {}
+
+    def episode_factory(options):
+        episode = make_episode(out)
+        refs["episode"] = weakref.ref(episode)
+        return episode
+
+    def sources_factory(node, episode, options, policy):
+        sources = BagSyntheticSources(node, episode, options, policy)
+        refs["sources"], refs["node"] = weakref.ref(sources), weakref.ref(node)
+        return sources
+
+    alive = []
+
+    def qc_runner(episode_root, **_):
+        alive.extend(sorted(name for name, ref in refs.items() if ref() is not None))
+        return {"status": "PASS", "reason": "", "rc": 0}
+
+    report, _ = run(tmp_path, bag, episode_factory=episode_factory, sources_factory=sources_factory, qc_runner=qc_runner)
+    assert report["verdict"] == "VALID" and report["qc"]["status"] == "PASS" and set(refs) == {"episode", "sources", "node"}
+    assert alive == []
+
+
 # ---- determinism ---------------------------------------------------------------------------------------------------------
 
 def test_two_runs_over_the_same_bag_are_byte_identical(tmp_path):

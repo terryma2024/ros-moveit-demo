@@ -312,3 +312,143 @@ def test_the_offline_engine_seals_and_reads_back_inside_one_session(tmp_path, mo
     assert engine.process(NOT_EXHAUSTED) == 0
     assert inside and inside[0] is not None and qc_session.active() is None
     assert result_of(working)["status"] == "VALID"
+
+
+# ---- the offline engine's memory: what finalize keeps alive and how often it parses the events ------------------------------
+
+class TrackedRows(list):
+    """A parsed stream a weak reference can follow."""
+
+
+def track_parses(monkeypatch):
+    """Wrap both line parsers so every parse is recorded: (kind, file name, file signature, weak reference to the rows)."""
+    import weakref
+    from pathlib import Path
+
+    from so101_demo.act import episode_qc
+    from so101_demo.act.episode_audit import checks, formal_coverage
+
+    parses = []
+
+    def tracking(kind, original):
+        def parse(path):
+            rows = TrackedRows(original(path))
+            parses.append((kind, Path(path).name, file_signature(path), weakref.ref(rows)))
+            return rows
+        return parse
+
+    monkeypatch.setattr(episode_qc, "_parse_stream_rows", tracking("lenient", episode_qc._parse_stream_rows))
+    strict = tracking("strict", checks._parse_audit_lines)
+    monkeypatch.setattr(checks, "_parse_audit_lines", strict)
+    monkeypatch.setattr(formal_coverage, "_parse_audit_lines", strict)
+    return parses
+
+
+def reading_sources(sources):
+    """The offline processor's pre-seal source: the physics steps come from the audit's events.jsonl, not from the adapter.
+
+    The real file grows between that read and the seal (the recorder queue's last row), so its signature changes; the synthetic
+    file does not, so the read moves the file's mtime forward to give the seal the same situation (content and hashes unchanged).
+    """
+    import os
+    from pathlib import Path
+
+    from so101_demo.act.episode_qc import _raw_physics_samples, read_verified_rows
+
+    adapter_steps = sources.physics_steps
+
+    def physics_steps(engine):
+        path = Path(engine.episode.capture.recorder.root) / "audit" / "events.jsonl"
+        samples = _raw_physics_samples(read_verified_rows(path.parent, "events.jsonl"))
+        status = path.stat()
+        os.utime(path, ns=(status.st_atime_ns, status.st_mtime_ns + 5_000_000_000))
+        return samples or adapter_steps(engine)
+
+    sources.physics_steps = physics_steps
+
+
+def test_the_pre_seal_events_parse_is_dead_before_the_seal_starts(tmp_path, monkeypatch):
+    import gc
+
+    from test_act_episode_recorder import NOT_EXHAUSTED, build, result_of
+
+    parses = track_parses(monkeypatch)
+    engine, sources, working = build(tmp_path)
+    reading_sources(sources)
+    alive_at_finish = []
+    original = engine.episode.finish
+
+    def finish(*args, **kwargs):
+        gc.collect()
+        alive_at_finish.extend((kind, name) for kind, name, _, ref in parses if ref() is not None)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(engine.episode, "finish", finish)
+    assert engine.process(NOT_EXHAUSTED) == 0 and result_of(working)["status"] == "VALID"
+    pre_seal = [entry for entry in parses if entry[1] == "events.jsonl" and entry[0] == "lenient"]
+    assert pre_seal, "the pre-seal reference check must have parsed the events"
+    assert alive_at_finish == []
+
+
+def test_finalize_parses_the_events_once_per_file_signature(tmp_path, monkeypatch):
+    from test_act_episode_recorder import NOT_EXHAUSTED, build, result_of
+
+    parses = track_parses(monkeypatch)
+    engine, sources, working = build(tmp_path)
+    reading_sources(sources)
+    assert engine.process(NOT_EXHAUSTED) == 0 and result_of(working)["status"] == "VALID"
+    events = [(kind, signature) for kind, name, signature, _ in parses if name == "events.jsonl"]
+    assert len(events) >= 2
+    assert len({signature for _, signature in events}) == len(events), events
+
+
+#: captured from the code as it was before the pre-seal check got its own session
+GOLDEN_REASONS = {
+    "end-after-recording": ("INVALID", ["TEACHER_REFERENCE_END_AFTER_RECORDING"]),
+    "end-step-absent": ("INVALID", ["TEACHER_REFERENCE_END_AFTER_RECORDING"]),
+    "time-mismatch": ("INVALID", ["TEACHER_REFERENCE_PHYSICS_TIME_MISMATCH"]),
+    "start-outside-window": ("INVALID", ["TEACHER_REFERENCE_START_NOT_IN_WINDOW"]),
+    "end-before-start": ("INVALID", ["TEACHER_REFERENCE_ORDER_INVALID"]),
+    "session-mismatch": ("INVALID", ["TEACHER_REFERENCE_SESSION_MISMATCH"]),
+}
+
+
+def tampered_reasons(tmp_path, monkeypatch, name):
+    """The reasons the engine records for a Teacher reference the recording cannot honour, read through the audit as the offline
+    processor does."""
+    import test_act_episode_recorder as recorder_tests
+
+    original = recorder_tests.observation
+
+    def end_observation(change):
+        def tampered(step, **kwargs):
+            document = original(step, **kwargs)
+            if step == recorder_tests.END_STEP:
+                change(document)
+            return document
+        monkeypatch.setattr(recorder_tests, "observation", tampered)
+
+    if name == "end-after-recording":
+        monkeypatch.setattr(recorder_tests, "END_STEP", 10 ** 6)
+    elif name == "end-step-absent":
+        end_observation(lambda document: document.update(simulation_step=10 ** 7))
+    elif name == "time-mismatch":
+        end_observation(lambda document: document.update(simulation_time_s=document["simulation_time_s"] + 0.0005))
+    elif name == "start-outside-window":
+        monkeypatch.setattr(recorder_tests, "START_STEP", 100)
+    elif name == "end-before-start":
+        monkeypatch.setattr(recorder_tests, "END_STEP", 400)
+    else:
+        end_observation(lambda document: document.update(session_id="another-session"))
+    engine, sources, working = recorder_tests.build(tmp_path, script=recorder_tests.teacher_script())
+    reading_sources(sources)
+    engine.process(recorder_tests.NOT_EXHAUSTED)
+    result = recorder_tests.result_of(working)
+    return result["status"], [item["reason"] for item in result["reasons"]]
+
+
+@pytest.mark.parametrize("name", ["end-after-recording", "end-step-absent", "time-mismatch", "start-outside-window",
+                                  "end-before-start", "session-mismatch"])
+def test_tampered_teacher_references_give_the_recorded_reasons(tmp_path, monkeypatch, name):
+    status, reasons = tampered_reasons(tmp_path, monkeypatch, name)
+    assert (status, reasons) == GOLDEN_REASONS[name]

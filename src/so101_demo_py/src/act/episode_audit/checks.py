@@ -254,8 +254,27 @@ def _canonical(value) -> bytes:
                       allow_nan=False).encode()
 
 
+_BLOCK = 1 << 20
+
+
+def _byte_length(path: Path) -> int:
+    """`len(path.read_bytes())`, counted block by block: the file is read in full but never held."""
+
+    total = 0
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(_BLOCK), b""):
+            total += len(block)
+    return total
+
+
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """`hashlib.sha256(path.read_bytes()).hexdigest()`, fed block by block."""
+
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(_BLOCK), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _reference_raw_ok(record, code: str) -> None:
@@ -896,15 +915,31 @@ def _audit_manifest_key(path: Path) -> tuple:
     return str(path), tree_signature(path.parent)
 
 
-def _parse_audit_lines(path: Path) -> list:
+def _parse_audit_lines_whole(path: Path) -> list:
     return [json.loads(line) for line in Path(path).read_text().splitlines()]
+
+
+def _parse_audit_lines(path: Path) -> list:
+    """`_parse_audit_lines_whole`, reading the file line by line (see `episode_qc._parse_stream_rows`): the same lines, the same
+    `json.loads`, and on any exception the original runs and raises what it raised."""
+
+    rows: list | None = []
+    try:
+        with Path(path).open() as stream:
+            for physical in stream:
+                rows.extend([json.loads(line) for line in physical.splitlines()])
+        return rows
+    except Exception:  # noqa: BLE001
+        pass
+    rows = None        # the partial rows are released before the original builds its own
+    return _parse_audit_lines_whole(path)
 
 
 def _records(path: Path, fields: frozenset, code: str, *,
              optional: frozenset = frozenset(),
              optional_any: tuple = ()) -> list:
     try:
-        rows = cached_lines(path, _parse_audit_lines)
+        rows = cached_lines(path, _parse_audit_lines, text_origin=True)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(code) from error
     # F3: alternative groups are options too, so the base requirement must not demand them

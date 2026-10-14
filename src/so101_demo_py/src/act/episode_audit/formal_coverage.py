@@ -68,7 +68,7 @@ def formal_coverage_failure(audit: Path):
 
 
 def _rows(audit: Path, name: str) -> list:
-    return cached_lines(audit / name, _parse_audit_lines)
+    return cached_lines(audit / name, _parse_audit_lines, text_origin=True)
 
 
 def _ns(seconds) -> int:

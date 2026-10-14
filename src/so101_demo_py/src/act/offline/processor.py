@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import gc
 import hashlib
 import json
 import os
@@ -178,6 +179,21 @@ def _write_json(path: Path, document: dict) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(staging, path)
+
+
+def release_memory() -> None:
+    """Give back what the replay and the seal no longer need, before the fresh-process QC starts.
+
+    The engine, its episode, the sources and the replay node reference each other, so they go with a collection, not with the last
+    name; the allocator is then asked to return the freed pages (the replay's churn leaves most of them as free space inside the heap).
+    Nothing the report or the QC reads lives in them."""
+    gc.collect()
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):   # not glibc: the collection above still ran
+        pass
 
 
 def run_independent_qc(episode_root, *, scope, inputs_manifest, teacher_manifest, output, ignore_scene_colors=False) -> dict:
@@ -367,6 +383,9 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     verdict, reasons_out = ("VALID" if rc == RC_VALID else "INVALID"), [item["reason"] for item in result["reasons"]]
     # the replay ends at the Teacher's terminal event plus the tail: what the bag holds beyond that was never played, by design
     report["bag"]["not_played"] = {topic: count - drained[topic] for topic, count in scan["counts"].items() if count != drained[topic]}
+    # the fresh-process QC runs next, next to this process: drop the replay's objects first
+    engine = episode = sources = node = None
+    release_memory()
     qc_began = _REAL["perf_counter"]()
     if verdict == "VALID":
         runner = qc_runner or (lambda root, **kw: run_independent_qc(root, ignore_scene_colors=ignore_scene_colors, **kw))

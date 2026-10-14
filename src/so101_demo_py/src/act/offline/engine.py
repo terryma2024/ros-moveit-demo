@@ -429,14 +429,7 @@ class OfflineEngine:
             self._close_episode()
             return
         if not self.replay_failed:
-            try:
-                # The adapter's retained samples are ordered dicts; the QC check wants plain dicts, as JSON gives it.
-                steps = [dict(sample) for sample in self.sources.physics_steps(self)]
-                check = self._reference_check(window=episode.capture.window, steps=steps, identity=episode.identity)
-                if check["status"] != "PASS":
-                    self.latch(check["reason"])
-            except Exception as error:
-                self.latch("RECORDER_REFERENCE_CHECK_FAILED: " + self._reason(error))
+            self._pre_seal_reference_check()
         self.require_teacher_events()
         if not self.stop_seen:
             self.latch("RECORDER_NORMAL_STOP_MISSING")
@@ -463,6 +456,24 @@ class OfflineEngine:
         self._seal_path = Path(episode.capture.recorder.root) / "seal.json"
         self._readback()
 
+    def _pre_seal_reference_check(self) -> None:
+        """The Teacher-reference check over the recording as it stands, before the seal.
+
+        It runs in a session of its own: the events it parses are about a gigabyte of Python objects and the file grows before the
+        seal reads it again (the recorder queue's last row), so that parse can never be reused. Nested inside the finalize session,
+        this one is a new top of the stack and is dropped, with the parse and the samples copied from it, before `episode.finish`.
+        """
+        episode = self.episode
+        with qc_session():
+            try:
+                # The adapter's retained samples are ordered dicts; the QC check wants plain dicts, as JSON gives it.
+                steps = [dict(sample) for sample in self.sources.physics_steps(self)]
+                check = self._reference_check(window=episode.capture.window, steps=steps, identity=episode.identity)
+                if check["status"] != "PASS":
+                    self.latch(check["reason"])
+            except Exception as error:
+                self.latch("RECORDER_REFERENCE_CHECK_FAILED: " + self._reason(error))
+
     def _close_episode(self) -> None:
         try:
             self.episode.close()
@@ -475,7 +486,7 @@ class OfflineEngine:
 
         from ..episode_assembly import episode_audit_pair
         from so101_demo.act.episode_audit.verification import verify_audit_manifest
-        from ..episode_qc import _raw_physics_samples, read_verified_rows
+        from ..episode_qc import _raw_physics_samples, read_verified_rows_sharing_strict
         from ..recorder import verify_episode_seal
 
         root = Path(self.episode.capture.recorder.root)
@@ -485,7 +496,7 @@ class OfflineEngine:
             manifest = verify_audit_manifest(audit_manifest)
             if self.replay_failed:
                 return
-            events = read_verified_rows(root / "audit", "events.jsonl")
+            events = read_verified_rows_sharing_strict(root / "audit", "events.jsonl")
             check = self._reference_check(window=manifest["window"], steps=_raw_physics_samples(events),
                                           identity=manifest["identity"])
             if check["status"] != "PASS":

@@ -324,6 +324,37 @@ def _physical_audit_key(episode_root, audit_manifest, scope):
     return (str(root), str(Path(audit_manifest).absolute()), tree_signature(root), file_signature(Path(scope).absolute()))
 
 
+def _read_original(path):
+    descriptor = os.open(_report_path(path), os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("original is not regular")
+        return stream.read()
+
+
+def _original_rows_whole(path):
+    return [json.loads(line) for line in _read_original(path).splitlines()]
+
+
+def _original_rows(path):
+    """`_original_rows_whole`, reading the verified original line by line (same open, same checks, same fallback on any exception).
+    A physical line ends in b"\n", so a b"\r\n" pair never straddles two of them and `bytes.splitlines` agrees with the whole file."""
+
+    rows: list | None = []
+    try:
+        descriptor = os.open(_report_path(path), os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError("original is not regular")
+            for physical in stream:
+                rows.extend([json.loads(line) for line in physical.splitlines()])
+        return rows
+    except Exception:  # noqa: BLE001 - the original reopens the file and raises what it raised
+        pass
+    rows = None
+    return _original_rows_whole(path)
+
+
 @session_memo(_physical_audit_key)
 def verify_episode_physical_audit(episode_root, audit_manifest, scope):
     """Re-read sealed originals for the selected publisher and bound Coordinator.
@@ -347,17 +378,12 @@ def verify_episode_physical_audit(episode_root, audit_manifest, scope):
                 or not _identity_ok(manifest["identity"], formal=True)):
             raise ValueError("full observed window/lease absent")
 
-        def read_original(path):
-            descriptor = os.open(_report_path(path), os.O_RDONLY | os.O_NOFOLLOW)
-            with os.fdopen(descriptor, "rb") as stream:
-                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                    raise ValueError("original is not regular")
-                return stream.read()
+        read_original = _read_original
 
         def original_rows(path):
             # strict: a blank line is an error here. A file that parses is the same list `read_verified_rows` would give, so the
             # session shares it (the events are parsed once for the whole QC).
-            rows = cached_lines(path, lambda target: [json.loads(line) for line in read_original(target).splitlines()])
+            rows = cached_lines(path, _original_rows)
             session = active()
             if session is not None:
                 session.cache.setdefault(("lines", "lenient", file_signature(path)), rows)
@@ -756,8 +782,40 @@ def read_verified_rows(root: Path, stream: str) -> list[dict]:
     return cached_lines(path, _parse_stream_rows, "lenient")
 
 
-def _parse_stream_rows(path: Path) -> list[dict]:
+def read_verified_rows_sharing_strict(root: Path, stream: str) -> list[dict]:
+    """`read_verified_rows`, taking the strict text parse of the same file signature when this session already holds one.
+
+    Only the offline engine's readback uses it, right after `verify_audit_manifest` parsed the stream strictly in the same session;
+    see `qc_session.cached_lines` for why the rows are equal. The independent QC keeps `read_verified_rows`."""
+
+    path = Path(root) / stream
+    if not path.is_file():
+        return []
+    return cached_lines(path, _parse_stream_rows, "lenient", reuse_text_strict=True)
+
+
+def _parse_stream_rows_whole(path: Path) -> list[dict]:
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+
+
+def _parse_stream_rows(path: Path) -> list[dict]:
+    """`_parse_stream_rows_whole`, reading the file line by line so the whole text and a list of its lines are never held.
+
+    `Path.open()` has `read_text`'s defaults (encoding, errors, universal newlines), so the text is the same; it is a series of
+    physical lines each ending in "\n" (the last one possibly not), and `str.splitlines` over the whole text is the concatenation of
+    `splitlines` over those lines. Any exception, including a decode error that would name a chunk-relative position, discards the
+    partial result and runs the original, so the failure path is the original's."""
+
+    rows: list | None = []
+    try:
+        with Path(path).open() as stream:
+            for physical in stream:
+                rows.extend([json.loads(line) for line in physical.splitlines() if line.strip()])
+        return rows
+    except Exception:  # noqa: BLE001 - whatever went wrong, the original reads the file and raises what it raised
+        pass
+    rows = None        # the partial rows are released before the original builds its own
+    return _parse_stream_rows_whole(path)
 
 
 def _manifest_digest(path: Path) -> str:

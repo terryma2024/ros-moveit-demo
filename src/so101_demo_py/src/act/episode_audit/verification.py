@@ -27,6 +27,7 @@ from so101_demo.act.episode_audit.checks import (
     _WINDOW_FIELDS,
     MANIFEST_KIND,
     _audit_manifest_key,
+    _byte_length,
     _capture_window_matches_observed,
     _event_identity_ok,
     _hex64,
@@ -76,8 +77,8 @@ def verify_audit_manifest(path: Path) -> dict:
         if (not isinstance(entry, dict) or set(entry) != {"path", "size", "sha256"}
                 or entry["path"] != name or not target.is_file() or target.is_symlink()):
             raise ValueError("AUDIT_MANIFEST_INVENTORY_INVALID")
-        payload = target.read_bytes()
-        if len(payload) != entry["size"] or _sha256(target) != entry["sha256"]:
+        # two separate passes, as before: the length of what is read, then its digest (neither holds the file)
+        if _byte_length(target) != entry["size"] or _sha256(target) != entry["sha256"]:
             # a changed raw reference, a rewritten stream or a deleted file lands here
             raise ValueError("AUDIT_HASH_MISMATCH")
     formal_window = json.loads((audit / "source.json").read_bytes()).get("mode") == "formal"

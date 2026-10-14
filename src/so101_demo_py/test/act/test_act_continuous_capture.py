@@ -9,7 +9,9 @@ run rather than disappearing from the grid.
 
 from __future__ import annotations
 
+import gc
 from pathlib import Path
+import weakref
 import numpy as np
 import pytest
 
@@ -849,3 +851,59 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     print("EPISODE QC reference check:", check["status"], check["reason"])
     assert check["status"] == "FAIL" and check["reason"] == "TEACHER_REFERENCE_MANIFEST_MISSING"
     assert not hasattr(episode_qc, "endpoint_qc_document")
+
+
+class FreshPixelSampler(FakeSampler):
+    """A sampler that, like the production synchronizer, hands out new arrays for every row."""
+
+    def __init__(self, sink):
+        super().__init__()
+        self.sink = sink
+
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        observation, audit = super().sample_with_audit(session_id, attempt_id, at_s)
+        observation["head"] = ZERO.copy()
+        observation["wrist"] = ZERO.copy()
+        self.sink.extend((weakref.ref(observation["head"]), weakref.ref(observation["wrist"])))
+        return observation, audit
+
+
+class DiscardingRecorder:
+    """Accepts rows without keeping them, so only the capture can still hold a row's pixels."""
+
+    def __init__(self):
+        self.count = 0
+
+    def append(self, observation, action, audit):
+        self.count += 1
+
+
+def test_written_rows_do_not_keep_their_camera_pixels_alive():
+    refs = []
+    capture = ContinuousEpisodeCapture(
+        recorder=DiscardingRecorder(), sampler=FreshPixelSampler(refs), guard=AcquisitionGuard(),
+        physical_audit=physical_audit, deadline_s=120.0, monotonic=lambda: 0.0)
+    minter = AcquisitionMinter()
+    start(capture)
+    stamps = [round(1.0 + 0.1 * index, 6) for index in range(8)]
+    frames_at(capture, minter, stamps)
+    for stamp in stamps[1:]:
+        capture.on_reference(reference(stamp))
+    written = capture.drain()
+    assert written >= 3 and len(refs) >= 2 * written
+    gc.collect()
+    assert [ref for ref in refs[:2 * written] if ref() is not None] == []
+
+
+def test_label_cutoff_is_the_largest_written_row_time():
+    capture, minter = build()
+    assert capture.label_cutoff_s == 0.0
+    assert capture.window["label_cutoff_s"] is None
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2, 1.3])
+    for target in (1.1, 1.2, 1.3):
+        capture.on_reference(reference(target))
+    assert capture.drain() == 2
+    times = [row["observation"]["sim_time_s"] for row in capture.recorder.rows]
+    assert capture.label_cutoff_s == max(times) == 1.1
+    assert capture.window["label_cutoff_s"] == 1.1

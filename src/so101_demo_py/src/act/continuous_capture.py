@@ -111,7 +111,9 @@ class ContinuousEpisodeCapture:
         self._acquisition_audit_capacity = 2 * frame_capacity
         self._references: dict = {}
         self._pending: deque = deque()
-        self._completed: list = []
+        # the largest sim time among written rows: the only fact later code reads from a written row. The rows
+        # themselves (two full camera frames each) are not kept; the recorder and the audit already hold them
+        self._label_cutoff_s = None
         self._events: list = []
         self._session_id = None
         self._attempt_id = None
@@ -412,7 +414,7 @@ class ContinuousEpisodeCapture:
 
     @property
     def label_cutoff_s(self) -> float:
-        return max((row["observation"]["sim_time_s"] for row in self._completed), default=0.0)
+        return 0.0 if self._label_cutoff_s is None else self._label_cutoff_s
 
     # -- internals ---------------------------------------------------------
 
@@ -692,7 +694,9 @@ class ContinuousEpisodeCapture:
             row["reference"] = entry
             row["labelled"] = True
             self._pending.popleft()
-            self._completed.append(row)
+            sim_time_s = row["observation"]["sim_time_s"]
+            self._label_cutoff_s = (sim_time_s if self._label_cutoff_s is None
+                                    else max(self._label_cutoff_s, sim_time_s))
             self._written += 1
             if self.audit is not None and entry.get("sequence") is not None:
                 # the seal requires every recorded row to be bound to the acquisitions it consumed, and that binding
