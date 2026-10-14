@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3652
+latest_checkpoint: CP-3653
 next_experiment: NONE until the eight-shard data loss under load is resolved or the human changes the qualification shape.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3653 — Superseded historical evidence deleted by human decision; 345 ledger citations now point at deleted paths
+
+- Human decisions of 2026-10-14: "历史证据也都一并清理了吧", then, after the coordinator proposed a scope, "历史证据的清理范围，按你的建议删除" - delete failed runs, runs on the superseded per-worker-domain topology, old gate directories, old image build contexts and scratch; keep everything in use and the most recent successful reference run of each kind.
+- Plan and execution by a Sonnet agent after EXP-591 ended. Code check first: no current code path dereferences the run roots, inputs directories, campaign configs or gate paths recorded in REG/unified/intents.sqlite3 (admission reads paths only from a new start request; slot exclusivity reads only the instance launcher of old payloads; the cleanup check reads a run's launch registry only for a non-terminal campaign). Before each deletion: no container, collection, instance, pytest or colcon process; no open handle on the entry. Deleted 1005 entries, about 891 GB by apparent size; free space on /data 255 GB to 1237 GB. Every step is in R/evidence-deletion-20261014/record.jsonl with the plan (plan.json, plan.md).
+- Deleted include the run roots and prep directories of EXP-576 to EXP-583, EXP-585 and EXP-588 to EXP-590, the old-topology successful runs EXP-581 and EXP-582 (earlier described as kept for history; deleted under this decision), superseded probe roots, 21 gate directories, 40 image build contexts and the test and analysis scratch.
+- Kept: REG/unified; calibration, models, the frozen input sets; the current gate dfe91fc0a29b, the runner gate 9cc0068b8592 and the three reference gates; the current image builds and those cited by the reference runs; R/run-tools, R/fast-gate and the import directories; all of R/run-logs (container logs, CLI logs and sampler data of the deleted runs stay here); records and designs directly under R; the scene lists act-w8-scenes-20261014T010200Z; the reference runs EXP-584 (act-w1-20261013T095500Z), EXP-586 (act-native-20261013T144822Z), EXP-587 (act-w2-20261013T165700Z) with their inputs; EXP-591 (act-w8-20261014T111500Z) with its inputs; the memory measurement scratch of the readback and offline processing work; every top-level entry of the evidence root not belonging to this campaign.
+- Ledger citations: 239 deleted entries are cited 345 times in earlier checkpoints and experiment entries; they are listed per entry in R/evidence-deletion-20261014/ledger-citations-to-deleted-paths.json. Those citations are not edited; this checkpoint is the annotation that the paths no longer exist. Conclusions recorded from them stand as recorded; the underlying files cannot be re-read.
 
 ## CP-3652 — EXP-591 VALID failure: memory held (19 GiB peak, no OOM) but only 4 of 19 VALID; one execution fault; lease released under the standing authorisation
 
