@@ -207,6 +207,46 @@ def test_a_read_that_did_not_overlap_the_apply_still_fails_even_with_the_matchin
         source.ready(at_s)
 
 
+def _applied_before_read(values, geometry, *, apply_end_before_read_ns=11_000_000, readback_after_read_begin_ns=43_000_000):
+    """A synthetic admitted association whose apply FINISHED before the row's planning read began and whose own read-back (the
+    association's query) began only after it: the association is not governing yet, but the scene already shows the apply."""
+    read = values["planning"]
+    begin = read["request_ros_clock"]["begin_monotonic_ns"]
+    record = {"request_ros_clock": {"begin_monotonic_ns": begin - apply_end_before_read_ns - 20_000_000},
+              "response_ros_clock": {"end_monotonic_ns": begin - apply_end_before_read_ns}}
+    query = {"record": {"request_ros_clock": {"begin_monotonic_ns": begin + readback_after_read_begin_ns}}}
+    return {"association_id": "next-association", "apply": {"record": record}, "query": query,
+            "receipt": {"geometry": geometry}}
+
+
+def test_a_read_after_the_apply_but_before_its_readback_may_show_exactly_that_scene(frozen_scene):
+    """EXP-593: the read began 11 ms after the detach apply finished and 43 ms before the Teacher's own read-back of it."""
+    source, values, at_s = provider(frozen_scene)
+    geometry, _ = _changed_read_geometry(values)
+    governing = source.scene_association_source(at_s)["association"]["association_id"]
+    source.concurrent_apply_source = lambda read: ([_applied_before_read(values, geometry)], False)
+    assert source.ready(at_s) is True
+    assert source(at_s)["planning_scene"]["association_id"] == governing
+
+
+def test_a_read_after_the_apply_before_its_readback_with_any_other_geometry_still_fails(frozen_scene):
+    source, values, at_s = provider(frozen_scene)
+    _changed_read_geometry(values)
+    wrong = _applied_before_read(values, {"not": "the read's scene"})
+    source.concurrent_apply_source = lambda read: ([wrong], False)
+    with pytest.raises(ValueError, match="LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID"):
+        source.ready(at_s)
+
+
+def test_a_read_that_began_after_the_readback_of_the_apply_still_fails_with_the_matching_geometry(frozen_scene):
+    source, values, at_s = provider(frozen_scene)
+    geometry, _ = _changed_read_geometry(values)
+    late = _applied_before_read(values, geometry, readback_after_read_begin_ns=-1_000_000)
+    source.concurrent_apply_source = lambda read: ([late], False)
+    with pytest.raises(ValueError, match="LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID"):
+        source.ready(at_s)
+
+
 def test_a_concurrent_apply_whose_association_is_not_built_yet_makes_the_row_wait(frozen_scene):
     source, values, at_s = provider(frozen_scene)
     _changed_read_geometry(values)
@@ -234,6 +274,55 @@ def test_the_concurrency_rule_itself():
     assert not concurrent_apply_geometry_matches(read, canonical({"x": 2}), "a", [initial, next_association])
     assert not concurrent_apply_geometry_matches(read, canonical({"x": 1}), "b", [initial, next_association]), "not itself"
     assert not concurrent_apply_geometry_matches(call(3000, 3100), canonical({"x": 1}), "a", [initial, next_association])
+
+
+def test_the_rule_for_a_read_between_an_apply_and_its_readback():
+    from so101_demo.act.scene_association import canonical, concurrent_apply_geometry_matches, read_follows_apply_before_readback
+
+    def read_at(begin):
+        return {"request_ros_clock": {"begin_monotonic_ns": begin}, "response_ros_clock": {"end_monotonic_ns": begin + 5}}
+
+    def association(identifier, apply_end, readback_begin, geometry):
+        return {"association_id": identifier, "receipt": {"geometry": geometry},
+                "apply": {"record": {"request_ros_clock": {"begin_monotonic_ns": apply_end - 20},
+                                     "response_ros_clock": {"end_monotonic_ns": apply_end}}},
+                "query": {"record": {"request_ros_clock": {"begin_monotonic_ns": readback_begin}}}}
+
+    initial = {"association_id": "a", "apply": None, "receipt": {"geometry": {"x": 0}}}
+    detach = association("b", 1000, 1100, {"x": 1})
+    assert read_follows_apply_before_readback(read_at(1011), detach)
+    assert read_follows_apply_before_readback(read_at(1000), detach), "touching the end of the apply counts"
+    assert not read_follows_apply_before_readback(read_at(999), detach), "that read overlaps the apply instead"
+    assert not read_follows_apply_before_readback(read_at(1100), detach), "the read-back began: the association governs"
+    assert not read_follows_apply_before_readback(read_at(1500), detach)
+    assert not read_follows_apply_before_readback(read_at(1011), initial)
+    assert concurrent_apply_geometry_matches(read_at(1011), canonical({"x": 1}), "a", [initial, detach])
+    assert not concurrent_apply_geometry_matches(read_at(1011), canonical({"x": 2}), "a", [initial, detach])
+    assert not concurrent_apply_geometry_matches(read_at(1011), canonical({"x": 1}), "b", [initial, detach]), "not itself"
+    assert not concurrent_apply_geometry_matches(read_at(1100), canonical({"x": 1}), "a", [initial, detach])
+
+
+def test_the_offline_hook_offers_the_association_of_an_apply_that_finished_before_the_read_and_is_not_read_back_yet():
+    from types import SimpleNamespace
+
+    from so101_demo.act.offline import sources
+
+    cls = next(value for value in vars(sources).values() if isinstance(value, type) and hasattr(value, "_concurrent_apply_for"))
+    host = object.__new__(cls)
+    applied = {"call_id": "apply-a", "service": "/apply_planning_scene", "request_ros_clock": {"begin_monotonic_ns": 980},
+               "response_ros_clock": {"end_monotonic_ns": 1000}, "response": {"success": True}}
+    document = {"association_id": "A", "apply": {"record": applied},
+                "query": {"record": {"request_ros_clock": {"begin_monotonic_ns": 1100}}}}
+    host.tracker = SimpleNamespace(records=[applied])
+    host.associations = SimpleNamespace(history=[{"association": document}])
+
+    def read_at(begin):
+        return {"request_ros_clock": {"begin_monotonic_ns": begin}, "response_ros_clock": {"end_monotonic_ns": begin + 5}}
+
+    documents, _pending = host._concurrent_apply_for(read_at(1011))
+    assert [item["association_id"] for item in documents] == ["A"]
+    documents, _pending = host._concurrent_apply_for(read_at(1100))
+    assert documents == []
 
 
 def test_the_offline_hook_finds_the_teachers_overlapping_applies_in_the_tracker():

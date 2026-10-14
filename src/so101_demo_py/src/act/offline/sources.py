@@ -335,7 +335,7 @@ class OfflineRosSources:
     def _concurrent_apply_for(self, read):
         """(admitted association documents whose apply overlapped `read`, True when an overlapping apply has no admitted
         association yet): a read concurrent with an apply may show the scene before or after it."""
-        from ...act.scene_association import association_anchor, read_overlaps_apply
+        from ...act.scene_association import association_anchor, read_follows_apply_before_readback, read_overlaps_apply
 
         # the Teacher's own applies, in the tracker (the planning calls hold the Recorder's reads only)
         overlapping = {call["call_id"] for call in list(self.tracker.records)
@@ -346,6 +346,11 @@ class OfflineRosSources:
         documents = [bound["association"] for bound in self.associations.history
                      if association_anchor(bound["association"])["call_id"] in overlapping]
         known = {association_anchor(document)["call_id"] for document in documents}
+        # An apply that finished before the read but whose own read-back began after it: its association is not governing yet while
+        # the scene already is its result. Offered with the overlapping ones; the rule accepts only exactly that geometry.
+        documents += [bound["association"] for bound in self.associations.history
+                      if association_anchor(bound["association"])["call_id"] not in overlapping
+                      and read_follows_apply_before_readback(read, bound["association"])]
         # An apply concurrent with this read is only known once its Teacher event has been replayed (the event is published when
         # the apply returns, after the read did): until the replay has moved a settle time past the read, no overlap is not yet proof.
         unseen = time.monotonic_ns() < read["response_ros_clock"]["end_monotonic_ns"] + self.APPLY_SETTLE_NS

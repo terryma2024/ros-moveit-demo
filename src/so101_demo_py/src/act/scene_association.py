@@ -113,15 +113,29 @@ def read_overlaps_apply(read, apply_record):
             and apply_record["response_ros_clock"]["end_monotonic_ns"] >= read["request_ros_clock"]["begin_monotonic_ns"])
 
 
-def concurrent_apply_geometry_matches(read, read_geometry, governing_id, associations):
-    """A read that ran concurrently with an association's apply may legitimately show either the old or the new scene.
+def read_follows_apply_before_readback(read, association):
+    """A `/get_planning_scene` call began after the association's Teacher apply finished and before the Teacher's own read-back of that
+    apply began (all on the one monotonic clock). Until that read-back the association is not the governing one, yet the scene
+    already is the apply's result."""
+    apply = association.get("apply")
+    query = association.get("query")
+    if not isinstance(apply, dict) or not isinstance(query, dict):
+        return False
+    begin = read["request_ros_clock"]["begin_monotonic_ns"]
+    return (apply["record"]["response_ros_clock"]["end_monotonic_ns"] <= begin
+            < query["record"]["request_ros_clock"]["begin_monotonic_ns"])
 
-    True when `read` overlaps the apply of an association other than `governing_id` and `read_geometry` (canonical normalized
-    geometry) is EXACTLY that association's receipt geometry. Anything else is still a mismatch."""
+
+def concurrent_apply_geometry_matches(read, read_geometry, governing_id, associations):
+    """A read next to an association's apply may legitimately show the new scene before that association governs.
+
+    True when `read` overlaps the apply of an association other than `governing_id`, or began after that apply finished and before
+    the association's own read-back (`read_follows_apply_before_readback`), and `read_geometry` (canonical normalized geometry)
+    is EXACTLY that association's receipt geometry. Anything else is still a mismatch."""
     for other in associations:
         if other["association_id"] == governing_id or other["apply"] is None:
             continue
-        if (read_overlaps_apply(read, association_anchor(other))
+        if ((read_overlaps_apply(read, association_anchor(other)) or read_follows_apply_before_readback(read, other))
                 and canonical(other["receipt"]["geometry"]) == read_geometry):
             return True
     return False
