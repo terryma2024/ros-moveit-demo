@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: dfe91fc0a29b8d6c9126f92fe3c5d5a048d47230
+current_commit: 3654ec80fd2314c6ecdf4ed09052f6c9f2835307
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,58 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3653
-next_experiment: NONE until the eight-shard data loss under load is resolved or the human changes the qualification shape.
+latest_checkpoint: CP-3654
+next_experiment: EXP-592 (PLANNED): one container, eight scenes, with the queued controller-state overlay.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3654 — Controller-state loss mechanism supported; queued publishing overlay and paused-frame retry; gate PASS; EXP-592 planned
+
+- Human answer of 2026-10-14 "做第 4 项": verify the mechanism from the EXP-591 evidence first. Read-only analysis (Sonnet), verdict SUPPORTED (strong), not proven: the stock joint_trajectory_controller 4.42.1 publishes state with realtime_tools try_publish, a single-slot hand-off that drops the message when the publishing thread has not taken the previous one (installed header realtime_publisher.hpp 178-191; upstream source 580, 1008, 1381). Over 2050 recording seconds of EXP-591 the 645 controller-state holes rose from 0.03 per second at host CPU pressure under 1 percent to 1.15 above 16 percent, and with the run delay of the ros2_control_node threads; 622 of 645 are single ticks; the message before a hole arrives a median 1.97 periods after its predecessor and the one after arrives on schedule, the signature of a skipped hand-off, not of an unproduced tick or a transport drop. The queued robot_contacts publisher lost 1 in 981k. The EXP-591 execution fault (final transaction evidence is not paused) occurred at low load; candidate cause a paused evidence frame published once through a try-lock and never retried.
+- Human answer "改为队列发布并修暂停帧". Commit `55885a936`: ros2_controllers 4.42.1 vendored under third_party/ros2_controllers (pinned commit, upstream files pinned by hash) overriding the apt packages; joint_trajectory_controller and joint_state_broadcaster publish state through a preallocated lock-free queue drained in order by a dedicated thread, same topic, QoS and content, overflow counted and logged, never silent; counters for enqueued, published, overflowed and the messages try_publish would have refused, logged every 5 s. Unit tests with a stalled publishing thread - controller state 1500 of 1500 delivered (stock 259), joint states 1500 of 1500 (stock lost 1410). The simulator evidence plugin retries a paused evidence or scene frame every cycle until it is published once. Running scene-state frames still single-slot. Commit `3654ec80f`: three new closed provenance roles for the overlay; the shard image provenance requires the overlay packages.
+- Gate tooling: R/fast-gate/gate_build_v2.zsh builds the overlay; the upstream controller suite runs serially on its own ROS domain under a skip-when-unchanged baseline rule; the local overlay tests always run.
+- Gate on 3654ec80f, R/gates/3654ec80fd23, serial configuration: build rc 0, 247 s; so101_demo_py rc 0, 391 s; colcon stage rc 0, test-result 3032 tests, 0 errors, 0 failures, 60 skipped, 744 s (the upstream controller suite ran in full); total 1382 s. PASSED. Images: shard R/image-build-20261014T140642Z (396.5 s), inference R/image-build-20261014T140647Z (66.3 s).
+- Inputs under the prep directory act-w1-inputs-20261014T143000Z: validation 42 PASS, 2 informational, 1 pending (the candidates file). Read back in the shard image without GPU: ros2 pkg prefix resolves both controllers to /act/install, the merged libraries contain the queued publisher log string and the apt copies do not; the Host gate install resolves likewise.
+
+```yaml
+experiment_id: EXP-592
+status: PLANNED
+prior_experiment: EXP-584 (VALID; one container, eight of eight)
+hypothesis: With the queued controller-state publishing overlay the stack behaves as before in one container - eight of eight VALID - and the counters show what the stock publisher would have dropped.
+prediction: Each controller's queued state publisher logs enqueued equal to published with overflowed 0; would_have_skipped is small but non-zero at one shard; no controller-state source gaps; no change in Teacher behaviour; eight of eight VALID with QC PASS; stop and settle by design.
+single_variable: The controller overlay and the paused-frame retry relative to EXP-584, plus all code since 983c1d7b5 (memory work, scheduling parameters without values, OOM adjustment, coverage T4 and T5, provenance roles) as acknowledged further differences.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Enforced by the run script - as the eight-shard scripts, for commit 3654ec80f, one worker, sampler before the CLI.
+  - Discovery lists twelve roles READY with one candidate each.
+success_criteria:
+  - As EXP-576; plus the queued publisher counters present in the shard log.
+failure_criteria:
+  - Any execution fault with its stage reached; a wave verification refusal; an unproven stop; a refused settle; an overflow of a queued state publisher.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 3654ec80f; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 3654ec80fd2314c6ecdf4ed09052f6c9f2835307 (images and Host gate install)
+  install_overlay: /act/install in inference image sha256:2c1e1b3a52ea841ba968603c1a65511f280a5dba35e262e7ffe299946050f511 and shard image sha256:2f32fba0f341de6e64b2270c8742ac38caa2e761fb4b5f72267069ad2ca50316; Host R/gates/3654ec80fd23/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference and campaign_shard; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel; the sampler on the Host
+  ros_domain_id: 181 in the container
+  gz_partition: the shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w1-inputs-20261014T143000Z/inspect.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w1-inputs-20261014T143000Z/run-w1.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3653 — Superseded historical evidence deleted by human decision; 345 ledger citations now point at deleted paths
 
