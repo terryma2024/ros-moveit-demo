@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3677
-next_experiment: EXP-602 (PLANNED): two-phase debug run repeated after the stop-proof retry fix.
+latest_checkpoint: CP-3678
+next_experiment: EXP-603 (to be planned) after the release-marker / manifest fault is fixed.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3678 — EXP-602 VALID failure: Teacher release-marker error left an unverifiable receipt; phase 2 never started
+
+- Stops all proven. One Teacher fault (RELEASE_MARKER_OBSERVATION_FAILED, manifest written but unverifiable) invalidated the wave before phase 2.
+- Diagnosis and fix handed to Sonnet.
 
 ## CP-3677 — Stop-proof inspect retried; gate PASS; EXP-602 planned
 
@@ -90,7 +95,7 @@ next_experiment: EXP-602 (PLANNED): two-phase debug run repeated after the stop-
 
 ```yaml
 experiment_id: EXP-602
-status: PLANNED
+status: VALID
 prior_experiment: EXP-601 (VALID failure; phase 1 complete, stop proof failed on inspect timeouts)
 hypothesis: With the stop proof tolerating a transiently slow daemon, the two-phase run completes - phase 1, syncfs, phase 2 on processor containers, combined records - and gives VALID at or above EXP-599's 13 of 16.
 prediction:
@@ -116,15 +121,23 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T151828Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T151828Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run 15:20:23Z to 15:31:50Z. Phase 1: 15 collected as PENDING_QC.
+  - wave-0-w00-dbg-01 faulted with CONTAINER_INSTANCE_REPORTED_FAULT TEACHER_RESULT_UNVERIFIED DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE.
+    - The Teacher child printed status=ERROR failure=RELEASE_MARKER_OBSERVATION_FAILED, with its manifest path, at 15:27:23Z, after the detach sync at 15:27:18Z.
+    - Its shard's second scene (dbg-00 was the first) never ran.
+  - CLI CAMPAIGN_RUN_FAILED CONTAINER_WAVE_COMMIT_READBACK_INVALID; phase 2 never started.
+  - campaign-cleanup.json CAMPAIGN_RUN_INTERRUPTED terminated true; every stop proven; store IDLE afterwards.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The stop-proof retry fix holds: no unconfirmed stop.
+  - A Teacher error with a written manifest was not classified as a Teacher result, and the fault invalidated the whole wave before phase 2. Cause under analysis.
+conclusion: VALID failure. Phase-1 fault on a Teacher release-marker error; no data verdicts.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T151828Z (host/wave-0/task-journal, wave-0/w00/g1/output/tasks/wave-0-w00-dbg-01)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T151828Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp602 and exp602-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
