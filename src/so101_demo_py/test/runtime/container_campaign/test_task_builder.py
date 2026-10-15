@@ -799,7 +799,10 @@ from act_result_teacher import OUTCOMES,write_manifest
 from parallel_worker_runtime_support import _write_numeric
 
 SERIAL=itertools.count(1)
-SLEEP=(sys.executable,'-c','import time\ntime.sleep(60)')
+# A non-Python helper: a Python child that receives SIGINT while the interpreter is still importing swallows it ("Exception
+# ignored ... KeyboardInterrupt") and then sleeps through the whole interrupt timeout, so under CPU load the stop outlasted the
+# revocation wait and cleanup was (correctly) reported unconfirmed. `sleep` has the default SIGINT disposition from exec on.
+SLEEP=(shutil.which('sleep') or '/bin/sleep','60')
 
 
 def _popen_with_default_sigint(argv,**kwargs):
