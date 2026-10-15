@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3673
+latest_checkpoint: CP-3674
 next_experiment: NONE until the human confirms the two-phase implementation plan.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3674 — Two-phase collection plan confirmed; implementation started
+
+- Human answer "确认执行" to the plan docs/superpowers/plans/2026-10-15-so101-act-two-phase-collection-implementation.md:
+  - 11 tasks and two checkpoints;
+  - Sonnet implements, Opus reviews;
+  - design docs/superpowers/specs/2026-10-15-so101-act-two-phase-collection-design.md, status set to CONFIRMED.
+- Tasks 1 and 2 (phase-1 seal with PENDING_QC and the recording receipt; phase-1 host verification and syncfs) handed to one Sonnet writer.
 
 ## CP-3673 — Pause-service wait retried; shard image can host the processor; two-phase plan awaits confirmation
 

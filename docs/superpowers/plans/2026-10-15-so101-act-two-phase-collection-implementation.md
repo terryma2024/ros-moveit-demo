@@ -1,6 +1,6 @@
 # SO-101 ACT two-phase collection: implementation plan
 
-The design is in `docs/superpowers/specs/2026-10-15-so101-act-two-phase-collection-design.md`. Nothing here may be executed before the human confirms this plan.
+The design is in `docs/superpowers/specs/2026-10-15-so101-act-two-phase-collection-design.md`. Confirmed by the human on 2026-10-15 ("确认执行").
 
 ## Execution rules
 

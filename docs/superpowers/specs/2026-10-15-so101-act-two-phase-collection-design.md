@@ -1,6 +1,6 @@
 # SO-101 ACT two-phase collection: record everything first, process afterwards
 
-Status: DRAFT for human confirmation. Nothing here is implemented.
+Status: CONFIRMED by the human on 2026-10-15 ("确认执行"); implementation in progress.
 
 ## Why
 
