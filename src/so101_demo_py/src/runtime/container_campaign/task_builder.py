@@ -652,6 +652,15 @@ def _data_verdict(facts,reason):
         return False
 
 
+def _receipt_written(facts):
+    try:
+        receipt=facts[0]['recording_receipt']
+        return (type(receipt) is dict and type(receipt['sha256']) is str and len(receipt['sha256'])==64
+                and type(receipt['files']) is int and receipt['files']>0)
+    except (KeyError,TypeError,IndexError):
+        return False
+
+
 def classify_task_fault(decision,facts):
     """None for a business result (the task succeeded, even if the cup was dropped or the data is invalid), else the fault code.
 
@@ -669,6 +678,10 @@ def classify_task_fault(decision,facts):
         return ('TEACHER_RESULT_UNVERIFIED: '+reason)[:200]
     if decision.act_data_status=='VALID':
         return None
+    if decision.act_data_status=='PENDING_QC':
+        # Phase 1 ends here: the Teacher result is final and the data waits for the processor. Only a bag bound by a written
+        # recording receipt is a business result; without that fact the processor would have nothing to trust.
+        return None if _receipt_written(facts) else 'DATA_PIPELINE_FAULT: PENDING_QC without a recording receipt'
     if (reason=='DYNAMIC_TARGET_UNREACHABLE' and decision.act_data_status=='INVALID'
             and decision.teacher_execution_status=='FAILED' and decision.teacher_task_result=='UNCONFIRMED'
             and decision.physical_action_proven_absent is True):

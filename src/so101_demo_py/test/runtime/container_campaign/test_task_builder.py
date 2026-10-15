@@ -567,7 +567,7 @@ def offline_facts(tmp_path,*,processes=None,pilot=None,deadline_s=None,skip=None
     tmp_path.mkdir(parents=True,exist_ok=True)
     collection,point,_clock=collection_for(tmp_path,processes=processes,pilot=pilot or pilot_factory(),**extra)
     collection.start_before_teacher()
-    outcome=collection.finish(lease=LEASE,skip_processing=skip,deadline_s=deadline_s)
+    outcome=collection.finish_inline(lease=LEASE,skip_processing=skip,deadline_s=deadline_s)
     facts=dict(outcome.facts,act_data_status=outcome.data_status)
     return outcome,(facts,outcome.reason)
 
@@ -705,6 +705,37 @@ def test_classification_fails_closed_without_matching_facts(tmp_path):
     assert type(builder().classify_task_fault(object(),facts)) is str
 
 
+def phase1_facts(tmp_path,*,receipt=True):
+    """Facts and reason from the real phase-1 `OfflineCollection.finish()`: PENDING_QC and a recording receipt, no processor."""
+    from test_offline_recording_switch import LEASE,collection_for
+    from test_phase1_pending_seal import _phase1_files
+    tmp_path.mkdir(parents=True,exist_ok=True)
+    collection,point,_clock=collection_for(tmp_path)
+    collection.start_before_teacher()
+    _phase1_files(tmp_path,point)
+    outcome=collection.finish(lease=LEASE)
+    facts=dict(outcome.facts,act_data_status=outcome.data_status)
+    if not receipt:
+        facts.pop('recording_receipt')
+    return outcome,(facts,outcome.reason)
+
+
+def test_pending_qc_with_a_recording_receipt_is_a_business_result_whatever_the_teacher_said(tmp_path):
+    outcome,facts=phase1_facts(tmp_path)
+    assert outcome.data_status=='PENDING_QC'
+    for status,execution,result in (('PASSED','COMPLETED','PASS'),('FAILED','COMPLETED','FAIL'),
+                                    ('FAILED','DEADLINE','UNCONFIRMED'),('FAILED','STOPPED_SAFETY','UNCONFIRMED'),
+                                    ('INDETERMINATE','COMPLETED','UNCONFIRMED')):
+        decision=teacher_decision(outcome,status=status,execution=execution,result=result)
+        assert builder().classify_task_fault(decision,facts) is None,(execution,result)
+
+
+def test_pending_qc_without_the_recording_receipt_fact_is_an_execution_fault(tmp_path):
+    outcome,facts=phase1_facts(tmp_path,receipt=False)
+    assert type(builder().classify_task_fault(teacher_decision(outcome),facts)) is str
+    assert type(builder().classify_task_fault(teacher_decision(outcome),None)) is str
+
+
 def perception_decision(disposition='FAILED',*,stopped=True,model_error=False):
     from so101_demo.parallel_batch.act_attempt import ActPerceptionDecision,ActPerceptionTerminal
     from so101_demo.parallel_batch.act_inference import ActInferenceRequest
@@ -812,9 +843,10 @@ class FlowGroup(WorkerOwnedProcessTree):
 
 class LoggedPilot(FakePilot):
     events=None
+    rig=None
 
     def finish(self):
-        LoggedPilot.events.append(('bag_closed',))
+        LoggedPilot.rig.stage('bag_closed')
         return super().finish()
 
 
@@ -822,7 +854,7 @@ class Rig:
     """One task wired to the doubles above. `hooks` maps a stage name to a callable run when that stage is reached."""
 
     def __init__(self,flow,monkeypatch,*,teacher='FAILED',processor=None,manifest=True,perception='admit',cancel=True,
-                 confirm=True,hooks=None,tree=None,build=True,terminal=('FAILED','PERCEPTION_NO_POSE','NOT_DETECTED'),**seams):
+                 confirm=True,hooks=None,tree=None,build=True,pilot_facts=None,terminal=('FAILED','PERCEPTION_NO_POSE','NOT_DETECTED'),**seams):
         self.flow,self.events,self.hooks=flow,[],dict(hooks or {})
         self.teacher,self.manifest,self.perception_mode,self.terminal=teacher,manifest,perception,terminal
         self.cancel_calls,self.confirm_calls,self.leases,self.groups=[],[],{},[]
@@ -835,14 +867,13 @@ class Rig:
         tree=dict(tree or {})
         session=self.session=flow.spec['simulation_session_id']
         LoggedPilot.events=self.events
-        monkeypatch.setattr(orchestration,'PilotRecording',lambda **kwargs:LoggedPilot(facts={'schema':STATS_SCHEMA},**kwargs))
+        LoggedPilot.rig=self
+        monkeypatch.setattr(orchestration,'PilotRecording',lambda **kwargs:LoggedPilot(facts={'schema':STATS_SCHEMA,**(pilot_facts or {})},**kwargs))
         monkeypatch.setattr(orchestration,'_memo_covers',lambda **kwargs:True)
         # the Teacher child command is a short real helper process instead of the dynamic pick-and-place CLI
         monkeypatch.setattr(ContainerCollectionRuntime,'consumer_argv',lambda runtime,reset_epoch,lease=None:SLEEP)
         for key,value in dict(session_id=session,reset_epoch=2,attempt_id='default-lease-1').items():
             monkeypatch.setitem(offline_fakes.IDENTITY,key,value)
-        if self.processor.on_start is None:
-            self.processor.on_start=lambda processes,argv:self.stage('offline')
         self.task=make_task(flow,dict(flow.document,task_id=self.task_id),task_id=self.task_id)
 
         def group(path):
@@ -866,7 +897,7 @@ class Rig:
         self.execution,self.runtime=execution,execution.runtime
         spy=execution.artifacts.seal_attempt
         def sealed(lease,decision):
-            self.events.append(('seal',))
+            self.stage('seal')
             return spy(lease,decision)
         execution.artifacts.seal_attempt=sealed   # a spy over the real store, to order events
 
@@ -986,8 +1017,11 @@ def test_teacher_failure_seals_and_run_returns_summary(flow,monkeypatch):
     summary=rig.execution.run()
     assert summary['kind']=='ACT_CONTAINER_COLLECTION_TASK_RESULT' and summary['scene_id']=='default'
     assert (summary['status'],summary['teacher_execution_status'],summary['teacher_task_result']) == ('FAILED','COMPLETED','FAIL')
-    assert summary['act_data_status']=='INVALID' and summary['act_data_reason'].startswith('OFFLINE_PROCESSOR_INVALID: rc=3')
-    assert summary['act_data_qc']=='NOT_RUN' and summary['export_eligible'] is False
+    assert summary['act_data_status']=='PENDING_QC' and summary['act_data_reason'] is None
+    assert summary['act_data_qc']=='NOT_RUN' and summary['export_eligible'] is False and summary['episode_seal_sha256'] is None
+    receipt=json.loads((rig.sealed()/'raw'/'recording-receipt.json').read_bytes())
+    assert receipt['kind']=='ACT_RECORDING_RECEIPT' and receipt['lease_identity']['attempt_id']=='default-lease-1'
+    assert ('processor_start',) not in rig.events
     assert rig.sealed().is_dir() and (rig.sealed()/'result.json').is_file()
     write_task_result(flow.output,rig.task_id,summary)
     assert read_task_result(flow.output,rig.task_id)['result']==summary
@@ -1010,17 +1044,11 @@ def test_pre_motion_unreachable_is_a_collected_sealed_teacher_failure_not_a_faul
     assert read_task_result(flow.output,rig.task_id)['result']==summary
 
 
-def test_qc_failure_in_flow_is_a_business_result(flow,monkeypatch):
-    processor=FakeProcesses(returncode=3,outputs='invalid',report=qc_report('FAIL',rc=1,reason='geometry'))
-    summary=Rig(flow,monkeypatch,teacher='PASSED',processor=processor).execution.run()
-    assert summary['status']=='PASSED' and summary['act_data_status']=='INVALID' and summary['export_eligible'] is False
-
-
 def test_success_waits_for_closed_bag_and_seal(flow,monkeypatch):
     rig=Rig(flow,monkeypatch)
     summary=rig.execution.run()
     names=[event[0] for event in rig.events]
-    assert names.index('bag_closed')<names.index('processor_start')<names.index('seal')
+    assert names.index('bag_closed')<names.index('seal') and 'processor_start' not in names
     assert names[-1]!='closed' and 'closed' not in names, 'runtime teardown belongs to shutdown_owned, not run'
     assert (rig.sealed()/'result.json').is_file() and summary['sealed']['path']=='attempts/default/default-lease-1/sealed'
     assert LoggedPilot.events is rig.events
@@ -1059,32 +1087,25 @@ def test_lease_is_init_stage_until_the_gate_and_exec_stage_after(flow,monkeypatc
 
 
 def test_fault_still_seals_then_raises_with_first_cause(flow,monkeypatch):
-    processor=FakeProcesses(returncode=3,outputs='invalid',report=qc_report('ERROR',rc=2,reason='OSError: disk gone'))
-    rig=Rig(flow,monkeypatch,teacher='PASSED',processor=processor)
+    rig=Rig(flow,monkeypatch,teacher='PASSED',pilot_facts={'closed':False})
     error=fault_of(rig)
-    assert error.code.startswith('DATA_PIPELINE_FAULT: INVALID OFFLINE_PROCESSOR_INVALID: rc=3')
+    assert error.code.startswith('DATA_PIPELINE_FAULT: INVALID RAW_BAG_NOT_CLOSED_CLEANLY')
     assert Path(error.sealed_location)==rig.sealed() and (rig.sealed()/'result.json').is_file()
 
 
 def test_seal_failure_raises(flow,monkeypatch):
-    rig=Rig(flow,monkeypatch,manifest=False)
+    rig=Rig(flow,monkeypatch)
+    def refuse(lease,decision):
+        raise ValueError('RESULT_TEACHER_MANIFEST_REQUIRED')
+    rig.execution.artifacts.seal_attempt=refuse
     error=fault_of(rig)
     assert error.code.startswith('RESULT_SEAL_FAILED') and 'RESULT_TEACHER_MANIFEST_REQUIRED' in error.code
     assert error.sealed_location is None and not rig.sealed().exists()
 
 
 def test_seal_failure_keeps_an_earlier_fault_as_the_first_cause(flow,monkeypatch):
-    processor=FakeProcesses(returncode=4,outputs=None)
-    error=fault_of(Rig(flow,monkeypatch,manifest=False,processor=processor))
+    error=fault_of(Rig(flow,monkeypatch,manifest=False))
     assert error.code.startswith('DATA_PIPELINE_FAULT') and error.sealed_location is None
-
-
-def test_data_regraded_at_seal_is_a_fault(flow,monkeypatch):
-    """The processor double claims VALID data; the real store finds no verifiable episode and grades it INVALID."""
-    rig=Rig(flow,monkeypatch,teacher='PASSED',processor=FakeProcesses())
-    error=fault_of(rig)
-    assert error.code=='RESULT_DATA_REGRADED_AT_SEAL' and Path(error.sealed_location)==rig.sealed()
-    assert json.loads((rig.sealed()/'result.json').read_bytes())['act_data_status']=='INVALID'
 
 
 def test_perception_no_pose_seals_manifest_free_business_result(flow,monkeypatch):
@@ -1175,8 +1196,8 @@ def test_unconfirmed_stop_before_motion_is_execution_fault(flow,monkeypatch):
     assert rig.execution.shutdown_owned() is False
 
 
-@pytest.mark.parametrize('stage',['reset','inference','execute','offline'])
-def test_request_stop_interrupts_reset_inference_execution_and_offline(flow,monkeypatch,stage):
+@pytest.mark.parametrize('stage',['reset','inference','execute','bag_closed'])
+def test_request_stop_interrupts_reset_inference_execution_and_bag_close(flow,monkeypatch,stage):
     rig=Rig(flow,monkeypatch,hooks={stage:lambda rig:rig.execution.request_stop()})
     error=fault_of(rig)
     assert error.code=='TASK_STOP_REQUESTED' and error.sealed_location is None and not rig.sealed().exists()

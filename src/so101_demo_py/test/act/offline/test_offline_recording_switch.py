@@ -287,7 +287,7 @@ def test_a_ready_bag_recorder_then_a_valid_processor_gives_valid_data_with_the_a
     collection.start_before_teacher()
     assert collection.ready is True and collection.events == ["recorder_started", "recorder_ready"]
     collection.teacher_started_now()
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("VALID", None)
     assert outcome.facts["seal"]["sha256"] == "a" * 64 and outcome.facts["qc_report_path"] == str(point / "qc-report.json")
     assert FakePilot.instances[0].finished and FakePilot.instances[0].root == point / "raw"
@@ -306,7 +306,7 @@ def test_a_ready_bag_recorder_then_a_valid_processor_gives_valid_data_with_the_a
 def test_a_processor_that_judges_the_data_invalid_gives_invalid_data_with_its_reasons(tmp_path):
     collection, point, _ = collection_for(tmp_path, processes=FakeProcesses(returncode=3, outputs="invalid"))
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert outcome.data_status == "INVALID"
     assert outcome.reason.startswith("OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_SOURCE_GAP: arm")
     assert "qc_report_path" not in outcome.facts and outcome.facts["processor"]["returncode"] == 3
@@ -316,7 +316,7 @@ def test_a_processor_that_judges_the_data_invalid_gives_invalid_data_with_its_re
 def test_a_processor_that_fails_is_invalid_data_never_an_exception(tmp_path, code):
     collection, _, _ = collection_for(tmp_path, processes=FakeProcesses(returncode=code, outputs=None))
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert outcome.data_status == "INVALID" and outcome.reason == f"OFFLINE_PROCESSOR_FAILED: rc={code}"
 
 
@@ -324,7 +324,7 @@ def test_a_processor_that_outlives_its_bound_is_terminated_and_the_data_is_inval
     processes = FakeProcesses(exits=False, outputs=None)
     collection, _, _ = collection_for(tmp_path, processes=processes, processing_timeout_s=33.0)
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert outcome.data_status == "INVALID" and outcome.reason == "OFFLINE_PROCESSOR_TIMEOUT: 33s"
     assert ("wait_exit", 33.0) in processes.events and ("terminate", orchestration.PROCESSOR_TERM_GRACE_S) in processes.events
 
@@ -373,7 +373,7 @@ def test_exit_zero_alone_is_not_valid_data(tmp_path, mutate, expected):
         return code
 
     processes.wait_exit = wait_exit
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert outcome.data_status == "INVALID" and outcome.reason == expected
 
 
@@ -383,7 +383,7 @@ def test_a_recorder_that_never_became_ready_is_invalid_and_nothing_is_processed(
                                       pilot=pilot_factory(ready=False, failure="RAW_PILOT_READY_TIMEOUT"))
     collection.start_before_teacher()
     assert collection.ready is False and collection.events[-1] == "recorder_not_ready:RAW_PILOT_READY_TIMEOUT"
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("INVALID", "RAW_PILOT_READY_TIMEOUT") and processes.specs == []
 
 
@@ -391,7 +391,7 @@ def test_a_recorder_that_cannot_be_started_is_invalid_data_and_never_an_exceptio
     processes = FakeProcesses()
     collection, _, _ = collection_for(tmp_path, processes=processes, pilot=pilot_factory(raises="no ros2"))
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert outcome.data_status == "INVALID" and outcome.reason == "RAW_PILOT_START_FAILED: no ros2" and processes.specs == []
 
 
@@ -400,7 +400,7 @@ def test_a_bag_that_was_not_closed_cleanly_is_invalid_and_nothing_is_processed(t
     processes = FakeProcesses()
     collection, _, _ = collection_for(tmp_path, processes=processes, pilot=pilot_factory(facts=facts))
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert outcome.data_status == "INVALID" and outcome.reason.startswith("RAW_BAG_NOT_CLOSED_CLEANLY") and processes.specs == []
 
 
@@ -408,7 +408,7 @@ def test_a_data_verdict_already_made_closes_the_bag_and_skips_the_processor(tmp_
     processes = FakeProcesses()
     collection, _, _ = collection_for(tmp_path, processes=processes)
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE, skip_processing="TERMINAL_CAPTURE_FAILED: x")
+    outcome = collection.finish_inline(lease=LEASE, skip_processing="TERMINAL_CAPTURE_FAILED: x")
     assert (outcome.data_status, outcome.reason) == ("INVALID", "TERMINAL_CAPTURE_FAILED: x")
     assert FakePilot.instances[0].finished and processes.specs == []
 
@@ -420,7 +420,7 @@ def test_a_bag_that_is_missing_is_invalid(tmp_path):
 
     collection, _, _ = collection_for(tmp_path, pilot=lambda **kw: NoBag(**kw))
     collection.start_before_teacher()
-    assert collection.finish(lease=LEASE).reason == "RAW_BAG_MISSING"
+    assert collection.finish_inline(lease=LEASE).reason == "RAW_BAG_MISSING"
 
 
 # ---- the five faults ---------------------------------------------------------------------------------------------------------
@@ -430,7 +430,7 @@ def test_recorder_absent_records_nothing_and_is_invalid(tmp_path):
     collection, point, _ = collection_for(tmp_path, fault="recorder_absent", processes=processes)
     collection.start_before_teacher()
     assert FakePilot.instances == [] and collection.events == ["recorder_not_started:fault_recorder_absent"]
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("INVALID", "RECORDER_ABSENT") and processes.specs == []
 
 
@@ -446,7 +446,7 @@ def test_recorder_late_starts_the_bag_only_after_the_teachers_setup_evidence_and
     collection._late_thread.join(timeout=10)
     assert FakePilot.instances and FakePilot.instances[0].started and collection.late_started is True
     assert 5.0 in clock.sleeps, "the late start waited for the Teacher's first command"
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("INVALID", "RECORDER_STARTED_AFTER_TEACHER") and processes.specs == []
 
 
@@ -463,7 +463,7 @@ def test_a_bag_fault_processes_a_sandbox_copy_and_writes_only_beneath_the_sandbo
         processes = FakeProcesses(returncode=3, outputs="invalid")
         collection, point, _ = collection_for(sandbox_tmp, fault=fault, processes=processes, bag_fault=bag_fault)
         collection.start_before_teacher()
-        outcome = collection.finish(lease=LEASE)
+        outcome = collection.finish_inline(lease=LEASE)
         sandbox = sandbox_tmp / "run" / "fault-sandbox"
         assert outcome.data_status == "INVALID" and outcome.reason.startswith("OFFLINE_PROCESSOR_INVALID: rc=3")
         (source, destination, topic, count), = copies
@@ -487,7 +487,7 @@ def test_output_write_failure_makes_the_processors_output_directory_read_only_fo
     processes = FakeProcesses(returncode=4, outputs=None, on_start=inspect)
     collection, point, _ = collection_for(tmp_path, fault="output_write_failure", processes=processes)
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE)
+    outcome = collection.finish_inline(lease=LEASE)
     out = tmp_path / "run" / "fault-sandbox" / "attempt-1" / "out"
     assert seen["mode"] == 0o555
     assert os.geteuid() == 0 or seen["writable"] is False
@@ -581,29 +581,6 @@ def test_collection_off_records_nothing_processes_nothing_and_the_data_is_disabl
     assert not any(spec.role == "act-offline-processor" for spec in group.specs)
 
 
-def test_the_runtime_finish_maps_a_valid_processor_verdict_and_leaves_the_teachers_fields_alone(tmp_path, monkeypatch):
-    monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
-    monkeypatch.setattr(orchestration, "_memo_covers", lambda **kwargs: True)   # the memo itself is tested in test_p3_rework
-    runtime, group, events, clock = worker_runtime(tmp_path, CollectionOptions("on"))
-    runtime.start_physical_runtime()
-    lease = _lease()
-    runtime.reset_and_validate_point(lease)
-    point = runtime._point_root(lease)[1]
-    # the processor is a process of the Worker's group: script it through the group
-    scripted = FakeProcesses()
-    group.start = lambda spec, *, environment=None, pass_fds=(): (scripted.start(spec, environment=environment)
-                                                                   if spec.role == "act-offline-processor"
-                                                                   else _ProcessGroup.start(group, spec, environment=environment,
-                                                                                            pass_fds=pass_fds))
-    group.wait_exit = lambda identity, timeout_s: scripted.wait_exit(identity, timeout_s)
-    baseline = _decision()
-    decision = runtime._finish_collection(lease, baseline)
-    assert decision.act_data_status == "VALID" and decision.qc_report_path == point / "qc-report.json"
-    assert (decision.status, decision.reason, decision.teacher_execution_status, decision.teacher_task_result) == (
-        baseline.status, baseline.reason, baseline.teacher_execution_status, baseline.teacher_task_result)
-    record = json.loads((point / "recorder-orchestration.json").read_text())
-    assert record["act_data_status"] == "VALID" and record["mode"] == "RAW_BAG_OFFLINE"
-    assert json.loads((point / "raw" / "lease.json").read_text())["attempt_id"] == "attempt-1"
 
 
 def test_a_teacher_decision_whose_data_is_already_invalid_is_not_processed(tmp_path, monkeypatch):
@@ -698,34 +675,46 @@ def test_a_fault_outside_the_sandbox_is_refused_before_any_process_starts(tmp_pa
     assert [event for event in events if event[0] == "start"] == [], "neither the bag recorder nor the Teacher was started"
 
 
+DEFERRED_FAULTS = BAG_FAULTS + ("output_write_failure",)
+
+
 @pytest.mark.parametrize("fault", [fault for fault in COLLECTION_FAULTS if fault != "none"])
-def test_each_fault_gives_invalid_data_while_the_teacher_stays_pass(tmp_path, monkeypatch, fault):
-    """Fault mode -> INVALID data, the Teacher's fields untouched, and the real store seals a PASSED attempt with INVALID data (never
-    exportable)."""
+def test_each_fault_is_invalid_data_at_the_recorder_or_deferred_to_the_processor(tmp_path, monkeypatch, fault):
+    """Phase 1: a recorder fault gives INVALID data as before and the real store seals a PASSED attempt with INVALID data (never
+    exportable). A bag or output fault acts on the processing, which phase 1 does not run: the data is PENDING_QC, the fault is
+    recorded for the processor, and no processor is started."""
     from act_result_teacher import sealed_teacher
     from test_act_result_schema3 import setup_result
 
     monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
-    monkeypatch.setattr(orchestration, "drop_bag_messages", lambda source, destination, *, topic, count: Path(destination).mkdir(
-        parents=True) or {"topic": topic, "dropped": count})
-    processor = FakeProcesses(returncode=4 if fault == "output_write_failure" else 3,
-                              outputs=None if fault == "output_write_failure" else "invalid")
     events = []
     options = CollectionOptions("on", fault, tmp_path / "orch" / "run" / "fault-sandbox")
-    runtime, group, events, clock = worker_runtime(tmp_path / "orch", options, events=events, group=ScriptedGroup(events, processor))
+    runtime, group, events, clock = worker_runtime(tmp_path / "orch", options, events=events, group=ScriptedGroup(events, FakeProcesses()))
     runtime.start_physical_runtime()
     lease = _lease()
     runtime.reset_and_validate_point(lease)
     if fault == "recorder_late":
         next(iter(runtime._recorders.values())).start_late()
+    point = runtime._point_root(lease)[1]
+    (point / "dynamic").mkdir(exist_ok=True)
+    (point / "dynamic" / "dynamic-execute-manifest.json").write_text("{}\n")
+    (tmp_path / "orch" / "inputs").mkdir(exist_ok=True)
+    (tmp_path / "orch" / "inputs" / "inputs-manifest.json").write_text("{}\n")
+    (tmp_path / "orch" / "scope.json").write_text("{}\n")
     baseline = _decision()
     decision = runtime._finish_collection(lease, baseline)
-    assert decision.act_data_status == "INVALID" and decision.act_data_reason and decision.qc_report_path is None
+    deferred = fault in DEFERRED_FAULTS
+    assert decision.act_data_status == ("PENDING_QC" if deferred else "INVALID") and decision.qc_report_path is None
+    assert (decision.act_data_reason is None) is deferred
     assert (decision.status, decision.reason, decision.teacher_execution_status, decision.teacher_task_result) == (
         baseline.status, baseline.reason, baseline.teacher_execution_status, baseline.teacher_task_result)
     started_pilots = [pilot for pilot in FakePilot.instances if pilot.started]
     assert bool(started_pilots) is (fault != "recorder_absent")
-    assert any(spec.role == "act-offline-processor" for spec in group.specs) is (fault in BAG_FAULTS + ("output_write_failure",))
+    assert not any(spec.role == "act-offline-processor" for spec in group.specs)
+    if deferred:
+        record = json.loads((runtime._point_root(lease)[1] / "recorder-orchestration.json").read_text())
+        assert record["fault_deferred_to_processing"] == fault
+        return
     (tmp_path / "store").mkdir()
     store, seal, document, inputs = setup_result(tmp_path / "store", monkeypatch)
     claim = sealed_teacher(store, "PASSED", data=decision.act_data_status, reason=decision.act_data_reason)
@@ -740,7 +729,7 @@ def test_seal_attempt_hands_the_processors_qc_report_to_the_store(tmp_path, monk
 
     store, seal, document, inputs = setup_result(tmp_path, monkeypatch)
     captured = {}
-    store.seal = lambda path, *, teacher, qc_report_path=None: captured.update(path=path, teacher=teacher, qc=qc_report_path) or "sealed"
+    store.seal = lambda path, *, teacher, qc_report_path=None, recording_receipt_path=None: captured.update(path=path, teacher=teacher, qc=qc_report_path) or "sealed"
     decision = SimpleNamespace(status=AttemptStatus.PASSED, teacher_execution_status="COMPLETED", teacher_task_result="PASS",
                                act_data_status="VALID", act_data_reason=None, episode_seal_path=seal,
                                qc_report_path=store.working / "qc-report.json")
@@ -766,17 +755,16 @@ def test_the_teachers_argv_is_identical_for_every_fault_and_differs_from_off_by_
     assert [item for item in off if item not in reference] == []
 
 
-def test_execute_expert_replaces_only_the_data_fields_with_the_processors_verdict(tmp_path, monkeypatch):
-    """The Teacher's receipt passes through `execute_expert`; the data verdict is added beside it, never over it."""
+def test_execute_expert_adds_the_pending_data_status_beside_the_teachers_fields(tmp_path, monkeypatch):
+    """The Teacher's receipt passes through `execute_expert`; the data status is added beside it, never over it, and no processor ran."""
     from parallel_worker_runtime_support import _write_numeric
 
     from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt
 
     monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
-    processor = FakeProcesses(returncode=3, outputs="invalid")
     events = []
     runtime, group, events, clock = worker_runtime(
-        tmp_path, CollectionOptions("on"), events=events, group=ScriptedGroup(events, processor),
+        tmp_path, CollectionOptions("on"), events=events, group=ScriptedGroup(events, FakeProcesses()),
         localize=lambda _lease, _result: SimpleNamespace(reset_epoch="reset-7"),
         capture_numeric_evidence=lambda _lease, _localized, root, boundary: _write_numeric(root, boundary + 1.0),
         admit_pose=lambda _lease, value: admitted, publish_pose=lambda value: True, resume_physics=lambda _lease, _reset: True,
@@ -786,10 +774,17 @@ def test_execute_expert_replaces_only_the_data_fields_with_the_processors_verdic
     lease = _lease()
     runtime.reset_and_validate_point(lease)
     runtime.localize_and_admit_pose(lease, "broker-result")
+    point = runtime._point_root(lease)[1]
+    (point / "dynamic").mkdir(exist_ok=True)
+    (point / "dynamic" / "dynamic-execute-manifest.json").write_text("{}\n")
+    (tmp_path / "inputs").mkdir(exist_ok=True)
+    (tmp_path / "inputs" / "inputs-manifest.json").write_text("{}\n")
+    (tmp_path / "scope.json").write_text("{}\n")
     decision = runtime.execute_expert(lease, admitted)
     assert decision.status is AttemptStatus.PASSED
     assert (decision.teacher_execution_status, decision.teacher_task_result) == ("COMPLETED", "PASS")
-    assert decision.act_data_status == "INVALID" and "OFFLINE_PROCESSOR_INVALID" in decision.act_data_reason
+    assert decision.act_data_status == "PENDING_QC" and decision.act_data_reason is None
+    assert not any(spec.role == "act-offline-processor" for spec in group.specs)
 
 
 def test_the_recorder_stopped_callback_fires_once_the_bag_is_closed_and_before_processing(tmp_path):
@@ -803,7 +798,7 @@ def test_the_recorder_stopped_callback_fires_once_the_bag_is_closed_and_before_p
                                                 on_recorder_stopped=lambda: order.append("recorder_stopped"))
     collection.start_before_teacher()
     collection.teacher_started_now()
-    collection.finish(lease=LEASE)
+    collection.finish_inline(lease=LEASE)
     assert order == ["pilot_finished", "recorder_stopped"]
 
 
@@ -813,7 +808,7 @@ def test_a_failing_recorder_stopped_callback_never_changes_the_data_verdict(tmp_
     collection, _point, _clock = collection_for(tmp_path, on_recorder_stopped=boom)
     collection.start_before_teacher()
     collection.teacher_started_now()
-    assert collection.finish(lease=LEASE).data_status == "VALID"
+    assert collection.finish_inline(lease=LEASE).data_status == "VALID"
 
 
 def test_a_retired_collection_also_reports_the_recorder_stopped(tmp_path):

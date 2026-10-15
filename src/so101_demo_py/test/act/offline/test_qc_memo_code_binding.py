@@ -79,36 +79,8 @@ def test_the_default_memo_check_is_the_real_memo_match(tmp_path, monkeypatch):
 def test_a_processor_verdict_without_a_covering_memo_is_invalid_data_not_valid_data(tmp_path, memo):
     collection, point, _ = collection_for(tmp_path, memo_check=lambda **kwargs: False)
     collection.start_before_teacher()
-    outcome = collection.finish(lease=LEASE, deadline_s=collection._clock() + 100_000.0)
+    outcome = collection.finish_inline(lease=LEASE, deadline_s=collection._clock() + 100_000.0)
     assert (outcome.data_status, outcome.reason) == ("INVALID", "OFFLINE_QC_MEMO_NOT_VALID")
     assert "qc_report_path" not in outcome.facts
 
 
-@pytest.mark.parametrize("memo", ["missing", "stale"])
-def test_a_missing_or_stale_memo_keeps_the_teacher_pass_sealed_instead_of_losing_it_to_the_lease_deadline(tmp_path, monkeypatch, memo):
-    from act_result_teacher import sealed_teacher
-    from test_act_result_schema3 import setup_result
-    from parallel_worker_runtime_support import _lease
-
-    from so101_demo.act.collection_orchestration import CollectionOptions
-
-    monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
-    monkeypatch.setattr(orchestration, "_memo_covers", lambda **kwargs: False)         # no memo, or a memo of other bytes
-    events = []
-    runtime, group, events, clock = worker_runtime(tmp_path / "w", CollectionOptions("on"), events=events,
-                                                   group=ScriptedGroup(events, FakeProcesses()))
-    runtime.start_physical_runtime()
-    lease = _lease()
-    runtime.reset_and_validate_point(lease)
-    baseline = _decision()
-    decision = runtime._finish_collection(lease, baseline)
-    assert (decision.act_data_status, decision.act_data_reason) == ("INVALID", "OFFLINE_QC_MEMO_NOT_VALID")
-    assert decision.qc_report_path is None, "the store never sees a QC report it would have to recompute"
-    assert (decision.status, decision.teacher_execution_status, decision.teacher_task_result) == (
-        baseline.status, baseline.teacher_execution_status, baseline.teacher_task_result)
-    (tmp_path / "store").mkdir()
-    store, seal, document, inputs = setup_result(tmp_path / "store", monkeypatch)
-    monkeypatch.setattr(episode_qc, "recompute_native_qc", lambda *a, **k: pytest.fail("the store recomputed the QC (290 s)"))
-    location = store.seal(seal, teacher=sealed_teacher(store, "PASSED", data=decision.act_data_status, reason=decision.act_data_reason))
-    sealed = json.loads((location / "result.json").read_bytes())
-    assert sealed["status"] == "PASSED" and sealed["act_data_status"] == "INVALID" and sealed["act_data_qc"] == "NOT_RUN"

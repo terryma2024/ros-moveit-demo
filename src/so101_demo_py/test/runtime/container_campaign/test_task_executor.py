@@ -551,7 +551,7 @@ def test_real_builder_business_failure_succeeds_and_next_task_gets_fresh_objects
                 assert status.state == 'READY'
                 stored = read_task_result(flow.output, spec.task_id)
                 assert stored['task_id'] == spec.task_id
-                assert stored['result']['teacher_task_result'] == 'FAIL' and stored['result']['act_data_status'] == 'INVALID'
+                assert stored['result']['teacher_task_result'] == 'FAIL' and stored['result']['act_data_status'] == 'PENDING_QC'
                 assert (flow.output/'tasks'/spec.task_id/'task-result.json').is_file()
                 assert (flow.output/'tasks'/spec.task_id/stored['result']['sealed']['path']/'result.json').is_file()
             assert executor.cleanup_errors == [] and retirement.calls == 0

@@ -56,8 +56,8 @@ class CollectionRecorder:
         collection.arm_late_start(point_root / "dynamic" / "reachability-observed.json")
 
     def _finish_collection(self, lease: Any, decision: RuntimeDecision) -> RuntimeDecision:
-        """After the Teacher ended: close the bag and run the offline processor (episode, fresh-process QC). Returns the decision
-        with the data status, its reason and the QC report; the Teacher fields are never touched."""
+        """After the Teacher ended (phase 1): close the bag and bind it in the recording receipt. Returns the decision with the data
+        status (PENDING_QC, or INVALID with its reason), the receipt path; the Teacher fields are never touched."""
         key = self._lease_key(lease)
         collection = self._recorders.pop(key, None)
         if self._collection is None:
@@ -77,12 +77,15 @@ class CollectionRecorder:
         outcome = collection.finish(lease={name: getattr(lease, name) for name in LEASE_FIELDS}, skip_processing=skip,
                                     deadline_s=float(lease.lease_deadline_monotonic_s))
         status, reason = outcome.data_status, outcome.reason
-        qc_path = None
+        qc_path = receipt_path = None
         if status == "VALID":
             qc_path = Path(outcome.facts["qc_report_path"])
+        elif status == "PENDING_QC":
+            receipt_path = Path(point_root) / outcome.facts["recording_receipt"]["path"]
         outcome.facts["act_data_status"] = status
         self._write_collection_record(point_root, outcome.facts, reason)
-        return replace(decision, act_data_status=status, act_data_reason=reason, qc_report_path=qc_path)
+        return replace(decision, act_data_status=status, act_data_reason=reason, qc_report_path=qc_path,
+                       recording_receipt_path=receipt_path)
 
     @staticmethod
     def _write_collection_record(point_root: Path, facts: dict, reason) -> None:

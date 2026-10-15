@@ -1,8 +1,10 @@
 """The data side of one Teacher attempt after the switch to raw-log recording.
 
 Before the Teacher: one record-only process (`ros2 bag record`, owned by `PilotRecording`) is started and waited for a bounded time;
-the Teacher starts whatever happened to it. After the Teacher ended: the bag is closed, the offline processor builds the sealed
-episode from it and runs the fresh-process QC, and the processor's verdict is the attempt's data verdict.
+the Teacher starts whatever happened to it. After the Teacher ended (phase 1 of the two-phase collection): the bag is closed, a
+recording receipt binds every raw file, and the data side ends PENDING_QC; no processor runs here. The retired inline form
+(`finish_inline`: the offline processor builds the sealed episode and runs the fresh-process QC inside the attempt) is not reachable
+from the shard task path and is deleted with the inline mode.
 
 Direction of dependence (unchanged from the live Recorder's orchestration): the Teacher never waits for, reads from or is stopped by
 anything here after its own start. Every defect on this side is a verdict on the data (INVALID) and never an input to the Teacher.
@@ -261,22 +263,34 @@ class OfflineCollection:
                 and not str(failure or "").startswith("RAW_PILOT_STOP_FAILED"))
 
     def finish(self, *, lease: dict, skip_processing: str | None = None, deadline_s: float | None = None) -> RecorderOutcome:
-        """After the Teacher ended: close the bag, run the processor, map its verdict. Never raises.
+        """Phase 1, after the Teacher ended: close the bag and seal the data side as PENDING_QC. Never raises.
+
+        No processor is started and none is waited for: the episode and the QC are built later, by the phase-2 processor, from the
+        closed bag. The recording receipt (`raw/recording-receipt.json`) binds every raw file and the documents the processor needs.
+        `lease` is the Worker's lease at this instant; `skip_processing` is the reason (a data verdict already made) for which the bag
+        is closed and the data stays INVALID with no receipt. `deadline_s` is accepted for the callers' signature and unused: phase 1
+        has no processing budget."""
+        return self._run_finish(lease, skip_processing, deadline_s, inline=False)
+
+    def finish_inline(self, *, lease: dict, skip_processing: str | None = None, deadline_s: float | None = None) -> RecorderOutcome:
+        """The retired inline form: close the bag and run the processor inside the attempt. Not reachable from the shard task path
+        (plan task 11 deletes it).
 
         `deadline_s` is the lease deadline on the same clock as `clock`: the processor's wait is capped at the time left on it minus
-        `SEAL_MARGIN_S`, so the Teacher's result is always sealed in time (the data is INVALID instead).
-        `lease` is the Worker's lease at this instant (the EXECUTING one, which the ResultStore will compare with the episode's
-        audit); `skip_processing` is the reason (a data verdict already made) for which the bag is closed and nothing is processed."""
+        `SEAL_MARGIN_S`, so the Teacher's result is always sealed in time (the data is INVALID instead)."""
+        return self._run_finish(lease, skip_processing, deadline_s, inline=True)
+
+    def _run_finish(self, lease: dict, skip_processing, deadline_s, *, inline: bool) -> RecorderOutcome:
         self.teacher_ended = True
         facts: dict = {"fault": self._fault, "events": self.events, "ready": self.ready, "mode": "RAW_BAG_OFFLINE",
                        "policy_sha256": self._policy.get("policy_sha256")}
         try:
-            return self._finish(facts, skip_processing, {name: lease[name] for name in LEASE_FIELDS}, deadline_s)
+            return self._finish(facts, skip_processing, {name: lease[name] for name in LEASE_FIELDS}, deadline_s, inline)
         except Exception as error:   # noqa: BLE001
             return RecorderOutcome("INVALID", ("RECORDER_ORCHESTRATION_FAILED: " + (str(error) or type(error).__name__))
                                    [:_REASON_CHARS], facts)
 
-    def _finish(self, facts: dict, skip_processing, lease: dict, deadline_s=None) -> RecorderOutcome:
+    def _finish(self, facts: dict, skip_processing, lease: dict, deadline_s=None, inline: bool = True) -> RecorderOutcome:
         if self._late_thread is not None:
             self._late_thread.join(timeout=float(self._policy["ready_timeout_s"]) + 5.0)
         pilot = self._pilot
@@ -300,7 +314,26 @@ class OfflineCollection:
                 default=str))[:_REASON_CHARS], facts)
         if skip_processing is not None:
             return RecorderOutcome("INVALID", skip_processing, facts)
-        return self._process(facts, lease, deadline_s)
+        if inline:
+            return self._process(facts, lease, deadline_s)
+        return self._seal_pending(facts, lease)
+
+    # ---- phase 1: the recording receipt -------------------------------------------------------------------------------
+
+    def _seal_pending(self, facts: dict, lease: dict) -> RecorderOutcome:
+        """The bag is closed cleanly: bind it and the processor's documents in the recording receipt. The data stays PENDING_QC."""
+        from .recording_receipt import write_recording_receipt
+
+        bag = self.raw_root / "bag"
+        if not (bag / "metadata.yaml").is_file():
+            return RecorderOutcome("INVALID", "RAW_BAG_MISSING", facts)
+        (self.raw_root / "lease.json").write_text(json.dumps(lease, sort_keys=True) + "\n")
+        if self._fault != "none":
+            facts["fault_deferred_to_processing"] = self._fault   # a diagnostic bag/output fault is applied by the phase-2 processor
+        facts["recording_receipt"] = write_recording_receipt(
+            self._base, lease_identity=lease, identity=self._identity, inputs_manifest=self._inputs_manifest, scope=self._scope,
+            teacher_manifest=self._point_root / "dynamic" / "dynamic-execute-manifest.json")
+        return RecorderOutcome("PENDING_QC", None, facts)
 
     # ---- the offline processor ----------------------------------------------------------------------------------
 

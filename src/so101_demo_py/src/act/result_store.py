@@ -296,7 +296,7 @@ class ActCollectionResultStore:
             self._reserved_metadata_sha256 = hashlib.sha256(metadata_bytes).hexdigest()
         self.episode_root = self.working / "episode"
 
-    def seal(self, episode_seal_path: Path, *, teacher: dict, qc_report_path=None) -> Path:
+    def seal(self, episode_seal_path: Path, *, teacher: dict, qc_report_path=None, recording_receipt_path=None) -> Path:
         """Publish the attempt's result (schema 3).
 
         `teacher` is the Teacher's own result and the data status its child reported. The attempt status is derived
@@ -315,7 +315,7 @@ class ActCollectionResultStore:
         if _safe(episode_seal_path) != self.episode_root / "seal.json":
             raise ValueError("EPISODE_LOCATION_MISMATCH")
         _check_teacher_manifest(self.working / _TEACHER_MANIFEST, claim)
-        data = self._grade_data(episode_seal_path, claim, qc_report_path)
+        data = self._grade_data(episode_seal_path, claim, qc_report_path, recording_receipt_path)
         completed = self.clock()
         if (isinstance(completed, bool) or not isinstance(completed, (int, float))
                 or not math.isfinite(completed)
@@ -350,7 +350,7 @@ class ActCollectionResultStore:
         except OSError as error:
             raise ResultInfraError("RESULT_SEAL_FAILED") from error
 
-    def _grade_data(self, episode_seal_path: Path, claim: dict, qc_report_path) -> dict:
+    def _grade_data(self, episode_seal_path: Path, claim: dict, qc_report_path, recording_receipt_path=None) -> dict:
         """The data side of the result: episode verification and the independent QC. Never raises on data problems.
 
         Returns the act_data_status to record (the child's, or INVALID when the data cannot be verified), the
@@ -373,6 +373,12 @@ class ActCollectionResultStore:
 
         if status in ("INVALID", "DISABLED"):
             return dict(status=status, reason=reason, qc="NOT_RUN", episode_sha256=episode_sha256, binding=None)
+        if (status == "PENDING_QC" and episode_sha256 is None and qc_report_path is None and recording_receipt_path is not None
+                and _safe(Path(recording_receipt_path)) == self.working / "raw" / "recording-receipt.json"
+                and (self.working / "raw" / "recording-receipt.json").is_file()):
+            # Phase 1 of the two-phase collection: the Teacher's result is final, the episode and the QC are built later by the
+            # processor from the recording receipt (named by the decision and present). Nothing to verify here, nothing exportable.
+            return dict(status=status, reason=reason, qc="NOT_RUN", episode_sha256=None, binding=None)
         memoised = (self.TRUST_INDEPENDENT_QC_MEMO and qc_report_path is not None and qc_required
                     and _safe(Path(qc_report_path)) == self.working / 'qc-report.json'
                     and _qc_memo_covers(qc_report_path, episode_root=self.episode_root, scope=self.scope,
@@ -443,7 +449,8 @@ class ActCollectionResultStore:
             episode_path = self.episode_root / "seal.json"
         if episode_path is None or _safe(Path(episode_path)) != self.episode_root / "seal.json":
             raise ValueError("EPISODE_LOCATION_MISMATCH")
-        return str(self.seal(episode_path, teacher=claim, qc_report_path=getattr(decision, "qc_report_path", None)))
+        return str(self.seal(episode_path, teacher=claim, qc_report_path=getattr(decision, "qc_report_path", None),
+                             recording_receipt_path=getattr(decision, "recording_receipt_path", None)))
 
     def write_recovery_receipt(self, lease: LeaseIdentity, *, succeeded: bool,
                                generation: int, deadline_monotonic_s: float, clock) -> Path:

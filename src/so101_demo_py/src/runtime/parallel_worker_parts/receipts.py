@@ -136,6 +136,9 @@ class RuntimeDecision:
     act_data_reason: str | None = None
     #: the independent fresh-process QC report written beside the episode (Phase A4c); None when QC did not produce one
     qc_report_path: Path | None = None
+    #: phase 1 of the two-phase collection: the recording receipt (`raw/recording-receipt.json`) that makes PENDING_QC data sealable
+    #: without an episode; None for every other decision
+    recording_receipt_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -77,7 +77,7 @@ def test_seal_attempt_hands_the_independent_qc_report_to_the_store(tmp_path, mon
     from test_act_result_schema3 import setup_result
     store, seal, document, inputs = setup_result(tmp_path, monkeypatch)
     captured = {}
-    store.seal = lambda path, *, teacher, qc_report_path=None: captured.update(
+    store.seal = lambda path, *, teacher, qc_report_path=None, recording_receipt_path=None: captured.update(
         path=path, teacher=teacher, qc=qc_report_path) or "sealed"
     decision = SimpleNamespace(status=AttemptStatus.PASSED, teacher_execution_status="COMPLETED",
                                teacher_task_result="PASS", act_data_status="VALID", act_data_reason=None,

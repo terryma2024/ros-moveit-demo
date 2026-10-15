@@ -109,7 +109,7 @@ def _collection_with_deadline(tmp_path, *, left_s, processes=None, **kwargs):
 def test_the_processor_wait_is_the_time_left_on_the_lease_minus_the_seal_margin_when_that_is_shorter_than_the_cap(tmp_path):
     processes = FakeProcesses(exits=False, outputs=None)
     collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=500.0, processes=processes)
-    outcome = collection.finish(lease=LEASE, deadline_s=deadline)
+    outcome = collection.finish_inline(lease=LEASE, deadline_s=deadline)
     assert ("wait_exit", 500.0 - SEAL_MARGIN_S) in processes.events
     assert (outcome.data_status, outcome.reason) == ("INVALID", f"OFFLINE_PROCESSOR_TIMEOUT: {500.0 - SEAL_MARGIN_S:.0f}s")
     assert ("terminate", orchestration.PROCESSOR_TERM_GRACE_S) in processes.events
@@ -118,57 +118,24 @@ def test_the_processor_wait_is_the_time_left_on_the_lease_minus_the_seal_margin_
 
 def test_with_plenty_of_time_left_the_cap_is_the_fixed_bound(tmp_path):
     collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=100_000.0)
-    outcome = collection.finish(lease=LEASE, deadline_s=deadline)
+    outcome = collection.finish_inline(lease=LEASE, deadline_s=deadline)
     assert outcome.data_status == "VALID" and ("wait_exit", orchestration.PROCESSING_TIMEOUT_S) in processes.events
 
 
 @pytest.mark.parametrize("left_s", [SEAL_MARGIN_S + MIN_PROCESSING_S - 0.5, SEAL_MARGIN_S, 10.0, -5.0])
 def test_without_enough_time_left_the_processor_is_not_started_and_the_data_is_invalid(tmp_path, left_s):
     collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=left_s)
-    outcome = collection.finish(lease=LEASE, deadline_s=deadline)
+    outcome = collection.finish_inline(lease=LEASE, deadline_s=deadline)
     assert outcome.data_status == "INVALID" and outcome.reason.startswith("OFFLINE_PROCESSOR_NO_TIME_LEFT")
     assert processes.specs == [] and FakePilot.instances[0].finished, "the bag was still closed"
 
 
 def test_just_enough_time_starts_the_processor(tmp_path):
     collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=SEAL_MARGIN_S + MIN_PROCESSING_S + 1.0)
-    assert collection.finish(lease=LEASE, deadline_s=deadline).data_status == "VALID"
+    assert collection.finish_inline(lease=LEASE, deadline_s=deadline).data_status == "VALID"
     assert ("wait_exit", MIN_PROCESSING_S + 1.0) in processes.events
 
 
-@pytest.mark.parametrize("scenario", ["no_time_left", "cap_hit"])
-def test_the_teacher_pass_survives_the_seal_when_the_budget_is_exhausted(tmp_path, monkeypatch, scenario):
-    """Data INVALID because of the budget; the real store seals the Teacher's PASS (never RESULT_AFTER_LEASE_DEADLINE)."""
-    from act_result_teacher import sealed_teacher
-    from test_act_result_schema3 import setup_result
-    from parallel_worker_runtime_support import _lease
-
-    from so101_demo.act.collection_orchestration import CollectionOptions
-
-    monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
-    processor = FakeProcesses(exits=False, outputs=None)
-    events = []
-    runtime, group, events, clock = worker_runtime(tmp_path / "w", CollectionOptions("on"), events=events,
-                                                   group=ScriptedGroup(events, processor))
-    runtime.start_physical_runtime()
-    lease = _lease()                        # issued 10, deadline 310 on the worker tests' clock (the recorder clock starts at 100)
-    runtime.reset_and_validate_point(lease)
-    if scenario == "no_time_left":
-        clock.now = lease.lease_deadline_monotonic_s - SEAL_MARGIN_S - 10.0       # the Teacher ran long: 10 s of budget remain
-    baseline = _decision()
-    decision = runtime._finish_collection(lease, baseline)
-    assert decision.act_data_status == "INVALID" and decision.qc_report_path is None
-    expected = "OFFLINE_PROCESSOR_NO_TIME_LEFT" if scenario == "no_time_left" else "OFFLINE_PROCESSOR_TIMEOUT"
-    assert decision.act_data_reason.startswith(expected)
-    assert (decision.status, decision.reason, decision.teacher_execution_status, decision.teacher_task_result) == (
-        baseline.status, baseline.reason, baseline.teacher_execution_status, baseline.teacher_task_result)
-    assert (scenario == "cap_hit") == any(spec.role == "act-offline-processor" for spec in group.specs)
-    (tmp_path / "store").mkdir()
-    store, seal, document, inputs = setup_result(tmp_path / "store", monkeypatch)
-    claim = sealed_teacher(store, "PASSED", data=decision.act_data_status, reason=decision.act_data_reason)
-    location = store.seal(seal, teacher=claim)
-    sealed = json.loads((location / "result.json").read_bytes())
-    assert sealed["status"] == "PASSED" and sealed["teacher_task_result"] == "PASS" and sealed["act_data_status"] == "INVALID"
 
 
 def test_the_runtime_passes_the_lease_deadline_to_the_collection(tmp_path, monkeypatch):
