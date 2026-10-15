@@ -101,10 +101,6 @@ class NativeProcessorOwner(NativeInstanceOwner):
         """A processor reaches no Teacher."""
         return None
 
-    def cpu_target(self):
-        """A processor is never throttled: nothing latency-sensitive runs in phase 2."""
-        return None
-
     # ---- what a processor does differently from a shard instance -----------------------------------------------------------
 
     def _spec_unchanged(self):

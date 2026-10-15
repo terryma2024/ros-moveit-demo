@@ -100,7 +100,6 @@ def test_owner_builds_the_processor_argv_from_the_admitted_launch(tmp_path):
     assert "--gpus" not in argv and argv[-3:] == ["campaign_processor", "--spec", str(fixture.spec_path)]
     assert argv[-4] == fixture.image["digest"] and owner.teacher_socket is None
     assert f"type=bind,src={fixture.attempt},dst={fixture.attempt},readonly" in [argv[i + 1] for i, v in enumerate(argv) if v == "--mount"]
-    assert owner.cpu_target() is None
     fixture.registry.close()
 
 

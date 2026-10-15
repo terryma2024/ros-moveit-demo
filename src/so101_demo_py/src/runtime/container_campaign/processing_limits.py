@@ -17,7 +17,7 @@ All times are Host monotonic seconds, the unit of `AdmittedCampaignContext.deadl
 DEFAULT_RESERVE_S = 1800
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_VERIFICATION_RESERVE_S = 600
-#: one processing task: the offline processor (`act.offline.orchestration.PROCESSING_TIMEOUT_S`, 1200 s) plus its seal margin and the
+#: one processing task: the offline processor (1200 s) plus its seal margin and the
 #: task-result publication; the config key `processing_task_timeout_s` may not be lower (`runtime.inference.config`)
 DEFAULT_TASK_TIMEOUT_S = 1800
 MAX_DEFAULT_PROCESSORS = 12

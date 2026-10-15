@@ -13,9 +13,6 @@ import re
 import time
 
 from so101_demo.act.parallel_collection import wave_assignment_for
-from so101_demo.runtime.container_campaign.cpu_shares import (
-    JOURNAL_NAME, CpuShareJournal, ShardCpuShares, valid_post_recording_shares,
-)
 from so101_demo.runtime.container_campaign.paths import host_task_output
 from so101_demo.runtime.container_campaign.service_owner import _write
 from so101_demo.runtime.container_campaign.task_contracts import TASK_ID_PATTERN, InputRef, TaskSpec
@@ -112,10 +109,9 @@ class RecordingGate:
     """Limits when the Host may send an assignment: recording slots, tasks in flight and the gap between assignments.
 
     Three independent limits, all of which must hold; each is optional (None: no such limit).
-    - `cap`: instances in the recording part of a task. An instance is in it from the moment the Host claims a scene for it
-      until its polled status reports that its recorder has stopped, or its task has ended or its instance has faulted or
-      finished. A status without a phase counts as recording until the task ends.
-    - `max_in_flight`: instances with a task between the claim and the task's end, in every phase.
+    - `cap`: instances recording. A phase-1 task is a recording, so an instance is recording from the moment the Host claims a
+      scene for it until its task has ended or its instance has faulted or finished.
+    - `max_in_flight`: instances with a task between the claim and the task's end.
     - `min_gap_s`: Host monotonic seconds between two assignment sends, across all instances. The gap is measured from the
       send, and no claim is made while another claimed assignment has not been sent yet, so two sends are never closer.
     The gate only delays when the Host sends an assignment; which scene a worker gets is still decided by `WaveAssignment`.
@@ -131,7 +127,7 @@ class RecordingGate:
         """True while a count limit or an unsent claim prevents a new claim; the next pulse may change that."""
         if any(member.claiming() for member in self.members):
             return True
-        if self.cap is not None and sum(1 for member in self.members if member.in_recording_part()) >= self.cap:
+        if self.cap is not None and sum(1 for member in self.members if member.in_flight()) >= self.cap:
             return True
         return (self.max_in_flight is not None
                 and sum(1 for member in self.members if member.in_flight()) >= self.max_in_flight)
@@ -157,12 +153,11 @@ class InstanceDispatch:
     """The per-instance loop. `control` has the four-operation `ContainerTaskControl` shape."""
 
     def __init__(self, *, control, shard, assignment, journal, endpoints, scene_manifest, case_inputs,
-                 config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep, gate=None, cpu=None,
+                 config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep, gate=None,
                  phase1_deadline_s=None):
         launch = shard.launch
         self.phase1_deadline_s = phase1_deadline_s   # no scene is claimed from this instant on; None: no phase-1 limit
         self.gate, self.recording_claim, self.done, self.unsent = gate, False, False, False
-        self.cpu = cpu   # a CPU-weight controller or None (feature off)
         self.control, self.shard, self.assignment, self.journal = control, shard, assignment, journal
         self.endpoints, self.scene_manifest, self.case_inputs = endpoints, scene_manifest, case_inputs
         self.config, self.context, self.dispatch_allowed = config, context, dispatch_allowed
@@ -196,22 +191,9 @@ class InstanceDispatch:
                     self.fault = 'CONTAINER_INSTANCE_UNREACHABLE: '+(str(error) or type(error).__name__)[:200]
             finally:
                 self._tick()
-            await self._sync_cpu()
             if self.fault is not None:
                 return
             await self.sleep(interval)
-
-    async def _sync_cpu(self):
-        """Hold the post-recording CPU weight exactly while the polled task is in offline processing. Never raises."""
-        if self.cpu is None:
-            return
-        seen = self._seen_current()
-        low = (not self.done and self.fault is None and seen is not None and seen.phase == 'POST_RECORDING'
-               and seen.state not in ('SUCCEEDED', 'FAILED'))
-        try:
-            await asyncio.to_thread(self.cpu.want, low)
-        except Exception:
-            pass
 
     def _tick(self):
         pulse, self._pulse = self._pulse, asyncio.Event()
@@ -231,13 +213,6 @@ class InstanceDispatch:
             return False
         seen = self._seen_current()
         return seen is None or seen.state not in ('SUCCEEDED', 'FAILED')
-
-    def in_recording_part(self):
-        """Whether this instance still occupies one of the gate's recording slots."""
-        if not self.in_flight():
-            return False
-        seen = self._seen_current()
-        return seen is None or seen.phase != 'POST_RECORDING'
 
     def claiming(self):
         """Whether a claimed assignment has not been sent yet (it is being prepared or journaled)."""
@@ -366,7 +341,6 @@ class InstanceDispatch:
         self.collected.append(task.task_id)
         self.current = None
         self.recording_claim = False
-        await self._sync_cpu()
         if self.gate is not None:
             self.gate.pulse()
         return True
@@ -412,11 +386,6 @@ class InstanceDispatch:
         self.done = True
         if self.gate is not None:
             self.gate.pulse()
-        if self.cpu is not None:
-            try:
-                await asyncio.to_thread(self.cpu.restore, 'FINISH')
-            except Exception:
-                pass
         if self._poller is not None:
             self._poller.cancel()
             await asyncio.gather(self._poller, return_exceptions=True)
@@ -432,36 +401,10 @@ class InstanceDispatch:
         return status
 
 
-class _LazyCpuShares:
-    """`ShardCpuShares` for a shard whose container is bound only after its start; same `want`/`restore` surface."""
-
-    def __init__(self, shard, shares, journal):
-        self.shard, self.shares, self.journal, self.inner = shard, shares, journal, None
-
-    def _resolve(self):
-        if self.inner is None:
-            provider = getattr(self.shard, 'cpu_target', None)
-            target = provider() if callable(provider) else None
-            if target is not None:
-                self.inner = ShardCpuShares(worker_id=self.shard.launch.worker_id, target=target,
-                                            post_recording_shares=self.shares, journal=self.journal)
-        return self.inner
-
-    def want(self, low):
-        inner = self._resolve()
-        if inner is not None:
-            inner.want(low)
-
-    def restore(self, why='RESTORE'):
-        if self.inner is not None:
-            self.inner.restore(why)
-
-
 class ConcurrentCollectionCoordinator:
     def __init__(self, *, context, config, case_inputs, scene_manifest, control_factory=None,
                  clock=time.monotonic, sleep=asyncio.sleep, max_recording_shards=None,
-                 max_tasks_in_flight=None, min_assignment_gap_s=None,
-                 post_recording_cpu_shares=None):
+                 max_tasks_in_flight=None, min_assignment_gap_s=None):
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != 'act_collection_start'
                 or type(config) is not ParallelRuntimeConfigLinuxCuda
                 or type(case_inputs) is not dict or not case_inputs or type(scene_manifest) is not dict
@@ -471,7 +414,6 @@ class ConcurrentCollectionCoordinator:
                     and (type(max_recording_shards) is not int or max_recording_shards < 1))
                 or (max_tasks_in_flight is not None
                     and (type(max_tasks_in_flight) is not int or max_tasks_in_flight < 1))
-                or (post_recording_cpu_shares is not None and not valid_post_recording_shares(post_recording_cpu_shares))
                 or (min_assignment_gap_s is not None
                     and (type(min_assignment_gap_s) not in (int, float) or not math.isfinite(min_assignment_gap_s)
                          or min_assignment_gap_s < 0))):
@@ -483,7 +425,6 @@ class ConcurrentCollectionCoordinator:
         self.scene_manifest = scene_manifest
         self.max_recording_shards = max_recording_shards
         self.max_tasks_in_flight, self.min_assignment_gap_s = max_tasks_in_flight, min_assignment_gap_s
-        self.post_recording_cpu_shares = post_recording_cpu_shares
         self.control_factory = control_factory or (lambda shard: ContainerTaskControl(owner=shard))
         self.clock, self.sleep = clock, sleep
         self.active = None
@@ -545,12 +486,11 @@ class ConcurrentCollectionCoordinator:
         gap = self.min_assignment_gap_s if self.min_assignment_gap_s else None
         gate = (RecordingGate(cap, in_flight, gap, self.clock)
                 if cap is not None or in_flight is not None or gap is not None else None)
-        cpu = self._cpu_controllers(shards, root)
         dispatches = [InstanceDispatch(control=self.control_factory(shard), shard=shard, assignment=assignment,
             journal=journal, endpoints=endpoints, scene_manifest=self.scene_manifest,
             case_inputs=self.case_inputs, config=self.config, context=self.context,
             dispatch_allowed=dispatch_allowed, clock=self.clock, sleep=self.sleep, gate=gate,
-            cpu=cpu.get(shard.launch.launch_id), phase1_deadline_s=self.phase1_deadline_s)
+            phase1_deadline_s=self.phase1_deadline_s)
             for shard in shards]
         if gate is not None:
             gate.members = dispatches
@@ -579,23 +519,7 @@ class ConcurrentCollectionCoordinator:
                 outcome['scene_faults'] = scene_faults
             return outcome
         finally:
-            for item in dispatches:   # every exit path leaves the weights as launched; a no-op after `finish`
-                if item.cpu is not None:
-                    try:
-                        await asyncio.to_thread(item.cpu.restore, 'WAVE_END')
-                    except Exception:
-                        pass
             self.active = None
-
-    def _cpu_controllers(self, shards, root):
-        """A weight controller per shard, keyed by launch id; empty when the feature is off.
-
-        A shard that has no bound container (not a container shard, or not started yet) keeps its weight."""
-        if self.post_recording_cpu_shares is None:
-            return {}
-        journal = CpuShareJournal(root/JOURNAL_NAME)
-        return {shard.launch.launch_id: _LazyCpuShares(shard, self.post_recording_cpu_shares, journal)
-                for shard in shards}
 
     async def _barrier(self, dispatches):
         """Start every instance; no task is assigned until all report READY. Any failure ends the whole wave."""

@@ -5,7 +5,6 @@ import hashlib
 import json
 import math
 import os
-from dataclasses import dataclass
 from pathlib import Path
 import re
 import subprocess
@@ -39,15 +38,6 @@ def read_container_namespace(pid):
         if inode <= 0:
             raise ValueError('SHARD_HOST_NAMESPACE_INVALID')
         return inode
-
-
-@dataclass(frozen=True)
-class CpuTarget:
-    """What the Host may change in a running shard: its exact container, the weight it was launched with, and the checks."""
-    container_id: str
-    original_cpu_shares: int
-    verify: object
-    docker: object
 
 
 class ContainerShardOwner:
@@ -85,7 +75,6 @@ class ContainerShardOwner:
         self.max_bytes,self.docker,self.namespace_reader,self.clock = (
             max_frame_bytes,docker_runner,namespace_reader,monotonic_ns)
         self.owner,self.bridge = None,None
-        self.original_cpu_shares = None
         self._registered,self._closing,self._runtime_ready = False,False,False
         self._start_task = self._close_task = None
         self._startup_done = asyncio.Event()
@@ -161,8 +150,6 @@ class ContainerShardOwner:
                 raise ValueError('SHARD_CONTAINER_IDENTITY_CHANGED')
             self.registry.bind_container(self.launch.launch_id,owner)
             self.owner = owner
-            # Docker reports 0 for the default weight; restoring means writing 1024 in that case.
-            self.original_cpu_shares = int((first.get('HostConfig') or {}).get('CpuShares') or 1024)
             control = self.root/'control'
             await self._wait_file(control/'child-ready.json',deadline)
             self.bridge = ContainerBridgeProcessOwner(container_owner=owner,control_socket_root=control,
@@ -210,18 +197,6 @@ class ContainerShardOwner:
         if not await asyncio.to_thread(self.bridge.ready):
             raise ValueError('SHARD_RUNTIME_NOT_READY')
         return True
-
-    def cpu_target(self):
-        """The registered container and its launch-time CPU weight, or None before the container is bound."""
-        if self.owner is None or self.original_cpu_shares is None:
-            return None
-
-        def verify():
-            if container_key_from_inspect(self.inspect(self.owner.container_id),
-                                          launch_generation=self.launch.launch_generation) != self.owner:
-                raise ValueError('SHARD_CONTAINER_IDENTITY_CHANGED')
-        return CpuTarget(container_id=self.owner.container_id,original_cpu_shares=self.original_cpu_shares,
-                         verify=verify,docker=self.docker)
 
     def control_client(self):
         from so101_demo.runtime.container_campaign.control_client import ContainerControlClient

@@ -5,7 +5,7 @@ import time
 from pathlib import PurePosixPath
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 TASK_ID_PATTERN = r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$'
 
@@ -36,17 +36,6 @@ class TaskStatus(_Closed):
     task_id: str = Field(pattern=TASK_ID_PATTERN)
     state: Literal['ACCEPTED', 'RUNNING', 'SUCCEEDED', 'FAILED']
     fault_reason: str | None = Field(default=None, min_length=1, max_length=300)
-    # Answer data for the Host's status query: RECORDING until the instance's recorder has stopped, then POST_RECORDING.
-    # None means the instance does not report a phase; the Host then counts it as recording until the task ends.
-    phase: Literal['RECORDING', 'POST_RECORDING'] | None = None
-
-    @model_serializer(mode='wrap')
-    def omit_absent_phase(self, handler):
-        # A status without a phase keeps exactly the wire form it always had.
-        document = handler(self)
-        if document.get('phase') is None:
-            document.pop('phase', None)
-        return document
 
 
 class InstanceStatus(_Closed):

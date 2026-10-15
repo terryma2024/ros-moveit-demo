@@ -81,7 +81,6 @@ class ContainerProcessorOwner(ContainerShardOwner):
         self.max_bytes, self.docker, self.namespace_reader, self.clock = (
             max_frame_bytes, docker_runner, namespace_reader, monotonic_ns)
         self.owner, self.bridge = None, None
-        self.original_cpu_shares = None
         self._registered, self._closing, self._runtime_ready = False, False, False
         self._start_task = self._close_task = None
         self._startup_done = asyncio.Event()
@@ -89,10 +88,6 @@ class ContainerProcessorOwner(ContainerShardOwner):
     @property
     def teacher_socket(self):
         """A processor reaches no Teacher."""
-        return None
-
-    def cpu_target(self):
-        """A processor is never throttled: nothing latency-sensitive runs in phase 2."""
         return None
 
     async def _start(self):
