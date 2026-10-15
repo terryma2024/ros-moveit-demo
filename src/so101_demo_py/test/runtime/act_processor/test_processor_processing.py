@@ -403,7 +403,8 @@ def grader_inputs(tmp_path):
     (out / "episode/seal.json").write_text("{}\n")
     (out / "qc-report.json").write_text("{}\n")
     return dict(out=out, qc_output=out / "qc-report.json", lease=LEASE, identity=IDENTITY, scope=tmp_path / "scope.json",
-                inputs_manifest=tmp_path / "inputs.json", teacher_status="PASSED")
+                inputs_manifest=tmp_path / "inputs.json", teacher_status="PASSED",
+                teacher_manifest=tmp_path / "sealed/dynamic/dynamic-execute-manifest.json")
 
 
 def patch_store(monkeypatch, *, seal=None, qc=None, audit=None):

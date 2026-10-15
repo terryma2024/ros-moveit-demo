@@ -200,7 +200,12 @@ class SubprocessRunner:
         return process is not None and process.poll() is None
 
 
-def grade_episode(*, out, qc_output, lease, identity, scope, inputs_manifest, teacher_status, trust_memo=True):
+def teacher_manifest_of(sealed):
+    """The phase-1 sealed Teacher manifest: the one Teacher manifest every phase-2 QC step binds (the output directory has no `dynamic/`)."""
+    return Path(sealed) / "dynamic" / "dynamic-execute-manifest.json"
+
+
+def grade_episode(*, out, qc_output, lease, identity, scope, inputs_manifest, teacher_status, teacher_manifest, trust_memo=True):
     """The data verdict of an episode the processor built, graded as `ActCollectionResultStore._grade_data` graded an inline one.
 
     Returns `{status, reason, qc, episode_sha256, binding}`; `binding` is None unless the QC ran. Never raises on a data problem."""
@@ -233,7 +238,7 @@ def grade_episode(*, out, qc_output, lease, identity, scope, inputs_manifest, te
     try:
         report, digest, mode = _verify_result_qc(Path(qc_output), episode_root=episode_root, audit_manifest=audit, scope=scope,
                                                  inputs_manifest=inputs_manifest, execution_lease=execution_lease,
-                                                 trust_memo=trust_memo)
+                                                 trust_memo=trust_memo, teacher_manifest=Path(teacher_manifest))
     except (OSError, ValueError, TypeError, KeyError) as error:
         return invalid("RESULT_QC_NOT_RUN: " + (str(error) or type(error).__name__))
     binding = dict(qc_report_path=Path(qc_output).relative_to(out).as_posix(), qc_report_sha256=digest,
@@ -319,7 +324,7 @@ class ProcessingExecution:
                 "--bag", str(bag), "--inputs", str(self.task.inputs_manifest), "--out", str(out),
                 "--lease", str(sealed / "raw" / "lease.json"), "--scope", str(self.task.scope),
                 "--record-stats", str(sealed / "raw" / "record-stats.json"),
-                "--teacher-manifest", str(sealed / "dynamic" / "dynamic-execute-manifest.json"),
+                "--teacher-manifest", str(teacher_manifest_of(sealed)),
                 "--qc-output", str(qc_output)]
 
     def _process(self, phase1):
@@ -382,12 +387,12 @@ class ProcessingExecution:
                 or not qc_output.is_file()):
             return self._finish(phase1, rc, self._invalid("OFFLINE_PROCESSOR_RESULT_NOT_VALID_AND_QC_PASS", out), out)
         covered = self.memo_check(qc_output=qc_output, episode_root=out / "episode", scope=task.scope,
-                                  inputs_manifest=task.inputs_manifest,
-                                  teacher_manifest=None if fault == "none" else task.sealed / "dynamic" / "dynamic-execute-manifest.json")
+                                  inputs_manifest=task.inputs_manifest, teacher_manifest=teacher_manifest_of(task.sealed))
         if covered is not True:
             return self._finish(phase1, rc, self._invalid("OFFLINE_QC_MEMO_NOT_VALID", out), out)
         data = self.grader(out=out, qc_output=qc_output, lease=phase1["lease_identity"], identity=phase1["identity"],
-                           scope=task.scope, inputs_manifest=task.inputs_manifest, teacher_status=phase1["status"])
+                           scope=task.scope, inputs_manifest=task.inputs_manifest, teacher_status=phase1["status"],
+                           teacher_manifest=teacher_manifest_of(task.sealed))
         return self._finish(phase1, rc, data, out)
 
     @staticmethod

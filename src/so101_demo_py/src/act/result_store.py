@@ -188,19 +188,22 @@ def _qc_memo_covers(report_path, *, episode_root, scope, inputs_manifest) -> boo
         return False
 
 
-def _recomputed_or_memoised(report_path, report, *, episode_root, scope, inputs_manifest, trust_memo, reader):
+def _recomputed_or_memoised(report_path, report, *, episode_root, scope, inputs_manifest, trust_memo, reader, teacher_manifest=None):
     """The recomputed report the stored one is compared with: the full recomputation, except where the caller trusts the fresh-process
     QC's memo and the memo covers exactly this report and these files (then the report is the recomputation by construction)."""
     if trust_memo:
         from . import qc_memo
 
-        if qc_memo.memo_matches(report_path, report, episode_root=episode_root, scope=scope, inputs_manifest=inputs_manifest):
+        if qc_memo.memo_matches(report_path, report, episode_root=episode_root, scope=scope, inputs_manifest=inputs_manifest,
+                                teacher_manifest=teacher_manifest):
             return report
-    return reader(episode_root, scope=scope, inputs_manifest=inputs_manifest)
+    if teacher_manifest is None:
+        return reader(episode_root, scope=scope, inputs_manifest=inputs_manifest)
+    return reader(episode_root, scope=scope, inputs_manifest=inputs_manifest, teacher_manifest=teacher_manifest)
 
 
 def _verify_result_qc(report_path, *, episode_root, audit_manifest, scope, inputs_manifest, execution_lease,
-                      trust_memo=False):
+                      trust_memo=False, teacher_manifest=None):
     """Authenticate the report and independently recompute its complete verdict.
 
     Results are graded by the data QC alone: the episode seal's task outcome is not a criterion, so a
@@ -230,7 +233,8 @@ def _verify_result_qc(report_path, *, episode_root, audit_manifest, scope, input
                 or frozen['mode']!=scope_document['mode']):
             raise ValueError('identity/hash/status mismatch')
         recomputed=_recomputed_or_memoised(report_path,report,episode_root=episode_root,scope=scope,
-            inputs_manifest=inputs_manifest,trust_memo=trust_memo,reader=episode_qc.recompute_native_qc)
+            inputs_manifest=inputs_manifest,trust_memo=trust_memo,reader=episode_qc.recompute_native_qc,
+            teacher_manifest=teacher_manifest)
         if _report_canonical(report)!=_report_canonical(recomputed):
             raise ValueError('recomputed verdict differs')
         return report,hashlib.sha256(_read_regular(report_path)).hexdigest(),scope_document['mode']

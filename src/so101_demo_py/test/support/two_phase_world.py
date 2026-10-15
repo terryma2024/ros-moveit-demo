@@ -144,8 +144,11 @@ def convert(world, *, processors=2, missing=(), faults=(), exhausted=()):
             continue
         shutil.copytree(sealed, output)
         (output/'result.json').unlink()
+        # a real phase-2 output directory has no dynamic/: the Teacher manifest is phase 1's sealed one, passed explicitly
+        shutil.rmtree(output/'dynamic')
         graded = grade_episode(out=output, qc_output=output/'qc-report.json', lease=lease, identity=identity,
-                               scope=world.scopes[scene], inputs_manifest=world.inputs_manifest, teacher_status=legacy['status'])
+                               scope=world.scopes[scene], inputs_manifest=world.inputs_manifest, teacher_status=legacy['status'],
+                               teacher_manifest=sealed/'dynamic'/'dynamic-execute-manifest.json')
         if graded['binding'] is None:
             raise AssertionError('controlled grading failed: '+str(graded['reason']))
         binding = graded['binding']

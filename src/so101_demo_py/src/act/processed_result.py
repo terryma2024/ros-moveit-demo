@@ -106,7 +106,7 @@ def verify_processed_result(output_dir, *, sealed, scene_id, result_sha256, rece
                 from so101_demo.runtime.act_processor.processing import grade_episode as regrade
             graded = regrade(out=out, qc_output=out / document["qc_report_path"], lease=lease, identity=document["identity"],
                              scope=Path(scope), inputs_manifest=Path(inputs_manifest), teacher_status=document["status"],
-                             trust_memo=trust_memo)
+                             trust_memo=trust_memo, teacher_manifest=sealed / "dynamic" / "dynamic-execute-manifest.json")
             binding = graded["binding"] or {}
             if (graded["status"] != "VALID" or graded["qc"] != qc or graded["episode_sha256"] != episode
                     or any(binding.get(name) != document[name] for name in _BINDING)):
