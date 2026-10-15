@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3683
-next_experiment: EXP-605 (PLANNED): two-phase debug run with the goal-stop proof fix.
+latest_checkpoint: CP-3684
+next_experiment: NONE until the human chooses the phase-1 recording concurrency.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3684 — EXP-605 VALID: first complete two-phase run (21 min; phase 2 processed 16 of 16 with no retry); 7 of 16 VALID at eight concurrent recordings
+
+- Pipeline complete and correct. Data quality limited by eight concurrent recordings: 6 INPUT_STALE and 3 late camera frames.
+- Next lever: the phase-1 recording cap.
 
 ## CP-3683 — Goal-stop proof fix; gate PASS; EXP-605 planned
 
@@ -92,7 +97,7 @@ next_experiment: EXP-605 (PLANNED): two-phase debug run with the goal-stop proof
 
 ```yaml
 experiment_id: EXP-605
-status: PLANNED
+status: VALID
 prior_experiment: EXP-604 (VALID failure; one shard's goal stop unconfirmed at wave end)
 hypothesis: With the goal-stop proof fixed, the two-phase run completes end to end - phase 1, stop proofs, syncfs, phase 2 on processor containers, combined records - with VALID at or above EXP-599's 13 of 16.
 prediction: Phase 1 about 12 minutes, phase 2 about 10 to 15 minutes; every stop proven; VALID at least 13 of 16.
@@ -116,15 +121,27 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T204253Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T204253Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 20:44:27Z to 21:05:27Z, 21 minutes, CLI exit 0 - the first complete two-phase run.
+  - Phase 1 (first shard launch to last shard stop): 626 s; 16 of 16 recorded; Teacher 16 of 16 PASS; every shard stop proven.
+  - syncfs 0.004 s.
+  - Phase 2: 540 s.
+    - 8 processors started, none lost, no relaunch; 16 dispatches, 16 results, 0 retries, 0 faults.
+    - Per-scene processing 159 to 268 s.
+  - Data 7 of 16 VALID with QC PASS. INVALID 9:
+    - INPUT_STALE 6, 4 of them with RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW;
+    - NO_NEW_ACQUISITION 3, 1 with the window failure.
+  - Store IDLE afterwards.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The two-phase implementation works end to end: phase-1 recording, stop proofs, syncfs, processor containers, combined records and the exit code.
+  - With no offline processing at all during phase 1, eight concurrent recordings still give 7 of 16. Four concurrent recordings without processing overlap gave 13 of 16 (EXP-599). Eight concurrent recordings interfere with each other; the phase-1 lever is max_concurrent_recordings (no code change).
+conclusion: VALID. The two-phase pipeline is functionally complete; data quality at eight concurrent recordings is not sufficient (7 of 16).
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T204253Z (host/campaign-result.json, processing-journal.jsonl, processing/)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T204253Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp605 and exp605-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
