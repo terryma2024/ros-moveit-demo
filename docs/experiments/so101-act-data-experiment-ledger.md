@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3659
-next_experiment: EXP-594 (PLANNED): sixth eight-shard qualification attempt, with the unreachable classification, the rule-gap fixes and the reachability-filtered scenes.
+latest_checkpoint: CP-3660
+next_experiment: NONE until the wrist-camera delivery holds and INPUT_STALE are resolved.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3660 — EXP-594 VALID failure: first complete eight-shard run; Teacher 40 of 40; NOT_QUALIFIED only on QC-valid 27 of 40
+
+- No execution fault, every stop proven, store IDLE, 55 minutes. The qualification report builds and names one reason, QUALITY_GATE_FAILED:qc_valid_rate. The remaining INVALID causes are late wrist-camera frames (8), INPUT_STALE (4, with the source-age failure) and one INPUT_TIMESTAMP_FUTURE.
+- Retained: run root, prep directory, logs and sampler data under R/run-logs/exp594. Nothing deleted.
 
 ## CP-3659 — Fixes committed, gate PASS, images rebuilt, scenes regenerated; EXP-594 planned
 
@@ -101,7 +106,7 @@ next_experiment: EXP-594 (PLANNED): sixth eight-shard qualification attempt, wit
 
 ```yaml
 experiment_id: EXP-594
-status: PLANNED
+status: VALID
 prior_experiment: EXP-593 (VALID failure; two pre-motion unreachable faults, 23 of 40 QC-valid)
 hypothesis: With pre-motion unreachable results sealed as Teacher failures, the rule gaps closed and reachable scenes only, eight shards finish both waves without an execution fault and reach the qualification pass counts - Teacher at least 38 of 40, QC at least 34 of 40.
 prediction:
@@ -130,15 +135,27 @@ commands:
   - command: zsh <registered root>/act-w8-inputs-20261014T231900Z/inspect.zsh
     exit_code: 0
   - command: zsh <registered root>/act-w8-inputs-20261014T231900Z/run-w8.zsh
-    exit_code: PENDING
+    exit_code: 0
+  - command: zsh <registered root>/act-w8-inputs-20261014T231900Z/build-report.zsh
+    exit_code: 3
 observed:
-  - PENDING
+  - Run 23:32:35Z to 00:27:39Z, about 55 minutes, two waves of 20; CLI exit 0 (the first eight-shard run to finish); wave-0-verified.json and wave-1-verified.json written; campaign-cleanup.json CAMPAIGN_CLOSING terminated true; all 16 shards and the Teacher service exited 0; store IDLE afterwards.
+  - Teacher 40 of 40 COMPLETED PASS; no execution fault.
+  - Data 27 of 40 VALID with QC PASS. INVALID reasons by episode - NO_NEW_ACQUISITION 8 (one with RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW); INPUT_STALE 4, each with RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW except wave-0-w07-qual-15; INPUT_TIMESTAMP_FUTURE 1. No LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID, no OFFLINE_SOURCE_GAP, no topic loss.
+  - Qualification report host/qualification-report.json sha256 1c0e885254f9abd0372cb8ffeae64a118a98bc1e64273ad495a581beddf850f7, NOT_QUALIFIED, the single reason QUALITY_GATE_FAILED:qc_valid_rate. teacher_physical_success_rate 40 of 40 PASS; qc_valid_rate 27 of 40 FAIL (34 required); recorder_lossless 27 of 27 PASS and frame_continuity 27 of 27 PASS over QC_VALID_EPISODES with 13 excluded.
+  - Queued state publishers overflowed 0 and sink_errors 0 in all 16 shard logs; would_have_skipped for the arm controller 91 to 187 per shard.
+  - Sampler 3305 samples; peak container memory 24.06 GiB; CPU pressure some avg10 median 2.79, at most 13.27; memory pressure at most 2.92.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The classification fix, the scene filter and the scene-read rule fix hold: no fault, Teacher 40 of 40, no scene geometry failure.
+  - The source-age failure fell from 10 of 38 to 5 of 40 episodes and now appears only with INPUT_STALE or a late camera frame; the manifest-write move helped but did not remove it.
+  - Late wrist-camera frames are now the leading cause (8 of 13), as predicted; INPUT_STALE is second.
+  - The qualification report path works end to end on a completed run.
+conclusion: VALID failure. The first complete eight-shard qualification run - NOT_QUALIFIED only on the QC-valid rate (27 of 40, 34 required); every other gate passes.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261014T231900Z (host/qualification-report.json, host/campaign-result.json, host/wave-*/task-journal)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261014T231900Z (build-report-result.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp594 (CLI, build-report, shard and teacher logs, sampler) and exp594-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
