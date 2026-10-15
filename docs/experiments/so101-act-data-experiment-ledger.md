@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 5d8532bb2822e394260eb85829a16e683818aa0d
+current_commit: 1776f588865a4bc40aed5fe0802f3831cfa7160c
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,72 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3680
-next_experiment: EXP-604 (to be planned) after the processor control readiness fix.
+latest_checkpoint: CP-3681
+next_experiment: EXP-604 (PLANNED): two-phase debug run with the processor path fix.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3681 — Processor path fix, two flaky gate tests fixed (one with a production fail-open); gate PASS; EXP-604 planned
+
+- Commit `56323e807` (Sonnet):
+  - processing_scheduler._item read the shard task directory (row location) instead of the sealed attempt (proof location). The processor refused the task with PROCESSING_TASK_ATTEMPT_INVALID and exited, and the Host only saw CONTAINER_CONTROL_OWNER_NOT_READY. The fixtures had used the wrong row shape.
+  - Any FAULT or MISSING scene in either phase now exits CAMPAIGN_COMPLETED_WITH_FAULTS.
+  - In-image check on a real EXP-603 sealed attempt: the old path is refused, the sealed path passes receipt verification.
+- Commit `39dd3c6dd` (Sonnet), gate flake in test_expert_validation_retry_owner_reconcile:
+  - Production fail-open in the Expert Validation supervisor (supervisor.py has_unresolved_campaign and _reconcile_retry_batch) treated an owner identity in the UNKNOWN state as not alive, unlike the store gate. Now anything not proven EXITED blocks.
+  - The fixture recorded the child identity before exec completed.
+  - Under load: 3 failures in 120 runs before, 0 in 400 after.
+- Commit `1776f5888` (Sonnet), gate flake HEAD_LOCAL_RUNTIME_CAMERA_STALE, test only:
+  - The head-local test helpers relied on host scheduling to stay within the 0.2 s camera and other wall-age bounds; armed_runtime(fresh=True) now re-stamps the wall fields at the guard's sample time, with opt-outs for the clock-loss and joint-loss tests.
+  - Under load: 6 failures in 15 runs before, 0 in 40 after.
+- Gates:
+  - 1a5973835 failed on the reconcile flake;
+  - 39dd3c6dd failed on the camera-stale flake;
+  - 1776f5888 (R/gates/1776f588865a) PASSED, all rc 0, dirty_after 0.
+- Images from 1776f5888:
+  - inference sha256:f4f22625d001cac47ba6402ca6857ab07ba2a104adb7f58a6f2805f5b19099ad (R/image-build-20261015T195316Z)
+  - shard sha256:a49812ed804ca752eb6fd91782a9be599e341154365c29ff32a50780fde6e439 (R/image-build-20261015T195430Z)
+- 48 exited EXP-603 processor containers removed after their logs had been saved (R/docker-cleanup-20261016-exp603-processors.jsonl). The first EXP-604 validation run refused on their presence.
+- Inputs REG/act-w8d-inputs-20261015T195716Z: validation 77 of 77 PASS on the second run; sha256sums regenerated.
+
+```yaml
+experiment_id: EXP-604
+status: PLANNED
+prior_experiment: EXP-603 (VALID failure; phase 1 and transition fine, every processor unreachable)
+hypothesis: With the processor reading the sealed attempt, phase 2 processes every recorded scene. The two-phase run gives VALID at or above EXP-599's 13 of 16, in about 20 minutes in total.
+prediction: Phase 1 about 11 minutes; phase 2 about 10 to 15 minutes with eight processors; few retries; CLI exit 0 if no scene faults, else CAMPAIGN_COMPLETED_WITH_FAULTS.
+single_variable: Commits 56323e807, 39dd3c6dd and 1776f5888 relative to EXP-603.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 1776f5888.
+success_criteria:
+  - Both phases complete; every scene has a combined record with a data verdict; every stop proven.
+failure_criteria:
+  - A campaign-stopping failure, an unproven stop, or processor faults on recorded scenes.
+invalid_criteria:
+  - As EXP-601, for commit 1776f5888.
+provenance:
+  source_commit: 1776f588865a4bc40aed5fe0802f3831cfa7160c (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/1776f588865a/install plus worktree import
+  runtime_executable: as EXP-601
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T195716Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after removing the EXP-603 processor containers
+    exit_code: 1 (processor containers present), then 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T195716Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3680 — EXP-603 VALID failure: phase 1 and the transition work (16 of 16 recorded in 677 s, syncfs 6 ms); every processor unreachable; exit code 0 despite faults
 
