@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3667
-next_experiment: EXP-598 (PLANNED): 16-scene eight-shard debug run with the recording cap lowered from 4 to 2.
+latest_checkpoint: CP-3668
+next_experiment: NONE until the human chooses the next step after the cap-2 result.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3668 — EXP-598 VALID: recording cap 2 gives 11 of 16 VALID (cap 4 gave 4 of 16); small-file writes ruled out
+
+- Human question "IO问题是否跟并发大量小文件写入有关？":
+  - Each episode writes 1926 frame PNGs of about 66 KB during offline processing, and the recorder seal fsyncs each of them.
+  - A direct test showed that neither the frame writes nor the seal fsync bursts, from 1 to 4 processes, delay other processes' synchronous writes or renames by more than a few milliseconds. Answer: no.
+- The INVALID rate depends on concurrency, but no disk load reproduces the stalls, so the mechanism is still open.
 
 ## CP-3667 — Disk benchmark and reversible IO-setting comparison; EXP-598 planned with recording cap 2
 
@@ -93,7 +100,7 @@ next_experiment: EXP-598 (PLANNED): 16-scene eight-shard debug run with the reco
 
 ```yaml
 experiment_id: EXP-598
-status: PLANNED
+status: VALID
 prior_experiment: EXP-597 (VALID; 4 of 16 VALID at recording cap 4)
 hypothesis: If the INVALID causes depend on concurrent write load, halving the concurrent recordings lowers the INVALID rate clearly.
 prediction: Clearly fewer INPUT_STALE and NO_NEW_ACQUISITION than EXP-596 and EXP-597 (6 of 14 and 12 of 16 INVALID), with lower write throughput; a longer run. If the rate stays similar, the disk is not the main cause.
@@ -117,15 +124,28 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T063007Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after the expectation fix
     exit_code: 1 (cap-4 expectations), then 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T063007Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 06:39:08Z to 07:03:57Z, 25 minutes (EXP-597 at cap 4 took 21), CLI exit 0; 16 of 16 collected; Teacher 16 of 16 PASS.
+  - Data 11 of 16 VALID (EXP-597 4 of 16, EXP-596 8 of 14). INVALID - INPUT_STALE 3, NO_NEW_ACQUISITION 2, RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW alongside in 2.
+  - Small-file write test afterwards on the idle host, R/smallfile-bench-20261015/results.json.
+    - Probe: 4 KiB write with fdatasync, and a 20 KB temp write with rename.
+    - The fdatasync p99 stayed at 1.7 to 3.1 ms under these loads:
+      - frame writing without fsync by 4 processes;
+      - the seal pattern (1926 files of 66 KB, each fsynced, then the directory) by 1, 2 or 4 processes at once.
+    - The rename p99 stayed at 0.13 to 0.20 ms under the same loads.
+    - Four buffered 2.2 GB writers gave fdatasync p99 36 ms and rename p99 8 ms.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The INVALID rate depends on concurrency - halving the concurrent recordings raised VALID from 4 of 16 to 11 of 16 on the same code (single comparison, spread between runs is large).
+  - Small-file writes and the per-file seal fsyncs are ruled out as the cause; no disk load reproduced the 100 to 400 ms stalls of the real runs. The concurrent factor is therefore not established as disk IO.
+  - At 11 of 16 (69 percent), the cap-2 rate projected to 40 scenes is about 27, short of 34.
+conclusion: VALID. Concurrency dependence supported; disk IO, including small-file writes, is not shown to be the mechanism.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T063007Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T063007Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp598 and exp598-console.log
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/smallfile-bench-20261015/results.json
+decision: KEEP
 next_experiment: NONE
 ```
 
