@@ -69,11 +69,22 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3675
-next_experiment: EXP-601 (PLANNED): first two-phase debug run, 16 scenes, eight workers.
+latest_checkpoint: CP-3676
+next_experiment: EXP-602 (to be planned): EXP-601 repeated after the stop-proof retry fix.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3676 — EXP-601 VALID failure: phase 1 recorded 16 of 16 at eight concurrent recordings; stop proof failed on docker inspect timeouts; lease released under the standing authorisation
+
+- Phase 1 worked: 16 recorded, Teacher 16 of 16, PENDING_QC.
+- The end-of-phase-1 stop proof failed: three docker inspect calls timed out after 30 s while all containers had exited 0.
+- Manual release by R/manual-lease-release-20261015-exp601.py under the standing human authorisation of CP-3628, same preconditions as CP-3646 and CP-3652:
+  - all eight shard containers exited with no process and no other container running;
+  - the store in exactly the held state;
+  - the lease owner pid 2129356 gone.
+- Parent operation 790c5f4274d2444a94c3eaa31000635a written CANCELLED; read back IDLE, no lease, no active slot. A human-authorised override, not a proof.
+- Fix in progress (Sonnet): a timed-out or transient docker inspect is retried within a bounded total before a stop counts as unconfirmed.
 
 ## CP-3675 — Two-phase collection implemented (plan tasks 1-7), reviewed, gate PASS; EXP-601 planned
 
@@ -117,7 +128,7 @@ next_experiment: EXP-601 (PLANNED): first two-phase debug run, 16 scenes, eight 
 
 ```yaml
 experiment_id: EXP-601
-status: PLANNED
+status: VALID
 prior_experiment: EXP-599 (13 of 16 VALID with four tasks in flight) and EXP-600 (9 of 15 with CPU shares)
 hypothesis: With recording and offline processing separated into two phases, eight concurrent recordings with nothing else running give VALID at or above EXP-599's 13 of 16, in a total time near or below EXP-599's 32 minutes.
 prediction:
@@ -145,15 +156,24 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T143411Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T143411Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run 14:36:02Z to 14:47:57Z.
+  - Phase 1 recorded all 16 scenes with eight concurrent recordings: 16 collected, Teacher 16 of 16 PASS, every data status PENDING_QC as designed.
+  - The CLI then ended with CAMPAIGN_RUN_FAILED CAMPAIGN_SHARD_STOP_UNCONFIRMED and CAMPAIGN_CLEANUP_UNCONFIRMED.
+    - campaign-cleanup.json: shards w00, w05 and w07 not terminated, each with one error - TimeoutExpired "docker inspect <id> timed out after 30 seconds"; the other five and the Teacher service terminated.
+    - docker ps -a afterwards: all eight shards Exited (0).
+  - Phase 2 never started: no processor container, no phase1-durability.json, no processing journal.
+  - The store held the lease and slots w00 to w07.
 inferred:
-  - NONE
-conclusion: PENDING
+  - Phase 1 itself works at eight concurrent recordings.
+  - The stop proof counts a single timed-out docker inspect as unconfirmed. The Docker daemon was transiently slow right after about 35 GB of bags were written and eight containers stopped at once - inferred, not measured.
+conclusion: VALID failure. Phase 1 complete; the run stopped at the phase transition on a stop-proof defect, so no data verdict was produced.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T143411Z (host/campaign-cleanup.json, task journals, phase-1 sealed attempts)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T143411Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp601 and exp601-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
