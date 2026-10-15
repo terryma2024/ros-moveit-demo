@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 02ca8318e2542a6e1fde027b96e3cf8e0f3a57a3
+current_commit: 737278f0b7baf5da3f9c82258af12054511f631b
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,73 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3662
-next_experiment: NONE until the human chooses how to test the shared-GPU render stall.
+latest_checkpoint: CP-3663
+next_experiment: EXP-596 (PLANNED): 16-scene eight-shard debug run with render, simulation-step and recorder diagnostics and GPU sampling.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3663 — Diagnostics and short debug runs; gate PASS; EXP-596 planned
+
+- Human answer "加诊断日志 + GPU 采样": logging only, no behaviour change.
+  - Commit `f552e9247`, submodule mujoco_ros2_control `ffe9711` on its branch codex/so101-act-data-0917a.
+  - CAMERA_RENDER_SLOW / STATS: render hand-over wait split into lock and cv, per-camera render, readback, convert, publish.
+  - SIM_STEP_SLOW / STATS: tick-gate ack wait, loop iteration, sim mutex wait; paused iterations skipped.
+  - RECORDER_DELIVERY_SLOW: receipt gap of 150 ms or more on the raw recorder's probe subscriptions, sidecar write and fsync of 100 ms or more.
+  - Thresholds: 100 ms for waits and renders, 150 ms for frames and loop iterations; at most 20 SLOW lines per 10 s.
+  - Not visible: the rosbag2 C++ recorder's own callbacks and writes.
+- The human asked to shorten the debug cycle ("能否缩短采样时间"). Human answer "放宽 functional 合同".
+  - Commit `737278f0b`: the functional contract (kind ACT_COLLECTION_FUNCTIONAL_RUN) accepts worker_count 1, 2 or 8 and 8 or 16 scenes, a closed set.
+  - The contract type is chosen by its kind, no longer by the worker count.
+  - Functional documents are refused wherever qualification evidence is required; the W8 gate contract and formal rules are unchanged.
+  - Targeted tests 1029 and 47 passed.
+- Gate on 737278f0b, R/gates/737278f0b7ba, serial: build rc 0; so101_demo_py 12928 passed, 187 skipped; colcon 2183 tests, 0 errors, 0 failures, 60 skipped; total 989 s. PASSED.
+  - An earlier gate on f552e9247 was stopped before completion because the next commit was coming.
+- Images from 737278f0b (both build logs read back that commit, identical source snapshots):
+  - inference sha256:b2feaa2dfb4dcc1857d1d691a840a28491b74516f6f1a035248696290614183a (R/image-build-20261015T031346Z)
+  - shard sha256:4ec4e42c3573a8e15020b572fa0c189c89bef4cda9601fd1463935f7b5504d0e (R/image-build-20261015T031511Z)
+- Inputs REG/act-w8d-inputs-20261015T030006Z (Sonnet; author step run by the coordinator), validation 71 of 71 PASS.
+  - Scenes: the first 16 rows of the reachability-filtered qualification-40, relabelled dbg-00 to dbg-15 with split functional, source ids kept per row.
+  - Samplers: host, thread, and GPU (nvidia-smi query every 200 ms and pmon every 1 s, under R/run-logs/exp596/gpu/).
+  - After the run: shard logs saved and a summary of the diagnostic lines per shard.
+
+```yaml
+experiment_id: EXP-596
+status: PLANNED
+prior_experiment: EXP-595 (VALID; stalls are off-CPU blocking, render path on the shared GPU suspected)
+hypothesis: The 334 ms simulation stalls and the late wrist frames coincide with long camera render or readback durations or a long render hand-over wait, at times of high GPU use, showing the shared GPU as the bottleneck.
+prediction: CAMERA_RENDER_SLOW lines with render or readback of 100 ms or more, aligned with SIM_STEP_SLOW and with the late frames in the bags; GPU utilisation high at those times. If no render line appears at the stalls, the GPU hypothesis is refuted and the recorder and simulation-loop lines are next.
+single_variable: The diagnostic logging, the functional-contract change and the 16-scene functional plane relative to EXP-595; same scheduling limits.
+lifecycle: ISOLATED_STACK (eight containers, one wave of 16)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 737278f0b.
+success_criteria:
+  - The run completes; the diagnostic lines and GPU samples cover it; every stop proven.
+failure_criteria:
+  - An execution fault, an unproven stop, or a missing diagnostic stream.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 737278f0b; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 737278f0b7baf5da3f9c82258af12054511f631b (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/737278f0b7ba/install plus worktree import
+  runtime_executable: as EXP-595, plus nvidia-smi samplers on the Host
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T030006Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T030006Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3662 — EXP-595 VALID: 18 of 40 QC-valid; the stalls are off-CPU blocking (render path on the shared GPU, recorder bursts), not scheduler starvation
 
