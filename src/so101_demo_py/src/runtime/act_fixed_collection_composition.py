@@ -82,6 +82,9 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     if type(campaign_id) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*',campaign_id) is None:
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
     runtime = _collection_runtime(arguments.collection_config)
+    # collect_timeout_s, process_timeout_s and processing_reserve_s are optional; any of them must fit the admitted total
+    from so101_demo.runtime.container_campaign.processing_limits import check_phase_limits
+    check_phase_limits(config,runtime.batch_hard_timeout_s)
     launcher = getattr(arguments, 'instance_launcher', 'container')
     if launcher not in ('container', 'native'):
         raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
@@ -135,7 +138,7 @@ def _digest(path) -> str:
 def build_container_campaign_owner(context, *, config, paths, slots, manifest_path, scene_manifest, case_inputs,
                                    parallel_runtime, approved_inputs, qualification, approved_disk_floor_bytes,
                                    docker_runner=None, service_query=None, namespace_reader=None, control_factory=None,
-                                   instance_launcher='container', native=None):
+                                   instance_launcher='container', native=None, admit_processor_slots=None):
     """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
 
     Order: the launch registry first (admission's `finish` opens it with `create=False`, so a construction failure below can
@@ -152,7 +155,11 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
 
     `instance_launcher` is `container` (one Docker container per slot) or `native` (one Host process group, one worker);
     admission has already refused `native` for anything else. Both run the same instance program, and the Teacher service
-    is a container either way. `native` is a mapping of the native launcher's edges (`install_prefix` is required; `command`,
+    is a container either way.
+
+    Phase 2 (processing): with the container launcher and an `admit_processor_slots(context, slots)` (the unified service's), the owner
+    gets a `ProcessingScheduler` over `ContainerProcessorLauncher`. Without one the campaign ends after phase 1. The native launcher's
+    processor owner is a later task. `native` is a mapping of the native launcher's edges (`install_prefix` is required; `command`,
     `base_environment`, `popen` and `graph_probe_factory` default to production).
     """
     from so101_demo.cli.mujoco_batch.request import _load_runtime_config
@@ -186,9 +193,23 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
             **given(control_factory=control_factory))
         verifier = ContainerWaveResultVerifier(root=paths['run'], registry=registry, case_inputs=case_inputs,
             qualification=qualification)
+        processing = None
+        if admit_processor_slots is not None and instance_launcher == 'container':
+            from so101_demo.runtime.container_campaign.processing_scheduler import ProcessingScheduler
+            from so101_demo.runtime.container_campaign.processor_launcher import ContainerProcessorLauncher
+            processors = ContainerProcessorLauncher(context=context, paths=paths, registry=registry,
+                images=dict(head=config['head_service']['image'], teacher=config['teacher_service']['image'],
+                            shard=config['shard_image']),
+                parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
+                config_paths=(Path(context.campaign_config_path),),
+                **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
+            processing = ProcessingScheduler(context=context, runtime=runtime, config=config, root=paths['run'],
+                launcher=processors, admit_slots=lambda slots: admit_processor_slots(context, slots),
+                case_inputs=case_inputs, **given(control_factory=control_factory))
         return ContainerCampaignOwner(admitted_context=context, config=config, root=paths['run'], service_owner=services,
             slots=slots, manifest_path=manifest_path, qualification=qualification, launcher=launcher,
-            coordinator=coordinator, verifier=verifier, approved_disk_floor_bytes=approved_disk_floor_bytes)
+            coordinator=coordinator, verifier=verifier, approved_disk_floor_bytes=approved_disk_floor_bytes,
+            processing=processing)
     except BaseException:
         registry.close()
         raise

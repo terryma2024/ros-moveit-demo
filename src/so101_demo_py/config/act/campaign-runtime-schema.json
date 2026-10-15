@@ -346,6 +346,31 @@
       "minimum": 2,
       "maximum": 1024
     },
+    "processor_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "processing_max_attempts": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "processing_reserve_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "collect_timeout_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "process_timeout_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
     "qualification_contract": {
       "oneOf": [
         {

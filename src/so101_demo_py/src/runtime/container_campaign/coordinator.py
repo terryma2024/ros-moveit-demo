@@ -146,8 +146,10 @@ class InstanceDispatch:
     """The per-instance loop. `control` has the four-operation `ContainerTaskControl` shape."""
 
     def __init__(self, *, control, shard, assignment, journal, endpoints, scene_manifest, case_inputs,
-                 config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep, gate=None, cpu=None):
+                 config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep, gate=None, cpu=None,
+                 phase1_deadline_s=None):
         launch = shard.launch
+        self.phase1_deadline_s = phase1_deadline_s   # no scene is claimed from this instant on; None: no phase-1 limit
         self.gate, self.recording_claim, self.done, self.unsent = gate, False, False, False
         self.cpu = cpu   # a CPU-weight controller or None (feature off)
         self.control, self.shard, self.assignment, self.journal = control, shard, assignment, journal
@@ -290,6 +292,10 @@ class InstanceDispatch:
                 service_generation=endpoint.service_generation, max_frame_bytes=endpoint.max_frame_bytes)
         config = self.config
         now = self.clock()
+        if self.phase1_deadline_s is not None and now >= self.phase1_deadline_s:
+            # The phase-1 limit gates claims only. A task already claimed keeps the stage bounds below, capped by the total
+            # deadline: cutting a recording short would give phase 2 nothing, and the wave verifier refuses a failed task.
+            raise InstanceFault('CONTAINER_PHASE1_DEADLINE_EXPIRED')
         deadline = min(now+config.initializing_hard_timeout_s+config.executing_hard_timeout_s
                        +config.finalizing_hard_timeout_s+config.worker_recovery_timeout_s,
                        self.context.deadline_monotonic_s)
@@ -455,6 +461,7 @@ class ConcurrentCollectionCoordinator:
         self.clock, self.sleep = clock, sleep
         self.active = None
         self.stop_reason = None
+        self.phase1_deadline_s = None
         self.waves = {}
 
     def stop_dispatch(self, reason):
@@ -462,6 +469,12 @@ class ConcurrentCollectionCoordinator:
             raise ValueError('CONTAINER_DISPATCH_STOP_REASON_INVALID')
         if self.stop_reason is None:
             self.stop_reason = reason
+
+    def set_phase1_deadline(self, deadline_monotonic_s):
+        """The instant after which no scene is claimed (the owner computes it from the campaign's time limits)."""
+        if type(deadline_monotonic_s) not in (int, float) or not math.isfinite(deadline_monotonic_s) or deadline_monotonic_s <= 0:
+            raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
+        self.phase1_deadline_s = float(deadline_monotonic_s)
 
     async def run_wave(self, *, plan, shards, endpoints, dispatch_allowed):
         if self.stop_reason is not None or self.active is not None or not dispatch_allowed():
@@ -510,7 +523,7 @@ class ConcurrentCollectionCoordinator:
             journal=journal, endpoints=endpoints, scene_manifest=self.scene_manifest,
             case_inputs=self.case_inputs, config=self.config, context=self.context,
             dispatch_allowed=dispatch_allowed, clock=self.clock, sleep=self.sleep, gate=gate,
-            cpu=cpu.get(shard.launch.launch_id))
+            cpu=cpu.get(shard.launch.launch_id), phase1_deadline_s=self.phase1_deadline_s)
             for shard in shards]
         if gate is not None:
             gate.members = dispatches

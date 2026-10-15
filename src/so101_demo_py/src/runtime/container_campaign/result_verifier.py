@@ -42,13 +42,17 @@ def check_wave_scheduling(plan, by_scene, roots, qualification):
 
 
 def verify_wave_records(root, plan, launch_records, case_inputs, qualification, *, case_rows=None, readback_workers=1,
-                        readback_timeout_s=DEFAULT_TIMEOUT_S):
+                        readback_timeout_s=DEFAULT_TIMEOUT_S, partial=False):
     """Recompute one wave's verified record from registry records and the task journal alone; no live owner is involved.
 
     `launch_records` are the registry records of the wave's shard launches. Without `case_rows` the rows are the collected
     journal records, which is what an independent verifier has; with them (the live verifier passes the coordinator's rows) each
     row must equal its collected record. Every task is read back through `verify_container_task_registration` against the
-    scene's own scope and inputs manifest; FAILED Teacher and INVALID/QC-failed data stay in the denominator."""
+    scene's own scope and inputs manifest; FAILED Teacher and INVALID/QC-failed data stay in the denominator.
+
+    `partial` is for a wave that phase 1 ended on its deadline: `plan` then names only the scenes collected, and the scheduling rule
+    (two tasks per qualification instance, reserved before surplus) is the one check that is skipped; the scenes that were never
+    collected are the campaign's missing evidence, recorded by the owner."""
     try:
         root = Path(root)
         wave_index = plan['wave_index']
@@ -141,7 +145,8 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
                 raise early
         if set(verified) != set(scene_order):
             raise ValueError('missing scene')
-        check_wave_scheduling(plan, by_scene, roots, qualification)
+        if not partial:
+            check_wave_scheduling(plan, by_scene, roots, qualification)
         return dict(wave_index=wave_index, scene_count=len(scene_order),
             coordinator_root=str(journal_root), case_results=[verified[name] for name in scene_order])
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
@@ -168,7 +173,7 @@ class ContainerWaveResultVerifier:
                 validate_file_ref(ref)
         self.root, self.registry, self.case_inputs, self.qualification = root, registry, inputs, qualification
 
-    def verify_wave(self, plan, outcome, shards):
+    def verify_wave(self, plan, outcome, shards, partial=False):
         """The live verification: the coordinator's outcome and the live shard owners are checked, then the records recompute."""
         try:
             if (type(plan) is not dict or type(outcome) is not dict
@@ -190,7 +195,7 @@ class ContainerWaveResultVerifier:
             raise ValueError('CONTAINER_WAVE_COMMIT_READBACK_INVALID') from error
         return verify_wave_records(self.root, plan, launch_records, self.case_inputs, self.qualification,
                                    case_rows=outcome['case_results'], readback_workers=self.readback_workers,
-                                   readback_timeout_s=self.readback_timeout_s)
+                                   readback_timeout_s=self.readback_timeout_s, partial=partial)
 
     def _check_scheduling(self, plan, by_scene, roots):
         check_wave_scheduling(plan, by_scene, roots, self.qualification)

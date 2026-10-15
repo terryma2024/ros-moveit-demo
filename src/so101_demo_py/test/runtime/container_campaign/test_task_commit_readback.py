@@ -663,3 +663,26 @@ def test_qualification_index_never_exports(world):
     assert entry['collection_evidence']['registration'] == str(world.registration)
     assert set(entry['collection_evidence']) == {'registration', 'owner_root', 'task_id', 'result_location', 'scope_path',
                                                  'inputs_manifest'}
+
+
+def test_a_partial_wave_after_a_phase_limit_skips_only_the_scheduling_rule(schedule_factory):
+    """Phase 1 ended on its deadline: the scenes collected so far are verified as they are, qualification's two-tasks-per-instance
+    rule is the one rule that cannot hold. Every readback and identity check still applies."""
+    schedule = schedule_factory(['s1', 's2', 's3', 's4'], qualification=True)
+    schedule.run_task('w00', 's1')
+    schedule.run_task('w01', 's2')
+    trimmed = dict(wave_index=0, scene_ids=['s1', 's2'], assignment=None)
+    outcome = wave_outcome(schedule, schedule.journal)
+    with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+        schedule.verifier.verify_wave(trimmed, outcome, schedule.shards)
+    value = schedule.verifier.verify_wave(trimmed, outcome, schedule.shards, partial=True)
+    assert value['scene_count'] == 2 and [row['scene_id'] for row in value['case_results']] == ['s1', 's2']
+
+
+def test_a_partial_wave_still_refuses_an_unfinished_task(schedule_factory):
+    unfinished = schedule_factory(['s1', 's2'], qualification=True)
+    unfinished.run_task('w00', 's1')
+    unfinished.run_task('w01', 's2', collect=False)
+    with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+        unfinished.verifier.verify_wave(dict(wave_index=0, scene_ids=['s1', 's2'], assignment=None),
+            wave_outcome(unfinished, unfinished.journal), unfinished.shards, partial=True)

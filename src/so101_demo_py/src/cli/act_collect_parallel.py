@@ -248,7 +248,7 @@ def main(argv=None, *, edges=None) -> int:
             approved_disk_floor_bytes=binding['disk_floor_bytes'], docker_runner=edges.docker_runner,
             service_query=edges.service_query, namespace_reader=edges.namespace_reader,
             control_factory=edges.control_factory, instance_launcher=args.instance_launcher,
-            native=_native_edges(edges, args))
+            native=_native_edges(edges, args), admit_processor_slots=workload.admit_processor_slots)
     except Exception as error:  # noqa: BLE001 - admitted but not built: nothing was launched, so ask admission to settle
         return _settle_unbuilt(workload, context, run, error)
     cleanup = []

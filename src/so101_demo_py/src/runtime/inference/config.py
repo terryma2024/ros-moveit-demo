@@ -102,7 +102,16 @@ _RECORDING_CAP = "max_concurrent_recordings"
 _TASKS_IN_FLIGHT = "max_tasks_in_flight"
 _ASSIGNMENT_GAP = "min_assignment_gap_s"
 _POST_RECORDING_SHARES = "post_recording_cpu_shares"
-_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _POST_RECORDING_SHARES)
+# Phase 2 (processing) and the time limits of the two phases. Their sum against `batch_hard_timeout_s` is checked where that value
+# is known (`processing_limits.check_phase_limits`).
+_PROCESSOR_COUNT = "processor_count"
+_PROCESSING_MAX_ATTEMPTS = "processing_max_attempts"
+_PROCESSING_RESERVE_S = "processing_reserve_s"
+_COLLECT_TIMEOUT_S = "collect_timeout_s"
+_PROCESS_TIMEOUT_S = "process_timeout_s"
+_INT_LIMITS = {_PROCESSOR_COUNT: (1, 16), _PROCESSING_MAX_ATTEMPTS: (1, 5), _PROCESSING_RESERVE_S: (1, 86400),
+               _COLLECT_TIMEOUT_S: (1, 86400), _PROCESS_TIMEOUT_S: (1, 86400)}
+_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _POST_RECORDING_SHARES, *_INT_LIMITS)
 
 
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
@@ -139,6 +148,9 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
         if _POST_RECORDING_SHARES in document:
             # Docker CPU weight a shard container holds during offline processing (restored afterwards); absent: feature off.
             _require(type(document[_POST_RECORDING_SHARES]) is int and 2 <= document[_POST_RECORDING_SHARES] <= 1024)
+        for name, (low, high) in _INT_LIMITS.items():
+            if name in document:
+                _require(type(document[name]) is int and low <= document[name] <= high)
         _require(type(document["schema_version"]) is int and document["schema_version"] == 1
                  and document["kind"] == "ACT_CONTAINER_CAMPAIGN")
         root = _absolute(document["evidence_root"])

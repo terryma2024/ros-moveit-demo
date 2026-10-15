@@ -260,3 +260,23 @@ def test_eight_worker_preparation_needs_none_of_the_scheduling_limits_in_the_cam
         assert store.execution_generation(Domain.VALIDATION) == 0
     finally:
         store.close()
+
+
+def test_phase_limits_that_exceed_the_batch_total_are_refused_before_admission(tmp_path,monkeypatch):
+    """`collect_timeout_s + process_timeout_s` (and each alone, and the reserve) must fit `batch_hard_timeout_s`."""
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
+    args = arguments(spec)
+    services = SimpleNamespace(act_workload=workload,act_error=None)
+    config_path = args.campaign_config
+    original = json.loads(config_path.read_bytes())
+    try:
+        for extra in (dict(collect_timeout_s=86400,process_timeout_s=86400),dict(collect_timeout_s=86400),
+                      dict(process_timeout_s=86400),dict(processing_reserve_s=86400)):
+            config_path.write_text(json.dumps(original|extra))
+            with pytest.raises(ValueError,match='CAMPAIGN_PHASE_LIMITS_EXCEED_TOTAL'):
+                module.prepare_collection_operation(args,services=services,
+                    contact_policy_fingerprint=spec.payload['contact_policy_fingerprint'])
+        assert store.execution_generation(Domain.VALIDATION) == 0
+    finally:
+        store.close()
