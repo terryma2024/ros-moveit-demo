@@ -251,6 +251,12 @@ class ContainerCampaignOwner:
                 # Both phases are over: the campaign result and the frozen index come from the combined per-scene proof (the
                 # Teacher half of phase 1, the data half of phase 2, every attempt; scenes without evidence are explicit entries).
                 combined=await asyncio.to_thread(combine,completed,list(ids))
+                # A scene that ended FAULT or MISSING in either phase is a fault of the run, so the CLI exits non-zero.
+                known={item['scene_id'] for item in result.get('task_faults',())}
+                unfinished=[dict(scene_id=item['scene_id'],reason=item.get('reason') or item['state'])
+                            for item in combined['scenes'] if item['state'] in ('FAULT','MISSING') and item['scene_id'] not in known]
+                if unfinished:
+                    result['task_faults']=[*result.get('task_faults',()),*unfinished]
                 _write(self.root/'host/campaign-result.json',build_campaign_result(self.context.campaign_id,len(ids),combined))
                 _write(self.root/'collection-index.json',build_frozen_index(campaign_id=self.context.campaign_id,
                     qualification=self.qualification,scene_count=len(ids),combined=combined))

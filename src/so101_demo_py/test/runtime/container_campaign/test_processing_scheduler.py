@@ -70,7 +70,9 @@ def make_rows(world, count):
     for index in range(count):
         scene = f"scene-{index:02d}"
         sealed = world.run / f"wave-0/w00/g1/output/tasks/t{index}/attempts/{scene}/{scene}-lease-1/sealed"
-        rows.append(dict(scene_id=scene, location=str(sealed), proof=dict(processing="PENDING", result_sha256=f"{index:064x}")))
+        # the real verified row: `location` is the shard task directory; the sealed attempt is `proof.location`
+        rows.append(dict(scene_id=scene, location=str(world.run / f"wave-0/w00/g1/output/tasks/t{index}"),
+                         proof=dict(processing="PENDING", result_sha256=f"{index:064x}", location=str(sealed))))
     return rows
 
 

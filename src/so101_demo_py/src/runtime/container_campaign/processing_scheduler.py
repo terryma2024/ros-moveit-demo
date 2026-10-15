@@ -160,7 +160,7 @@ class ProcessingScheduler:
         scene = row["scene_id"]
         proof = row["proof"]
         refs = self.case_inputs[scene]
-        sealed = Path(row["location"])
+        sealed = Path(proof["location"])   # `row["location"]` is the shard task directory; the sealed attempt is the proof's
         if any(re.fullmatch(TASK_ID_PATTERN, f"{scene}-proc-{n}") is None for n in range(1, self.max_attempts + 1)):
             raise ValueError("PROCESSING_TASK_ID_INVALID")
         return dict(scene_id=scene, phase1_attempt=str(sealed), attempt_name=sealed.parent.name, made=0,

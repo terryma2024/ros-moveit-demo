@@ -56,7 +56,8 @@ def test_a_native_scheduler_processes_through_one_native_processor_and_proves_it
         parallel_runtime=runtime_ref, approved_inputs=(), config_paths=(), install_prefix=tmp_path,
         command=[sys.executable, str(script), "--mode", "serve"], base_environment=dict(os.environ))
     admitted = []
-    row = dict(scene_id="scene-01", location=str(fixture.attempt), proof=dict(processing="PENDING", result_sha256="a" * 64))
+    row = dict(scene_id="scene-01", location=str(fixture.attempt.parents[4]),
+               proof=dict(processing="PENDING", result_sha256="a" * 64, location=str(fixture.attempt)))
     inputs = {"scene-01": dict(scope=dict(path=str(scope), sha256=hashlib.sha256(scope.read_bytes()).hexdigest()),
                                inputs_manifest=dict(path=str(manifest), sha256=hashlib.sha256(manifest.read_bytes()).hexdigest()))}
     scheduler = ProcessingScheduler(context=fixture.context, runtime=launcher.runtime, config={"processor_count": 4}, root=run,

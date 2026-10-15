@@ -191,3 +191,27 @@ def test_an_infrastructure_error_in_a_wave_still_stops_the_campaign(tmp_path, mo
         asyncio.run(run())
     finally:
         phase.world.registry.close()
+
+
+def test_a_phase_two_fault_or_missing_scene_is_reported_as_a_task_fault_so_the_cli_exits_non_zero(tmp_path, monkeypatch):
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=4)
+    owner = phase.owner
+
+    def verify_processing(waves, ids):
+        combined = combined_for(waves, ids)
+        for scene, (state, reason) in zip(combined['scenes'][:2], (('FAULT', 'PROCESSOR_UNREACHABLE: X'), ('MISSING', 'PROCESSING_NOT_RUN'))):
+            scene.update(state=state, reason=reason)
+        combined['counts'] = {state: sum(1 for item in combined['scenes'] if item['state'] == state)
+                              for state in ('PROCESSED', 'FINAL_AT_PHASE1', 'FAULT', 'MISSING')}
+        return combined
+    owner.verifier.verify_processing = verify_processing
+
+    async def run():
+        result = await owner.run(phase.world.manifest)
+        assert result['task_faults'] == [dict(scene_id='scene-00', reason='PROCESSOR_UNREACHABLE: X'),
+                                         dict(scene_id='scene-01', reason='PROCESSING_NOT_RUN')]
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        phase.world.registry.close()
