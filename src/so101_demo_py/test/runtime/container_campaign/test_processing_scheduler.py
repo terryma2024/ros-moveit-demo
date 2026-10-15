@@ -30,6 +30,7 @@ class World:
         self.start_fail = set(start_fail)
         self.launches, self.starts, self.terminated, self.assigned, self.admitted = [], [], [], [], []
         self.dead = set()
+        self.unreleased = set()
         self.context = SimpleNamespace(campaign_id="campaign", execution_generation=1,
                                        deadline_monotonic_s=time.monotonic() + 600.)
 
@@ -96,6 +97,11 @@ class FakeControl:
     async def assign_task(self, task):
         document = read_document(Path(task.inputs_ref.path))
         scene, attempt = document["scene_id"], document["proc_attempt"]
+        if self.world.behaviour(scene, attempt)[0] == "LOST_ASSIGN":
+            self.world.assigned.append(dict(task_id=task.task_id, scene=scene, attempt=attempt, processor=self.launch.worker_id,
+                                            generation=self.launch.launch_generation, deadline=task.deadline_monotonic_s,
+                                            document=document))
+            raise ConnectionError("assign lost")     # the processor never saw the task
         self.world.assigned.append(dict(task_id=task.task_id, scene=scene, attempt=attempt, processor=self.launch.worker_id,
                                         generation=self.launch.launch_generation, deadline=task.deadline_monotonic_s,
                                         document=document))
@@ -133,7 +139,8 @@ class FakeControl:
 
     async def terminate(self, reason):
         self.world.terminated.append((self.launch.launch_id, reason))
-        return InstanceStatus(instance_id=self.launch.launch_id, state="TERMINATED", resources_released=True)
+        return InstanceStatus(instance_id=self.launch.launch_id, state="TERMINATED",
+                              resources_released=self.launch.launch_id not in self.world.unreleased)
 
 
 def run(coroutine):
@@ -251,6 +258,27 @@ def test_a_processor_that_dies_costs_its_task_an_attempt_and_is_relaunched_with_
     assert world.events("processor_relaunch")[0]["launch_generation"] == 2
     assert ("processing-p00-g1", "PROCESSING_END") in world.terminated, "the dead container is stopped before its replacement"
     assert summary["processors_stopped"] is True
+
+
+def test_processors_stopped_needs_every_generation_of_every_slot_proven(tmp_path):
+    world = World(tmp_path, script={("scene-00", 1): "DIE"})
+    world.unreleased.add("processing-p00-g1")        # the replaced generation's container cannot be proven stopped
+    scheduler, rows, deadline = world.scheduler(config={"processor_count": 1}, rows=make_rows(world, 3))
+    summary = run(scheduler.run(rows, deadline_s=deadline))
+    assert world.launches == [("p00", 1), ("p00", 2)] and summary["counts"]["VALID"] == 3
+    assert summary["processors_stopped"] is False, "generation 1 was never proven stopped, whatever generation 2 did"
+    assert world.events("phase2_end")[0]["processors_stopped"] is False
+
+
+def test_a_lost_assignment_is_detected_by_the_short_acknowledgement_timeout(tmp_path):
+    world = World(tmp_path, script={("scene-00", 1): "LOST_ASSIGN"})
+    scheduler, rows, deadline = world.scheduler(config={"processor_count": 1}, rows=make_rows(world, 2))
+    began = time.monotonic()
+    summary = run(scheduler.run(rows, deadline_s=deadline))
+    assert time.monotonic() - began < 5., "not the minutes-long task backstop"
+    lost, = world.events("processor_lost")
+    assert lost["scene_id"] == "scene-00" and "PROCESSOR_ASSIGN_NOT_ACKNOWLEDGED" in lost["reason"]
+    assert world.launches == [("p00", 1), ("p00", 2)] and summary["counts"]["VALID"] == 2 and summary["scenes"][0]["attempts"] == 2
 
 
 def test_a_failed_task_that_stops_its_processor_is_a_lost_processor(tmp_path):

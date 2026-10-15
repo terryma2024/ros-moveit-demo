@@ -56,6 +56,8 @@ RESULT_KIND = "ACT_PROCESSING_TASK_RESULT"
 FINAL, FAULT, MISSING = "FINAL", "FAULT", "MISSING"
 REFUSED_FAULT, EXHAUSTED_FAULT = "PROCESSING_REFUSED", "PROCESSING_RETRIES_EXHAUSTED"
 DEADLINE_REASON, UNAVAILABLE_REASON = "PROCESSING_DEADLINE", "PROCESSOR_UNAVAILABLE"
+#: a task that the polled status does not show after this many heartbeat timeouts was never received by the processor
+ASSIGN_ACK_HEARTBEATS = 3
 _OUTCOMES = ("VALID", "INVALID", "REFUSED", "INFRASTRUCTURE_FAILURE")
 
 
@@ -116,6 +118,7 @@ class ProcessingScheduler:
         self.control_factory = control_factory or (lambda owner: ContainerTaskControl(owner=owner))
         self.clock, self.memory_reader = clock, memory_reader
         self.owners = []          # every launched processor owner, every generation (the campaign owner closes what is left)
+        self.stop_state = {}      # launch id -> whether that processor container's stop was proven, every generation
         self.journal = ProcessingJournal(self.root / "host" / JOURNAL_NAME, clock)
         self.max_attempts = processing_max_attempts(config)
 
@@ -222,15 +225,20 @@ class ProcessingScheduler:
         control = worker.control
         if control is None:
             return True
+        launch_id = getattr(getattr(worker.owner, "launch", None), "launch_id", None)
         try:
             status = await control.terminate("PROCESSING_END")
-            return bool(status.resources_released)
+            proven = bool(status.resources_released)
         except Exception:   # noqa: BLE001
-            return False
+            proven = False
+        if launch_id is not None:
+            self.stop_state[launch_id] = proven      # the latest word on this container: a retry may prove it
+        return proven
 
     async def _stop_all(self, workers):
         results = await asyncio.gather(*(self._terminate(worker) for worker in workers))
-        return all(results)
+        # every generation of every slot, not only the last one: a replaced container that was never proven stopped still counts
+        return all(results) and all(self.stop_state.values())
 
     # ---- one task ----------------------------------------------------------------------------------------------------------
 
@@ -303,8 +311,10 @@ class ProcessingScheduler:
             await control.assign_task(task)
         except Exception:   # noqa: BLE001 - an uncertain exchange is only ever queried, never repeated
             pass
-        last_ok = self.clock()
+        last_ok = assigned_at = self.clock()
         backstop = task.deadline_monotonic_s + runtime.heartbeat_timeout_s
+        acknowledgement_s = ASSIGN_ACK_HEARTBEATS * runtime.heartbeat_timeout_s
+        acknowledged = False
         while True:
             if self.clock() >= self.deadline_s:
                 raise _PastDeadline
@@ -323,6 +333,11 @@ class ProcessingScheduler:
                     "STOPPING", "TERMINATED") or status.fault_reason:
                 reason = (seen.fault_reason if seen is not None and seen.fault_reason else status.fault_reason or status.state)
                 raise _Lost("PROCESSOR_TASK_FAILED: " + str(reason))
+            acknowledged = acknowledged or (seen is not None and seen.task_id == task.task_id)
+            if not acknowledged and self.clock() - assigned_at >= acknowledgement_s:
+                # an assignment that was lost on the way is not repeated (it might run twice); the processor is replaced instead of
+                # waiting out the task budget
+                raise _Lost("PROCESSOR_ASSIGN_NOT_ACKNOWLEDGED")
             if self.clock() >= backstop:
                 raise _Lost("PROCESSOR_TASK_DEADLINE_EXCEEDED")
             await asyncio.sleep(runtime.heartbeat_interval_s)
