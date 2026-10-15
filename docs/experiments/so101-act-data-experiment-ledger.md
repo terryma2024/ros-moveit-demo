@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3671
-next_experiment: EXP-600 (PLANNED): 16-scene debug run, recording cap 4, CPU shares 64 during offline processing, per-message traces.
+latest_checkpoint: CP-3672
+next_experiment: NONE until the human confirms the two-phase implementation plan.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3672 — EXP-600 VALID: lower CPU weight in processing removes INPUT_STALE but not late frames; late frames are receiver-side and transport delays
+
+- 9 of 15 VALID, all INVALID late camera frames. One new fault: the pause service was not found at an episode reset.
+- Traces classify late frames mostly as each receiver being late separately, or both receivers late after an on-time publish. Sending delays are rare.
 
 ## CP-3671 — CPU weight per phase and delay traces; two-phase design drafted; EXP-600 planned
 
@@ -107,7 +112,7 @@ next_experiment: EXP-600 (PLANNED): 16-scene debug run, recording cap 4, CPU sha
 
 ```yaml
 experiment_id: EXP-600
-status: PLANNED
+status: VALID
 prior_experiment: EXP-597 (cap 4, 4 of 16 VALID) and EXP-599 (cap 4 with four tasks in flight, 13 of 16)
 hypothesis: Lowering the CPU weight of shards in offline processing to 64 of 1024 protects the recordings under contention, raising VALID well above 4 of 16 without the time cost of the in-flight limit. The traces classify each late frame as a sending, transport or rosbag delay.
 prediction: VALID between EXP-597 and EXP-599; run time near 21 minutes. If VALID stays near 4 of 16, CPU share is not the contended resource (memory bandwidth or cache would remain), which also supports the two-phase design.
@@ -131,15 +136,31 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T075459Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after the image-commit rule fix
     exit_code: 2 (image commit), then 1 (validation image commit), then 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T075459Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run 08:21:24Z to 08:41:26Z, 20 minutes. CLI CAMPAIGN_RUN_FAILED CONTAINER_WAVE_COMMIT_READBACK_INVALID, because of one execution fault.
+  - Episodes: 15 collected, Teacher 15 of 15 PASS, 9 VALID; INVALID 6, all NO_NEW_ACQUISITION (3 with the source-age window alongside); INPUT_STALE 0 (EXP-597 6).
+  - wave-0-w02-dbg-05 faulted with CONTAINER_INSTANCE_REPORTED_FAULT "pause service unavailable": teleop_runtime.py _pause_snapshot found no /mujoco_ros2_control_node/set_pause within its wait at the episode reset. The Teacher was then stopped (TEACHER_USER_STOP).
+  - The w02 CPU shares had been restored to 1024 at 08:32:28, before that task, so the low weight was not in force for the fault.
+  - CPU-share journal (host/wave-0/cpu-shares-journal.jsonl): 32 entries, every update and restore ok.
+  - Late-frame classification over the 15 episodes (trace_join.py, threshold 60 ms against the plugin publish time; outputs in R/exp600-trace-join/):
+
+    | Topic | Sender | Transport | Rosbag only | Probe only |
+    | --- | --- | --- | --- | --- |
+    | wrist image | 2 | 13 | 8 | 1 |
+    | head image | 5 | 7 | 7 | 1 |
+    | wrist camera_info | 2 | 54 | 195 | 192 |
+    | head camera_info | 5 | 0 | 36 | 15 |
 inferred:
-  - NONE
-conclusion: PENDING
+  - The low CPU weight during offline processing removed INPUT_STALE (the Teacher's lag) but not the late camera frames.
+  - Late frames are rarely a sending delay. Most are delayed on the receiving side - each subscriber process separately (rosbag only or probe only) - or on the shared path after publish (transport). That points to receiver-side scheduling and delivery, not the simulator or camera plugin.
+  - The pause-service fault is a service-discovery failure under load, the same family as the lost ListControllers response of EXP-596.
+conclusion: VALID diagnostic run. The CPU weight helps the Teacher but not frame delivery; the delays are on the receiving side and in transport, which supports separating recording from processing (two-phase design).
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T075459Z (host/wave-0/cpu-shares-journal.jsonl, task journals, probe traces under each task's raw/)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T075459Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp600 (shard logs with CAMERA_PUBLISH_TRACE and TEACHER_SOURCE_TRACE) and exp600-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
