@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3661
-next_experiment: EXP-595 (PLANNED): EXP-594 repeated with a thread-level stall sampler, to locate the delivery stalls.
+latest_checkpoint: CP-3662
+next_experiment: NONE until the human chooses how to test the shared-GPU render stall.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3662 — EXP-595 VALID: 18 of 40 QC-valid; the stalls are off-CPU blocking (render path on the shared GPU, recorder bursts), not scheduler starvation
+
+- Complete run, Teacher 40 of 40, NOT_QUALIFIED on qc_valid_rate only.
+- The thread sampler shows no throttling and only mild run-queue enrichment. The simulation stalls leave the whole container idle, which points at the lock-step camera render on the one GPU the eight shards share.
+- Retained: run root, prep directory, R/run-logs/exp595 (thread sampler 499 MB), the analysis document. Nothing deleted.
 
 ## CP-3661 — Delivery-stall analysis; human chose to locate the mechanism first; EXP-595 planned with a thread sampler
 
@@ -92,7 +98,7 @@ next_experiment: EXP-595 (PLANNED): EXP-594 repeated with a thread-level stall s
 
 ```yaml
 experiment_id: EXP-595
-status: PLANNED
+status: VALID
 prior_experiment: EXP-594 (VALID failure; complete run, NOT_QUALIFIED only on qc_valid_rate 27 of 40)
 hypothesis: The in-container delivery stalls (late wrist frames, held camera_info, all-topic stalls of about 330 ms) coincide with a measurable waiting state of the receiving or publishing threads - run-queue delay, cgroup throttling, D state, or a busy thread in the same process - which the thread sampler identifies.
 prediction: Results similar to EXP-594 (Teacher about 40 of 40, QC-valid about 27 of 40, no fault). For each stall, either the recorder or camera-plugin threads show run-queue delay or another thread of the same process is busy for the stall's length; if no thread shows anything, the cause is inside a process (a lock or executor) and needs in-process instrumentation.
@@ -116,15 +122,37 @@ commands:
   - command: zsh <registered root>/act-w8-inputs-20261015T012253Z/inspect.zsh
     exit_code: 0
   - command: zsh <registered root>/act-w8-inputs-20261015T012253Z/run-w8.zsh
-    exit_code: PENDING
+    exit_code: 0
+  - command: zsh <registered root>/act-w8-inputs-20261015T012253Z/build-report.zsh
+    exit_code: 3
 observed:
-  - PENDING
+  - Run 01:26:16Z to 02:19:27Z; CLI exit 0; both samplers stopped cleanly; the thread sampler wrote 499 MB; store IDLE afterwards.
+  - Teacher 40 of 40 COMPLETED PASS. Data 18 of 40 VALID. INVALID by main cause:
+    - NO_NEW_ACQUISITION 11 (two with a scene_state loss);
+    - INPUT_STALE 5;
+    - INPUT_TIMESTAMP_FUTURE 3;
+    - a scene_state loss 1;
+    - controller-state gaps with a scene_state loss and COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE 2.
+  - Qualification report sha256 3746337f631a4a7035530ef5d9abc272b788d506c45caa956c72661bf821d2c9, NOT_QUALIFIED, the single reason QUALITY_GATE_FAILED:qc_valid_rate.
+  - Queued state publishers overflowed 0.
+  - Thread analysis (R/exp595-thread-stall-analysis.md):
+    - No cgroup throttling at any time.
+    - Run-queue waits only mildly enriched at the stalls.
+    - Of 34 all-topic stalls, 17 lie inside intentional simulation pauses and 7 before the first step. Six are recorder delivery bursts with the simulation stepping.
+    - Four, plus 334 to 336 ms physics-step gaps in five episodes, are simulation stalls in which the whole container goes idle with no run-queue wait or D state.
+    - Neither the 250 ms tick-gate timeout nor the 60 s render-wait timeout was logged.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The data-quality loss is not CPU starvation in the scheduler sense.
+  - The leading candidate is the lock-step camera render path blocking off-CPU on the single GPU shared by eight shards (medium confidence, the GPU wait not observed directly).
+  - A second candidate is recorder-side delivery bursts of unknown mechanism.
+  - The run-to-run spread (27 and 18 of 40 on the same code) is large; the thread sampler's own load (under 0.5 percent of the host) is an unlikely but not excluded contributor.
+conclusion: VALID failure for qualification (18 of 40 QC-valid); VALID as a diagnostic run - the stall mechanism is narrowed to off-CPU blocking in the simulation's render path and in the recorder, not scheduler starvation or throttling.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261015T012253Z (host/qualification-report.json, task journals, bags)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261015T012253Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp595 (CLI, shard and teacher logs, host sampler, thread sampler) and exp595-console.log
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/exp595-thread-stall-analysis.md
+decision: KEEP
 next_experiment: NONE
 ```
 
