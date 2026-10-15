@@ -101,7 +101,6 @@ def _service(service, role, *, readback):
 _RECORDING_CAP = "max_concurrent_recordings"
 _TASKS_IN_FLIGHT = "max_tasks_in_flight"
 _ASSIGNMENT_GAP = "min_assignment_gap_s"
-_POST_RECORDING_SHARES = "post_recording_cpu_shares"
 # Phase 2 (processing) and the time limits of the two phases. Their sum against `batch_hard_timeout_s` is checked where that value
 # is known (`processing_limits.check_phase_limits`).
 _PROCESSOR_COUNT = "processor_count"
@@ -111,11 +110,11 @@ _COLLECT_TIMEOUT_S = "collect_timeout_s"
 _PROCESS_TIMEOUT_S = "process_timeout_s"
 _VERIFICATION_RESERVE_S = "verification_reserve_s"
 _PROCESSING_TASK_TIMEOUT_S = "processing_task_timeout_s"
-# the task timeout may not be lower than the offline processor's 1200 s plus its 60 s seal margin
+# the task timeout may not be lower than the offline processor's 1200 s plus a 60 s margin
 _INT_LIMITS = {_PROCESSOR_COUNT: (1, 16), _PROCESSING_MAX_ATTEMPTS: (1, 5), _PROCESSING_RESERVE_S: (1, 86400),
                _COLLECT_TIMEOUT_S: (1, 86400), _PROCESS_TIMEOUT_S: (1, 86400), _VERIFICATION_RESERVE_S: (1, 86400),
                _PROCESSING_TASK_TIMEOUT_S: (1260, 86400)}
-_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _POST_RECORDING_SHARES, *_INT_LIMITS)
+_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, *_INT_LIMITS)
 
 
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
@@ -141,17 +140,14 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
                "head_service", "teacher_service", "shard_image", "gpu_uuid",
                "qualification_contract"))
         if _RECORDING_CAP in document:
-            # How many shards may be in the recording part of a task at once; the Host reads it, the campaign hash freezes it.
+            # How many shards may be recording (hold a phase-1 task) at once; the Host reads it, the campaign hash freezes it.
             _require(type(document[_RECORDING_CAP]) is int and 1 <= document[_RECORDING_CAP] <= 8)
         if _TASKS_IN_FLIGHT in document:
-            # How many shards may hold a task (any phase) at once; the Host reads it, the campaign hash freezes it.
+            # How many shards may hold a task at once; the Host reads it, the campaign hash freezes it.
             _require(type(document[_TASKS_IN_FLIGHT]) is int and 1 <= document[_TASKS_IN_FLIGHT] <= 8)
         if _ASSIGNMENT_GAP in document:
             # Minimum Host monotonic seconds between two assignments across shards.
             _require(type(document[_ASSIGNMENT_GAP]) in (int, float) and 0 <= document[_ASSIGNMENT_GAP] <= 3600)
-        if _POST_RECORDING_SHARES in document:
-            # Docker CPU weight a shard container holds during offline processing (restored afterwards); absent: feature off.
-            _require(type(document[_POST_RECORDING_SHARES]) is int and 2 <= document[_POST_RECORDING_SHARES] <= 1024)
         for name, (low, high) in _INT_LIMITS.items():
             if name in document:
                 _require(type(document[name]) is int and low <= document[name] <= high)
