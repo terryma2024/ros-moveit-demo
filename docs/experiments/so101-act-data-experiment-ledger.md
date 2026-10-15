@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7ee92a897a697d2d476a7ca1c0328433dca03a29
+current_commit: b6be0f582b5f3c521acc8e8ec8afe84189e61175
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,93 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3674
-next_experiment: NONE until the human confirms the two-phase implementation plan.
+latest_checkpoint: CP-3675
+next_experiment: EXP-601 (PLANNED): first two-phase debug run, 16 scenes, eight workers.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3675 — Two-phase collection implemented (plan tasks 1-7), reviewed, gate PASS; EXP-601 planned
+
+- Commits (Sonnet; each reviewed by Opus):
+  - `d72fe5549` task 1: phase-1 seal as PENDING_QC with raw/recording-receipt.json.
+  - `ad00bd68e` task 2: host phase-1 check and one syncfs.
+  - `8b86dfd16` task 3: campaign_processor program and processed-result.json.
+  - `729a52b99` task 4: processor container role, mounts, registry, admission, owner.
+  - `a8c5014c0` review amendments: every phase-1 attempt mounted read-only into every processor; the receipt binds recorder-orchestration.json.
+  - `df2d7cc3f` task 5: phase-2 scheduler.
+    - processor_count default min(12, MemAvailable / 3 GiB);
+    - infrastructure retries up to 3 in new -proc-<n> attempts;
+    - host/processing-journal.jsonl;
+    - collect_timeout_s, process_timeout_s and processing_reserve_s.
+  - `389e8437c` task 6: combined two-phase proof; gates, recompute, owner and export read both phases.
+  - `0979a1e57` task 7: native processor.
+  - `6818f4516`: result_store.py split under the 1200-line limit.
+- Accepted deviations and coordinator decisions:
+  - A processor's writable mount is the whole <run>/processing tree, not one output directory; task assignment keeps the outputs apart.
+  - Recordings already claimed at the phase-1 deadline are not cut.
+  - A phase-1-deadline partial wave recomputes as WAVE_RECOMPUTE_INVALID.
+- Independent Opus review of tasks 1-7 (read-only). Fixes, each with a test that failed first (except one test whose first failure was for the wrong reason):
+  - `fe1537b20` BLOCKER: phase-2 QC and verification looked for the Teacher manifest beside the processed episode (no dynamic/ there), so every real scene would have been INVALID or FAULT. The test world had hidden it by copying dynamic/.
+  - `0cd337687` MAJOR: deferred diagnostic faults now record in the point root and are applied in phase 2.
+  - `3644fe672` covers two minor findings: a claim past the phase-1 deadline is released, and an unexpected processor exception is REFUSED, not retried.
+  - `c412a286c` adds verification_reserve_s (default 600) and keeps the health monitor running through phase 2.
+  - `35fac15da` adds processing_task_timeout_s (default 1800, minimum 1260).
+  - `d2d6d9eeb`: every processor generation must be proven stopped, and a lost assignment is detected quickly.
+- Gate fixes:
+  - `19f2e9b2b`: test_processor_admission registered in the so101_teleop CMake list.
+  - `c939ed3a5`: the shard image entrypoint (image_bootstrap) admits campaign_processor. Found by the EXP-601 image readback; a real processor launch would have been refused with IMAGE_ROLE_COMMAND_INVALID.
+  - `b6be0f582`: the task-builder test rig's fake child was a Python sleep that could swallow SIGINT during interpreter start under load (3 of 115 loaded runs failed, 0 of 45 after /bin/sleep); test-only.
+- Gate on b6be0f582, R/gates/b6be0f582b5f: build rc 0, demo rc 0, colcon rc 0, dirty_after 0. PASSED.
+  - Earlier gates: d2d6d9eeb failed on the CMake registration; 19f2e9b2b passed; c939ed3a5 failed on the flaky test.
+- Images from b6be0f582:
+  - inference sha256:ea242b7f8ed4deccf335748d766176e98f8a35a7a4f6f7b0d34a87deac46e8e6 (R/image-build-20261015T142913Z)
+  - shard sha256:2afd5d23f720c133635af9b8e78831134610e41c4ff0d4a9115b81e2ed752013 (R/image-build-20261015T143029Z)
+  - The processor readback through the image ENTRYPOINT returned rc 0, with no NVIDIA device.
+- Inputs REG/act-w8d-inputs-20261015T143411Z: sources cloned from act-w8d-inputs-20261015T123402Z, whose first author run against the 19f2e9b2b images failed only on the processor readback. Validation 77 of 77 PASS.
+  - Campaign config: only min_assignment_gap_s 30; no recording cap, no in-flight limit, no CPU shares; every two-phase key at its default.
+
+```yaml
+experiment_id: EXP-601
+status: PLANNED
+prior_experiment: EXP-599 (13 of 16 VALID with four tasks in flight) and EXP-600 (9 of 15 with CPU shares)
+hypothesis: With recording and offline processing separated into two phases, eight concurrent recordings with nothing else running give VALID at or above EXP-599's 13 of 16, in a total time near or below EXP-599's 32 minutes.
+prediction:
+  - Phase 1 about 10 to 12 minutes and phase 2 about 12 to 15 minutes; no execution fault.
+  - Few INPUT_STALE.
+  - Late camera frames possibly still present at eight concurrent recordings, classified by the traces.
+  - If VALID is well below 13 of 16, eight concurrent recordings themselves interfere and max_concurrent_recordings is the lever.
+single_variable: The two-phase collection and full eight-way recording relative to EXP-599; same scenes and samplers.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit b6be0f582, plus no processor containers or processes and free processor slots.
+success_criteria:
+  - Both phases complete; every scene has a combined record; every stop proven; the samplers and traces cover the run.
+failure_criteria:
+  - An execution fault, an unproven stop, or a missing combined record.
+invalid_criteria:
+  - Refusal before admission; source trees differing from b6be0f582; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: b6be0f582b5f3c521acc8e8ec8afe84189e61175 (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/b6be0f582b5f/install plus worktree import
+  runtime_executable: as EXP-600, plus campaign_processor in the shard image
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T143411Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T143411Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3674 — Two-phase collection plan confirmed; implementation started
 
