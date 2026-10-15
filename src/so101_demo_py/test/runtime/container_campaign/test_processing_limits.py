@@ -3,7 +3,7 @@
 import pytest
 
 from so101_demo.runtime.container_campaign.processing_limits import (
-    DEFAULT_MAX_ATTEMPTS, DEFAULT_RESERVE_S, check_phase_limits, default_processor_count, phase1_deadline_s,
+    DEFAULT_MAX_ATTEMPTS, DEFAULT_RESERVE_S, DEFAULT_VERIFICATION_RESERVE_S, check_phase_limits, default_processor_count, phase1_deadline_s,
     phase2_deadline_s, processing_max_attempts, processor_count_for)
 
 GIB = 2**30
@@ -41,9 +41,18 @@ def test_a_process_timeout_alone_reserves_exactly_that_long_after_phase_one():
 
 
 def test_process_timeout_is_measured_from_the_start_of_phase_two_and_is_capped_by_the_total():
-    assert phase2_deadline_s({}, phase2_start_s=2000., total_deadline_s=5400.) == 5400.
+    assert phase2_deadline_s({}, phase2_start_s=2000., total_deadline_s=5400.) == 5400. - 600
     assert phase2_deadline_s({"process_timeout_s": 1000}, phase2_start_s=2000., total_deadline_s=5400.) == 3000.
-    assert phase2_deadline_s({"process_timeout_s": 4000}, phase2_start_s=2000., total_deadline_s=5400.) == 5400.
+    assert phase2_deadline_s({"process_timeout_s": 4000}, phase2_start_s=2000., total_deadline_s=5400.) == 5400. - 600
+
+
+def test_phase_two_leaves_a_verification_reserve_for_the_hosts_readback():
+    assert DEFAULT_VERIFICATION_RESERVE_S == 600
+    assert phase2_deadline_s({"verification_reserve_s": 100}, phase2_start_s=2000., total_deadline_s=5400.) == 5300.
+    assert phase2_deadline_s({"verification_reserve_s": 100, "process_timeout_s": 1000}, phase2_start_s=2000.,
+                             total_deadline_s=5400.) == 3000.
+    with pytest.raises(ValueError, match="CAMPAIGN_PHASE_LIMITS_EXCEED_TOTAL"):
+        check_phase_limits({"verification_reserve_s": TOTAL}, TOTAL)
 
 
 @pytest.mark.parametrize("available_gib,expected", [(0.5, 1), (2.9, 1), (3, 1), (8.9, 2), (36, 12), (500, 12), (100, 12)])

@@ -114,13 +114,15 @@ class ContainerCampaignOwner:
             raise ValueError('CAMPAIGN_DISK_FLOOR_REACHED')
 
     async def _monitor(self):
+        """Disk and service health, once a second, until the run ends: through phase 2 and the readback too. The phase-1 deadline
+        only closes dispatch; it does not end the observation."""
         try:
-            while self.dispatch_allowed():
+            while not self._closing and not self._run_done.is_set():
+                if not self.dispatch_allowed() and not self.dispatch_stopped:
+                    self.stop_dispatch(PHASE1_DEADLINE_REASON if self._phase1_limit_reached() else 'CAMPAIGN_DEADLINE_EXPIRED')
                 self._disk_guard()
                 await self.services.check_health()
                 await asyncio.sleep(1.)
-            if not self.dispatch_stopped and not self._closing:
-                self.stop_dispatch(PHASE1_DEADLINE_REASON if self._phase1_limit_reached() else 'CAMPAIGN_DEADLINE_EXPIRED')
         except Exception as error:
             self.stop_dispatch('CAMPAIGN_RESOURCE_OR_SERVICE_FAULT')
             _write(self.root/'host/dispatch-fault.json',dict(type=type(error).__name__,reason=str(error)))

@@ -371,6 +371,11 @@
       "minimum": 1,
       "maximum": 86400
     },
+    "verification_reserve_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
     "qualification_contract": {
       "oneOf": [
         {

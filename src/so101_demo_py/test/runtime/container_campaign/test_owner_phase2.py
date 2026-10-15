@@ -85,7 +85,7 @@ def test_pending_rows_reach_the_scheduler_after_syncfs_and_the_summary_is_record
         call, = phase.scheduler.calls
         assert [row['scene_id'] for row in call['rows']] == [f'scene-{i:02d}' for i in range(8)]
         assert all(row['proof']['processing'] == 'PENDING' for row in call['rows'])
-        assert call['deadline_s'] == owner.context.deadline_monotonic_s, 'no process_timeout_s: phase 2 ends at the total'
+        assert call['deadline_s'] == owner.context.deadline_monotonic_s - 600, 'phase 2 ends one verification reserve before the total'
         record = json.loads((owner.root/'host/processing-result.json').read_text())
         assert record['kind'] == 'act_collection_processing_summary' and record['counts']['VALID'] == 8
         assert result['phase2']['counts']['VALID'] == 8 and result['processing'] == 'PENDING'
@@ -281,6 +281,43 @@ def test_a_deadline_before_the_first_wave_records_everything_as_missing_and_star
         result = await owner.run(phase.world.manifest)
         assert phase.world.waves == [] and phase.scheduler.calls == []
         assert result['missing_evidence'] == [f'scene-{i:02d}' for i in range(8)]
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        phase.world.registry.close()
+
+
+def test_the_health_and_disk_monitor_keeps_running_through_phase_two(tmp_path, monkeypatch):
+    stamps = []
+
+    async def run_wave(*, plan, shards, endpoints, dispatch_allowed):
+        await asyncio.sleep(1.3)    # the 1 s collect limit passes during the first wave
+        rows = [dict(scene_id=scene, worker_id='w00', location='/out/'+scene, task_id='wave-0-w00-'+scene, launch_id='l')
+                for scene in plan['scene_ids'][:5]]
+        return dict(wave_index=plan['wave_index'], coordinator_root='x', case_results=rows, infra_errors=[])
+
+    def verify(plan, outcome, shards, partial=False):
+        return pending_verified([])(plan, outcome, shards)
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=21, config={'collect_timeout_s': 1}, run_wave=run_wave, verify=verify)
+    owner = phase.owner
+    owner.coordinator.stop_dispatch = lambda reason: None
+    guard = owner._disk_guard
+    owner._disk_guard = lambda: stamps.append(time.monotonic()) or guard()
+
+    async def slow_phase_two(rows, *, deadline_s):
+        phase.scheduler.calls.append(dict(rows=rows, deadline_s=deadline_s, started=time.monotonic()))
+        await asyncio.sleep(2.6)
+        phase.scheduler.calls[-1]['ended'] = time.monotonic()
+        return dict(schema_version=1, kind='act_collection_processing_summary', processors=1, processors_stopped=True,
+                    counts=dict(VALID=len(rows), INVALID=0, FAULT=0, MISSING=0), scenes=[])
+    phase.scheduler.run = slow_phase_two
+
+    async def run():
+        await owner.run(phase.world.manifest)
+        call = phase.scheduler.calls[0]
+        during = [stamp for stamp in stamps if call['started'] <= stamp <= call['ended']]
+        assert len(during) >= 2, 'the monitor sampled disk and health during phase 2'
         await owner.close()
     try:
         asyncio.run(run())

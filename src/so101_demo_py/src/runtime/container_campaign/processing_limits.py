@@ -7,13 +7,16 @@ All times are Host monotonic seconds, the unit of `AdmittedCampaignContext.deadl
                   `collect_timeout_s` from admission, if set;
                   otherwise total minus the time phase 2 must keep: `process_timeout_s` if set, else `processing_reserve_s`
     phase 2     starts when the last phase-1 shard is proven stopped and ends at the earlier of `process_timeout_s` from that
-                start (if set) and the total
+                start (if set) and the total minus `verification_reserve_s` (default 600): the Host's independent readback of the
+                processed results (it recomputes the QC of every VALID scene and never trusts the processor's memo) runs after
+                phase 2 and needs that time before the total
 
 `collect_timeout_s + process_timeout_s` may not exceed the total, and neither may any of the three single values.
 """
 
 DEFAULT_RESERVE_S = 1800
 DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_VERIFICATION_RESERVE_S = 600
 MAX_DEFAULT_PROCESSORS = 12
 #: the processor peaks at 2.2 GiB and its QC child runs after it
 PROCESSOR_MEMORY_BYTES = 3 * 2**30
@@ -23,7 +26,9 @@ def check_phase_limits(config, batch_hard_timeout_s):
     """Refuse limits that cannot fit the admitted total. `config` is the campaign config (absent keys are not limits)."""
     collect, process = config.get("collect_timeout_s"), config.get("process_timeout_s")
     reserve = config.get("processing_reserve_s")
-    if (any(value is not None and value > batch_hard_timeout_s for value in (collect, process))
+    verification = config.get("verification_reserve_s")
+    if ((verification is not None and verification >= batch_hard_timeout_s)
+            or any(value is not None and value > batch_hard_timeout_s for value in (collect, process))
             or (collect is not None and process is not None and collect + process > batch_hard_timeout_s)
             or (reserve is not None and reserve >= batch_hard_timeout_s)):
         raise ValueError("CAMPAIGN_PHASE_LIMITS_EXCEED_TOTAL")
@@ -41,7 +46,9 @@ def phase1_deadline_s(config, *, admitted_s, total_deadline_s):
 def phase2_deadline_s(config, *, phase2_start_s, total_deadline_s):
     """When phase-2 dispatch stops and in-flight processing is terminated."""
     process = config.get("process_timeout_s")
-    return total_deadline_s if process is None else min(phase2_start_s + process, total_deadline_s)
+    end = total_deadline_s - config.get("verification_reserve_s", DEFAULT_VERIFICATION_RESERVE_S)
+    return end if process is None else min(phase2_start_s + process, end)
+
 
 
 def default_processor_count(available_bytes):
