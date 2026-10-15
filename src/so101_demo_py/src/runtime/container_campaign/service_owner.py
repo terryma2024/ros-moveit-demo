@@ -18,6 +18,7 @@ import time
 from types import SimpleNamespace
 
 from so101_demo.runtime.container_campaign.launch import InferenceLaunchArgs, build_container_argv
+from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_inspect
 from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey, container_key_from_inspect
 from so101_demo.runtime.container_campaign.provenance import read_container_provenance
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
@@ -114,7 +115,7 @@ class ContainerServiceOwner:
         self._closing = False
 
     def inspect_container(self, container_id):
-        value = self.docker_runner(['docker', 'inspect', container_id])
+        value = bounded_docker_inspect(self.docker_runner, ['docker', 'inspect', container_id])
         if value.returncode != 0:
             raise ValueError('SERVICE_CONTAINER_INSPECT_FAILED')
         documents = json.loads(value.stdout)

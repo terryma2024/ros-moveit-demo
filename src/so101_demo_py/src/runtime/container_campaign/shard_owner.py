@@ -16,6 +16,7 @@ from so101_demo.runtime.container_campaign.instance_owner_common import (
     check_runtime_ready, load_instance_spec, read_instance_exit)
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs, build_container_argv
 from so101_demo.runtime.container_campaign.paths import CONTAINER_TEACHER_SOCKET
+from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_inspect
 from so101_demo.runtime.container_campaign.process_identity import container_key_from_inspect
 from so101_demo.runtime.container_campaign.provenance import read_container_provenance
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
@@ -99,7 +100,7 @@ class ContainerShardOwner:
         return self.inspect(self.owner.container_id)
 
     def inspect(self,container_id):
-        result = self.docker(['docker','inspect',container_id])
+        result = bounded_docker_inspect(self.docker,['docker','inspect',container_id])
         if result.returncode != 0:
             raise ValueError('SHARD_CONTAINER_INSPECT_FAILED')
         documents = json.loads(result.stdout)

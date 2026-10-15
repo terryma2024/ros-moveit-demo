@@ -10,6 +10,7 @@ import re
 import stat
 import sys
 
+from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_inspect
 from so101_demo.runtime.container_campaign.process_identity import container_key_from_inspect
 from so101_demo.runtime.inference.config import _open_regular
 from so101_demo.runtime.parallel_ipc.frames import _pairs, canonical_json
@@ -159,7 +160,7 @@ def read_container_provenance(container_id, *, docker_runner):
     try:
         _require(_sha(container_id))
         def inspect():
-            result = docker_runner(["docker", "inspect", container_id])
+            result = bounded_docker_inspect(docker_runner, ["docker", "inspect", container_id])
             _require(result.returncode == 0)
             documents = _json(result.stdout)
             _require(type(documents) is list and len(documents) == 1)
