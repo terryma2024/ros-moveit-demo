@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1776f588865a4bc40aed5fe0802f3831cfa7160c
+current_commit: ddd3aee5fe23c8fcca5332cd0be2c24106c5839f
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,64 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3682
-next_experiment: EXP-605 (to be planned) after the goals_stopped stop-receipt fix.
+latest_checkpoint: CP-3683
+next_experiment: EXP-605 (PLANNED): two-phase debug run with the goal-stop proof fix.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3683 — Goal-stop proof fix; gate PASS; EXP-605 planned
+
+- Commit `5d2b00ec0` (Sonnet; reviewed by Opus).
+  - retirement._goals_stopped needed the goal-stop probe (controller_stop.py, a fresh node discovering four cancel services, 5 s budget) to see cancel acknowledgements or terminal statuses.
+  - The outer asyncio.wait_for in _retire had the same 5 s, so under eight-shard load the probe's observation was discarded (EXP-604 w05 audit: TimeoutError, no controller-stop.json). goals_stopped stayed false although the native stop was clean, unforced and the graph empty.
+  - Now a probe that reached no server is covered by a clean, unforced native termination: every ROS child exited and the graph is empty, so no action server, hence no goal, can run.
+  - Anything the probe did observe must still prove the stop by itself. A forced or missing native stop still fails.
+  - The outer wait gains 2 s of grace, and the error names the timeout.
+  - Tests: 3 failed first; 26 retirement tests pass; 1034 in the related suites.
+- Gate on ddd3aee5f (5d2b00ec0 plus the EXP-604 ledger commit), R/gates/ddd3aee5fe23: all rc 0, dirty_after 0. PASSED.
+- Images from ddd3aee5f:
+  - inference sha256:2a66654780b2617108c74c9576b4532a3d68e1a7cf37e735d9fe1611aadb348b (R/image-build-20261015T203847Z)
+  - shard sha256:8d4f5330ed3ba6a6e1191bb09dfd8bfc75845e4f7fcd87187f9db0808a488b19 (R/image-build-20261015T203958Z)
+- Inputs REG/act-w8d-inputs-20261015T204253Z: validation 77 of 77 PASS.
+
+```yaml
+experiment_id: EXP-605
+status: PLANNED
+prior_experiment: EXP-604 (VALID failure; one shard's goal stop unconfirmed at wave end)
+hypothesis: With the goal-stop proof fixed, the two-phase run completes end to end - phase 1, stop proofs, syncfs, phase 2 on processor containers, combined records - with VALID at or above EXP-599's 13 of 16.
+prediction: Phase 1 about 12 minutes, phase 2 about 10 to 15 minutes; every stop proven; VALID at least 13 of 16.
+single_variable: Commit 5d2b00ec0 relative to EXP-604.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit ddd3aee5f.
+success_criteria:
+  - As EXP-604.
+failure_criteria:
+  - As EXP-604.
+invalid_criteria:
+  - As EXP-601, for commit ddd3aee5f.
+provenance:
+  source_commit: ddd3aee5fe23c8fcca5332cd0be2c24106c5839f (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/ddd3aee5fe23/install plus worktree import
+  runtime_executable: as EXP-601
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T204253Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T204253Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3682 — EXP-604 VALID failure: phase 1 complete; one shard's stop receipt lacked goals_stopped, exit 1, stop unconfirmed; lease released under the standing authorisation
 
