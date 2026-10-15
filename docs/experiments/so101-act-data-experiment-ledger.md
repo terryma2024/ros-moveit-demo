@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 737278f0b7baf5da3f9c82258af12054511f631b
+current_commit: b28d622626a5bab43bf7007c97595c10c2e3d8cc
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,71 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3664
-next_experiment: NONE until the human decides on the in-episode fsync pressure and the readiness-probe resend.
+latest_checkpoint: CP-3665
+next_experiment: EXP-597 (PLANNED): 16-scene eight-shard debug run without in-episode sidecar fsync and with the readiness resend.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3665 — In-episode sidecar fsync removed, readiness resend; gate PASS; EXP-597 planned
+
+- Human answers:
+  - "回合内不 fsync，结束时一次" - no fsync during an episode, one at the end.
+  - "修：超时重发" - resend the readiness query on a timeout.
+- Commit `737db31a5`: the raw recorder sidecar (scene_read_writer.py) flushes during recording and fsyncs file and directory once at close; it no longer fsyncs every 20 lines.
+- Commit `b28d62262`: the stack-readiness probe cancels and resends a ListControllers call pending for more than 2 s (CONTROLLER_QUERY_TIMEOUT_S); the 60 s probe timeout is unchanged.
+- Findings while implementing:
+  - The Teacher manifest is written by temp file and rename with no fsync, so there was nothing to remove. No final fsync was added, because one fsync on the shared filesystem waits for every shard's dirty data.
+  - contact_live.py and the transport observer fsync per chunk, but neither runs in the shard episode path.
+  - Remaining candidate for the Teacher's D state: journal commits forced by other shards' end-of-episode fsyncs of large files.
+- Gate on b28d62262, R/gates/b28d622626a5, serial: build rc 0; so101_demo_py 12932 passed, 187 skipped; colcon 3042 tests, 0 errors, 0 failures, 60 skipped. PASSED.
+- Images from b28d62262 (both read back that commit, identical sources):
+  - inference sha256:90a0fd755b389264852eac1928c3e0a18855c978371bdcb7820969e9b6bc3c85 (R/image-build-20261015T042055Z)
+  - shard sha256:a37a80667493bb8f9df7ef2bff5b2ed4f9797efd86127a214837f55de5ef752a (R/image-build-20261015T042159Z)
+- Inputs REG/act-w8d-inputs-20261015T042443Z, sources cloned from the EXP-596 inputs with the log directory changed to exp597; validation 71 of 71 PASS.
+
+```yaml
+experiment_id: EXP-597
+status: PLANNED
+prior_experiment: EXP-596 (VALID diagnostic; 8 of 14 VALID, filesystem stalls suspected, readiness fault)
+hypothesis: Without the sidecar's in-episode fsyncs, host-wide blocked-process spikes and Teacher stalls fall, and INPUT_STALE becomes rarer; the readiness resend removes the startup fault.
+prediction:
+  - No RECORDER_DELIVERY_SLOW sidecar_fsync lines during recording.
+  - Fewer ticks with procs_blocked of 5 or more.
+  - Fewer Teacher clock jumps; INPUT_STALE fewer than 4 of 16.
+  - No readiness fault.
+  - If INPUT_STALE persists at a similar rate, the remaining fsync sources (end-of-episode seals in other shards) are next.
+single_variable: Commits 737db31a5 and b28d62262 relative to EXP-596; same scenes, scheduling, samplers.
+lifecycle: ISOLATED_STACK (eight containers, one wave of 16)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit b28d62262.
+success_criteria:
+  - The run completes with all 16 scenes collected; every stop proven; diagnostics cover it.
+failure_criteria:
+  - An execution fault or an unproven stop.
+invalid_criteria:
+  - Refusal before admission; source trees differing from b28d62262; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: b28d622626a5bab43bf7007c97595c10c2e3d8cc (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/b28d622626a5/install plus worktree import
+  runtime_executable: as EXP-596
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T042443Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T042443Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3664 — EXP-596 VALID: filesystem stalls suspected, readiness-probe defect; historical evidence deleted
 
