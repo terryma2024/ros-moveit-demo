@@ -84,6 +84,7 @@ def runtime_setup(monkeypatch, *, clock=None, sink=None, block_cancel=None, bloc
     row.runtime = module.HeadLocalRuntime(node=row.node, port=row.port, local_state=row.state,
         owner=row.owner, observer=row.observer, policy=policy, sink=row.sink,
         monotonic=clock.monotonic)
+    row.monkeypatch = monkeypatch
     row.closed_count = lambda: sum(helper.closed_planned for helper in FakeHelper.instances)
     return row
 
@@ -120,16 +121,66 @@ def prime_current_inputs(row, *, sim=None, velocity=0.0):
     return message
 
 
-def armed_runtime(row):
+def keep_wall_bounds_fresh(row):
+    """Make the wall-age bounds of the local guard independent of scheduling latency.
+
+    The runtime bounds camera pair age (camera_source_age_s, 0.2 s in the default
+    test policy), ROS clock sample age, joint receipt age and executor progress age
+    on the wall clock. A test that primes originals and reaches a guard later on a
+    loaded host would be refused for host latency alone, which no test of
+    admission, ownership or exposure intends to exercise. The guard's own sample
+    time re-stamps those wall fields and marks executor progress; ordering,
+    pairing, identity and every simulated-time bound still run on the real data.
+    A test whose subject is the real age of the ROS clock or the admission JOINT
+    sets row.fresh_clock or row.fresh_joint to False.
+    """
+    observer, runtime = row.observer, row.runtime
+    row.fresh_clock = True  # a test of ROS clock loss sets this False
+    row.fresh_joint = True  # a test of joint receipt loss sets this False
+    policy_type = type(row.port.feedback_policy)
+    real_check_joint = policy_type.check_joint
+
+    def check_joint(policy, sample, decision):
+        if (policy is row.port.feedback_policy and row.fresh_joint
+                and sample is not None and 'wall_s' in sample):
+            sample = dict(sample, wall_s=decision['wall_after_s'])
+        return real_check_joint(policy, sample, decision)
+
+    # The policy instance is frozen; the class patch is undone with the test and
+    # applies only to this row's policy instance.
+    row.monkeypatch.setattr(policy_type, 'check_joint', check_joint)
+    real_inputs, real_current = observer.current_inputs, runtime._current
+
+    def current_inputs(now_wall_s):
+        current = real_inputs(now_wall_s)
+        current['image'] = dict(current['image'], wall_s=now_wall_s)
+        current['info'] = dict(current['info'], wall_s=now_wall_s)
+        current['image_source_wall_s'] = now_wall_s
+        if row.fresh_clock:
+            current['clock'] = dict(current['clock'], wall_s=now_wall_s)
+        return current
+
+    def current(*args, **keywords):
+        runtime.executor_progress()
+        return real_current(*args, **keywords)
+
+    observer.current_inputs, runtime._current = current_inputs, current
+
+
+def armed_runtime(row, *, fresh=False):
+    """fresh=True keeps the wall-age bounds independent of host load; see keep_wall_bounds_fresh."""
     prime_current_inputs(row)
     row.runtime.start()
+    if fresh:
+        keep_wall_bounds_fresh(row)
     assert row.runtime.arm()['incarnation'] == 'inc-1'
     return row.runtime
 
 
 def test_admission_joint_loss_refuses_even_when_independent_raw_stop_feedback_advances(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
+    row.fresh_joint = False  # this test's subject is the real age of the admission JOINT
     original_sink = row.port._head_original_sink
     observed_before = row.observer.current_inputs(row.clock.monotonic())['joint']
 
@@ -176,7 +227,8 @@ def inventory_record(row, message, goal_uuid, cdr):
 
 def test_admission_clock_loss_refuses_without_disabling_raw_stop_clock(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
+    row.fresh_clock = False  # this test's subject is the real age of the ROS clock sample
     original_observe = row.observer.observe_original
     original_clock = row.observer.current_inputs(row.clock.monotonic())['clock']
 
@@ -212,7 +264,7 @@ def test_admission_clock_loss_refuses_without_disabling_raw_stop_clock(monkeypat
 
 def test_admission_uses_received_causal_joint_when_latest_original_precedes_ros_clock_update(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     try:
         causal = row.port.feedback_snapshot()
         message = ros_neck.JointState(name=['neck_yaw_joint'], position=[.2], velocity=[0.])
@@ -298,7 +350,7 @@ def test_arm_requires_current_originals_quiet_feedback_and_matching_identity(mon
 
 def test_dispatch_guard_consumes_current_originals_and_refuses_stale_ones(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     assert runtime.dispatch_guard() is True
     row.clock.sim = 11.0
     with pytest.raises((PermissionError, ValueError)):
@@ -311,7 +363,7 @@ def test_dispatch_guard_consumes_current_originals_and_refuses_stale_ones(monkey
 
 def test_invalid_original_latches_first_fault_before_a_blocked_sink_and_still_stops(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     release = threading.Event()
     row.sink.block = release
     result = {}
@@ -333,7 +385,7 @@ def test_invalid_original_latches_first_fault_before_a_blocked_sink_and_still_st
 def test_blocked_deadman_close_does_not_block_cancel_or_raw_stop(monkeypatch):
     close_block = threading.Event()
     row = runtime_setup(monkeypatch, block_close=close_block)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     with row.port._lock:
         row.port._goals[str(uuid.uuid4())] = dict(accepted=None, handle=None, result=None,
             cancel_requested=False, cancel_ack=False, error=None, goal={})
@@ -351,7 +403,7 @@ def test_blocked_deadman_close_does_not_block_cancel_or_raw_stop(monkeypatch):
 def test_blocked_cancel_does_not_block_the_deadman_latch_ack(monkeypatch):
     cancel_block = threading.Event()
     row = runtime_setup(monkeypatch, block_cancel=cancel_block)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     row.clients['cancel_goal'].block = cancel_block
     with row.port._lock:
         row.port._goals[str(uuid.uuid4())] = dict(accepted=None, handle=None, result=None,
@@ -366,7 +418,7 @@ def test_blocked_cancel_does_not_block_the_deadman_latch_ack(monkeypatch):
 
 def test_repeated_stop_and_later_fault_never_renew_the_original_origin(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     first = runtime.stop('success')
     origin = first['stop_origin_wall_s']
     time.sleep(.02)
@@ -382,7 +434,7 @@ def test_repeated_stop_and_later_fault_never_renew_the_original_origin(monkeypat
 
 def test_watchdog_detects_a_direct_local_state_latch_and_starts_the_real_stop(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     token = row.state.latch_fault('HEAD_LOCAL_DISPATCH_DIRECT_FAULT')
     assert token is not None
     assert wait_for(lambda: runtime.faulted, timeout_s=1.)
@@ -396,7 +448,7 @@ def test_watchdog_detects_a_direct_local_state_latch_and_starts_the_real_stop(mo
 
 def test_writer_enqueue_failure_latches_fault_and_still_stops(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     row.sink.fail = True
     with pytest.raises(PermissionError):
         runtime.record('TEST_RECORD', dict(value=1))
@@ -417,7 +469,7 @@ def test_persistent_writer_failure_reports_once_and_preserves_stop_origin(monkey
         return sink(*args)
 
     row = runtime_setup(monkeypatch, sink=counting_sink)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     try:
         sink.fail = True
         with pytest.raises(PermissionError, match='HEAD_LOCAL_WRITER_ENQUEUE_FAILED'):
@@ -439,7 +491,7 @@ def test_persistent_writer_failure_reports_once_and_preserves_stop_origin(monkey
 def test_close_reports_unquiesced_worker_instead_of_claiming_retirement(monkeypatch):
     close_block = threading.Event()
     row = runtime_setup(monkeypatch, block_close=close_block)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     runtime.fault('HEAD_LOCAL_TEST_UNQUIESCED')
     receipt = runtime.close(timeout_s=.05)
     assert receipt['retired'] is False
@@ -453,7 +505,7 @@ def test_close_reports_unquiesced_worker_instead_of_claiming_retirement(monkeypa
 
 def test_own_inventory_requires_the_existing_local_record_and_never_reregisters(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     message, goal_uuid, cdr = prepared()
     record = inventory_record(row, message, goal_uuid, cdr)
     row.state.register_prepared(record, cdr)
@@ -474,7 +526,7 @@ def test_own_inventory_requires_the_existing_local_record_and_never_reregisters(
 
 def test_hard_fault_preserves_the_complete_inventory_and_refuses_admission(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     message, goal_uuid, cdr = prepared()
     record = inventory_record(row, message, goal_uuid, cdr)
     row.state.register_prepared(record, cdr)
@@ -535,7 +587,7 @@ class Producer:
 
 def test_startup_goes_through_the_owner_and_records_the_events_in_order(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     assert kinds_of(row, 'CONTROLLER_READBACK', 'DEADMAN_ARMED', 'GRAPH_PROOF', 'STARTUP_STOP_WINDOW',
                     'ARMED') == ['CONTROLLER_READBACK', 'DEADMAN_ARMED', 'GRAPH_PROOF',
                                  'STARTUP_STOP_WINDOW', 'ARMED']
@@ -558,7 +610,7 @@ def test_startup_goes_through_the_owner_and_records_the_events_in_order(monkeypa
 
 def test_the_runtime_binds_itself_as_the_owners_fault_entry_and_liveness(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     row.owner._fault('HEAD_GRAPH_CHANGED', dict(added=[1]))
     assert runtime.faulted and runtime.fault_reason == 'HEAD_GRAPH_CHANGED'
     assert row.owner._liveness is not None and row.owner._liveness() < .5
@@ -591,7 +643,7 @@ def test_a_refused_owner_step_fails_the_startup_without_readiness(monkeypatch, d
 
 def test_a_successful_case_proves_the_stop_then_closes_the_deadman_as_planned(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     with Producer(row):
         runtime.stop('success', dict(status='TARGET_LOCKED'))
         runtime.finish_requested_stop()
@@ -618,7 +670,7 @@ def test_a_successful_case_proves_the_stop_then_closes_the_deadman_as_planned(mo
 
 def test_the_planned_close_comes_after_the_proof_records(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     order = []
     original = FakeHelper.close_planned
 
@@ -636,7 +688,7 @@ def test_the_planned_close_comes_after_the_proof_records(monkeypatch):
 
 def test_a_fault_latches_the_deadman_at_once_without_waiting_for_the_stop_proof(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     runtime.fault('HEAD_LOCAL_TEST_FAULT_LATCH')  # no producer: the raw stop cannot be confirmed
     assert wait_for(lambda: row.closed_count() == 1)
     assert wait_for(lambda: runtime.retirement_snapshot()['deadman_close']['finished'])
@@ -654,7 +706,7 @@ def test_a_fault_latches_the_deadman_at_once_without_waiting_for_the_stop_proof(
 
 def test_a_fault_during_a_planned_stop_closes_unplanned_and_proves_nothing_planned(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     with Producer(row):
         runtime.stop('success')
         runtime.fault('HEAD_LOCAL_TEST_LATE_FAULT')
@@ -668,7 +720,7 @@ def test_a_fault_during_a_planned_stop_closes_unplanned_and_proves_nothing_plann
 
 def test_a_missing_end_window_leaves_the_stop_unconfirmed_and_latches_the_controller(monkeypatch):
     row = runtime_setup(monkeypatch, policy=head_simulation_policy(head_stop_window_deadline_s=.15))
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     row.window.auto = False  # the controller_state stream gave no quiet window after the raw stop
     with Producer(row):
         runtime.stop('success')
@@ -687,7 +739,7 @@ def test_a_missing_end_window_leaves_the_stop_unconfirmed_and_latches_the_contro
 
 def test_an_unconfirmed_raw_stop_never_asks_for_the_end_window(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     runtime.stop('success')  # nothing produces feedback: the raw stop cannot confirm
     assert wait_for(lambda: runtime.retirement_snapshot()['cancel_stop']['finished'] is True, timeout_s=3.)
     runtime.finish_requested_stop()

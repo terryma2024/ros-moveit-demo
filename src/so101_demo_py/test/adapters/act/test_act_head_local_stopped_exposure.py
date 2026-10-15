@@ -74,9 +74,9 @@ def feed_joint(row, sim, velocity=0.0, position=.2):
     return message
 
 
-def exposure_setup(monkeypatch, *, camera_skew_s=.02, clock=None):
+def exposure_setup(monkeypatch, *, camera_skew_s=.02, clock=None, fresh=False):
     row = runtime_setup(monkeypatch, clock=clock)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=fresh)
     events = []
     detector = FakeDetector()
     buffer = FakeBuffer()
@@ -130,7 +130,7 @@ def prime_exposure(local, *, final_sim=None, infos=True):
 
 def test_inference_deadline_sets_clears_and_refuses_extension(monkeypatch):
     row = runtime_setup(monkeypatch)
-    runtime = armed_runtime(row)
+    runtime = armed_runtime(row, fresh=True)
     now = runtime.monotonic()
     assert runtime.inference_deadline(now + 1.) is True
     assert runtime.inference_deadline(None) is True
@@ -143,7 +143,7 @@ def test_inference_deadline_sets_clears_and_refuses_extension(monkeypatch):
 
 
 def test_local_exposure_binds_the_local_runtime_without_a_monitor(monkeypatch):
-    local = exposure_setup(monkeypatch)
+    local = exposure_setup(monkeypatch, fresh=True)
     assert local.exposures.monitor is None
     assert local.exposures.port is local.row.port
     assert local.exposures.frame == CAMERA_FRAME
@@ -155,7 +155,7 @@ def test_local_exposure_binds_the_local_runtime_without_a_monitor(monkeypatch):
 
 
 def test_local_stopped_observation_completes_with_one_owned_cuda_call(monkeypatch):
-    local = exposure_setup(monkeypatch)
+    local = exposure_setup(monkeypatch, fresh=True)
     prime_current_inputs(local.row)
     settled_wall, payload = prime_exposure(local)
     request = stopped_request(local.row, settled_wall_s=settled_wall)
@@ -183,7 +183,7 @@ def test_local_stopped_observation_completes_with_one_owned_cuda_call(monkeypatc
 
 
 def test_local_stopped_observation_discards_an_expired_pair_without_cuda(monkeypatch):
-    local = exposure_setup(monkeypatch)
+    local = exposure_setup(monkeypatch, fresh=True)
     prime_current_inputs(local.row)
     settled_wall, _ = prime_exposure(local, final_sim=10.35)
     request = stopped_request(local.row, settled_wall_s=settled_wall)
@@ -198,7 +198,7 @@ def test_local_stopped_observation_discards_an_expired_pair_without_cuda(monkeyp
 
 
 def test_local_stopped_observation_returns_none_on_a_moving_root_proof(monkeypatch):
-    local = exposure_setup(monkeypatch)
+    local = exposure_setup(monkeypatch, fresh=True)
     prime_current_inputs(local.row)
     settled_wall, _ = prime_exposure(local)
     feed_joint(local.row, 10.06, velocity=.5)
@@ -211,7 +211,7 @@ def test_local_stopped_observation_returns_none_on_a_moving_root_proof(monkeypat
 
 
 def test_local_stopped_observation_refuses_a_replayed_request(monkeypatch):
-    local = exposure_setup(monkeypatch)
+    local = exposure_setup(monkeypatch, fresh=True)
     prime_current_inputs(local.row)
     settled_wall, _ = prime_exposure(local)
     request = stopped_request(local.row, settled_wall_s=settled_wall)
@@ -224,7 +224,7 @@ def test_local_stopped_observation_refuses_a_replayed_request(monkeypatch):
 
 
 def test_local_exposure_missing_simulation_policy_faults_before_detector(monkeypatch):
-    local = exposure_setup(monkeypatch)
+    local = exposure_setup(monkeypatch, fresh=True)
     try:
         local.exposures._simulation_policy = None
         with pytest.raises(PermissionError, match='HEAD_LIVE_LOCAL_POLICY_REQUIRED'):

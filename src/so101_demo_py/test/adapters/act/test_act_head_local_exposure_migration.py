@@ -11,7 +11,7 @@ from test_act_head_local_stopped_exposure import (
 
 
 def prepared_exposure(monkeypatch):
-    local = exposure_setup(monkeypatch)
+    local = exposure_setup(monkeypatch, fresh=True)
     prime_current_inputs(local.row)
     settled, payload = prime_exposure(local)
     request = stopped_request(local.row, settled_wall_s=settled)
