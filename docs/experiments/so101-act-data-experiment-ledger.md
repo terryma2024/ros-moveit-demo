@@ -69,11 +69,54 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3668
-next_experiment: NONE until the human chooses the next step after the cap-2 result.
+latest_checkpoint: CP-3669
+next_experiment: EXP-599 (PLANNED): 16-scene debug run, recording cap 4 with at most 4 tasks in flight.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3669 — EXP-599 planned: recording cap 4, at most 4 tasks in flight
+
+- Human answer "区分并发里的哪一部分在干扰": keep the recording cap at 4 but limit the tasks in flight (claim to end, every phase including offline processing) to 4. Other shards' offline processing then no longer overlaps four concurrent recordings.
+- Inputs REG/act-w8d-inputs-20261015T070725Z, cloned from the EXP-596 sources: max_tasks_in_flight 4 in author.py and in the validation expectations. Validation 71 of 71 PASS.
+
+```yaml
+experiment_id: EXP-599
+status: PLANNED
+prior_experiment: EXP-598 (VALID; cap 2, 11 of 16) and EXP-597 (VALID; cap 4 without an in-flight limit, 4 of 16)
+hypothesis: The interference comes from other shards' offline processing running during recordings; with at most four tasks in flight, VALID rises well above EXP-597's 4 of 16.
+prediction: VALID near or above EXP-598's 11 of 16 if offline processing is the interferer; near 4 of 16 if four concurrent recordings themselves interfere. Run time longer than EXP-597.
+single_variable: max_tasks_in_flight 4 relative to EXP-597; same commit, images, scenes and samplers.
+lifecycle: ISOLATED_STACK (eight containers, one wave of 16)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit b28d62262.
+success_criteria:
+  - All 16 scenes collected; every stop proven; diagnostics cover the run.
+failure_criteria:
+  - An execution fault or an unproven stop.
+invalid_criteria:
+  - Refusal before admission; source trees differing from b28d62262; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: b28d622626a5bab43bf7007c97595c10c2e3d8cc (images and Host gate install)
+  install_overlay: as EXP-597
+  runtime_executable: as EXP-597
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T070725Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T070725Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3668 — EXP-598 VALID: recording cap 2 gives 11 of 16 VALID (cap 4 gave 4 of 16); small-file writes ruled out
 
