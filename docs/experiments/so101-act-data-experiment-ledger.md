@@ -69,11 +69,57 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3684
-next_experiment: NONE until the human chooses the phase-1 recording concurrency.
+latest_checkpoint: CP-3685
+next_experiment: EXP-606 (PLANNED): two-phase debug run with phase-1 recording cap 4.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3685 — Human decision: phase-1 recording cap 4; EXP-606 planned; plan task 11 drafted
+
+- Human answer "并发 4，先跑 16 场景调试确认" (2026-10-16): max_concurrent_recordings 4 in phase 1 (a parameter, no code change), first a 16-scene debug run.
+- Inputs REG/act-w8d-inputs-20261015T232201Z (Sonnet edit of the cloned sources: author.py cap 4 as HUMAN_DECISION; validate-inputs.py no longer forbids the cap and expects the gate (4, None, 30); self-test accepts 4 and refuses 3 and absent).
+- Same commit, gate and images as EXP-605 (ddd3aee5f). Validation 77 of 77 PASS.
+- The eight exited EXP-605 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp605-processors.jsonl).
+- Plan task 11 (removal of the inline mode) is drafted by a Sonnet writer. Edits are held until EXP-606 has passed its launch check, which requires the source tree to equal the gated commit.
+
+```yaml
+experiment_id: EXP-606
+status: PLANNED
+prior_experiment: EXP-605 (VALID; first complete two-phase run, 7 of 16 at eight concurrent recordings)
+hypothesis: With at most four concurrent recordings in phase 1 and no processing overlap, VALID reaches at least 14 of 16.
+prediction: VALID 13 to 16 of 16. Phase 1 about 1.5 to 2 times EXP-605's 626 s; phase 2 about 540 s.
+single_variable: max_concurrent_recordings 4 relative to EXP-605; same commit, images, scenes and samplers.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers, at most four recording; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit ddd3aee5f.
+success_criteria:
+  - As EXP-605.
+failure_criteria:
+  - As EXP-605.
+invalid_criteria:
+  - As EXP-601, for commit ddd3aee5f.
+provenance:
+  source_commit: ddd3aee5fe23c8fcca5332cd0be2c24106c5839f (images and Host gate install, as EXP-605)
+  install_overlay: as EXP-605
+  runtime_executable: as EXP-605
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T232201Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T232201Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3684 — EXP-605 VALID: first complete two-phase run (21 min; phase 2 processed 16 of 16 with no retry); 7 of 16 VALID at eight concurrent recordings
 
