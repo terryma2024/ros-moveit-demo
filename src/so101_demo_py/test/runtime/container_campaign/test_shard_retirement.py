@@ -217,3 +217,71 @@ def test_the_stop_audit_is_schema_two_and_carries_no_namespace(tmp_path, monkeyp
     with pytest.raises(TypeError):
         mod.NativeShardRetirement(process_owner=_owner, launch_generation=7, evidence_root=root,
             stack=retirement.stack, goal_stop_budget_s=5, stack_stop_budget_s=15, **{NS_FIELD: "/act/campaign/w00"})
+
+
+def _read_back(mod, root, owner):
+    return mod.read_shard_stop_evidence(root, process_owner=owner, launch_generation=7, session_id="session1",
+        ros_domain_id=181, namespace_inode=pid_namespace_inode())
+
+
+def _unreached(original):
+    """A probe that never reached any action server: no ACK and no status on any lane."""
+    def probe(**kwargs):
+        from so101_demo.runtime.container_campaign.controller_stop import ControllerStopObservation
+        document = original(**kwargs).document
+        for lane in document["lanes"].values():
+            lane.update(cancel_sent_monotonic_ns=None, cancel_received_monotonic_ns=None, cancel_return_code=None,
+                goals_canceling=None, status_received_monotonic_ns=None, statuses=None)
+        return ControllerStopObservation(canonical_json(document))
+    return probe
+
+
+def test_a_probe_timeout_is_covered_by_a_clean_unforced_native_termination_and_names_itself(tmp_path, monkeypatch):
+    """EXP-604: discovery was too slow under eight shards; the stack then stopped cleanly, so no goal can execute."""
+    import json
+    mod, root, owner, _native, retirement, calls = fixture(tmp_path, monkeypatch)
+    def slow(**kwargs):
+        raise TimeoutError()
+    retirement.goal_probe = slow
+    receipt = asyncio.run(retirement.retire(fenced=True))
+    assert receipt["goals_stopped"] is True and receipt["forced"] is False
+    audit = json.loads((root / "retirement/audit.json").read_bytes())
+    (error,) = audit["errors"]
+    assert error["boundary"] == "goal_stop" and error["error_type"] == "TimeoutError"
+    assert "TimeoutError" in error["reason"] and "5" in error["reason"]
+    assert _read_back(mod, root, owner)["goals_stopped"] is True
+
+
+def test_a_probe_that_reached_no_server_is_covered_by_clean_native_termination(tmp_path, monkeypatch):
+    mod, root, owner, _native, retirement, calls = fixture(tmp_path, monkeypatch)
+    retirement.goal_probe = _unreached(retirement.goal_probe)
+    receipt = asyncio.run(retirement.retire(fenced=True))
+    assert receipt["goals_stopped"] is True
+    assert _read_back(mod, root, owner)["goals_stopped"] is True
+
+
+@pytest.mark.parametrize("native_failure", ["forced", "missing"])
+def test_a_probe_timeout_is_not_covered_without_clean_unforced_termination(tmp_path, monkeypatch, native_failure):
+    mod, root, owner, _native, retirement, calls = fixture(tmp_path, monkeypatch,
+        forced=native_failure == "forced", stack_failed=native_failure == "missing")
+    def slow(**kwargs):
+        raise TimeoutError()
+    retirement.goal_probe = slow
+    receipt = asyncio.run(retirement.retire(fenced=True))
+    assert receipt["goals_stopped"] is False
+    with pytest.raises(ValueError, match="SHARD_STOP_EVIDENCE_UNCONFIRMED"):
+        _read_back(mod, root, owner)
+
+
+def test_a_probe_finishing_just_after_its_budget_still_contributes_its_observation(tmp_path, monkeypatch):
+    """The probe's own deadline equals the outer one; the outer used to cut it off and discard the observation."""
+    mod, root, owner, _native, retirement, calls = fixture(tmp_path, monkeypatch)
+    original = retirement.goal_probe
+    def late(**kwargs):
+        time.sleep(0.3)
+        return original(**kwargs)
+    retirement.goal_probe, retirement.goal_budget = late, 0.2
+    receipt = asyncio.run(retirement.retire(fenced=True))
+    assert receipt["goals_stopped"] is True
+    assert (root / "retirement/controller-stop.json").is_file()
+    assert _read_back(mod, root, owner)["goals_stopped"] is True

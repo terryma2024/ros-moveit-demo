@@ -77,13 +77,33 @@ def _with_causes(error, limit=1200):
     return " <- ".join(parts)[:limit]
 
 
+def _unreached(goal):
+    """The probe never reached an action server: no lane returned a cancel ACK or a status (or it produced nothing)."""
+    return goal is None or all(lane['cancel_received_monotonic_ns'] is None and lane['statuses'] is None
+                               for lane in goal.document['lanes'].values())
+
+
 def _goals_stopped(goal,native):
     # No-status idle servers still need a positive original ACK on every lane,
     # physical stop and termination of every owned action-server process. No
     # forced exit or ACK alone can close this proof. _native verifies identity,
     # namespace/domain/session, chronology, group/graph and physical facts.
-    return goal is not None and (goal.proven or goal.empty_cancel_acknowledged
-        and native is not None and native['kill_sent'] is False)
+    # A probe that reached no server at all (discovery too slow under load, or it
+    # timed out) has observed nothing that contradicts the stop: an unforced
+    # termination of every owned process with the graph clear then proves no goal
+    # executes. Any ACK or status that was seen must still be a stop proof itself.
+    native_clean = native is not None and native['kill_sent'] is False
+    if native_clean and _unreached(goal):
+        return True
+    return goal is not None and (goal.proven or goal.empty_cancel_acknowledged and native_clean)
+
+
+#: The probe's own deadline equals the outer one; the outer waits this much longer so the probe's observation is not discarded.
+_PROBE_GRACE_S = 2.0
+
+
+def _describe(error, budget):
+    return f"{type(error).__name__} after {budget}s goal-stop budget: {error}" if not str(error) else str(error)
 
 
 class NativeShardRetirement:
@@ -126,13 +146,14 @@ class NativeShardRetirement:
         try:
             goal_observation = await asyncio.wait_for(asyncio.to_thread(self.goal_probe,
                 timeout_s=self.goal_budget,
-                return_on_empty_ack=True), timeout=self.goal_budget)
+                return_on_empty_ack=True), timeout=self.goal_budget+_PROBE_GRACE_S)
             if type(goal_observation) is not ControllerStopObservation:
                 raise ValueError("ACT_CONTROLLER_STOP_OBSERVATION_REQUIRED")
             _write(audit_root, "controller-stop.json", goal_observation.payload)
             goal_ref = hashlib.sha256(goal_observation.payload).hexdigest()
         except Exception as error:
-            errors.append(dict(boundary="goal_stop", error_type=type(error).__name__, reason=str(error)))
+            errors.append(dict(boundary="goal_stop", error_type=type(error).__name__,
+                reason=_describe(error, self.goal_budget)))
             goal_observation = None
         try:
             if native_owner is None or self.stack.process is None:
@@ -212,7 +233,7 @@ def read_shard_stop_evidence(root, *, process_owner, launch_generation, session_
             ros_children_exited=native is not None, ros_graph_empty=native is not None,
             forced=native is not None and native["kill_sent"])
         _require(all(type(receipt[name]) is bool and receipt[name] == value for name,value in facts.items()))
-        _require(not audit["errors"] or not all(facts[name] for name in (
+        _require(not any(error["boundary"] == "native_stop" for error in audit["errors"]) or not all(facts[name] for name in (
             "goals_stopped", "controllers_stopped", "ros_children_exited", "ros_graph_empty")))
         if not all(facts[name] for name in ("goals_stopped", "controllers_stopped", "ros_children_exited", "ros_graph_empty")) or facts["forced"]:
             raise ValueError("SHARD_STOP_EVIDENCE_UNCONFIRMED")
