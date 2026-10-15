@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3665
-next_experiment: EXP-597 (PLANNED): 16-scene eight-shard debug run without in-episode sidecar fsync and with the readiness resend.
+latest_checkpoint: CP-3666
+next_experiment: NONE until the human chooses how to relieve the shared NVMe write latency.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3666 — EXP-597 VALID: removing the sidecar fsync did not help (4 of 16 VALID); the shared NVMe shows write latency up to 470 ms
+
+- Complete 16-scene run with no fault and the Teacher 16 of 16.
+- Data quality did not improve.
+- Dirty-page throttling is ruled out.
+- The single consumer NVMe shows mean write latency of 45 ms at p90 and 186 ms at p99 at modest throughput, which explains blocking that does not depend on fsync.
 
 ## CP-3665 — In-episode sidecar fsync removed, readiness resend; gate PASS; EXP-597 planned
 
@@ -94,7 +101,7 @@ next_experiment: EXP-597 (PLANNED): 16-scene eight-shard debug run without in-ep
 
 ```yaml
 experiment_id: EXP-597
-status: PLANNED
+status: VALID
 prior_experiment: EXP-596 (VALID diagnostic; 8 of 14 VALID, filesystem stalls suspected, readiness fault)
 hypothesis: Without the sidecar's in-episode fsyncs, host-wide blocked-process spikes and Teacher stalls fall, and INPUT_STALE becomes rarer; the readiness resend removes the startup fault.
 prediction:
@@ -123,15 +130,32 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T042443Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T042443Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 04:25:40Z to 04:46:51Z, 21 minutes, CLI exit 0; 16 of 16 collected; Teacher 16 of 16 PASS; no readiness fault.
+  - Data 4 of 16 VALID. INVALID:
+    - INPUT_STALE 6;
+    - NO_NEW_ACQUISITION 5;
+    - a scene_state loss 1 (together with NO_NEW_ACQUISITION);
+    - RECORDER_EVENT_RETENTION_FAILED ENDPOINT_STOP_MAPPING_INVALID with AUDIT_FORMAL_COVERAGE_INCOMPLETE 1 (dbg-08, new);
+    - RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW alongside in 7.
+  - RECORDER_DELIVERY_SLOW: no sidecar_fsync (EXP-596 121), sidecar_write of 100 ms or more 57 (EXP-596 36), receipt gaps 13.
+  - Host procs_blocked over the thread-sampler ticks: median 0, p99 11, share of ticks at 5 or more 3.5 percent (EXP-596 p99 8, 2.65 percent).
+  - Host memory: Dirty median 0.39 GB, p90 1.12 GB, maximum 1.33 GB, against dirty_background_ratio 10 and dirty_ratio 20, so dirty-page throttling is not reached.
+  - nvme0n1 (EAGET SSD 2TB, the only disk and the root filesystem, scheduler none), 1 Hz from the host sampler:
+    - utilisation median 6 percent, p90 30 percent, p99 66 percent, maximum 94 percent;
+    - write throughput median 6.7 MB/s, p90 127 MB/s, maximum 753 MB/s;
+    - mean time per completed write median 1.5 ms, p90 45 ms, p99 186 ms, maximum 470 ms.
 inferred:
-  - NONE
-conclusion: PENDING
+  - Removing the sidecar fsync did not help; the hypothesis of CP-3665 is refuted, and a plain write() still blocks 100 ms or more.
+  - The device itself shows write latency of tens to hundreds of milliseconds at modest throughput. Every synchronous IO and journal commit waits at those moments, which fits the Teacher's D state, the stale sources and the late frames (moderate confidence; not yet aligned per event).
+  - The run-to-run spread (8 of 14 and 4 of 16) is large.
+conclusion: VALID; hypothesis refuted. The leading mechanism is the latency of the single shared consumer NVMe under the bursty writes of eight shards.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T042443Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T042443Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp597 and exp597-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
