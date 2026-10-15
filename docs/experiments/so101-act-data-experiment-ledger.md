@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3672
+latest_checkpoint: CP-3673
 next_experiment: NONE until the human confirms the two-phase implementation plan.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3673 — Pause-service wait retried; shard image can host the processor; two-phase plan awaits confirmation
+
+- Commit `6ce923297` (Sonnet), under the human precedent for single-shot service interactions ("修：超时重发", CP-3664).
+  - teleop_runtime.py _pause_snapshot waited once for /mujoco_ros2_control_node/set_pause, 5 s, without spinning the node, on a client created fresh for every reset, and never resent the call.
+  - It now waits in 0.5 s slices, spinning between them, up to the same 5 s bound, and resends a pause call pending for more than 2 s.
+  - Same error string at the bound.
+  - Targeted tests 13 of 13; no red phase was observed.
+  - The sibling reset and unpause clients were not examined.
+  - Not yet gated.
+- Read-only check of the EXP-600 shard image (sha256:b299b2c4…), docker run --rm --network none --read-only, no GPU: rosbag2_py, rclpy, mujoco 3.12.0, so101_demo.cli.act_offline_episode and so101_demo.act.offline.processor all import (python rc 0). The two-phase design's assumption that the processor container can use the shard image holds.
+- The two-phase design and implementation plan (commit `f824a04d9`) await the human's confirmation before execution.
 
 ## CP-3672 — EXP-600 VALID: lower CPU weight in processing removes INPUT_STALE but not late frames; late frames are receiver-side and transport delays
 
