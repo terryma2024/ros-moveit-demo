@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 753dbbd9cc4527dc105c4f4bbcea01c3c6b99638
+current_commit: 5d8532bb2822e394260eb85829a16e683818aa0d
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,69 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3678
-next_experiment: EXP-603 (to be planned) after the release-marker / manifest fault is fixed.
+latest_checkpoint: CP-3679
+next_experiment: EXP-603 (PLANNED): two-phase debug run with the release-marker fix and per-scene fault isolation.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3679 — Release-marker fix, per-scene fault isolation; gate PASS; EXP-603 planned
+
+- Commit `36ba64b81` (Sonnet).
+  - The EXP-602 manifest had status ERROR but its trace ended at OPEN_GRIPPER with no failure boundary, so validate_dynamic_manifest_semantics raised DYNAMIC_MANIFEST_STATUS.
+  - A failed release-marker commit now ends the trace in ERROR and names the failing event. The real manifest, patched to the new shape, classifies as FAILED / UNCONFIRMED, a sealed Teacher failure.
+  - The release marker was read by one bare world_observer.snapshot(), which rejects samples older than 0.2 s; evidence lag reached 2.556 s under load. It is now observed through the execution's waiting snapshot, which spins and retries within its deadline.
+  - Tests: 4 failed first, then 2642 passed in the targeted run.
+- Human answer "继续处理其他场景" (2026-10-16). Commit `5d8532bb2` (Sonnet).
+  - A phase-1 task fault is isolated to its scene: a FAULT entry with its reason, kept in every denominator and never a pass, so qualification stays NOT_QUALIFIED with a named reason.
+  - Later scenes of the faulted instance are MISSING. Every other recorded scene continues to phase 2.
+  - The CLI exits 1 with CAMPAIGN_COMPLETED_WITH_FAULTS.
+  - Faults outside a task, unregisterable results, journal errors, unproven stops, a failed wave barrier, a failed syncfs and service health still stop the campaign.
+  - Tests: 11 of 147 new tests failed first; 1109 targeted tests passed after two old-behaviour assertions were updated.
+- A gate on 36ba64b81 was stopped by the coordinator, because 5d8532bb2 followed.
+- Gate on 5d8532bb2, R/gates/5d8532bb2822: build rc 0, demo rc 0, colcon rc 0, dirty_after 0. PASSED.
+- Images from 5d8532bb2:
+  - inference sha256:4f625cae72f2dea75dcfbb4025b292be6d38ff4048242f2271fc5b2c58890d97 (R/image-build-20261015T161331Z)
+  - shard sha256:7243407e2da4734c27c743f02727793609ca483358bf6249dbb54538e88afa1d (R/image-build-20261015T161450Z)
+- Inputs REG/act-w8d-inputs-20261015T161808Z (cloned sources, log directory exp603): validation 77 of 77 PASS.
+
+```yaml
+experiment_id: EXP-603
+status: PLANNED
+prior_experiment: EXP-602 (VALID failure; Teacher release-marker fault before phase 2)
+hypothesis: The two-phase run completes end to end at eight concurrent recordings, with VALID at or above EXP-599's 13 of 16.
+prediction: Phase 1 about 12 minutes, phase 2 about 12 to 15 minutes. A Teacher release-marker failure, if any, seals as a Teacher failure, and any other per-scene fault is isolated. VALID at least 13 of 16.
+single_variable: Commits 36ba64b81 and 5d8532bb2 relative to EXP-602.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 5d8532bb2.
+success_criteria:
+  - Both phases complete; every scene has a combined record; every stop proven.
+failure_criteria:
+  - A campaign-stopping failure, an unproven stop, or a missing combined record.
+invalid_criteria:
+  - As EXP-601, for commit 5d8532bb2.
+provenance:
+  source_commit: 5d8532bb2822e394260eb85829a16e683818aa0d (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/5d8532bb2822/install plus worktree import
+  runtime_executable: as EXP-601
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T161808Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T161808Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3678 — EXP-602 VALID failure: Teacher release-marker error left an unverifiable receipt; phase 2 never started
 
