@@ -11,6 +11,8 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
+# One ListControllers call that has not answered after this long is abandoned and resent.
+CONTROLLER_QUERY_TIMEOUT_S = 2.0
 _CONTROLLERS = (
     "joint_state_broadcaster", "arm_controller", "gripper_controller", "neck_controller",
 )
@@ -136,21 +138,49 @@ def evaluate_act_stack_readiness(*, session_id: str, ros_domain_id: int, now_s: 
     return ActStackReadiness(True, None, artifact, checks)
 
 
+class _PendingQuery:
+    """One in-flight service call and when it was sent; the caller treats it as an opaque handle."""
+
+    __slots__ = ("future", "sent_s")
+
+    def __init__(self, future, sent_s: float) -> None:
+        self.future, self.sent_s = future, sent_s
+
+
+def _abandon(client, future) -> None:
+    """Drop a call whose response never came, so a late reply cannot be matched to it. Never raises."""
+    for action in (lambda: client.remove_pending_request(future), future.cancel):
+        try:
+            action()
+        except Exception:   # noqa: BLE001 - best effort: the abandoned future is no longer read either way
+            pass
+
+
 def advance_controller_query(client, pending, controllers, *, now_s: float,
                              next_query_s: float, request_factory):
-    """Keep one service future alive, then stop querying after all four are active."""
+    """Keep one service future alive, then stop querying after all four are active.
+
+    A response can be lost (the controller manager logs "failed to send response ... (timeout)"), and an rclpy future for a
+    lost response stays pending forever. A call pending longer than `CONTROLLER_QUERY_TIMEOUT_S` is abandoned and sent again;
+    the probe's overall timeout is unchanged.
+    """
     if not client.service_is_ready():
         return pending, controllers, next_query_s
     if pending is not None:
-        if pending.done():
-            response = pending.result()
+        if pending.future.done():
+            response = pending.future.result()
             if response is not None:
                 controllers = {item.name: item.state for item in response.controller}
             pending = None
-        return pending, controllers, next_query_s
+            return pending, controllers, next_query_s
+        if now_s - pending.sent_s < CONTROLLER_QUERY_TIMEOUT_S:
+            return pending, controllers, next_query_s
+        _abandon(client, pending.future)
+        pending = None
+        next_query_s = min(next_query_s, now_s)
     if (not all(controllers.get(name) == "active" for name in _CONTROLLERS)
             and now_s >= next_query_s):
-        pending = client.call_async(request_factory())
+        pending = _PendingQuery(client.call_async(request_factory()), now_s)
         next_query_s = now_s + 0.5
     return pending, controllers, next_query_s
 

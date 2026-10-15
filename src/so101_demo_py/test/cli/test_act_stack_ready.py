@@ -132,6 +132,77 @@ def test_controller_query_settles_once_then_stays_idle():
     assert pending is None and client.calls == 1
 
 
+def _active_response():
+    controller = [type("State", (), {"name": name, "state": "active"})()
+                  for name in observations()["controllers"]]
+    return type("Response", (), {"controller": controller})()
+
+
+class _DroppingClient:
+    """The first response is lost (the service timed out sending it); later calls answer at once."""
+
+    def __init__(self):
+        self.calls = 0
+        self.removed = []
+
+    def service_is_ready(self):
+        return True
+
+    def remove_pending_request(self, future):
+        self.removed.append(future)
+
+    def call_async(self, _request):
+        self.calls += 1
+        answered = self.calls > 1
+        response = _active_response()
+        return type("Future", (), {"done": lambda self: answered,
+                                   "result": lambda self: response,
+                                   "cancel": lambda self: None})()
+
+
+def test_a_pending_controller_query_is_abandoned_and_resent_after_the_per_call_timeout():
+    from so101_demo.cli.act_stack_ready import CONTROLLER_QUERY_TIMEOUT_S, advance_controller_query
+
+    client = _DroppingClient()
+    pending, states, next_query = advance_controller_query(
+        client, None, {}, now_s=10.0, next_query_s=0.0, request_factory=lambda: object())
+    assert client.calls == 1 and pending is not None
+    first = pending
+    # inside the timeout the lost call is still pending: nothing is resent
+    pending, states, next_query = advance_controller_query(
+        client, pending, states, now_s=10.0 + CONTROLLER_QUERY_TIMEOUT_S - 0.1,
+        next_query_s=next_query, request_factory=lambda: object())
+    assert client.calls == 1 and pending is first and not client.removed
+    # past it, the dropped call is abandoned and a fresh one is sent
+    pending, states, next_query = advance_controller_query(
+        client, pending, states, now_s=10.0 + CONTROLLER_QUERY_TIMEOUT_S + 0.1,
+        next_query_s=next_query, request_factory=lambda: object())
+    assert client.calls == 2 and pending is not first and len(client.removed) == 1
+    pending, states, _ = advance_controller_query(
+        client, pending, states, now_s=10.0 + CONTROLLER_QUERY_TIMEOUT_S + 0.2,
+        next_query_s=next_query, request_factory=lambda: object())
+    assert pending is None and all(state == "active" for state in states.values())
+
+
+def test_the_per_call_timeout_is_a_named_constant_well_inside_the_probe_timeout():
+    from so101_demo.cli.act_stack_ready import CONTROLLER_QUERY_TIMEOUT_S
+
+    assert CONTROLLER_QUERY_TIMEOUT_S == 2.0
+
+
+def test_a_query_that_answers_in_time_is_not_resent():
+    from so101_demo.cli.act_stack_ready import CONTROLLER_QUERY_TIMEOUT_S, advance_controller_query
+
+    client = _DroppingClient()
+    client.calls = 1   # the next call answers at once
+    pending, states, next_query = advance_controller_query(
+        client, None, {}, now_s=5.0, next_query_s=0.0, request_factory=lambda: object())
+    pending, states, _ = advance_controller_query(
+        client, pending, states, now_s=5.0 + CONTROLLER_QUERY_TIMEOUT_S / 2,
+        next_query_s=next_query, request_factory=lambda: object())
+    assert pending is None and client.calls == 2 and not client.removed
+
+
 def test_eight_recent_100hz_samples_prove_a_stable_stop():
     value = deepcopy(observations())
     value["joints"] = tuple({
