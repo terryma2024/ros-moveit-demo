@@ -815,13 +815,15 @@ class StateMachineRunner:
                 current, action_result.status, action_result.failure, workflow=self.workflow)
             commit_failure = self._commit(request, current, next_state, count, original_failure)
             if commit_failure is not None:
+                # The run ends in ERROR: the trace carries the failed edge from the state whose commit failed, so a manifest
+                # written from this result ends in its own status (a trace stopping at `current` is not a verifiable ERROR).
                 return RunResult(
                     RunStatus.ERROR,
-                    current,
+                    State.ERROR,
                     None,
                     commit_failure,
                     count,
-                    tuple(trace),
+                    (*trace, State.ERROR),
                 )
             if next_state is State.VALIDATION_FAILED:
                 trace.append(State.VALIDATION_FAILED)

@@ -141,6 +141,9 @@ class ExecutionEvidence:
             self._publish_final_normal_stop()
         if not done:
             failure_evidence = self._capture_failure_evidence(result)
+            self._annotate_boundary_event(
+                (failure_evidence or {}).get("failure_boundary_state"),
+                None if result.failure is None else result.failure.code)
         end_observation = end_problem = None
         if done:
             end_observation, end_problem = self._take_teacher_end_observation()
@@ -169,6 +172,16 @@ class ExecutionEvidence:
             "failure": self._document["failure"]})
         self._stream_manifest_block()
         self._write()
+
+    def _annotate_boundary_event(self, boundary, failure_code) -> None:
+        """A state whose action succeeded but whose commit failed (the release marker could not be observed) has a state event
+        and is also the failure boundary: that event names the failure, the form the manifest contract requires of it."""
+        name = getattr(boundary, "value", boundary)
+        if not name or not failure_code:
+            return
+        for event in self._state_events:
+            if event.get("state") == name and not event.get("validation_failure"):
+                event["validation_failure"] = failure_code
 
     def _build_process_summary(self, end_observation) -> dict[str, object]:
         """The `teacher_process_summary` document, aggregated on its own thread and awaited with a bound. Never raises."""

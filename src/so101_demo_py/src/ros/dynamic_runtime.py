@@ -522,6 +522,20 @@ def _cleanup_dynamic_execute(
     return _CleanupOutcome(tuple(failures))
 
 
+class ExecutionSnapshotObserver:
+    """The runner's release-marker observer: the execution's own waiting `_snapshot`, not a bare `observer.snapshot()`.
+
+    The bare call raised `EvidenceStale` on a single stale sample (max age 0.2 s) and ended the run; under load the evidence
+    topic's lag reached 2.5 s. `_snapshot` spins the executor and retries until a fresh sample or its own unchanged deadline.
+    """
+
+    def __init__(self, execution: Any) -> None:
+        self._execution = execution
+
+    def snapshot(self):
+        return self._execution._snapshot()
+
+
 def _unreachable_pre_motion_result() -> RunResult:
     """The Teacher's terminal result when the reachability preflight decided UNREACHABLE: the first transition fails and no
     action ran, which is the shape the execution's failure evidence proves physical action absent from."""
@@ -990,9 +1004,9 @@ def run_dynamic_execute(
                 actions,
                 session_id=options.session_id,
                 policy_bundle_sha256=loaded.sha256,
-                # The runner reads the Teacher's own observer directly. It used to be wrapped by a recorder that appended every
+                # The runner reads the Teacher's own evidence, no copy: it used to be wrapped by a recorder that appended every
                 # observation to a list nothing ever read (an unbounded Teacher-side data copy with no consumer, removed in A4a).
-                world_observer=execution.observer,
+                world_observer=ExecutionSnapshotObserver(execution),
                 **workflow_options,
             )
             finish_setup("accepted")

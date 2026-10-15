@@ -629,7 +629,7 @@ def test_the_runner_reads_the_teachers_own_observer_and_no_data_side_is_armed(tm
 
     runtime.execution, runtime.runner = execution, runner
     assert run_dynamic_execute(_options(tmp_path), _runtime=runtime) == 0
-    assert captured[0]["world_observer"] is built[0].observer
+    assert captured[0]["world_observer"]._execution is built[0]
     assert not hasattr(built[0], "episode_recorder") and not hasattr(built[0], "_data_start_step")
 
 

@@ -829,3 +829,52 @@ def test_control_failure_terminal_pose_must_be_within_both_policy_tolerances() -
         "terminal_orientation_error_rad": pytest.approx(0.02),
     }
     assert rejected is None
+
+
+def test_a_failed_release_marker_commit_ends_the_trace_in_error_with_the_failed_edge():
+    """The Teacher manifest's `state_trace` must end in its `status` (ERROR): a commit failure used to stop the trace at the
+    state whose action had succeeded, which the host could not verify (EXP-602)."""
+    from so101_demo.core.runner import dry_run_actions
+    from so101_demo.core.workflow import TEACHER_WORKFLOW
+
+    class FailingObserver:
+        def snapshot(self):
+            raise RuntimeError("atomic evidence age 2.5s exceeds 0.2s")
+
+    teacher_actions = {state: dry_run_actions()[state] for state in TEACHER_WORKFLOW.action_states}
+    runner = StateMachineRunner(teacher_actions, session_id="s", world_observer=FailingObserver(),
+                                workflow=TEACHER_WORKFLOW)
+
+    result = runner.run(RunRequest(mode=RunMode.EXECUTE))
+
+    assert result.status.value == "ERROR"
+    assert result.failure.code == "RELEASE_MARKER_OBSERVATION_FAILED"
+    assert result.current_state is State.ERROR
+    assert result.state_trace[-2:] == (State.OPEN_GRIPPER, State.ERROR)
+    assert result.transition_count == len(result.state_trace) - 1
+
+
+def test_the_failure_boundary_event_of_a_failed_commit_names_its_failure():
+    adapter = _finish_adapter()
+    adapter._state_events.extend([{"state": "DETACH_MOVEIT"}, {"state": "OPEN_GRIPPER"}])
+
+    adapter._annotate_boundary_event(State.OPEN_GRIPPER, "RELEASE_MARKER_OBSERVATION_FAILED")
+    adapter._annotate_boundary_event(None, "ANY")
+    adapter._annotate_boundary_event(State.LIFT, "ANY")
+
+    assert adapter._state_events == [
+        {"state": "DETACH_MOVEIT"},
+        {"state": "OPEN_GRIPPER", "validation_failure": "RELEASE_MARKER_OBSERVATION_FAILED"},
+    ]
+
+
+def test_the_release_marker_is_observed_through_the_executions_waiting_snapshot():
+    """One bare `observer.snapshot()` fails on a single stale sample; the execution's `_snapshot` spins and retries within its deadline."""
+    from so101_demo.ros.dynamic_runtime import ExecutionSnapshotObserver
+
+    sample = SimpleNamespace(simulation_session_id="s", publisher_sequence=7, reset_epoch=2)
+    calls = []
+    execution = SimpleNamespace(_snapshot=lambda: calls.append("snapshot") or sample)
+
+    assert ExecutionSnapshotObserver(execution).snapshot() is sample
+    assert calls == ["snapshot"]
