@@ -219,6 +219,62 @@ def test_closed_container_start_refuses_before_resources(tmp_path,problem):
         store.close()
 
 
+def eight_worker_functional(spec, scenes=16):
+    """The same spec as an eight-worker functional (debug) start: eight slots, a functional contract of `scenes` scenes."""
+    payload = dict(spec.payload)
+    payload['worker_slots'] = [asdict(ActWorkerSlot(campaign_id=payload['campaign_id'], worker_id=f'w{index:02d}',
+                                                    execution_generation=spec.execution_generation)) for index in range(8)]
+    payload['worker_count'] = 8
+    path = Path(payload['manifest_path'])
+    document = json.loads(path.read_text())
+    scene_path = Path(document['scene_manifest']['path'])
+    scene_path.write_text(json.dumps({'scenarios':[{'scene_id':f'functional-{i:02d}','split':'validation'}
+                                                for i in range(scenes)]}))
+    document['scene_manifest']['sha256'] = hashlib.sha256(scene_path.read_bytes()).hexdigest()
+    document['worker_count'] = 8
+    path.write_text(json.dumps(document))
+    payload['manifest_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return replace(spec, payload=payload)
+
+
+@pytest.mark.parametrize('scenes',[8,16])
+def test_eight_worker_functional_start_admits_eight_slots_without_a_gate_contract(tmp_path, scenes):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        context = workload.start(eight_worker_functional(spec, scenes), allow_existing=False)
+        assert context.worker_count == 8
+        assert [item.worker_id for item in workload.slot_registry.slots()] == [f'w{index:02d}' for index in range(8)]
+    finally:
+        store.close()
+
+
+def test_eight_worker_functional_start_refuses_a_campaign_config_naming_a_contract(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        spec = eight_worker_functional(spec)
+        config_path = Path(spec.payload['campaign_config_path'])
+        config = json.loads(config_path.read_text())
+        config['qualification_contract'] = dict(path=spec.payload['manifest_path'], sha256=spec.payload['manifest_sha256'])
+        config_path.write_text(json.dumps(config))
+        payload = dict(spec.payload, campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
+        with pytest.raises(ValueError):
+            workload.start(replace(spec, payload=payload), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('scenes',[10,40])
+def test_eight_worker_functional_start_refuses_scene_counts_outside_the_closed_set(tmp_path, scenes):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        with pytest.raises(ValueError):
+            workload.start(eight_worker_functional(spec, scenes), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()
+
+
 def assert_nothing_acquired(service, store):
     assert service.slot_registry.slots() == () and service.child_registry.launches() == ()
     assert service.arbiter.is_idle()

@@ -17,14 +17,16 @@ def check_wave_scheduling(plan, by_scene, roots, qualification):
 
     Refusals carry a coded message (`INSTANCE_SHORT:<worker>`, `RESERVED_COLLECTED_ELSEWHERE:<scene>`,
     `SURPLUS_BEFORE_RESERVED:<scene>`) so a report can name the exact failure."""
+    assignment = plan.get('assignment')
     if qualification:
         counts = {worker: 0 for worker in roots}
         for collected in by_scene.values():
             counts[collected['worker_id']] += 1
         for worker in sorted(counts):
-            if counts[worker] < 2:
+            # a reserved slot owes exactly its own reserved cases (two on the gate plane, one or two on a functional wave)
+            owed = len(assignment['reserved_by_worker'][worker]) if assignment is not None else 2
+            if counts[worker] < owed:
                 raise ValueError('INSTANCE_SHORT:'+worker)
-    assignment = plan.get('assignment')
     if assignment is None:
         return
     done = {}

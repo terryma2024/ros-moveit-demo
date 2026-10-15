@@ -7,8 +7,8 @@ settles only after every original container stop is proven. An unproven stop lea
 non-zero.
 
 Exit codes: 0 completed and settled; 2 refused before admission; 1 anything after admission (admission refusal, a run fault, an
-unproven stop, a refused settle). Planes: `--qualification` with `--worker-count` 1/2 (functional contract) or 8 (gate contract),
-otherwise formal (8 workers, `--manifest` is the scene list and `--qualification-report` the container qualification report,
+unproven stop, a refused settle). Planes: `--qualification` with `--worker-count` 1/2/8 (functional contract, 8 or 16 scenes, debug only: it never yields a
+qualification report) or 8 (gate contract, 40 scenes), otherwise formal (8 workers, `--manifest` is the scene list and `--qualification-report` the container qualification report,
 a report built from another run of the registered evidence root, which formal admission recomputes and verifies in full). In the
 exact-eight qualification plane `--run-id` must be the gate contract's `qualification_run_id`.
 
@@ -35,7 +35,7 @@ from types import SimpleNamespace
 from typing import Callable, Mapping
 
 from so101_demo.act.parallel_collection_contracts import (
-    read_document, validate_functional_contract, validate_qualification_contract,
+    read_document, validate_run_contract,
 )
 from so101_demo.runtime.act_fixed_collection_composition import (
     build_container_campaign_owner, collection_parallel_runtime, prepare_collection_operation,
@@ -96,7 +96,8 @@ def _parser():
                         help='how each instance runs: one Docker container per worker, or one native Host process group '
                              '(exactly one worker)')
     parser.add_argument('--manifest', type=Path, required=True,
-                        help='functional contract (1/2 workers), gate contract (8), or the formal scene list')
+                        help='functional contract (1/2/8 workers, 8 or 16 scenes, debug only), gate contract (8 workers, 40 scenes), '
+                             'or the formal scene list')
     parser.add_argument('--qualification-report', type=Path, help='formal plane only')
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--collection-config', type=Path, required=True)
@@ -153,11 +154,10 @@ def _preflight(args):
     except (OSError, ValueError, UnicodeError) as error:
         raise ValueError('COLLECTION_MANIFEST_INVALID') from error
     if args.qualification:
-        contract = (validate_qualification_contract(document) if args.worker_count == 8
-                    else validate_functional_contract(document))
+        plane, contract = validate_run_contract(document)
         if contract['worker_count'] != args.worker_count:
             raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
-        if args.worker_count == 8 and args.run_id != contract['qualification_run_id']:
+        if plane == 'gate' and args.run_id != contract['qualification_run_id']:
             raise ValueError('QUALIFICATION_RUN_ID_MISMATCH')
         scenes = validate_file_ref(contract['scene_manifest'])
         scenes_sha = contract['scene_manifest']['sha256']

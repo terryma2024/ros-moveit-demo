@@ -49,6 +49,47 @@ def reserve_qualification_scenes(scene_ids: tuple, worker_ids: tuple) -> dict:
                 for index,worker in enumerate(worker_ids)}, surplus=scene_ids[16:])
 
 
+def reserve_functional_scenes(scene_ids: tuple, worker_ids: tuple) -> dict:
+    """Debug-only reservations for a functional eight-worker wave: adjacent, equal, ordered cases per slot, no surplus.
+
+    Shaped like `reserve_qualification_scenes` (8 or 16 scenes give 1 or 2 cases per slot), so the same dispatch and
+    scheduling checks apply. It is not qualification evidence and nothing in the gate plane accepts it.
+    """
+    from so101_demo.parallel_batch.contracts.common import _require_id
+    try:
+        if (type(scene_ids) is not tuple or len(scene_ids) not in (8, 16)
+                or type(worker_ids) is not tuple or worker_ids != tuple(f'w{index:02d}' for index in range(8))
+                or len(set(scene_ids)) != len(scene_ids)):
+            raise ValueError('wave shape')
+        for scene_id in scene_ids:
+            _require_id('scene_id',scene_id)
+    except (ValueError, TypeError) as error:
+        raise ValueError('FUNCTIONAL_RESERVATIONS_INVALID') from error
+    each = len(scene_ids) // 8
+    return dict(reserved_by_worker={worker:scene_ids[index*each:(index+1)*each]
+                for index,worker in enumerate(worker_ids)}, surplus=())
+
+
+def wave_assignment_for(scene_ids: tuple, worker_ids: tuple) -> dict:
+    """The reservation a planned wave must carry: the gate shape for 20 scenes, the functional shape for 8 or 16."""
+    if len(scene_ids) == 20:
+        return reserve_qualification_scenes(scene_ids, worker_ids)
+    return reserve_functional_scenes(scene_ids, worker_ids)
+
+
+def plan_campaign_waves(scene_ids, worker_ids, *, plane, max_wave_size: int = 20) -> list:
+    """The wave plans of a campaign. `plane` is 'gate' (W8 qualification), 'functional' (debug) or None (formal).
+
+    Only eight workers on the gate or functional plane carry reservations; every other run claims scenes dynamically."""
+    if plane not in ('gate', 'functional', None):
+        raise ValueError('CAMPAIGN_PLANE_INVALID')
+    worker_ids = tuple(worker_ids)
+    reserve = plane is not None and len(worker_ids) == 8
+    reserver = reserve_qualification_scenes if plane == 'gate' else reserve_functional_scenes
+    return [dict(wave_index=index, scene_ids=list(wave), assignment=reserver(wave, worker_ids) if reserve else None)
+            for index, wave in enumerate(partition_waves(scene_ids, max_wave_size=max_wave_size))]
+
+
 def write_campaign_index(path, *, waves, qualification: bool) -> str:
     """Atomically publish the campaign index: the wave partition and what it was for."""
 

@@ -26,7 +26,8 @@
       "type": "integer",
       "enum": [
         1,
-        2
+        2,
+        8
       ]
     },
     "scene_manifest": {

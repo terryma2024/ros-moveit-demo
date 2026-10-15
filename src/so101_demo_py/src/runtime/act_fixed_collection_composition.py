@@ -51,7 +51,7 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     import re
 
     from so101_demo.act.parallel_collection_contracts import (
-        read_document,validate_functional_contract,validate_qualification_contract,
+        read_document,validate_run_contract,
     )
     from so101_demo.runtime.container_campaign.paths import validate_registered_evidence_root
     from so101_demo.runtime.inference.config import load_campaign_config
@@ -94,8 +94,7 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
         raise ValueError('COLLECTION_POLICY_INVALID')
     manifest = read_document(arguments.manifest)
     if arguments.qualification:
-        contract = (validate_qualification_contract(manifest) if arguments.worker_count == 8
-                    else validate_functional_contract(manifest))
+        _plane,contract = validate_run_contract(manifest)
         if contract['worker_count'] != arguments.worker_count or arguments.qualification_report is not None:
             raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
     elif arguments.qualification_report is None:

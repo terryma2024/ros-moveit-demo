@@ -20,6 +20,10 @@ IDENTITY_KEYS = frozenset({'source_sha256','runtime_config_sha256','collection_c
                           'contact_policy_fingerprint','image_source_install','gpu_uuid'})
 FUNCTIONAL_KEYS = frozenset({'schema_version','kind','run_id','worker_count','scene_manifest',
                             'controlled_identity'})
+#: Human decision 2026-10-15: short eight-shard DEBUG runs may use the functional contract. The sets are closed and are not
+#: evidence: a functional run has no gate contract, writes no qualification report and is refused by every qualification reader.
+FUNCTIONAL_WORKER_COUNTS = (1,2,8)
+FUNCTIONAL_SCENE_COUNTS = (8,16)
 QUALITY_RULE_KEYS = frozenset({'schema_version','kind','name','episode_rule','population','pass'})
 #: The populations a rule file may name. `ALL_FROZEN_SCENES` is every scene of the frozen list: FAILED, INVALID, no-pose and
 #: unevidenced scenes stay in the denominator. `QC_VALID_EPISODES` (human decision D2, 2026-10-14) is the scenes whose data is
@@ -82,12 +86,24 @@ def validate_functional_contract(document):
         _require(type(document['schema_version']) is int and document['schema_version'] == 1
                  and document['kind'] == 'ACT_COLLECTION_FUNCTIONAL_RUN')
         _require_id('run_id',document['run_id'])
-        _require(type(document['worker_count']) is int and document['worker_count'] in (1,2))
+        _require(type(document['worker_count']) is int and document['worker_count'] in FUNCTIONAL_WORKER_COUNTS)
         validate_controlled_identity(document['controlled_identity'])
-        scene_ids(document['scene_manifest'],count=8)
+        _require(len(scene_ids(document['scene_manifest'])) in FUNCTIONAL_SCENE_COUNTS)
         return copy.deepcopy(document)
     except (OSError,ValueError,TypeError,KeyError,UnicodeError) as error:
         raise ValueError('FUNCTIONAL_COLLECTION_CONTRACT_INVALID') from error
+
+
+def validate_run_contract(document):
+    """`(plane, contract)` of a qualification-mode run document: 'gate' (W8, 40 scenes) or 'functional' (debug).
+
+    The plane follows the document's own kind, never the worker count: eight workers may carry either contract."""
+    kind = document.get('kind') if type(document) is dict else None
+    if kind == 'ACT_PARALLEL_COLLECTION_GATE':
+        return 'gate',validate_qualification_contract(document)
+    if kind == 'ACT_COLLECTION_FUNCTIONAL_RUN':
+        return 'functional',validate_functional_contract(document)
+    raise ValueError('COLLECTION_RUN_CONTRACT_KIND_INVALID')
 
 
 def quality_episode_rule(name):

@@ -12,9 +12,9 @@ import json
 from pathlib import Path
 import time
 
-from so101_demo.act.parallel_collection import partition_waves,reserve_qualification_scenes
+from so101_demo.act.parallel_collection import plan_campaign_waves
 from so101_demo.act.parallel_collection_contracts import (
-    read_document,scene_ids,validate_functional_contract,validate_qualification_contract,
+    read_document,scene_ids,validate_run_contract,
 )
 from so101_demo.runtime.container_campaign.resource_log import (
     append_resource_log,check_disk_dispatch_guard,read_disk_free_bytes,
@@ -117,19 +117,19 @@ class ContainerCampaignOwner:
                     or actual!=manifest):
                 raise ValueError('CAMPAIGN_MANIFEST_CHANGED')
             if self.qualification:
-                contract=(validate_qualification_contract(actual) if self.context.worker_count==8
-                          else validate_functional_contract(actual))
-                ids=scene_ids(contract['scene_manifest'],count=40 if self.context.worker_count==8 else 8)
+                plane,contract=validate_run_contract(actual)
+                if contract['worker_count']!=self.context.worker_count:
+                    raise ValueError('CAMPAIGN_MANIFEST_INVALID')
+                # the gate plane is exactly 40 scenes; a functional contract was already closed to 8 or 16
+                ids=scene_ids(contract['scene_manifest'],count=40 if plane=='gate' else None)
             else:
+                plane=None
                 rows=actual.get('scenarios')
                 if type(rows) is not list or not rows or any(type(row) is not dict for row in rows):
                     raise ValueError('CAMPAIGN_MANIFEST_INVALID')
                 ids=tuple(row['scene_id'] for row in rows)
-            waves=partition_waves(ids,max_wave_size=20)
             worker_ids=tuple(slot.worker_id for slot in self.slots)
-            plans=[dict(wave_index=index,scene_ids=list(wave),assignment=
-                reserve_qualification_scenes(wave,worker_ids) if self.qualification and len(worker_ids)==8 else None)
-                for index,wave in enumerate(waves)]
+            plans=plan_campaign_waves(ids,worker_ids,plane=plane,max_wave_size=20)
             self._disk_guard()
             _write(self.root/'campaign-index.json',dict(schema_version=1,kind='act_collection_campaign_index',
                 qualification=self.qualification,scene_count=len(ids),waves=plans))

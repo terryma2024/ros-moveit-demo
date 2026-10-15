@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 import time
 
-from so101_demo.act.parallel_collection import reserve_qualification_scenes
+from so101_demo.act.parallel_collection import wave_assignment_for
 from so101_demo.runtime.container_campaign.paths import host_task_output
 from so101_demo.runtime.container_campaign.service_owner import _write
 from so101_demo.runtime.container_campaign.task_contracts import TASK_ID_PATTERN, InputRef, TaskSpec
@@ -431,7 +431,7 @@ class ConcurrentCollectionCoordinator:
                 if re.fullmatch(TASK_ID_PATTERN, task_id_for(shard.launch.wave_id, shard.launch.worker_id, scene)) is None:
                     raise ValueError('CONTAINER_TASK_ID_INVALID')
         if plan['assignment'] is not None and canonical_json(plan['assignment']) != canonical_json(
-                reserve_qualification_scenes(scene_order, worker_ids)):
+                wave_assignment_for(scene_order, worker_ids)):
             raise ValueError('CONTAINER_WAVE_ASSIGNMENT_CHANGED')
         for scene in scene_order:
             for ref in (*self.case_inputs[scene].values(), self.scene_manifest):

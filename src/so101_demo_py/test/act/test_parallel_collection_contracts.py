@@ -101,14 +101,58 @@ def test_gate_refuses_claims_missing_current_original_inputs(tmp_path,problem):
         module().validate_qualification_contract(document)
 
 
-def test_functional_run_cannot_include_qualification_or_accept_eight_workers(tmp_path):
+def functional_document(tmp_path,workers,scenes,name='functional-run'):
+    gate = fixture(tmp_path)
+    ref_ = ref(tmp_path/f'{name}-scenes.json',{'scenarios':[
+        {'scene_id':f'{name}-{i:02d}','split':'validation'} for i in range(scenes)]})
+    return dict(schema_version=1,kind='ACT_COLLECTION_FUNCTIONAL_RUN',run_id=name,
+        worker_count=workers,scene_manifest=ref_,controlled_identity=identity())
+
+
+@pytest.mark.parametrize('workers,scenes',[(8,16),(8,8),(1,8),(2,8),(1,16),(2,16)])
+def test_functional_contract_accepts_the_closed_worker_and_scene_sets(tmp_path,workers,scenes):
+    document = functional_document(tmp_path,workers,scenes)
+    assert module().validate_functional_contract(document) == document
+
+
+@pytest.mark.parametrize('workers,scenes',[(8,10),(3,8),(8,40),(4,8),(0,8),(16,8),(8,0),(8,9),(8,24)])
+def test_functional_contract_refuses_anything_outside_the_closed_sets(tmp_path,workers,scenes):
+    document = functional_document(tmp_path,workers,scenes)
+    with pytest.raises(ValueError,match='FUNCTIONAL_COLLECTION_CONTRACT_INVALID'):
+        module().validate_functional_contract(document)
+
+
+def test_gate_contract_is_not_a_functional_contract_and_stays_exact_eight_forty(tmp_path):
     gate = fixture(tmp_path)
     with pytest.raises(ValueError,match='FUNCTIONAL_COLLECTION_CONTRACT_INVALID'):
         module().validate_functional_contract(gate)
-    document = dict(schema_version=1,kind='ACT_COLLECTION_FUNCTIONAL_RUN',run_id='run',
-        worker_count=8,scene_manifest=gate['functional_manifest'],controlled_identity=identity())
-    with pytest.raises(ValueError,match='FUNCTIONAL_COLLECTION_CONTRACT_INVALID'):
-        module().validate_functional_contract(document)
+    assert module().validate_qualification_contract(gate) == gate
+    for change in (dict(worker_count=2),):
+        with pytest.raises(ValueError,match='PARALLEL_QUALIFICATION_CONTRACT_INVALID'):
+            module().validate_qualification_contract(gate|change)
+
+
+def test_run_contract_plane_is_chosen_by_document_kind_not_worker_count(tmp_path):
+    functional = functional_document(tmp_path,8,16)
+    assert module().validate_run_contract(functional) == ('functional',functional)
+    gate = fixture(tmp_path)
+    assert module().validate_run_contract(gate) == ('gate',gate)
+    for bad in (functional|{'kind':'OTHER'},{},[],gate|{'worker_count':1}):
+        with pytest.raises(ValueError):
+            module().validate_run_contract(bad)
+
+
+def test_functional_run_is_never_a_qualification_contract_or_report_input(tmp_path):
+    from so101_demo.act import collection_qualification_recompute as recompute
+    document = functional_document(tmp_path,8,16)
+    with pytest.raises(ValueError,match='PARALLEL_QUALIFICATION_CONTRACT_INVALID'):
+        module().validate_qualification_contract(document)
+    with pytest.raises(ValueError,match='PARALLEL_QUALIFICATION_CONTRACT_INVALID'):
+        module().validate_qualification_contract(document,check_rules=False)
+    path = tmp_path/'functional-run.json'
+    path.write_text(json.dumps(document))
+    with pytest.raises(ValueError,match='QUALIFICATION_CONTRACT_UNREADABLE'):
+        recompute.contract_documents(path)
 
 
 @pytest.mark.parametrize('kind',['functional','qualification'])
