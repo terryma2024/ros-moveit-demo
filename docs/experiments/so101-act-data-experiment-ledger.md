@@ -69,11 +69,31 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3663
-next_experiment: EXP-596 (PLANNED): 16-scene eight-shard debug run with render, simulation-step and recorder diagnostics and GPU sampling.
+latest_checkpoint: CP-3664
+next_experiment: NONE until the human decides on the in-episode fsync pressure and the readiness-probe resend.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3664 — EXP-596 VALID: filesystem stalls suspected, readiness-probe defect; historical evidence deleted
+
+- 16-scene debug run in 20 minutes: 14 collected, 8 VALID; one readiness fault (a lost ListControllers response never retried). GPU contention refuted. INPUT_STALE coincides with host-wide blocked processes and slow fsyncs, so filesystem stalls are suspected.
+- Human request "清理一下历史证据的数据", 2026-10-15 - deletion under the policy of R/evidence-deletion-20261014, plan and record in R/evidence-deletion-20261015 (plan.json, record.jsonl, docker.jsonl). 42 entries, 334.6 GiB deleted:
+  - run roots of EXP-591 (act-w8-20261014T111500Z) and EXP-593 (act-w8-20261014T151000Z);
+  - EXP-594 (act-w8-20261014T231900Z) except host/;
+  - EXP-584 (act-w1-20261013T095500Z);
+  - gate f552e9247bd5;
+  - gates dfe91fc0a29b, 3654ec80fd23, 02ca8318e254, 74db37fb4676, 4b187eee19c1 and 983c1d7b56ae reduced to their result, rc and timing files and the offline yaml;
+  - the EXP-591 image build contexts, R/scratch except the memory-measurement directories and recent entries, the reach-filter container root except launch.log, two /tmp scratch directories.
+- Docker: all exited so101-act containers (logs saved first) and the dfe91fc0a29b, 3654ec80fd23 and 02ca8318e254 campaign images removed; the 737278f0b7ba pair remains.
+- Two apply passes stopped (read-only fixture directories, a symlink loop) and were resumed after fixing the script.
+- Disk used 1.1T before, 708G after.
+- Kept:
+  - run roots EXP-595, EXP-592, EXP-587, EXP-586, EXP-596;
+  - all inputs directories, scene lists, run-logs, analyses;
+  - gates 737278f0b7ba and 9cc0068b8592;
+  - everything outside this campaign.
+- Ledger citations of the deleted paths now point at removed data.
 
 ## CP-3663 — Diagnostics and short debug runs; gate PASS; EXP-596 planned
 
@@ -101,7 +121,7 @@ next_experiment: EXP-596 (PLANNED): 16-scene eight-shard debug run with render, 
 
 ```yaml
 experiment_id: EXP-596
-status: PLANNED
+status: VALID
 prior_experiment: EXP-595 (VALID; stalls are off-CPU blocking, render path on the shared GPU suspected)
 hypothesis: The 334 ms simulation stalls and the late wrist frames coincide with long camera render or readback durations or a long render hand-over wait, at times of high GPU use, showing the shared GPU as the bottleneck.
 prediction: CAMERA_RENDER_SLOW lines with render or readback of 100 ms or more, aligned with SIM_STEP_SLOW and with the late frames in the bags; GPU utilisation high at those times. If no render line appears at the stalls, the GPU hypothesis is refuted and the recorder and simulation-loop lines are next.
@@ -125,15 +145,30 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T030006Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T030006Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run 03:22:33Z to 03:42:23Z, 20 minutes. CLI CAMPAIGN_RUN_FAILED CONTAINER_WAVE_COMMIT_READBACK_INVALID.
+  - Episodes: 14 of 16 collected, Teacher PASS in all 14, 8 VALID. INVALID - INPUT_STALE with the source-age window 4, NO_NEW_ACQUISITION 1, one missing scene_state message 1.
+  - wave-0-w06-dbg-12 faulted with COLLECTION_NATIVE_STACK_NOT_READY (per-task readiness: controller_states false for 60 s); dbg-13 never ran.
+  - Samplers and logs saved; every stop proven.
+  - Diagnostics (R/exp596-debug-run-analysis.md):
+    - GPU mean 9 percent, maximum 64 percent; CAMERA_RENDER_SLOW only at startup; SIM_STEP_SLOW about 33 iterations across eight shards, mostly at startup.
+    - RECORDER_DELIVERY_SLOW 166 lines, of which 158 are sidecar write or fsync durations of 125 to 840 ms, 8 receipt gaps.
+    - The four INPUT_STALE episodes fail at the Teacher's detach request. Each coincides with host procs_blocked of 5 to 18 (baseline median 0 to 1) and a Teacher simulation-clock lag of 34 to 148 ms.
+    - In one episode the Teacher main thread was in D state at the request, with a 359 ms sidecar fsync starting 19 ms later.
+  - w06 fault: ros2_control_node logged that its ListControllers response failed to send (timeout); act_stack_ready.py advance_controller_query never resends a pending call.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The shared-GPU render hypothesis is refuted for the data loss.
+  - The leading mechanism (moderate confidence) is filesystem stalls on the shared /data filesystem during eight concurrent recordings: fsync and writeback make writing processes - the Teacher, the bag, the simulation - block for 100 to 400 ms. The Teacher's detach request then names a source more than 100 ms old, and frames arrive late. The blocking syscall in the Teacher is not proven.
+  - The w06 fault is a probe defect: a lost service response is never retried.
+  - The functional eight-worker plane works end to end, and the debug cycle is about 20 minutes.
+conclusion: VALID diagnostic run. Mechanism narrowed to filesystem stalls; a readiness-probe defect found.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T030006Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T030006Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp596 (shard and teacher logs, host, thread and GPU samplers) and exp596-console.log
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/exp596-debug-run-analysis.md
+decision: KEEP
 next_experiment: NONE
 ```
 
