@@ -188,6 +188,28 @@ def test_a_genuinely_live_owner_is_never_retired(production_session):
         end_owner_process(process)
 
 
+def test_a_live_owner_whose_fingerprint_no_longer_matches_still_blocks_the_console(
+    production_session
+):
+    """UNKNOWN is not proof of exit: the console gate blocks it exactly as the store's gate does."""
+
+    session = production_session
+    service, store = session.service, session.store
+    process = install_live_owner(store, batch_id=session.batch_id)
+    try:
+        store._connection.execute(
+            "UPDATE owned_execution SET argv_sha256=? WHERE batch_id=?",
+            ("0" * 64, session.batch_id),
+        )
+        assert service.supervisor.has_unresolved_campaign() is True
+        refused = post_retry(service, console_body(session, "retry-owner-unknown-1"))
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["code"] == "VALIDATION_RECOVERY_REQUIRED", refused.text
+        assert store.retry_admissions(CAMPAIGN_ID) == ()
+    finally:
+        end_owner_process(process)
+
+
 def test_an_owner_identity_the_platform_will_not_report_still_refuses(
     production_session, monkeypatch
 ):

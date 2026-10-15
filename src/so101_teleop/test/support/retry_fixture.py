@@ -30,6 +30,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 
 from campaign_batch_fixture import CATALOG_SHA256, SELECTION_SHA256, write_campaign_batch
@@ -179,6 +180,25 @@ def spawn_owner_process(argv=("-c", "import time; time.sleep(120)")) -> subproce
     )
 
 
+def settled_identity(process: subprocess.Popen, *, argv=("-c", "import time; time.sleep(120)"),
+                     timeout: float = 10.0):
+    """Read the child's identity only once the kernel reports the command it was asked to run.
+
+    Right after ``Popen`` returns, a loaded host can still show the child mid-exec, with a command
+    line other than the final one. An identity recorded from that read fingerprints a command the
+    process never runs again, so the row would name a live process it can no longer match.
+    """
+
+    deadline = time.monotonic() + timeout
+    while True:
+        identity = read_identity(process.pid)
+        if list(identity.argv[-len(argv):]) == list(argv):
+            return identity
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"owner child never reported its command line: {identity.argv}")
+        time.sleep(0.01)
+
+
 def end_owner_process(process: subprocess.Popen, timeout: float = 5.0) -> None:
     if process.poll() is None:
         process.kill()
@@ -233,7 +253,7 @@ def install_live_owner(store: SupervisorStore, *, batch_id: str = BATCH_ID) -> s
     """
 
     process = spawn_owner_process()
-    identity = read_identity(process.pid)
+    identity = settled_identity(process)
     store._connection.execute(
         "UPDATE owned_execution SET pid=?, pgid=?, started_ticks=?, argv_sha256=? "
         "WHERE batch_id=?",

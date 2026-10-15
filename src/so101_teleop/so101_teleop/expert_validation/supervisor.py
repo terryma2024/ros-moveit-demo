@@ -34,6 +34,7 @@ from .execution_context import (
 )
 from .owner_tree import OwnerIntent
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
+from so101_teleop.process_identity import IDENTITY_EXITED, identity_state
 from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 from .models import (
     BatchBinding,
@@ -676,10 +677,11 @@ class ExpertValidationSupervisor:
         if record is None or record.state == "INTENT":
             # The spawn outcome is unknowable; never replay or skip this entry.
             raise RuntimeError("COMMAND_OUTCOME_UNKNOWN")
-        if ExecutionProcessOwner.identity_alive(
+        if identity_state(
             record.pid, record.started_ticks, record.argv_sha256
-        ):
-            # The previous owner is still provably live; never overlap it.
+        ) != IDENTITY_EXITED:
+            # Only proof of exit lets the next owner start: a live owner and an identity this
+            # build cannot read or match both stay blocking, as in the store's owner gate.
             raise RuntimeError("RETRY_EXECUTION_STILL_RUNNING")
         return self._verify_retry_journal(request, batch_id, batch_root)
 
@@ -759,9 +761,11 @@ class ExpertValidationSupervisor:
             if record.state == "INTENT":
                 # Spawn intent without ACK: the outcome is unknowable.
                 return True
-            if ExecutionProcessOwner.identity_alive(
+            # UNKNOWN (a live pid whose fingerprint does not match, an unreadable identity) is not
+            # proof of exit; it blocks exactly like ALIVE, as in the store's owner gate.
+            if identity_state(
                 record.pid, record.started_ticks, record.argv_sha256
-            ):
+            ) != IDENTITY_EXITED:
                 return True
         return False
 
