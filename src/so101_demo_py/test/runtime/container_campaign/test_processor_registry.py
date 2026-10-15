@@ -35,7 +35,10 @@ def test_processor_launch_record_shape(tmp_path):
     assert item.role == "processor" and item.launcher == "container"
     for changes in (dict(worker_id="w00", launch_id="processing-w00-g1"), dict(worker_id=None),
                     dict(wave_id="wave-0"), dict(session_id="session"), dict(launch_id="wave-0-p00-g1"),
-                    dict(launch_id="processing-p00-g2"), dict(launcher="native", container_name=None, image_digest=None)):
+                    dict(launch_id="processing-p00-g2"),
+                    dict(launcher="native", container_name=None, image_digest=None, worker_id="w00", launch_id="processing-w00-g1"),
+                    dict(launcher="native", container_name="so101-x", image_digest=None),
+                    dict(launcher="native", container_name=None, image_digest=None, wave_id="wave-0")):
         with pytest.raises(ValueError, match="CONTAINER_LAUNCH_RECORD_INVALID"):
             launch(tmp_path, **changes)
 
@@ -97,4 +100,31 @@ def test_processor_launches_do_not_collide_with_shards_or_services(tmp_path):
     registry.register(launch(tmp_path))
     registry.register(launch(tmp_path, worker="p01"))
     assert len(registry.records()) == 3
+    registry.close()
+
+
+def native_launch(tmp_path, **changes):
+    return launch(tmp_path, launcher="native", container_name=None, image_digest=None, **changes)
+
+
+def test_a_native_processor_launch_record_is_a_processor_without_a_container(tmp_path):
+    item = native_launch(tmp_path)
+    assert item.role == "processor" and item.launcher == "native" and item.container_name is None and item.image_digest is None
+
+
+def test_a_native_processor_stops_with_the_native_exit_observation_alone(tmp_path):
+    from so101_demo.runtime.container_campaign.process_identity import NativeOwnerKey, ProcessOwnerKey
+
+    registry = ContainerLaunchRegistry(tmp_path / "launches.sqlite3")
+    item = native_launch(tmp_path)
+    registry.register(item)
+    key = NativeOwnerKey.from_process(ProcessOwnerKey(700, 700, 12345, "a" * 64, "b" * 64), launch_generation=1)
+    registry.bind_native(item.launch_id, key)
+    document = dict(schema_version=1, kind="native_instance_exit", pid=700, pgid=700, started_ticks=12345, argv_sha256="a" * 64,
+                    owned_root=item.owned_root, leader_state="absent", group_members=[], marker_survivors=[], graph_clear=True)
+    for damage in (dict(leader_state="live"), dict(group_members=[701]), dict(marker_survivors=[9])):
+        with pytest.raises(ValueError, match="LAUNCH_STOP_UNCONFIRMED"):
+            registry.prove_terminated(item.launch_id, dict(document, **damage))
+    assert registry.prove_terminated(item.launch_id, document) is True    # no shard stop receipt is asked of a processor
+    assert registry.role_terminated("processor", lambda cid: None, inspect_native=lambda record: document)
     registry.close()

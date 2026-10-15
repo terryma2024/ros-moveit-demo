@@ -13,11 +13,17 @@ import sys
 
 from so101_demo.runtime.act_instance.identity import ACT_INSTANCE_ROS_DOMAIN_ID
 from so101_demo.runtime.container_campaign.native_owner import NativeInstanceOwner
+from so101_demo.runtime.container_campaign.native_processor_owner import NativeProcessorOwner
+from so101_demo.runtime.container_campaign.processor_launcher import ContainerProcessorLauncher
+from so101_demo.runtime.container_campaign.launch import ProcessorLaunchArgs
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch
 from so101_demo.runtime.container_campaign.shard_launcher import ContainerShardLauncher
 
 #: The module the native instance runs; the same installed code a container image holds, started as a Host process.
 NATIVE_INSTANCE_MODULE = 'so101_demo.cli.act_instance_native'
+
+#: The module the native processor runs: the native shell of the same `campaign_processor` program a processor container runs.
+NATIVE_PROCESSOR_MODULE = 'so101_demo.cli.campaign_processor_native'
 
 #: How long the Host's graph probe discovers before it lists the nodes of the instance's domain.
 GRAPH_SPIN_TIME_S = 3.0
@@ -76,3 +82,33 @@ class NativeInstanceLauncher(ContainerShardLauncher):
             base_environment=self.base_environment, graph_probe=graph_probe, popen=self.popen)
         owner_environment = owner.environment
         return owner
+
+
+class NativeProcessorLauncher(ContainerProcessorLauncher):
+    """Prepare the native processor of a native single-worker run (phase 2): the native counterpart of `ContainerProcessorLauncher`.
+
+    The private directories, the spec and the launch record are the container processor's; only the launcher differs (a Host process
+    group, no container, no image), and so does what the owner mounts: nothing, since the processor reads the same host paths."""
+
+    def __init__(self, *, context, paths, registry, parallel_runtime, approved_inputs, config_paths, install_prefix,
+                 command=None, base_environment=None, popen=subprocess.Popen):
+        self._common(context=context, paths=paths, registry=registry, parallel_runtime=parallel_runtime,
+                     approved_inputs=approved_inputs, config_paths=config_paths)
+        self.base_environment = dict(os.environ if base_environment is None else base_environment)
+        if not Path(install_prefix).is_absolute() or not callable(popen) or self.context.worker_count != 1:
+            raise ValueError('COLLECTION_NATIVE_LAUNCHER_INVALID')
+        self.install_prefix = Path(install_prefix)
+        self.command = list(command) if command is not None else [sys.executable, '-m', NATIVE_PROCESSOR_MODULE]
+        self.popen = popen
+
+    def _launch(self, *, slot, generation, short, root):
+        return ContainerLaunch(launch_id=f'processing-{slot.worker_id}-g{generation}', role='processor', worker_id=slot.worker_id,
+            wave_id=None, launch_generation=generation, container_name=None, image_digest=None, owned_root=str(root),
+            session_id=None, launcher='native')
+
+    def _owner(self, *, launch, spec_path, token, attempts):
+        return NativeProcessorOwner(admitted_context=self.context, launch=launch, entry=ProcessorLaunchArgs(spec=spec_path),
+            paths=self.paths, registry=self.registry, service_token=token,
+            startup_timeout_s=self.runtime.initializing_hard_timeout_s, status_timeout_s=self.runtime.heartbeat_timeout_s,
+            max_frame_bytes=self.runtime.broker_max_frame_bytes, stop_timeout_s=self.runtime.worker_recovery_timeout_s,
+            install_prefix=self.install_prefix, command=self.command, base_environment=self.base_environment, popen=self.popen)

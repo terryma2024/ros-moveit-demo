@@ -105,9 +105,12 @@ class _PastDeadline(Exception):
 
 class ProcessingScheduler:
     def __init__(self, *, context, runtime, config, root, launcher, admit_slots, case_inputs, control_factory=None,
-                 clock=time.monotonic, memory_reader=read_mem_available_bytes):
-        if not callable(launcher) or not callable(admit_slots) or type(case_inputs) is not dict or not callable(clock):
+                 clock=time.monotonic, memory_reader=read_mem_available_bytes, max_processors=None):
+        """`max_processors` caps the processors whatever the configuration or the memory allow: a native single worker passes 1."""
+        if (not callable(launcher) or not callable(admit_slots) or type(case_inputs) is not dict or not callable(clock)
+                or max_processors is not None and (type(max_processors) is not int or max_processors < 1)):
             raise ValueError("PROCESSING_SCHEDULER_CONFIG_INVALID")
+        self.max_processors = max_processors
         self.context, self.runtime, self.config, self.root = context, runtime, config, Path(root)
         self.launcher, self.admit_slots, self.case_inputs = launcher, admit_slots, case_inputs
         self.control_factory = control_factory or (lambda owner: ContainerTaskControl(owner=owner))
@@ -125,6 +128,8 @@ class ProcessingScheduler:
             raise ValueError("PROCESSING_QUEUE_INVALID")
         self.deadline_s = float(deadline_s)
         count = processor_count_for(self.config, queue_length=len(items), available_bytes=self._available_bytes())
+        if self.max_processors is not None:
+            count = min(count, self.max_processors)
         slots = tuple(ActWorkerSlot(self.context.campaign_id, f"p{index:02d}", self.context.execution_generation)
                       for index in range(count))
         self.admit_slots(slots)

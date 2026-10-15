@@ -40,18 +40,39 @@ def all_phase1_attempts(run):
 class ContainerProcessorLauncher:
     def __init__(self, *, context, images, paths, registry, parallel_runtime, approved_inputs, config_paths,
                  docker_runner=_docker, namespace_reader=read_container_namespace):
+        if type(images) is not dict or set(images) != {"head", "teacher", "shard"}:
+            raise ValueError("PROCESSOR_LAUNCHER_INVALID")
+        self._common(context=context, paths=paths, registry=registry, parallel_runtime=parallel_runtime,
+                     approved_inputs=approved_inputs, config_paths=config_paths)
+        self.images = images
+        self.docker_runner, self.namespace_reader = docker_runner, namespace_reader
+
+    def _common(self, *, context, paths, registry, parallel_runtime, approved_inputs, config_paths):
         from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != "act_collection_start"
                 or type(registry) is not ContainerLaunchRegistry or str(paths["run"]) != context.evidence_root
-                or type(approved_inputs) is not tuple or type(config_paths) is not tuple or type(images) is not dict
-                or set(images) != {"head", "teacher", "shard"}):
+                or type(approved_inputs) is not tuple or type(config_paths) is not tuple):
             raise ValueError("PROCESSOR_LAUNCHER_INVALID")
-        self.context, self.images, self.paths, self.registry = context, images, paths, registry
+        self.context, self.paths, self.registry = context, paths, registry
         self.parallel_runtime = dict(parallel_runtime)
         self.runtime = _load_runtime_config(validate_file_ref(parallel_runtime))
         self.approved_inputs, self.config_paths = approved_inputs, config_paths
-        self.docker_runner, self.namespace_reader = docker_runner, namespace_reader
+
+    def _launch(self, *, slot, generation, short, root):
+        return ContainerLaunch(launch_id=f"processing-{slot.worker_id}-g{generation}", role="processor", worker_id=slot.worker_id,
+                               wave_id=None, launch_generation=generation,
+                               container_name=f"so101-act-{short}-{slot.worker_id}-g{generation}",
+                               image_digest=self.images["shard"]["digest"], owned_root=str(root), session_id=None)
+
+    def _owner(self, *, launch, spec_path, token, attempts):
+        return ContainerProcessorOwner(admitted_context=self.context, launch=launch, entry=ProcessorLaunchArgs(spec=spec_path),
+            images=self.images, paths=self.paths, registry=self.registry, approved_inputs=self.approved_inputs,
+            config_paths=tuple(dict.fromkeys((*self.config_paths, spec_path))), phase1_attempts=attempts,
+            service_token=token, startup_timeout_s=self.runtime.initializing_hard_timeout_s,
+            status_timeout_s=self.runtime.heartbeat_timeout_s, max_frame_bytes=self.runtime.broker_max_frame_bytes,
+            stop_timeout_s=self.runtime.worker_recovery_timeout_s, docker_runner=self.docker_runner,
+            namespace_reader=self.namespace_reader)
 
     def __call__(self, *, slot, generation):
         context = self.context
@@ -83,13 +104,5 @@ class ContainerProcessorLauncher:
         _write(spec_path, spec)
         if load_processor_spec(spec_path)[0] != spec:
             raise ValueError("PROCESSOR_SPEC_DRIFT")
-        launch = ContainerLaunch(launch_id=f"processing-{suffix}", role="processor", worker_id=slot.worker_id, wave_id=None,
-                                 launch_generation=generation, container_name=f"so101-act-{short}-{suffix}",
-                                 image_digest=self.images["shard"]["digest"], owned_root=str(root), session_id=None)
-        return ContainerProcessorOwner(admitted_context=context, launch=launch, entry=ProcessorLaunchArgs(spec=spec_path),
-            images=self.images, paths=self.paths, registry=self.registry, approved_inputs=self.approved_inputs,
-            config_paths=tuple(dict.fromkeys((*self.config_paths, spec_path))), phase1_attempts=attempts,
-            service_token=token, startup_timeout_s=self.runtime.initializing_hard_timeout_s,
-            status_timeout_s=self.runtime.heartbeat_timeout_s, max_frame_bytes=self.runtime.broker_max_frame_bytes,
-            stop_timeout_s=self.runtime.worker_recovery_timeout_s, docker_runner=self.docker_runner,
-            namespace_reader=self.namespace_reader)
+        launch = self._launch(slot=slot, generation=generation, short=short, root=root)
+        return self._owner(launch=launch, spec_path=spec_path, token=token, attempts=attempts)

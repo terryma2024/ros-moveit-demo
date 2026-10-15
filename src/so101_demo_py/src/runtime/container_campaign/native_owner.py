@@ -65,6 +65,10 @@ def native_instance_environment(base, *, owned_root, session_id, gpu_uuid):
 
 
 class NativeInstanceOwner:
+    #: the prefix of this owner's own refusal codes and the launch role it predecessors-check (`NativeProcessorOwner` overrides both)
+    CODE = 'SHARD'
+    ROLE = 'shard'
+
     def __init__(self, *, admitted_context, launch, entry, paths, registry, service_token, startup_timeout_s,
                  status_timeout_s, max_frame_bytes, stop_timeout_s, install_prefix, ros2_executable, teacher_socket, command,
                  base_environment, graph_probe, popen=subprocess.Popen, monotonic_ns=time.monotonic_ns):
@@ -121,7 +125,7 @@ class NativeInstanceOwner:
 
     async def start(self):
         if self._start_task is not None or self._closing:
-            raise ValueError('SHARD_OWNER_ALREADY_STARTED')
+            raise ValueError(self.CODE+'_OWNER_ALREADY_STARTED')
         self._start_task = asyncio.create_task(self._start())
         try:
             return await asyncio.shield(self._start_task)
@@ -133,15 +137,13 @@ class NativeInstanceOwner:
         try:
             deadline = min(self.clock()+int(self.startup_budget*1e9), int(self.context.deadline_monotonic_s*1e9))
             if self.clock() >= deadline:
-                raise ValueError('SHARD_START_DEADLINE_EXPIRED')
-            from so101_demo.runtime.act_instance.spec import load_spec
-            if (hashlib.sha256(self.entry.spec.read_bytes()).hexdigest() != self.spec_sha256
-                    or load_spec(self.entry.spec)[0] != self.spec):
-                raise ValueError('SHARD_SPEC_CHANGED')
+                raise ValueError(self.CODE+'_START_DEADLINE_EXPIRED')
+            if hashlib.sha256(self.entry.spec.read_bytes()).hexdigest() != self.spec_sha256 or not self._spec_unchanged():
+                raise ValueError(self.CODE+'_SPEC_CHANGED')
             # A cached exit cannot authorize reuse of the slot: read the exact predecessor's exit again first.
             for previous in self.registry.records():
                 item = previous['launch']
-                if item['role'] == 'shard' and item['worker_id'] == self.launch.worker_id:
+                if item['role'] == self.ROLE and item['worker_id'] == self.launch.worker_id:
                     if previous['owner'] is None:
                         raise ValueError('LAUNCH_OWNER_UNKNOWN')
                     if item.get('launcher', 'container') != 'native':
@@ -151,18 +153,14 @@ class NativeInstanceOwner:
                     self.registry.prove_terminated(item['launch_id'], observed)
             self.registry.register(self.launch)
             self._registered = True
-            _write(self.root/'launch-argv.json', dict(argv=self.argv, launcher='native',
-                environment_sha256=hashlib.sha256(json.dumps(self.environment, sort_keys=True).encode()).hexdigest(),
-                fixed_environment={name: self.environment[name] for name in (
-                    'ROS_DOMAIN_ID', 'ROS_LOCALHOST_ONLY', 'ROS_AUTOMATIC_DISCOVERY_RANGE', 'MUJOCO_GL',
-                    INSTANCE_ROOT_ENV, INSTANCE_OUTPUT_ENV, 'CUDA_VISIBLE_DEVICES')}))
+            _write(self.root/'launch-argv.json', self._launch_record())
             fd = os.open(self.root/'native-instance.log', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
             self._log = os.fdopen(fd, 'wb')
             try:
                 self.process = self.popen(self.argv, env=self.environment, cwd=self.root, shell=False,
                     start_new_session=True, stdin=subprocess.DEVNULL, stdout=self._log, stderr=subprocess.STDOUT)
             except OSError as error:
-                raise ValueError('SHARD_NATIVE_LAUNCH_FAILED') from error
+                raise ValueError(self.CODE+'_NATIVE_LAUNCH_FAILED') from error
             process = await self._identity(self.process.pid)
             self.owner = NativeOwnerKey.from_process(process, launch_generation=self.launch.launch_generation)
             self.registry.bind_native(self.launch.launch_id, self.owner)
@@ -171,21 +169,42 @@ class NativeInstanceOwner:
             self.bridge = NativeBridgeProcessOwner(native_owner=self.owner, control_socket_root=control,
                 runtime_id=self.spec['runtime_id'], service_epoch=self.context.service_epoch,
                 campaign_id=self.context.campaign_id, worker_id=self.launch.worker_id,
-                execution_generation=self.context.execution_generation, session_id=self.launch.session_id)
+                execution_generation=self.context.execution_generation, session_id=self._session_id())
             binding = self.bridge.accept_ready(read_document(control/'child-ready.json'))
             self.registry.bind_child(self.launch.launch_id, binding)
-            await self._wait_file(self.root/'runtime-ready.json', deadline)
-            await self._wait_file(self.root/'stack-readiness.json', deadline)
-            check_runtime_ready(self.root, generation=self.launch.launch_generation, process=binding.process)
-            _write(self.root/'native-instance-provenance.json', dict(schema_version=1, kind='ACT_NATIVE_INSTANCE_PROVENANCE',
-                install_prefix=str(self.install_prefix), argv=self.argv, spec_sha256=self.spec_sha256,
-                process_owner=asdict(self.owner.process_key()),
-                host_pid_namespace_inode=pid_namespace_inode()))
+            await self._await_runtime(binding, deadline)
+            self._write_provenance()
             await self._ensure_alive(deadline)
             self._runtime_ready = True
             return binding
         finally:
             self._startup_done.set()
+
+    # ---- what differs between a shard instance and a processor (`NativeProcessorOwner`) ------------------------------------
+
+    def _spec_unchanged(self):
+        from so101_demo.runtime.act_instance.spec import load_spec
+        return load_spec(self.entry.spec)[0] == self.spec
+
+    def _launch_record(self):
+        return dict(argv=self.argv, launcher='native',
+            environment_sha256=hashlib.sha256(json.dumps(self.environment, sort_keys=True).encode()).hexdigest(),
+            fixed_environment={name: self.environment[name] for name in (
+                'ROS_DOMAIN_ID', 'ROS_LOCALHOST_ONLY', 'ROS_AUTOMATIC_DISCOVERY_RANGE', 'MUJOCO_GL',
+                INSTANCE_ROOT_ENV, INSTANCE_OUTPUT_ENV, 'CUDA_VISIBLE_DEVICES')})
+
+    def _session_id(self):
+        return self.launch.session_id
+
+    async def _await_runtime(self, binding, deadline):
+        await self._wait_file(self.root/'runtime-ready.json', deadline)
+        await self._wait_file(self.root/'stack-readiness.json', deadline)
+        check_runtime_ready(self.root, generation=self.launch.launch_generation, process=binding.process)
+
+    def _write_provenance(self):
+        _write(self.root/'native-instance-provenance.json', dict(schema_version=1, kind='ACT_NATIVE_INSTANCE_PROVENANCE',
+            install_prefix=str(self.install_prefix), argv=self.argv, spec_sha256=self.spec_sha256,
+            process_owner=asdict(self.owner.process_key()), host_pid_namespace_inode=pid_namespace_inode()))
 
     async def _identity(self, pid):
         """The kernel identity of the process just spawned, after it has exec'd; retried only while it is incomplete."""

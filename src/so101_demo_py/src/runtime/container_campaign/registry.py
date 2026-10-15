@@ -48,8 +48,8 @@ class ContainerLaunch:
             if self.launcher not in LAUNCHERS:
                 raise ValueError('launcher')
             if self.launcher == 'native':
-                # a native instance is a Host process group: it has no container and no image
-                if self.container_name is not None or self.image_digest is not None or self.role != 'shard':
+                # a native instance or processor is a Host process group: it has no container and no image
+                if self.container_name is not None or self.image_digest is not None or self.role not in ('shard', 'processor'):
                     raise ValueError('native scope')
                 if type(self.launch_id) is not str or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*', self.launch_id) is None:
                     raise ValueError('id')

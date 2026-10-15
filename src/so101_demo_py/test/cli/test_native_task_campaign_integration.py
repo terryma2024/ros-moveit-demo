@@ -23,6 +23,7 @@ from test_container_task_campaign_integration import (  # noqa: F401  (fixtures 
 )
 from test_controller_stop import run_probe
 from so101_demo.cli.act_collect_parallel import CollectionEdges, main
+from so101_demo.runtime.container_campaign.native_launcher import NativeProcessorLauncher
 from so101_demo.runtime.container_campaign.native_owner import NativeInstanceOwner
 
 
@@ -56,6 +57,9 @@ def test_the_native_single_worker_runs_the_whole_campaign_chain_and_settles(tmp_
     (owner,) = spies.owners
     (shard,) = owner.shards
     assert type(shard) is NativeInstanceOwner and shard.launch.launcher == 'native'
+    # phase 2 of a native single worker: the same scheduler over the native processor launcher, one processor at most
+    assert owner.processing is not None and type(owner.processing.launcher) is NativeProcessorLauncher
+    assert owner.processing.max_processors == 1
     # admission recorded the launcher; the Teacher is still a container, the instance is not
     payload = json.loads(spies.workload.arbiter.store._query_one('SELECT payload_json FROM parents')['payload_json'])
     assert payload['instance_launcher'] == 'native' and payload['worker_count'] == 1

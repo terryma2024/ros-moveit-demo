@@ -668,7 +668,8 @@ class UnifiedWorkloadService:
 
         The context must be this owner's durable record. Slots are reserved like shard slots (the same table, the same duplicate
         and launcher exclusivity rules) before any processor container is launched, and `finish` releases them with the
-        campaign. Native campaigns have no processor slots here."""
+        campaign. A native campaign (one worker) admits exactly one processor slot: the native processor runs after the native shard
+        was proven stopped, and has no ROS graph, so it does not share the fixed domain with anything."""
         if not isinstance(context, AdmittedCampaignContext) or context.workload_kind != 'act_collection_start':
             raise ValueError('CAMPAIGN_CONTEXT_MISMATCH')
         if (type(slots) is not tuple or not slots
@@ -685,12 +686,15 @@ class UnifiedWorkloadService:
             if row is None or AdmittedCampaignContext.from_dict(json.loads(row[0])) != context:
                 raise ValueError("CAMPAIGN_CONTEXT_MISMATCH")
             parent = store._query_one("SELECT payload_json FROM parents WHERE operation_id=?", (context.operation_id,))
-            if parent is None or json.loads(parent[0]).get('instance_launcher') != 'container':
+            launcher = None if parent is None else json.loads(parent[0]).get('instance_launcher')
+            if launcher not in ('container', 'native'):
                 raise ValueError('PROCESSOR_SLOT_LAUNCHER_UNSUPPORTED')
+            if launcher == 'native' and len(slots) != 1:
+                raise ValueError('PROCESSOR_SLOT_NATIVE_SINGLE_ONLY')
             if not any(not slot.is_processor and slot.campaign_id == context.campaign_id
                        and slot.execution_generation == context.execution_generation for slot in self.slot_registry.slots()):
                 raise ValueError('CAMPAIGN_NOT_ACTIVE')
-            with self.slot_registry.reserve_many(slots):
+            with self.slot_registry.reserve_many(slots, processors=True):
                 pass
         return slots
 

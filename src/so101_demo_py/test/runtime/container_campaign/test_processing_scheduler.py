@@ -49,11 +49,11 @@ class World:
     def control_factory(self, owner):
         return FakeControl(self, owner)
 
-    def scheduler(self, config=None, rows=None, available=36 * GIB, case_inputs=None, deadline_s=None):
+    def scheduler(self, config=None, rows=None, available=36 * GIB, case_inputs=None, deadline_s=None, max_processors=None):
         rows = rows if rows is not None else make_rows(self, 5)
         scheduler = ProcessingScheduler(context=self.context, runtime=RUNTIME, config=config or {}, root=self.run,
             launcher=self.launcher, admit_slots=lambda slots: self.admitted.append(slots), case_inputs=case_inputs or inputs_for(rows),
-            control_factory=self.control_factory, memory_reader=lambda: available)
+            control_factory=self.control_factory, memory_reader=lambda: available, max_processors=max_processors)
         return scheduler, rows, (deadline_s if deadline_s is not None else time.monotonic() + 30.)
 
     def journal(self):
@@ -171,6 +171,17 @@ def test_a_configured_count_overrides_memory_but_launches_no_idle_processor(tmp_
     scheduler, rows, deadline = world.scheduler(config={"processor_count": 16}, available=3 * GIB, rows=make_rows(world, 2))
     run(scheduler.run(rows, deadline_s=deadline))
     assert len(world.admitted[0]) == 2 and sorted(world.launches) == [("p00", 1), ("p01", 1)]
+
+
+@pytest.mark.parametrize("config", [{}, {"processor_count": 4}])
+def test_a_native_single_worker_runs_exactly_one_processor_whatever_the_memory_or_the_config_allow(tmp_path, config):
+    world = World(tmp_path)
+    scheduler, rows, deadline = world.scheduler(config=config, available=36 * GIB, rows=make_rows(world, 5), max_processors=1)
+    summary = run(scheduler.run(rows, deadline_s=deadline))
+    assert [slot.worker_id for slot in world.admitted[0]] == ["p00"] and sorted(world.launches) == [("p00", 1)]
+    assert [item["scene"] for item in world.assigned] == [row["scene_id"] for row in rows]
+    assert summary["processors"] == 1 and summary["counts"]["VALID"] == 5
+    assert world.events("phase2_start")[0]["processors"] == 1
 
 
 def test_one_processor_serves_a_queue_in_order(tmp_path):

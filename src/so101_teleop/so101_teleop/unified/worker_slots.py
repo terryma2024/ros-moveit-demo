@@ -128,10 +128,12 @@ class ActWorkerSlotRegistry:
         elif active and {slot.campaign_id for slot in active} & self.native_campaign_ids():
             raise ValueError('NATIVE_INSTANCE_EXCLUSIVE')
 
-    def validate(self, slots, *, launcher='container'):
+    def validate(self, slots, *, launcher='container', processors=False):
         if type(slots) is not tuple or not slots or any(type(slot) is not ActWorkerSlot for slot in slots):
             raise ValueError('WORKER_SLOT_INVALID')
-        self._require_launcher_exclusivity(slots, launcher)
+        if not processors:
+            # processor slots join an already admitted campaign (a native one included); the exclusivity was settled when it was
+            self._require_launcher_exclusivity(slots, launcher)
         existing = list(self.slots())
         if self.child_registry is not None:
             existing.extend(self.child_registry.launches())
@@ -143,12 +145,12 @@ class ActWorkerSlotRegistry:
             existing.append(slot)
 
     @contextlib.contextmanager
-    def reserve_many(self, slots, *, launcher='container'):
+    def reserve_many(self, slots, *, launcher='container', processors=False):
         # Commit the complete logical reservation before any GPU lease or spawn.
         # Holding this store's lock across admission prevents resource races.
         with self.store._thread_lock:
             with self.store.immediate_transaction():
-                self.validate(slots, launcher=launcher)
+                self.validate(slots, launcher=launcher, processors=processors)
                 for slot in slots:
                     self.store._connection.execute('INSERT INTO act_worker_slots VALUES (?,?,?,?,1)',
                         (slot.campaign_id, slot.worker_id, slot.execution_generation, _canonical(slot)))
