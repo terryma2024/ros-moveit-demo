@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: b28d622626a5bab43bf7007c97595c10c2e3d8cc
+current_commit: 7ee92a897a697d2d476a7ca1c0328433dca03a29
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,79 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3670
-next_experiment: NONE until the human chooses between the in-flight limit for qualification and reducing the offline-processing interference.
+latest_checkpoint: CP-3671
+next_experiment: EXP-600 (PLANNED): 16-scene debug run, recording cap 4, CPU shares 64 during offline processing, per-message traces.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3671 — CPU weight per phase and delay traces; two-phase design drafted; EXP-600 planned
+
+- Human answer "降低离线处理的干扰再跑".
+  - Commit `9d6ff1df5`: optional campaign key post_recording_cpu_shares (2 to 1024). When a shard enters POST_RECORDING, the host runs docker update --cpu-shares and restores the launch value afterwards, journaled in host/wave-N/cpu-shares-journal.jsonl. A failure never stops the campaign.
+  - Commits `a535652` (submodule) and `7ee92a897`, diagnostics only:
+    - CAMERA_PUBLISH_TRACE (stamp and wall time around each camera publish);
+    - a raw-recorder probe trace of camera and /clock receipts;
+    - TEACHER_SOURCE_TRACE at each planning-scene apply (the Teacher's /clock receipt lag).
+- Human question "离线处理做什么？" answered: replay of the raw bag through the live rules, then about 1926 PNG frames and about 330 MB of audit files written, a hashed and fsynced seal, and an independent QC in a fresh process. This takes about 6 minutes per episode, after a recording of about 2 minutes.
+- Human proposal "能把采集和处理分成两阶段吗？…前者实时性高，后者吞吐量优先" and answers:
+  1. lightweight containers for processing;
+  2. phase 1 starts with eight workers;
+  3. infrastructure failures retried automatically;
+  4. one total limit, and "可以指定每个阶段的时限" - optional per-phase limits;
+  5. the inline mode deleted.
+- Draft design and implementation plan, commit `f824a04d9`, not confirmed for execution:
+  - docs/superpowers/specs/2026-10-15-so101-act-two-phase-collection-design.md
+  - docs/superpowers/plans/2026-10-15-so101-act-two-phase-collection-implementation.md
+- Gate on 7ee92a897, R/gates/7ee92a897a69, serial: build rc 0; so101_demo_py 12966 passed, 187 skipped; colcon 2184 tests, 0 errors, 0 failures, 60 skipped; colcon_rc 0. PASSED.
+  - The gate recorded dirty_after=2: the two design documents were untracked in docs/ while it ran (R/gates/7ee92a897a69/dirty-after-explained.json).
+  - Coordinator decision: the EXP-600 inputs accept that count only when every dirty path is an untracked docs/ file listed in that record.
+- Images, built at HEAD f824a04d9 (docs only after the gate commit):
+  - inference sha256:de8638f8acd3aae3ff9667616513ae8ed4d5e5da53418309c1b9634c2aac1b9e (R/image-build-20261015T081149Z)
+  - shard sha256:b299b2c43e02497e3c6bcdc7e4319548f99317522acf42a9c6224c8270455947 (R/image-build-20261015T081257Z)
+  - The EXP-600 author step and validation accept an image commit whose src, scripts and third_party equal the gated commit - the run-script rule of the human decision "启动脚本要求HEAD与源码提交完全一致 这个规则可以去掉". git diff 7ee92a897 f824a04d9 over those trees is empty.
+- Inputs REG/act-w8d-inputs-20261015T075459Z:
+  - recording cap 4, no in-flight limit, post_recording_cpu_shares 64;
+  - validation 71 of 71 PASS on the second run (first run kept as validate-inputs.run1-image-commit.json);
+  - sha256sums regenerated.
+
+```yaml
+experiment_id: EXP-600
+status: PLANNED
+prior_experiment: EXP-597 (cap 4, 4 of 16 VALID) and EXP-599 (cap 4 with four tasks in flight, 13 of 16)
+hypothesis: Lowering the CPU weight of shards in offline processing to 64 of 1024 protects the recordings under contention, raising VALID well above 4 of 16 without the time cost of the in-flight limit. The traces classify each late frame as a sending, transport or rosbag delay.
+prediction: VALID between EXP-597 and EXP-599; run time near 21 minutes. If VALID stays near 4 of 16, CPU share is not the contended resource (memory bandwidth or cache would remain), which also supports the two-phase design.
+single_variable: post_recording_cpu_shares 64 and the trace logging relative to EXP-597.
+lifecycle: ISOLATED_STACK (eight containers, one wave of 16)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 7ee92a897, with the docs-only dirty exception above.
+success_criteria:
+  - All 16 scenes collected; every stop proven; the CPU-share journal and the traces cover the run.
+failure_criteria:
+  - An execution fault or an unproven stop.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 7ee92a897; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 7ee92a897a697d2d476a7ca1c0328433dca03a29 (Host gate install); images built at f824a04d9 with identical source trees
+  install_overlay: /act/install in the two images above; Host R/gates/7ee92a897a69/install plus worktree import
+  runtime_executable: as EXP-597
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T075459Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after the image-commit rule fix
+    exit_code: 2 (image commit), then 1 (validation image commit), then 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T075459Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3670 — EXP-599 VALID: at most four tasks in flight gives 13 of 16 VALID; other shards' offline processing is the main interferer
 
