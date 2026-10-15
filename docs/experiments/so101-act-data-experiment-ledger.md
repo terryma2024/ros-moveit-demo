@@ -69,11 +69,65 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3666
-next_experiment: NONE until the human chooses how to relieve the shared NVMe write latency.
+latest_checkpoint: CP-3667
+next_experiment: EXP-598 (PLANNED): 16-scene eight-shard debug run with the recording cap lowered from 4 to 2.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3667 — Disk benchmark and reversible IO-setting comparison; EXP-598 planned with recording cap 2
+
+- Human answer "先试降录制并发，再做压缩": first a debug run with max_concurrent_recordings 2, then lossless compression if write load is confirmed.
+- Human request "先测试一下这个盘的读写速度": dd and Python, no tool installed, R/disk-bench-20261015/result.json; test files deleted (deletions.log).
+  - Bandwidth: sequential O_DIRECT write 3.3 to 3.8 GB/s for 4 GiB, then steady about 2.3 GB/s over 32 GiB; sequential read 2.1 GB/s.
+  - Idle 4 KiB write plus fdatasync: median 1.3 ms, p99 1.4 ms. Idle random read: median 0.08 ms.
+  - Under one buffered 16 GiB writer, fdatasync was median 1.4 ms, p90 203 ms, p99 606 ms, maximum 1.0 s; reads were unaffected.
+  - The device is not bandwidth-limited; synchronous writes wait behind large writeback.
+- Human answer "允许对比实验": temporary sudo changes, restored and read back equal (scheduler none, dirty_ratio 20, dirty_background_ratio 10); R/io-tuning-bench-20261015 (original.json, changes.jsonl, restored.json, results.json).
+  - Settings compared: scheduler none, mq-deadline and kyber, each with default and with small dirty thresholds (64 MB background, 256 MB).
+  - Load: four buffered writers, 16 GiB in total.
+  - The baseline (none) had fdatasync p99 37 ms; no setting was better overall; small dirty thresholds were worse.
+  - This load drains in 5 s and does not match the real runs (dirty at most 1.3 GB, about 126 MB/s at p90).
+  - Inferred: host IO tuning is not the fix, and the writeback explanation is weak for the real load.
+- Inputs REG/act-w8d-inputs-20261015T063007Z: cloned from the EXP-597 sources; max_concurrent_recordings 2 in author.py and in the validation expectations. Validation 71 of 71 PASS on the second run; the first run, with the cap-4 expectations, is kept as validate-inputs.run1-cap4-expectations.json. sha256sums.txt regenerated after the edit (the first is sha256sums.run1.txt).
+
+```yaml
+experiment_id: EXP-598
+status: PLANNED
+prior_experiment: EXP-597 (VALID; 4 of 16 VALID at recording cap 4)
+hypothesis: If the INVALID causes depend on concurrent write load, halving the concurrent recordings lowers the INVALID rate clearly.
+prediction: Clearly fewer INPUT_STALE and NO_NEW_ACQUISITION than EXP-596 and EXP-597 (6 of 14 and 12 of 16 INVALID), with lower write throughput; a longer run. If the rate stays similar, the disk is not the main cause.
+single_variable: max_concurrent_recordings 2 instead of 4; same commit, images, scenes and samplers as EXP-597.
+lifecycle: ISOLATED_STACK (eight containers, one wave of 16)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit b28d62262.
+success_criteria:
+  - All 16 scenes collected; every stop proven; diagnostics cover the run.
+failure_criteria:
+  - An execution fault or an unproven stop.
+invalid_criteria:
+  - Refusal before admission; source trees differing from b28d62262; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: b28d622626a5bab43bf7007c97595c10c2e3d8cc (images and Host gate install)
+  install_overlay: as EXP-597
+  runtime_executable: as EXP-597
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T063007Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after the expectation fix
+    exit_code: 1 (cap-4 expectations), then 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T063007Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3666 — EXP-597 VALID: removing the sidecar fsync did not help (4 of 16 VALID); the shared NVMe shows write latency up to 470 ms
 
