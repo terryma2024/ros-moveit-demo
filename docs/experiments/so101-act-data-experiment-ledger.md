@@ -69,11 +69,64 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3660
-next_experiment: NONE until the wrist-camera delivery holds and INPUT_STALE are resolved.
+latest_checkpoint: CP-3661
+next_experiment: EXP-595 (PLANNED): EXP-594 repeated with a thread-level stall sampler, to locate the delivery stalls.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3661 — Delivery-stall analysis; human chose to locate the mechanism first; EXP-595 planned with a thread sampler
+
+- Read-only analysis (Sonnet), R/exp594-camera-stale-analysis.md:
+  - Holds: 30 wrist-only late image messages in 16 of 40 episodes; wrist camera_info held 0.5 to 1.6 s in 35 of 40.
+  - INPUT_STALE: three of four coincide with all-topic stalls of about 330 to 470 ms, or with a 322 ms planning-scene read gap.
+  - Transport: rmw_fastrtps_cpp, shared memory active, /dev/shm 64 MB, socket buffers in the private netns equal to the host's. A reproducer with three images under CPU load shows holds with zero UDP receive errors.
+  - UDP loss is ruled out; CPU starvation reproduces the holds, but the EXP-594 host pressure medians were low (CPU 2.79, IO 0.16), so the mechanism is open.
+- Human answer "先定位机制再修": no code change; a thread-level sampler is added to the next full run.
+- R/run-tools/thread_sampler.py (Sonnet, stdlib, outside the repository):
+  - Samples at 10 Hz per so101-act container: cgroup cpu.stat (throttling), CPU, IO and memory pressure.
+  - Per-thread schedstat run-queue delay, CPU time, state and context switches, kept only for threads over 10 ms delay or 80 ms CPU per tick or in D state, plus one per-second aggregate.
+  - Refuses to start if a source is missing. Tests 18 of 18 (R/exp595-sampler-test-20261015).
+  - Its own CPU use is 4.75 to 16.3 percent of one core at 1000 to 2000 threads, above the 5 percent aim; accepted as about 0.5 percent of the 32-core host.
+- Inputs REG/act-w8-inputs-20261015T012253Z: EXP-594 inputs re-authored with a new token. The thread sampler is started after the host sampler and stopped by the same trap, writing to R/run-logs/exp595/thread-sampler/. Validation 65 PASS, 6 informational, 0 failed; inspect rc 0; preconditions pass.
+
+```yaml
+experiment_id: EXP-595
+status: PLANNED
+prior_experiment: EXP-594 (VALID failure; complete run, NOT_QUALIFIED only on qc_valid_rate 27 of 40)
+hypothesis: The in-container delivery stalls (late wrist frames, held camera_info, all-topic stalls of about 330 ms) coincide with a measurable waiting state of the receiving or publishing threads - run-queue delay, cgroup throttling, D state, or a busy thread in the same process - which the thread sampler identifies.
+prediction: Results similar to EXP-594 (Teacher about 40 of 40, QC-valid about 27 of 40, no fault). For each stall, either the recorder or camera-plugin threads show run-queue delay or another thread of the same process is busy for the stall's length; if no thread shows anything, the cause is inside a process (a lock or executor) and needs in-process instrumentation.
+single_variable: The thread sampler only; same commit, images, scenes, rules and scheduling as EXP-594.
+lifecycle: ISOLATED_STACK (eight containers per wave)
+preconditions:
+  - Enforced by the run script, as EXP-594, plus a refusal if the thread sampler fails to start.
+success_criteria:
+  - As EXP-588; and the thread sampler output covers the whole run.
+failure_criteria:
+  - As EXP-593.
+invalid_criteria:
+  - Refusal before admission; source trees differing from 02ca8318e; a competing container or GPU compute process; the Host CLI process interrupted.
+provenance:
+  source_commit: 02ca8318e2542a6e1fde027b96e3cf8e0f3a57a3 (images and Host gate install)
+  install_overlay: as EXP-594
+  runtime_executable: as EXP-594, plus R/run-tools/thread_sampler.py on the Host
+  ros_domain_id: 181 in every container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261015T012253Z/inspect.zsh
+    exit_code: 0
+  - command: zsh <registered root>/act-w8-inputs-20261015T012253Z/run-w8.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3660 — EXP-594 VALID failure: first complete eight-shard run; Teacher 40 of 40; NOT_QUALIFIED only on QC-valid 27 of 40
 
