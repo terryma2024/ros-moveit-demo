@@ -92,9 +92,16 @@ class WaveAssignment:
     def mark_faulted(self, scene):
         self._move(scene, FAULTED)
 
+    def release(self, scene):
+        """Give a claimed scene back unrecorded (the phase-1 deadline passed before its task was sent): it is not a fault."""
+        self._move(scene, PENDING)
+
 
 class InstanceFault(RuntimeError):
     pass
+
+
+PHASE1_EXPIRED = 'CONTAINER_PHASE1_DEADLINE_EXPIRED'
 
 
 class RecordingGate:
@@ -239,6 +246,8 @@ class InstanceDispatch:
                 return None
             if not self.assignment.has_next(self.worker_id):
                 return None
+            if self.phase1_deadline_s is not None and self.clock() >= self.phase1_deadline_s:
+                return None   # no claim from the phase-1 deadline on; the scene stays unrecorded
             if self.gate.blocked():
                 await self.gate.changed()
                 continue
@@ -295,7 +304,7 @@ class InstanceDispatch:
         if self.phase1_deadline_s is not None and now >= self.phase1_deadline_s:
             # The phase-1 limit gates claims only. A task already claimed keeps the stage bounds below, capped by the total
             # deadline: cutting a recording short would give phase 2 nothing, and the wave verifier refuses a failed task.
-            raise InstanceFault('CONTAINER_PHASE1_DEADLINE_EXPIRED')
+            raise InstanceFault(PHASE1_EXPIRED)
         deadline = min(now+config.initializing_hard_timeout_s+config.executing_hard_timeout_s
                        +config.finalizing_hard_timeout_s+config.worker_recovery_timeout_s,
                        self.context.deadline_monotonic_s)
@@ -308,7 +317,16 @@ class InstanceDispatch:
                         deadline_monotonic_s=deadline)
 
     async def _run_task(self, scene):
-        task = await asyncio.to_thread(self.prepare_task, scene)
+        """Run one claimed scene. False when the phase-1 deadline passed before the task was sent: the claim is given back."""
+        try:
+            task = await asyncio.to_thread(self.prepare_task, scene)
+        except InstanceFault as fault:
+            if str(fault) != PHASE1_EXPIRED:
+                raise
+            self.assignment.release(scene)   # the scene stays unrecorded: missing evidence, not an infrastructure error
+            self.recording_claim = self.unsent = False
+            self._tick()
+            return False
         output = host_task_output(self.owner_root, task.task_id)
         await asyncio.to_thread(self.journal.assign, instance_id=self.launch_id, task=task, host_output=output)
         self.current = (task, scene)
@@ -347,6 +365,7 @@ class InstanceDispatch:
         await self._sync_cpu()
         if self.gate is not None:
             self.gate.pulse()
+        return True
 
     async def run(self, stop_reason):
         """Dispatch scenes until none remain, dispatch is fenced or the instance faults; then terminate it."""
@@ -358,10 +377,12 @@ class InstanceDispatch:
                 if scene is None:
                     break
                 try:
-                    await self._run_task(scene)
+                    sent = await self._run_task(scene)
                 except Exception:
                     self.assignment.mark_faulted(scene)
                     raise
+                if not sent:
+                    break
             reason = self.fault
         except InstanceFault as fault:
             reason = str(fault)

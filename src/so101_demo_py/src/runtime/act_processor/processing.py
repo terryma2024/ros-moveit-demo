@@ -71,6 +71,10 @@ class ProcessingTask:
     deadline_monotonic_s: float
 
 
+def _unexpected(error):
+    return f"PROCESSING_UNEXPECTED_ERROR: {type(error).__name__}: {error}"[:_REASON_CHARS]
+
+
 def _sha256_file(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -308,6 +312,8 @@ class ProcessingExecution:
             phase1 = verify_phase1(task)
         except Refused as error:
             return self._result(REFUSED, str(error), None, None, None)
+        except Exception as error:   # noqa: BLE001 - a defect in the processor's own logic is deterministic: not retried
+            return self._result(REFUSED, _unexpected(error), None, None, None)
         try:
             return self._process(phase1)
         except Refused as error:
@@ -316,6 +322,10 @@ class ProcessingExecution:
             return self._result(INFRASTRUCTURE_FAILURE, str(error), getattr(error, "rc", None), None, phase1)
         except OSError as error:   # an output that cannot be written
             return self._result(INFRASTRUCTURE_FAILURE, f"PROCESSING_OUTPUT_WRITE_FAILED: {error}"[:_REASON_CHARS], None, None, phase1)
+        except Exception as error:   # noqa: BLE001
+            # The processor's own logic raised something unexpected (not the child's crash, which is an rc handled in `_process`):
+            # the same input would raise it again, so it is a fault, not a lost processor to retry on another one.
+            return self._result(REFUSED, _unexpected(error), None, None, phase1)
 
     def _argv(self, phase1, bag, out, qc_output):
         sealed = self.task.sealed
