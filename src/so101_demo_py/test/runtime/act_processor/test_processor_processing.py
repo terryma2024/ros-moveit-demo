@@ -19,6 +19,8 @@ from so101_demo.runtime.container_campaign.task_contracts import InputRef, TaskS
 
 LEASE = dict(batch_id="b1", coordinator_epoch=1, worker_id="w00", worker_generation=1, point_id="scene-01",
              attempt_id="scene-01-lease-1", lease_generation=1, lease_issued_monotonic_s=10.0, lease_deadline_monotonic_s=900.0)
+RESULT_LEASE = {name: LEASE[name] for name in ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id",
+                                                "attempt_id", "lease_generation")}
 IDENTITY = dict(session_id="campaign-wave00-w00-g1", reset_epoch=1, attempt_id="scene-01-lease-1")
 
 
@@ -55,7 +57,8 @@ class Fixture:
         (self.sealed / "recorder-orchestration.json").write_text(
             json.dumps({} if fault is None else {"fault_deferred_to_processing": fault}))
         write_recording_receipt(self.sealed, lease_identity=LEASE, identity=IDENTITY, inputs_manifest=self.inputs, scope=self.scope)
-        self.result = dict(kind="ACT_COLLECTION_RESULT", schema_version=3, lease_identity=LEASE, status="PASSED",
+        # the sealed result.json holds the seven-key lease identity of the result store; the receipt holds the whole lease
+        self.result = dict(kind="ACT_COLLECTION_RESULT", schema_version=3, lease_identity=RESULT_LEASE, status="PASSED",
                            teacher_execution_status="COMPLETED", teacher_task_result="SUCCESS", act_data_status="PENDING_QC",
                            act_data_reason=None, act_data_qc="NOT_RUN", export_eligible=False, episode_seal_sha256=None,
                            completed_monotonic_s=20.0, qc_report_path=None, qc_report_sha256=None, inputs_sha256=None,

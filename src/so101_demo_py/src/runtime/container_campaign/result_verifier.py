@@ -197,6 +197,13 @@ class ContainerWaveResultVerifier:
                                    case_rows=outcome['case_results'], readback_workers=self.readback_workers,
                                    readback_timeout_s=self.readback_timeout_s, partial=partial)
 
+    def verify_processing(self, waves, scene_ids):
+        """The combined proof of both phases (`processing_verifier.verify_processing`) over the verified phase-1 waves."""
+        from so101_demo.runtime.container_campaign.processing_verifier import verify_processing
+
+        return verify_processing(self.root, waves, scene_ids, readback_workers=self.readback_workers,
+                                 readback_timeout_s=self.readback_timeout_s)
+
     def _check_scheduling(self, plan, by_scene, roots):
         check_wave_scheduling(plan, by_scene, roots, self.qualification)
 
@@ -205,12 +212,45 @@ _TASK_DATA = ('result_status', 'teacher_execution_status', 'teacher_task_result'
               'act_data_qc', 'export_eligible', 'result_sha256', 'task_result_sha256')
 
 
-def build_frozen_index(*, campaign_id, qualification, scene_count, waves):
+def build_frozen_index(*, campaign_id, qualification, scene_count, waves=None, combined=None):
     """The one document export reads: every collected task, and the episodes a formal export may take.
 
-    A qualification campaign never lists committed episodes. A proof whose processing is still pending (phase 1 only) has no episode
-    or QC to list: the index is refused with PROCESSING_PENDING until the combined proof exists."""
-    tasks, committed = [], []
+    A qualification campaign never lists committed episodes. With `waves` (phase-1 verified records) every proof must already be
+    final: a proof whose processing is still pending has no episode or QC to list, and the index is refused with
+    PROCESSING_PENDING. With `combined` (the combined proof of both phases, `processing_verifier.verify_processing`) each task
+    carries the final verdict of both phases and a processed pass becomes a schema 4 committed episode whose evidence names the
+    phase-2 output directory; scenes without evidence (processing fault or missing, or never recorded) are listed in
+    `scenes_without_evidence` and never skipped."""
+    if (waves is None) == (combined is None):
+        raise ValueError('FROZEN_INDEX_SOURCE_INVALID')
+    tasks, committed, without = [], [], []
+    if combined is not None:
+        for item in combined['scenes']:
+            proof, state = item['phase1'], item['state']
+            if state in ('FAULT', 'MISSING'):
+                without.append(dict(scene_id=item['scene_id'], state=state, reason=item['reason']))
+            if proof is None:
+                continue
+            verdict = item['verdict']
+            phase2 = item['phase2']
+            tasks.append(dict(scene_id=item['scene_id'], worker_id=item['worker_id'], task_id=item['task_id'],
+                launch_id=item['launch_id'], location=item['location'], state=state,
+                result_status=verdict['status'], teacher_execution_status=verdict['teacher_execution_status'],
+                teacher_task_result=verdict['teacher_task_result'], act_data_status=verdict['act_data_status'],
+                act_data_reason=verdict['act_data_reason'], act_data_qc=verdict['act_data_qc'],
+                export_eligible=verdict['export_eligible'], result_sha256=proof['result_sha256'],
+                task_result_sha256=proof['task_result_sha256'],
+                processed_result_sha256=None if phase2 is None else phase2['processed_result']['sha256']))
+            if state == 'PROCESSED' and verdict['export_eligible'] is True and not qualification:
+                committed.append(dict(kind='ACT_COMMITTED_EPISODE', schema_version=4, scene_id=item['scene_id'],
+                    verifier_sha256=proof['result_sha256'], task_result_sha256=proof['task_result_sha256'],
+                    processed_result_sha256=phase2['processed_result']['sha256'],
+                    collection_evidence=dict(registration=item['registration'], owner_root=item['owner_root'],
+                        task_id=item['task_id'], result_location=proof['location'], scope_path=item['scope_path'],
+                        inputs_manifest=item['inputs_manifest'], processing_output=phase2['output_dir'])))
+        return dict(schema_version=2, kind='act_collection_frozen_index', campaign_id=campaign_id,
+                    qualification=qualification, scene_count=scene_count, collected_tasks=tasks,
+                    committed_episodes=committed, scenes_without_evidence=without)
     for wave in waves:
         for row in wave['case_results']:
             proof = row['proof']

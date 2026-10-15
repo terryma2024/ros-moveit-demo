@@ -33,13 +33,12 @@ from so101_demo.act.offline.orchestration import (
     BAG_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, drop_bag_messages, read_processor_result, _memo_covers, _read_report)
 from so101_demo.act.offline.recording_receipt import RECEIPT_RELATIVE, verify_recording_receipt
 from so101_demo.act.parallel_collection_contracts import read_document
+from so101_demo.act.processed_result import PROCESSED_KIND, PROCESSED_NAME  # noqa: F401 - the Host reads the same document
 from so101_demo.runtime.container_campaign.task_contracts import TaskSpec
 from so101_demo.runtime.inference.config import validate_file_ref
 
 TASK_KIND = "ACT_PROCESSING_TASK"
 TASK_RESULT_KIND = "ACT_PROCESSING_TASK_RESULT"
-PROCESSED_KIND = "ACT_PROCESSED_RESULT"
-PROCESSED_NAME = "processed-result.json"
 PHASE1_ATTEMPT = re.compile(r"/attempts/(?P<scene>[a-zA-Z0-9][a-zA-Z0-9_-]*)/(?P<attempt>[a-zA-Z0-9][a-zA-Z0-9_-]*)/sealed")
 DEFERRED_FAULTS = BAG_FAULTS + ("output_write_failure",)
 #: the processor is told to stop this long before the task deadline so the task result is still written
@@ -128,11 +127,16 @@ def verify_phase1(task):
                 or result.get("act_data_status") != "PENDING_QC" or result.get("episode_seal_sha256") is not None
                 or result.get("act_data_qc") != "NOT_RUN" or result.get("export_eligible") is not False):
             raise ValueError("PHASE1_RESULT_NOT_PENDING_QC")
-        lease = result["lease_identity"]
-        if lease["attempt_id"] != sealed.parent.name or lease["point_id"] != task.scene_id:
-            raise ValueError("PHASE1_RESULT_ATTEMPT_MISMATCH")
         receipt_raw = (sealed / RECEIPT_RELATIVE).read_bytes()
         receipt = json.loads(receipt_raw)
+        # `result.json` holds the result store's lease identity (seven keys); the receipt holds the whole lease, which is what
+        # the receipt check and the grading need. The result's identity must be exactly that lease restricted to its keys.
+        lease = receipt["lease_identity"]
+        stated = result["lease_identity"]
+        if type(stated) is not dict or {name: lease[name] for name in stated} != stated:
+            raise ValueError("PHASE1_RESULT_LEASE_MISMATCH")
+        if lease["attempt_id"] != sealed.parent.name or lease["point_id"] != task.scene_id:
+            raise ValueError("PHASE1_RESULT_ATTEMPT_MISMATCH")
         verified = verify_recording_receipt(
             sealed, lease_identity=lease, identity=receipt["identity"],
             external={"scope": _sha256_file(task.scope), "inputs_manifest": _sha256_file(task.inputs_manifest)})

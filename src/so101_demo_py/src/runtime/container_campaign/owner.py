@@ -23,6 +23,7 @@ from so101_demo.runtime.container_campaign.processing_limits import (
 from so101_demo.runtime.container_campaign.resource_log import (
     append_resource_log,check_disk_dispatch_guard,read_disk_free_bytes,
 )
+from so101_demo.runtime.container_campaign.processing_verifier import build_campaign_result
 from so101_demo.runtime.container_campaign.result_verifier import build_frozen_index
 from so101_demo.runtime.container_campaign.service_owner import ContainerServiceOwner,_write
 from so101_demo.runtime.container_campaign.native_owner import NativeInstanceOwner
@@ -231,11 +232,21 @@ class ContainerCampaignOwner:
                 result['phase2']=phase2
             if missing:
                 result['missing_evidence']=missing
+            combine=getattr(self.verifier,'verify_processing',None)
             if missing or any(row['proof'].get('processing')=='PENDING' for wave in completed for row in wave['case_results']):
-                # Only the Teacher half is proven (and not every scene was recorded). The campaign result and the frozen index
-                # need the combined proof of both phases.
+                # The Teacher half is proven (and not every scene was recorded): this is the phase-1 record.
                 result['processing']='PENDING'
                 _write(self.root/'host/phase1-result.json',result)
+                if self.processing is None or not callable(combine):
+                    return result
+            if self.processing is not None and callable(combine):
+                # Both phases are over: the campaign result and the frozen index come from the combined per-scene proof (the
+                # Teacher half of phase 1, the data half of phase 2, every attempt; scenes without evidence are explicit entries).
+                combined=await asyncio.to_thread(combine,completed,list(ids))
+                _write(self.root/'host/campaign-result.json',build_campaign_result(self.context.campaign_id,len(ids),combined))
+                _write(self.root/'collection-index.json',build_frozen_index(campaign_id=self.context.campaign_id,
+                    qualification=self.qualification,scene_count=len(ids),combined=combined))
+                result['processing']='COMPLETE'
                 return result
             _write(self.root/'host/campaign-result.json',result)
             _write(self.root/'collection-index.json',build_frozen_index(campaign_id=self.context.campaign_id,

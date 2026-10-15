@@ -35,6 +35,7 @@ REASON_CODES = frozenset({
     'CLEANUP_UNCONFIRMED', 'DISPATCH_FAULT', 'EVIDENCE_INVALID', 'FROZEN_INDEX_MISMATCH', 'FROZEN_INDEX_MISSING',
     'FROZEN_INPUTS_INVALID', 'IDENTITY_MISMATCH', 'INSTANCE_SHORT', 'LAUNCH_TOPOLOGY_INVALID', 'PLAN_MISMATCH',
     'PROVENANCE_CONTAINER_MISMATCH', 'QUALITY_GATE_FAILED', 'QUALITY_RULE_UNDEFINED', 'REGISTRY_UNREADABLE',
+    'PHASE1_NOT_RECORDED', 'PROCESSING_FAULT', 'PROCESSING_MISSING', 'PROCESSING_RECORD_INVALID',
     'RESERVED_COLLECTED_ELSEWHERE', 'SCOPE_MISMATCH', 'SHARD_SPEC_INVALID', 'SHARD_SPEC_MISSING', 'SURPLUS_BEFORE_RESERVED',
     'TASK_FAILED', 'TASK_UNFINISHED', 'TEACHER_SERVICE_INVALID', 'WAVE_RECOMPUTE_INVALID', 'WAVE_RECORD_MISMATCH',
     'WAVE_VERIFIED_MISSING'})
@@ -164,6 +165,9 @@ class _Run:
         self.reasons = set()
         self.records = ()
         self.config = None
+        self.processors = {}
+        self.combined = None
+        self.two_phase = False
 
     def mismatch(self, key):
         self.reasons.add('IDENTITY_MISMATCH:'+key)
@@ -203,11 +207,21 @@ class _Run:
         expected = {'teacher-g1': ('teacher', None, None, 1)}
         expected.update({f'wave-{wave}-{worker}-g{wave+1}': ('shard', f'wave-{wave}', worker, wave+1)
                          for wave in WAVES for worker in WORKERS})
-        actual = {}
+        actual, self.processors, slots = {}, {}, {}
         for record in self.records:
             launch = record['launch']
+            if launch['role'] == 'processor':
+                # phase 2: `processing-pNN-g<k>`, any number of slots, each slot with launch generations 1..k without a gap
+                worker, generation = launch['worker_id'], launch['launch_generation']
+                if (launch['launch_id'] != f'processing-{worker}-g{generation}' or launch['wave_id'] is not None
+                        or launch['launch_id'] in self.processors):
+                    self.reasons.add('LAUNCH_TOPOLOGY_INVALID')
+                self.processors[launch['launch_id']] = (worker, generation)
+                slots.setdefault(worker, []).append(generation)
+                continue
             actual[launch['launch_id']] = (launch['role'], launch['wave_id'], launch['worker_id'], launch['launch_generation'])
-        if len(self.records) != len(expected) or actual != expected:
+        if (len(self.records)-len(self.processors) != len(expected) or actual != expected
+                or any(sorted(generations) != list(range(1, len(generations)+1)) for generations in slots.values())):
             self.reasons.add('LAUNCH_TOPOLOGY_INVALID')
         for record in self.records:
             launch = record['launch']
@@ -293,6 +307,8 @@ class _Run:
         sources = [(self.run/'host'/'teacher-provenance.json', images['inference'], 'teacher-g1')]
         sources += [(self.run/f'wave-{wave}'/worker/f'g{wave+1}'/'actual-container-provenance.json', images['shard'],
                      f'wave-{wave}-{worker}-g{wave+1}') for wave in WAVES for worker in WORKERS]
+        sources += [(self.run/'processing'/worker/f'g{generation}'/'actual-container-provenance.json', images['shard'], launch_id)
+                    for launch_id, (worker, generation) in self.processors.items()]
         for path, image, launch_id in sources:
             try:
                 document = read_document(path)
@@ -372,19 +388,52 @@ class _Run:
                 self.reasons.add(f'WAVE_RECORD_MISMATCH:{index}')
             self.verified.append(verified)
         complete = all(item is not None for item in self.verified)
+        self.combined = self.combine() if complete else None
         for name, path in (('CAMPAIGN_RESULT', self.run/'host'/'campaign-result.json'),
                            ('FROZEN_INDEX', self.run/'collection-index.json')):
             stored = _try_bytes(path)
             if stored is None:
                 self.reasons.add(name+'_MISSING')
-            elif complete and self.campaign_id is not None:
+            elif complete and self.campaign_id is not None and (self.combined is not None or not self.two_phase):
                 from so101_demo.runtime.container_campaign.result_verifier import build_frozen_index
 
-                document = (dict(campaign_id=self.campaign_id, scene_count=len(self.scenes), waves=self.verified)
-                            if name == 'CAMPAIGN_RESULT' else build_frozen_index(campaign_id=self.campaign_id,
-                                qualification=True, scene_count=len(self.scenes), waves=self.verified))
+                if self.combined is not None:
+                    from so101_demo.runtime.container_campaign.processing_verifier import build_campaign_result
+
+                    document = (build_campaign_result(self.campaign_id, len(self.scenes), self.combined)
+                                if name == 'CAMPAIGN_RESULT' else build_frozen_index(campaign_id=self.campaign_id,
+                                    qualification=True, scene_count=len(self.scenes), combined=self.combined))
+                else:
+                    document = (dict(campaign_id=self.campaign_id, scene_count=len(self.scenes), waves=self.verified)
+                                if name == 'CAMPAIGN_RESULT' else build_frozen_index(campaign_id=self.campaign_id,
+                                    qualification=True, scene_count=len(self.scenes), waves=self.verified))
                 if canonical(document) != stored:
                     self.reasons.add(name+'_MISMATCH')
+
+    def combine(self):
+        """The combined proof of both phases, recomputed from the phase-1 rows, the receipts, the processed results and the journal.
+
+        A run is two-phase when a recomputed phase-1 proof is pending, a processor was launched or the processing record exists;
+        a run without any of them is the inline form and is judged as before (`self.combined` stays None)."""
+        rows = [row for wave in self.verified for row in wave['case_results']]
+        self.two_phase = (any(row['proof'].get('processing') == 'PENDING' for row in rows) or bool(self.processors)
+                          or (self.run/'host'/'processing-result.json').exists())
+        if not self.two_phase:
+            return None
+        from so101_demo.runtime.container_campaign.processing_verifier import verify_processing
+
+        try:
+            combined = verify_processing(self.run, self.verified, self.scenes, readback_workers=self.readback_workers,
+                                         readback_timeout_s=self.readback_timeout_s)
+        except _RUN_ERRORS:
+            self.reasons.add('PROCESSING_RECORD_INVALID')
+            return None
+        for item in combined['scenes']:
+            if item['state'] == 'FAULT':
+                self.reasons.add('PROCESSING_FAULT:'+item['scene_id'])
+            elif item['state'] == 'MISSING':
+                self.reasons.add(('PHASE1_NOT_RECORDED:' if item['phase1'] is None else 'PROCESSING_MISSING:')+item['scene_id'])
+        return combined
 
     def scopes(self):
         if self.frozen_set is None:
@@ -408,10 +457,13 @@ class _Run:
                       if record['owner'] is not None and record['exit_inspect'] is not None}
             clear = registry is not None and registry.all_terminated(lambda container_id: stored[container_id])
             document = read_document(self.run/'host'/'campaign-cleanup.json')
-            clear = (clear and set(document) == {'terminated', 'services', 'shards', 'stop_reason'}
+            keys = {'terminated', 'services', 'shards', 'stop_reason'} | ({'processors'} if self.processors else set())
+            clear = (clear and set(document) == keys
                      and document['terminated'] is True and document['stop_reason'] == 'CAMPAIGN_CLOSING'
                      and document['services'].get('terminated') is True and len(document['shards']) == len(WAVES)*len(WORKERS)
-                     and all(item.get('terminated') is True for item in document['shards']))
+                     and all(item.get('terminated') is True for item in document['shards'])
+                     and sorted(item.get('launch_id') for item in document.get('processors', ())) == sorted(self.processors)
+                     and all(item.get('terminated') is True for item in document.get('processors', ())))
         except _RUN_ERRORS:
             clear = False
         if not clear:
@@ -421,23 +473,33 @@ class _Run:
 
     # ---- quality -------------------------------------------------------------------------------------------------------------
 
+    def scene_rows(self):
+        """`(row, proof, processed)` per recorded scene and the scenes phase 1 never recorded.
+
+        Two-phase: the proof is the phase-1 readback and `processed` the phase-2 readback record (None when processing did not deliver
+        the scene). Inline: the proof is the whole sealed result and there is no phase 2."""
+        if self.combined is not None:
+            recorded = [(item, item['phase1'], item['phase2']) for item in self.combined['scenes'] if item['phase1'] is not None]
+            return recorded, [item['scene_id'] for item in self.combined['scenes'] if item['phase1'] is None]
+        return [(row, row['proof'], None) for wave in self.verified for row in (wave or {}).get('case_results', ())], []
+
     def quality(self):
         rows = {name: [] for name in QUALITY_ORDER}
         member = {}
-        for wave in self.verified:
-            for row in (wave or {}).get('case_results', ()):
-                scene = row['scene_id']
-                try:
-                    verdicts, member[scene] = evaluate_scene(row['proof'])
-                except _RUN_ERRORS:
-                    verdicts = {name: ('NO_EVIDENCE', None, 'EVIDENCE_INVALID') for name in QUALITY_ORDER}
-                    member[scene] = (True, None)
-                for name in QUALITY_ORDER:
-                    outcome, source, error = verdicts[name]
-                    if error is not None:
-                        self.reasons.add(f'EVIDENCE_INVALID:{name}:{scene}')
-                    rows[name].append(dict(scene_id=scene, task_id=row['task_id'], registration=file_ref(row['registration']),
-                                           source=source, outcome=outcome))
+        recorded, unrecorded = self.scene_rows()
+        for row, proof, processed in recorded:
+            scene = row['scene_id']
+            try:
+                verdicts, member[scene] = evaluate_scene(proof, processed)
+            except _RUN_ERRORS:
+                verdicts = {name: ('NO_EVIDENCE', None, 'EVIDENCE_INVALID') for name in QUALITY_ORDER}
+                member[scene] = (True, None)
+            for name in QUALITY_ORDER:
+                outcome, source, error = verdicts[name]
+                if error is not None:
+                    self.reasons.add(f'EVIDENCE_INVALID:{name}:{scene}')
+                rows[name].append(dict(scene_id=scene, task_id=row['task_id'], registration=file_ref(row['registration']),
+                                       source=source, outcome=outcome))
         order = {scene: index for index, scene in enumerate(self.scenes)}
         complete = all(item is not None for item in self.verified)
         block = {}
@@ -451,18 +513,19 @@ class _Run:
                 excluded = [dict(scene_id=item['scene_id'], reason=member[item['scene_id']][1]) for item in evidence
                             if not member[item['scene_id']][0]]
                 evidence = [item for item in evidence if member[item['scene_id']][0]]
-            outcomes = [item['outcome'] for item in evidence]
+            # a scene phase 1 never recorded has no row to show, but it is in every denominator as no evidence, never as a pass
+            outcomes = [item['outcome'] for item in evidence]+['NO_EVIDENCE']*len(unrecorded)
             passed = sum(1 for outcome in outcomes if outcome == 'PASS')
             if rule is None:
                 verdict = 'UNDEFINED'
-            elif not complete or len(evidence)+len(excluded) != len(self.scenes):
+            elif not complete or len(evidence)+len(excluded)+len(unrecorded) != len(self.scenes):
                 verdict = 'NOT_EVALUATED'
             else:
                 passed, verdict = apply_rule(rule, outcomes)
                 if verdict == 'FAIL':
                     self.reasons.add('QUALITY_GATE_FAILED:'+name)
             block[name] = dict(rule=_ref_of(self.contract['quality_rules'][name]), evidence=evidence,
-                               result=dict(population=population, denominator=len(evidence), passed=passed, verdict=verdict,
+                               result=dict(population=population, denominator=len(outcomes), passed=passed, verdict=verdict,
                                            excluded=excluded))
         return block
 

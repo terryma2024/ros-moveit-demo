@@ -126,8 +126,16 @@ def worker_main(request):
 
         job = request['job']
         try:
-            proof = verify_container_task_registration(Path(job['registration']), scope=Path(job['scope']),
-                                                       inputs_manifest=Path(job['inputs_manifest']))
+            if 'processing' in job:
+                # a phase-2 job: the processed result of one scene, read back against its phase-1 record
+                from so101_demo.act.processed_result import verify_processed_result
+
+                arguments = dict(job['processing'])
+                proof = verify_processed_result(arguments.pop('output_dir'), sealed=Path(arguments.pop('sealed')),
+                    scope=Path(job['scope']), inputs_manifest=Path(job['inputs_manifest']), **arguments)
+            else:
+                proof = verify_container_task_registration(Path(job['registration']), scope=Path(job['scope']),
+                                                           inputs_manifest=Path(job['inputs_manifest']))
             body = dict(ok=True, proof=proof)
             if json.loads(json.dumps(proof, allow_nan=False)) != proof:
                 raise ValueError('proof is not JSON-exact')
@@ -160,7 +168,7 @@ def _attempt(index, job, *, directory, identity, request_identity, timeout_s, ex
     scene = job['scene_id']
     result_path = directory / f'result-{index}.json'
     request = dict(sys_path=list(sys.path), identity=request_identity, result_path=str(result_path),
-                   job={key: job[key] for key in ('registration', 'scope', 'inputs_manifest')})
+                   job={key: job[key] for key in ('registration', 'scope', 'inputs_manifest', 'processing') if key in job})
     try:
         completed = subprocess.run([executable, '-c', _BOOTSTRAP], input=json.dumps(request), text=True,
                                    capture_output=True, timeout=timeout_s, env=dict(os.environ), check=False)

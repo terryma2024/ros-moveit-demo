@@ -4,6 +4,12 @@ Every verdict is recomputed from files re-read now: `result.json` (hash-bound by
 by the result), `topic-loss.json` (hash-bound by the QC report), `episode/seal.json` and `episode/records.jsonl` (hash-bound by
 the result and by the seal) and the Teacher manifest. Nothing here consumes a number a report or a memo claims.
 
+Two-phase collection. A phase-1 result is `PENDING_QC`: it holds the Teacher half (the Teacher manifest, `result.json`) and the data
+half lives under the phase-2 output directory (`processed-result.json`, `episode/`, `qc-report.json`, `topic-loss.json`). With a
+`processed` readback record `evaluate_scene` reads the Teacher gate from the phase-1 location and the three data gates from the
+phase-2 locations; the phase-1 result hash binds both. A scene phase 2 did not deliver (no record) and a scene phase 1 never recorded
+have `NO_EVIDENCE` for the gates they lack: it is never a pass, never a way out of a denominator, and not an evidence error.
+
 A scene is `PASS`, `FAIL` or `NO_EVIDENCE`. `NO_EVIDENCE` means the sealed result carries no authenticated evidence for that gate
 (for example a perception no-pose result has no episode, QC report or loss document); it is never a pass and the scene stays in
 the denominator. A document that exists but contradicts the hash that binds it raises `EVIDENCE_INVALID`.
@@ -69,6 +75,10 @@ def _result(proof):
     return sealed, _document(raw)
 
 
+def _qc_name(result):
+    return result.get('qc_report_name', 'qc-report.json')
+
+
 def _qc_report(sealed, result):
     """The QC report the result names, or None when no QC ran. A named report must still hash to the result's binding."""
     digest = result['qc_report_sha256']
@@ -76,7 +86,7 @@ def _qc_report(sealed, result):
         return None
     from so101_demo.act import episode_qc
 
-    path = sealed/'qc-report.json'
+    path = sealed/_qc_name(result)
     if hashlib.sha256(_read(path)).hexdigest() != digest:
         raise _invalid()
     try:
@@ -152,7 +162,7 @@ def _qc_valid(sealed, result, report):
     if report is None:
         return 'NO_EVIDENCE', None
     passed = result['act_data_qc'] == 'PASS' and report['status'] == 'PASS'
-    return ('PASS' if passed else 'FAIL'), file_ref(sealed/'qc-report.json')
+    return ('PASS' if passed else 'FAIL'), file_ref(sealed/_qc_name(result))
 
 
 _GATES = dict(recorder_lossless=_lossless, frame_continuity=_continuity, qc_valid_rate=_qc_valid,
@@ -177,29 +187,84 @@ def qc_valid_membership(result, report):
     return True, None
 
 
-def evaluate_scene(proof):
+def _processed(processed, proof, result):
+    """`(data directory, result for the data gates)` from a phase-2 readback record, re-reading `processed-result.json`.
+
+    The document must hash to the record, name the phase-1 result hash of the proof, and agree with the directory the record names;
+    the data verdict and the bindings of the data gates come from it, the Teacher facts stay those of the phase-1 `result.json`."""
+    from so101_demo.act.processed_result import PROCESSED_NAME, data_directory
+
+    try:
+        output = Path(processed['output_dir'])
+        raw = _read(output/PROCESSED_NAME)
+        if hashlib.sha256(raw).hexdigest() != processed['processed_result']['sha256']:
+            raise _invalid()
+        document = _document(raw)
+        if (document.get('phase1_result_sha256') != proof['result_sha256']
+                or processed.get('phase1_result_sha256') != proof['result_sha256']
+                or Path(processed['data_dir']) != data_directory(output, document)):
+            raise _invalid()
+        merged = dict(result, **{name: document[name] for name in (
+            'act_data_status', 'act_data_reason', 'act_data_qc', 'export_eligible', 'episode_seal_sha256', 'qc_report_sha256')})
+        merged['qc_report_name'] = document['qc_report_path'] or 'qc-report.json'
+    except (KeyError, TypeError) as error:
+        raise _invalid() from error
+    return Path(processed['data_dir']), merged
+
+
+def _no_evidence(error=None):
+    return ('NO_EVIDENCE', None, error)
+
+
+def evaluate_scene(proof, processed=None):
     """`(verdicts, membership)` for one verified task readback proof.
 
     `verdicts` is `{gate: (outcome, source ref or None, error or None)}`: a gate whose evidence cannot be read or contradicts its
     binding is `NO_EVIDENCE` with the error, so the caller can name it. `membership` is `(member, reason)` of
     `qc_valid_membership`; when the QC evidence itself cannot be read the scene is kept in the population (`(True, None)`), so
-    unreadable evidence is never a way out of a gate."""
+    unreadable evidence is never a way out of a gate.
+
+    `proof` is None for a scene phase 1 never recorded (every gate `NO_EVIDENCE`, no error). A proof whose `processing` is `PENDING`
+    is a phase-1 record: its data gates read `processed`, the phase-2 readback record (`act.processed_result`), or, when there is
+    none, have no evidence; its Teacher gate always reads the phase-1 location."""
+    if proof is None:
+        return {name: _no_evidence() for name in QUALITY_ORDER}, (True, None)
     sealed, result = _result(proof)
-    try:
-        report = _qc_report(sealed, result)
-        failure = None
-        membership = qc_valid_membership(result, report)
-    except ValueError as error:
-        report, failure, membership = None, error, (True, None)
+    pending = proof.get('processing') == 'PENDING'
+    data, data_result, available, failure = sealed, result, True, None
+    if pending:
+        if processed is None:
+            available = False
+        else:
+            try:
+                data, data_result = _processed(processed, proof, result)
+            except ValueError as error:
+                failure = error
+    report, membership = None, (True, None)
+    if available and failure is None:
+        try:
+            report = _qc_report(data, data_result)
+            membership = qc_valid_membership(data_result, report)
+        except ValueError as error:
+            failure = error
     verdicts = {}
     for name in QUALITY_ORDER:
+        if name == 'teacher_physical_success_rate':
+            # the Teacher half is phase 1's; only a legacy inline result lets a data failure take it down as well
+            blocked = failure if not pending else None
+            args = (sealed, result, report)
+        elif not available:
+            verdicts[name] = _no_evidence()
+            continue
+        else:
+            blocked, args = failure, (data, data_result, report)
         try:
-            if failure is not None:
-                raise failure
-            outcome, source = _GATES[name](sealed, result, report)
+            if blocked is not None:
+                raise blocked
+            outcome, source = _GATES[name](*args)
             verdicts[name] = (outcome, source, None)
         except (OSError, ValueError, TypeError, KeyError) as error:
-            verdicts[name] = ('NO_EVIDENCE', None, str(error) or type(error).__name__)
+            verdicts[name] = _no_evidence(str(error) or type(error).__name__)
     return verdicts, membership
 
 

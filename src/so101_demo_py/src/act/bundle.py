@@ -17,6 +17,9 @@ from pathlib import Path
 _EPISODE_KEYS = ("scene_id", "journal_sha256", "verifier_sha256")
 _COLLECTION_EVIDENCE_KEYS=frozenset({'coordinator_root','result_location','scope_path','inputs_manifest','receipt'})
 _TASK_EVIDENCE_KEYS=frozenset({'registration','owner_root','task_id','result_location','scope_path','inputs_manifest'})
+_PROCESSED_EVIDENCE_KEYS=_TASK_EVIDENCE_KEYS|{'processing_output'}
+_PROCESSED_DATA_FIELDS=('act_data_status','act_data_reason','act_data_qc','export_eligible','episode_seal_sha256','qc_report_sha256',
+    'inputs_sha256','scope_sha256','audit_manifest_sha256','collection_mode')
 _FROZEN_INDEX_KIND='act_collection_frozen_index'
 
 
@@ -35,6 +38,8 @@ def _verified_collection(episode):
     evidence=episode.get('collection_evidence')
     if episode.get('kind')=='ACT_COMMITTED_EPISODE' and episode.get('schema_version')==3:
         return _verified_container_collection(episode)
+    if episode.get('kind')=='ACT_COMMITTED_EPISODE' and episode.get('schema_version')==4:
+        return _verified_processed_collection(episode)
     if (episode.get('kind')!='ACT_COMMITTED_EPISODE' or type(episode.get('schema_version')) is not int
             or episode['schema_version']!=2 or type(evidence) is not dict or set(evidence)!=_COLLECTION_EVIDENCE_KEYS):
         raise ValueError('EPISODE_COLLECTION_EVIDENCE_REQUIRED')
@@ -87,6 +92,52 @@ def _verified_container_collection(episode):
     return _export_gates(scope,proof,evidence)
 
 
+def _verified_processed_collection(episode):
+    """(mode, combined proof) of a schema 4 episode from the frozen index of a two-phase campaign.
+
+    Both phases are read back afresh: the registered container task (the Teacher half, `PENDING` at phase 1) and the processed result
+    in the phase-2 output directory, bound to that task's result and receipt hashes. The combined proof carries the Teacher fields of
+    phase 1 and the data fields of phase 2, and passes the same export gates as a schema 3 proof."""
+    from . import processed_result
+    from .collection_scope import read_collection_scope
+    from .result_store import verify_container_task_registration,_safe
+    evidence=episode.get('collection_evidence')
+    if type(evidence) is not dict or set(evidence)!=_PROCESSED_EVIDENCE_KEYS:
+        raise ValueError('EPISODE_COLLECTION_EVIDENCE_REQUIRED')
+    if any(not isinstance(episode.get(key),str) or _SHA256_HEX.fullmatch(episode[key]) is None
+           for key in ('verifier_sha256','task_result_sha256','processed_result_sha256')):
+        raise ValueError('EPISODE_RECEIPT_INVALID')
+    try:
+        paths={key:_safe(Path(evidence[key])) for key in _PROCESSED_EVIDENCE_KEYS-{'task_id'}}
+        scope=read_collection_scope(paths['scope_path'])
+        proof=verify_container_task_registration(paths['registration'],scope=paths['scope_path'],
+            inputs_manifest=paths['inputs_manifest'])
+        output=paths['processing_output']
+        if (proof['task_id']!=evidence['task_id'] or paths['registration'].name!='collected.json'
+                or Path(proof['location'])!=paths['result_location']
+                or not paths['result_location'].is_relative_to(paths['owner_root'])
+                or proof.get('processing')!='PENDING' or output.parent.name!=proof['scene_id']
+                or output.parent.parent.name!='processing'):
+            raise ValueError('registration locator')
+        processed=processed_result.verify_processed_result(output,sealed=Path(proof['location']),scene_id=proof['scene_id'],
+            result_sha256=proof['result_sha256'],receipt_sha256=proof['receipt_sha256'],scope=paths['scope_path'],
+            inputs_manifest=paths['inputs_manifest'])
+        if (processed['status']!='PASS' or processed['output_dir']!=str(output) or processed['scene_id']!=proof['scene_id']
+                or processed['phase1_result_sha256']!=proof['result_sha256'] or processed['diagnostic_fault']!='none'):
+            raise ValueError('processed readback')
+    except (OSError,ValueError,TypeError,KeyError) as error:
+        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID') from error
+    if (episode.get('verifier_sha256')!=proof['result_sha256'] or episode.get('task_result_sha256')!=proof['task_result_sha256']
+            or episode.get('processed_result_sha256')!=processed['processed_result']['sha256']):
+        raise ValueError('EPISODE_RECEIPT_CONFLICT')
+    combined=dict(proof,processing='PROCESSED',processed_result_sha256=episode['processed_result_sha256'],
+        **{name:processed[name] for name in _PROCESSED_DATA_FIELDS})
+    if (episode['scene_id']!=scope['scene_id'] or proof['scene_id']!=scope['scene_id'] or combined['collection_mode']!=scope['mode']
+            or ('collection_mode' in episode and episode['collection_mode']!=scope['mode'])):
+        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID')
+    return _export_gates(scope,combined,evidence)
+
+
 def _export_gates(scope,proof,evidence):
     """Collection mode, result status, data QC and oracle exclusion: the gates every exportable episode passes."""
     if scope['mode']=='preselected_target_diagnostic':
@@ -123,7 +174,9 @@ def _teacher_oracle_exclusion(evidence):
     from .teacher_process import exclusion_of_manifest
     try:
         location=_safe(Path(evidence['result_location']))
-        bound=read_qc_report(location/'qc-report.json')['checks'][REFERENCE_CHECK]['details']['teacher_manifest_sha256']
+        # the QC report is phase 2's (schema 4), the Teacher manifest phase 1's
+        data=_safe(Path(evidence['processing_output'])) if 'processing_output' in evidence else location
+        bound=read_qc_report(data/'qc-report.json')['checks'][REFERENCE_CHECK]['details']['teacher_manifest_sha256']
         raw=_read_regular(location/'dynamic'/'dynamic-execute-manifest.json')
     except (OSError,ValueError,TypeError,KeyError) as error:
         raise ValueError('EXPORT_EPISODE_TEACHER_MANIFEST_UNREADABLE') from error
@@ -144,7 +197,7 @@ def sealed_episode(evidence,proof):
     recorder directory is trusted before that digest agrees: the rows and every frame are then bound by the seal `files` map."""
     from .result_store import _read_regular,_safe
     try:
-        root=_safe(Path(evidence['result_location']))/'episode'
+        root=_safe(Path(evidence.get('processing_output') or evidence['result_location']))/'episode'
         raw=_read_regular(root/'seal.json')
         seal=json.loads(raw)
     except (OSError,ValueError,TypeError,KeyError) as error:
@@ -329,7 +382,7 @@ def _index(path) -> dict:
             raise ValueError('CAMPAIGN_INDEX_INVALID')
         if entry['scene_id'] in entries:
             raise ValueError('EPISODE_RECEIPT_CONFLICT')
-        if entry.get('schema_version')==3 and (document.get('kind')!=_FROZEN_INDEX_KIND or document.get('qualification') is not False):
+        if entry.get('schema_version') in (3,4) and (document.get('kind')!=_FROZEN_INDEX_KIND or document.get('qualification') is not False):
             # container task episodes come only from a frozen, non-qualification campaign index
             raise ValueError('EPISODE_FROZEN_INDEX_REQUIRED')
         entries[entry['scene_id']]=entry
@@ -366,6 +419,15 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
         mode=_verify_collection_for_export(entry)
         # carry the content locator through: a resolved episode that forgets where its content lives
         # forces the exporter to guess, and guessing is what this module exists to prevent
+        if entry.get('schema_version')==4:
+            resolved.append({"kind":'ACT_COMMITTED_EPISODE',"schema_version":4,
+                             "collection_evidence":entry['collection_evidence'],"collection_mode":mode,"status":'PASSED',
+                             "scene_id":episode["scene_id"],"split":episode.get("split"),
+                             "task_result_sha256":entry["task_result_sha256"],"verifier_sha256":entry["verifier_sha256"],
+                             "processed_result_sha256":entry["processed_result_sha256"],
+                             **{key: entry[key] for key in ("content_path", "content_sha256")
+                                if isinstance(entry.get(key), str)}})
+            continue
         if entry.get('schema_version')==3:
             resolved.append({"kind":'ACT_COMMITTED_EPISODE',"schema_version":3,
                              "collection_evidence":entry['collection_evidence'],"collection_mode":mode,"status":'PASSED',
