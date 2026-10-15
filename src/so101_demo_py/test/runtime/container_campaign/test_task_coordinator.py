@@ -117,7 +117,8 @@ class Instance:
         if mode == 'failed' and count >= 2:
             state = 'FAILED'
         elif mode != 'hang' and count >= (5 if mode == 'slow' else 2):
-            self._result(task_id, BUSINESS_FAILURE if mode == 'business' else dict(teacher_task_result='PASS'))
+            if mode != 'noresult':
+                self._result(task_id, BUSINESS_FAILURE if mode == 'business' else dict(teacher_task_result='PASS'))
             state, instance = 'SUCCEEDED', 'READY'
         if state == 'RUNNING':
             assert not (self.journal_root/task_id/'collected.json').exists()
@@ -252,7 +253,7 @@ def test_lost_assign_reply_is_queried_never_resent(tmp_path, config):
     outcome = run_wave(world)
     control = world.controls['w00']
     assert control.assigned == ['wave-0-w00-s1'] and control.terminate_reason.startswith('CONTAINER_STATUS_QUERY_REFUSED')
-    assert outcome['case_results'] == [] and len(outcome['infra_errors']) == 1
+    assert outcome['case_results'] == [] and outcome['infra_errors'] == [] and len(outcome['scene_faults']) == 1
     failed = json.loads((world.journal_root/'wave-0-w00-s1/failed.json').read_text())
     assert failed['reason'].startswith('CONTAINER_STATUS_QUERY_REFUSED')
 
@@ -268,13 +269,42 @@ def test_fault_terminates_only_that_instance(tmp_path, config):
     assert healthy.calls.index('terminate') == len(healthy.calls)-1
     assert healthy.assigned == ['wave-0-w00-s1', 'wave-0-w00-s3', 'wave-0-w00-s4']   # s2 is never reassigned
     assert [row['scene_id'] for row in outcome['case_results']] == ['s1', 's3', 's4']
-    assert len(outcome['infra_errors']) == 1 and outcome['infra_errors'][0]['task_id'] == 'wave-0-w01-s2'
-    assert world.coordinator.stop_reason == 'CONTAINER_INSTANCE_EXECUTION_FAULT'
+    # a task fault is isolated to its scene: it is reported as a scene fault, not as an infrastructure error
+    assert outcome['infra_errors'] == [] and len(outcome['scene_faults']) == 1
+    fault = outcome['scene_faults'][0]
+    assert fault['task_id'] == 'wave-0-w01-s2' and fault['scene_id'] == 's2' and fault['worker_id'] == 'w01'
+    assert world.coordinator.stop_reason is None   # later waves are not fenced
     assert json.loads((world.journal_root/'wave-0-w01-s2/failed.json').read_text())['reason'].startswith('CONTAINER_TASK_FAILED')
     assert not (world.journal_root/'wave-0-w01-s2/collected.json').exists()
-    # dispatch is stopped for later waves
-    with pytest.raises(ValueError, match='CONTAINER_WAVE_DISPATCH_FENCED'):
-        run_wave(world)
+
+
+def test_faulted_worker_s_later_reserved_scenes_stay_unrecorded_and_the_others_continue():
+    scenes = tuple(f'scene-{i:02d}' for i in range(20))
+    workers = tuple(f'w{i:02d}' for i in range(8))
+    assignment = WaveAssignment(scene_ids=scenes, worker_ids=workers, assignment=reserve_qualification_scenes(scenes, workers))
+    lost = assignment.next_scene('w03')
+    assignment.mark_faulted(lost)
+    assert assignment.next_scene('w03') is None   # the faulted instance takes nothing more
+    later = scenes[7]
+    assert assignment.states[later] == 'PENDING'
+    for worker in workers:
+        if worker == 'w03':
+            continue
+        for _ in range(2):
+            assignment.mark_collected(assignment.next_scene(worker))
+    taken = [assignment.next_scene('w00') for _ in range(4)]
+    assert taken == list(scenes[16:]) and later not in taken   # surplus still flows to the healthy workers
+    assert assignment.states[later] == 'PENDING'               # never given to anyone: missing evidence
+
+
+@pytest.mark.parametrize('kind', ['unregistered_result', 'journal'])
+def test_infrastructure_faults_still_stop_the_campaign(tmp_path, config, kind):
+    world = make_world(tmp_path, config, script={'s1': 'noresult'} if kind == 'unregistered_result' else {})
+    if kind == 'journal':
+        world.controls['w00'].terminate_mode = 'raises'
+    outcome = run_wave(world)
+    assert outcome['infra_errors'] and 'scene_faults' not in outcome
+    assert world.coordinator.stop_reason == 'CONTAINER_INSTANCE_EXECUTION_FAULT'
 
 
 def test_ready_instance_is_polled_during_barrier(tmp_path, config):
@@ -438,11 +468,11 @@ def test_unreachable_or_deadline_faults_instance_and_keeps_others(tmp_path, conf
     expected = 'CONTAINER_INSTANCE_UNREACHABLE' if kind == 'unreachable' else 'CONTAINER_TASK_DEADLINE_EXCEEDED'
     assert broken.terminate_reason.startswith(expected) and broken.calls.count('terminate') == 1
     assert healthy.terminate_reason == 'WAVE_COMPLETE' and healthy.calls.count('terminate') == 1
-    assert len(outcome['infra_errors']) == 1 and outcome['infra_errors'][0]['worker_id'] == 'w01'
+    assert outcome['infra_errors'] == [] and [fault['worker_id'] for fault in outcome['scene_faults']] == ['w01']
     failed = [path for path in world.journal_root.glob('*/failed.json')]
     assert len(failed) == 1 and json.loads(failed[0].read_text())['reason'].startswith(expected)
     assert {row['worker_id'] for row in outcome['case_results']} >= {'w00'}
-    assert world.coordinator.stop_reason == 'CONTAINER_INSTANCE_EXECUTION_FAULT'
+    assert world.coordinator.stop_reason is None
 
 
 def test_transient_status_errors_below_the_unreachable_bound_are_tolerated(tmp_path, config):
@@ -475,8 +505,8 @@ def test_reported_stopping_or_fault_status_faults_instance(tmp_path, config, kin
     outcome = run_wave(world)
     assert world.controls['w01'].terminate_reason.startswith('CONTAINER_INSTANCE_REPORTED_FAULT: native stack died')
     assert world.controls['w00'].terminate_reason == 'WAVE_COMPLETE'
-    assert len(outcome['infra_errors']) == 1 and outcome['infra_errors'][0]['worker_id'] == 'w01'
-    assert world.coordinator.stop_reason == 'CONTAINER_INSTANCE_EXECUTION_FAULT'
+    assert outcome['infra_errors'] == [] and [fault['worker_id'] for fault in outcome['scene_faults']] == ['w01']
+    assert world.coordinator.stop_reason is None
 
 
 @pytest.mark.parametrize('mode,expected', [('raises', 'CONTAINER_INSTANCE_TERMINATE_FAILED'),

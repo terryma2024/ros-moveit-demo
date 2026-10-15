@@ -304,7 +304,12 @@ def wave_outcome(world, journal=None, root=None):
     rows = [dict(scene_id=item['collected']['scene_id'], worker_id=item['collected']['worker_id'],
                  location=item['collected']['host_output'], task_id=task_id, launch_id=item['collected']['instance_id'])
             for task_id, item in journal.records().items() if item['collected'] is not None]
-    return dict(wave_index=0, coordinator_root=str(journal.root), infra_errors=[], case_results=rows)
+    outcome = dict(wave_index=0, coordinator_root=str(journal.root), infra_errors=[], case_results=rows)
+    failed = [dict(scene_id=item['failed']['scene_id'], task_id=task_id, worker_id=item['failed']['worker_id'])
+              for task_id, item in journal.records().items() if item['failed'] is not None]
+    if failed:
+        outcome['scene_faults'] = failed
+    return outcome
 
 
 def real_verifier(world):
@@ -441,12 +446,70 @@ def schedule_factory(tmp_path, monkeypatch):
         value.close()
 
 
-def test_failed_record_or_infra_error_fails_wave(schedule_factory):
+def test_failed_task_is_a_fault_entry_and_the_rest_of_the_wave_still_verifies(schedule_factory):
     schedule = schedule_factory(['s1', 's2'], qualification=False)
     schedule.run_task('w00', 's1')
     schedule.run_task('w01', 's2', collect=False)
+    value = schedule.verify()
+    assert [row['scene_id'] for row in value['case_results']] == ['s1'] and value['scene_count'] == 2
+    assert value['faults'] == [dict(scene_id='s2', worker_id='w01', task_id='wave-0-w01-s2', launch_id='wave-0-w01-g1',
+                                    reason='execution fault')]
+    assert 'missing' not in value
+
+
+def test_a_fault_free_wave_record_has_no_fault_or_missing_keys(schedule_factory):
+    schedule = schedule_factory(['s1'], qualification=False)
+    schedule.run_task('w00', 's1')
+    assert set(schedule.verify()) == {'wave_index', 'scene_count', 'coordinator_root', 'case_results'}
+
+
+def test_the_coordinator_fault_list_must_equal_the_journal_failures(schedule_factory):
+    schedule = schedule_factory(['s1', 's2'], qualification=False)
+    schedule.run_task('w00', 's1')
+    schedule.run_task('w01', 's2', collect=False)
+    plan = dict(wave_index=0, scene_ids=schedule.scenes, assignment=None)
+    outcome = wave_outcome(schedule, schedule.journal)
+    for invalid in ({k: v for k, v in outcome.items() if k != 'scene_faults'}, outcome | {'scene_faults': []},
+                    outcome | {'infra_errors': ['shard-crash']}):
+        with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+            schedule.verifier.verify_wave(plan, invalid, schedule.shards)
+
+
+def test_scenes_without_any_record_are_refused_unless_a_task_fault_explains_them(schedule_factory):
+    schedule = schedule_factory(['s1', 's2'], qualification=False)
+    schedule.run_task('w00', 's1')
     with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
         schedule.verify()
+    schedule.run_task('w01', 's2', collect=False)
+    assert schedule.verify()['faults'][0]['scene_id'] == 's2'
+
+
+def test_a_faulted_instance_s_shortened_task_list_is_not_a_scheduling_violation(schedule_factory):
+    schedule = schedule_factory(SCENES, qualification=True, assignment=ASSIGNMENT)
+    for worker, scene in (('w00', 's1'), ('w01', 's3'), ('w00', 's2'), ('w00', 's5'), ('w00', 's6')):
+        schedule.run_task(worker, scene)
+    schedule.run_task('w01', 's4', collect=False)
+    value = schedule.verify()
+    assert [fault['scene_id'] for fault in value['faults']] == ['s4']
+    assert [row['scene_id'] for row in value['case_results']] == ['s1', 's2', 's3', 's5', 's6']
+
+
+def test_a_first_task_fault_leaves_the_second_reserved_scene_missing_and_listed(schedule_factory):
+    first = schedule_factory(SCENES, qualification=True, assignment=ASSIGNMENT)
+    for worker, scene in (('w00', 's1'), ('w00', 's2'), ('w00', 's5'), ('w00', 's6')):
+        first.run_task(worker, scene)
+    first.run_task('w01', 's3', collect=False)
+    gone = first.verify()
+    assert [fault['scene_id'] for fault in gone['faults']] == ['s3'] and gone['missing'] == ['s4']
+
+
+def test_a_healthy_instance_is_still_held_to_the_scheduling_rule(schedule_factory):
+    short = schedule_factory(SCENES, qualification=True, assignment=ASSIGNMENT)
+    for worker, scene in (('w00', 's1'), ('w00', 's5'), ('w00', 's2')):
+        short.run_task(worker, scene)
+    short.run_task('w01', 's3', collect=False)
+    with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+        short.verify()
 
 
 def test_unfinished_assignment_fails_wave(schedule_factory):
@@ -682,7 +745,10 @@ def test_a_partial_wave_after_a_phase_limit_skips_only_the_scheduling_rule(sched
 def test_a_partial_wave_still_refuses_an_unfinished_task(schedule_factory):
     unfinished = schedule_factory(['s1', 's2'], qualification=True)
     unfinished.run_task('w00', 's1')
-    unfinished.run_task('w01', 's2', collect=False)
+    owner = unfinished.owners['w01']
+    path = write_input(owner, 'wave-0-w01-s2', worker='w01', scene='s2')
+    unfinished.journal.assign(instance_id='wave-0-w01-g1', host_output=host_task_output(owner, 'wave-0-w01-s2'),
+        task=TaskSpec(task_id='wave-0-w01-s2', inputs_ref=InputRef(**ref(path)), deadline_monotonic_s=1e9))
     with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
         unfinished.verifier.verify_wave(dict(wave_index=0, scene_ids=['s1', 's2'], assignment=None),
             wave_outcome(unfinished, unfinished.journal), unfinished.shards, partial=True)

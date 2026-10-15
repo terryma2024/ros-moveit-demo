@@ -232,3 +232,24 @@ def test_the_legacy_index_still_refuses_a_pending_proof(tmp_path):
     run.scene("a")
     with pytest.raises(ValueError, match="PROCESSING_PENDING"):
         build_frozen_index(campaign_id="camp", qualification=False, scene_count=1, waves=run.waves("a"))
+
+
+def test_a_phase_1_task_fault_is_a_fault_entry_without_a_proof_and_stays_in_the_denominator(tmp_path):
+    run = Run(tmp_path)
+    run.scene("a")
+    run.final("a")
+    waves = run.waves("a")
+    waves[0]["faults"] = [dict(scene_id="f", worker_id="w01", task_id="wave-0-w01-f", launch_id="wave-0-w01-g1",
+                               reason="CONTAINER_INSTANCE_REPORTED_FAULT: native stack died")]
+    combined = run.verify(waves, ["a", "f", "m"])
+    items = by_scene(combined)
+    assert [items[name]["state"] for name in ("a", "f", "m")] == ["PROCESSED", "FAULT", "MISSING"]
+    fault = items["f"]
+    assert fault["reason"] == "PHASE1_TASK_FAULT: CONTAINER_INSTANCE_REPORTED_FAULT: native stack died"
+    assert fault["phase1"] is None and fault["phase2"] is None and fault["task_id"] == "wave-0-w01-f"
+    assert fault["worker_id"] == "w01" and fault["launch_id"] == "wave-0-w01-g1"
+    assert fault["verdict"]["act_data_status"] == "PROCESSING_FAULT" and fault["verdict"]["export_eligible"] is False
+    assert combined["missing_evidence"] == ["f", "m"] and combined["counts"]["FAULT"] == 1
+    index = build_frozen_index(campaign_id="camp", qualification=False, scene_count=3, combined=combined)
+    assert [item["scene_id"] for item in index["committed_episodes"]] == ["a"]
+    assert [(item["scene_id"], item["state"]) for item in index["scenes_without_evidence"]] == [("f", "FAULT"), ("m", "MISSING")]

@@ -87,12 +87,35 @@ def register_processor(run, slot, generation, *, settle=True):
         registry.close()
 
 
-def convert(world, *, processors=2, missing=(), faults=(), exhausted=()):
-    """Rewrite a built world as a finished two-phase run; `missing`, `faults` and `exhausted` are scene indexes."""
+def fault_phase1_task(run, stored, scene, reason):
+    """Turn a collected phase-1 task into a journaled task fault: `failed.json` replaces `collected.json`, the scene's row leaves its
+    wave record and the wave lists the fault the way `verify_wave_records` does (CONTROLLED edit of the base world)."""
+    for wave in stored:
+        row = next((item for item in wave['case_results'] if item['scene_id'] == scene), None)
+        if row is None:
+            continue
+        directory = Path(run)/'host'/f'wave-{wave["wave_index"]}'/'task-journal'/row['task_id']
+        assigned = json.loads((directory/'assigned.json').read_bytes())
+        (directory/'collected.json').unlink()
+        _write(directory/'failed.json', dict({name: assigned[name] for name in (
+            'task_id', 'instance_id', 'worker_id', 'launch_generation', 'wave_id', 'scene_id', 'owner_root', 'host_output')},
+            schema_version=1, kind='ACT_CONTAINER_TASK_FAILED', reason=reason, failed_monotonic_s=1.))
+        wave['case_results'] = [item for item in wave['case_results'] if item is not row]
+        wave['faults'] = [dict(scene_id=scene, worker_id=row['worker_id'], task_id=row['task_id'], launch_id=row['launch_id'],
+                               reason=reason)]
+        return
+    raise AssertionError('no such scene')
+
+
+def convert(world, *, processors=2, missing=(), faults=(), exhausted=(), task_faults=()):
+    """Rewrite a built world as a finished two-phase run; `missing`, `faults`, `exhausted` and `task_faults` are scene indexes
+    (`task_faults`: the phase-1 task itself faulted)."""
     from so101_demo.runtime.act_processor.processing import grade_episode
 
     run = world.run
     stored = [json.loads((run/'host'/f'wave-{index}-verified.json').read_bytes()) for index in (0, 1)]
+    for index in task_faults:
+        fault_phase1_task(run, stored, world.scenes[index], 'CONTAINER_INSTANCE_REPORTED_FAULT: native stack died')
     journal = ProcessingJournal(run/'host'/'processing-journal.jsonl')
     summary, queue = [], []
     for wave in stored:

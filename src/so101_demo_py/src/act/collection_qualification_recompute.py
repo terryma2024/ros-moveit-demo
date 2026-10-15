@@ -353,10 +353,10 @@ class _Run:
             return None
         for task_id, item in journal.items():
             if item['failed'] is not None:
-                self.reasons.add('TASK_FAILED:'+task_id)
+                self.reasons.add('TASK_FAILED:'+task_id)   # a faulted scene is a named reason; the wave is still verified
             elif item['collected'] is None:
                 self.reasons.add('TASK_UNFINISHED:'+task_id)
-        if any(item['collected'] is None for item in journal.values()):
+        if any(item['collected'] is None and item['failed'] is None for item in journal.values()):
             return None
         try:
             manifest = _ref(self.run/'inputs'/'frozen'/'inputs-manifest.json')
@@ -429,6 +429,8 @@ class _Run:
             self.reasons.add('PROCESSING_RECORD_INVALID')
             return None
         for item in combined['scenes']:
+            if item['state'] == 'FAULT' and item['phase1'] is None:
+                continue   # a phase-1 task fault: already named by `TASK_FAILED:<task>`
             if item['state'] == 'FAULT':
                 self.reasons.add('PROCESSING_FAULT:'+item['scene_id'])
             elif item['state'] == 'MISSING':

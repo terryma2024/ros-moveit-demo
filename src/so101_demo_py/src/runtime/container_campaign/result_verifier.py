@@ -12,8 +12,10 @@ from so101_demo.runtime.inference.config import validate_file_ref
 _ROW = {'scene_id', 'worker_id', 'location', 'task_id', 'launch_id'}
 
 
-def check_wave_scheduling(plan, by_scene, roots, qualification):
+def check_wave_scheduling(plan, by_scene, roots, qualification, faulted_workers=frozenset()):
     """The qualification scheduling rule over collected records: two tasks per instance, reserved scenes before surplus.
+
+    A worker in `faulted_workers` had a task fault: it owes nothing further, its later scenes are missing, and it takes no surplus.
 
     Refusals carry a coded message (`INSTANCE_SHORT:<worker>`, `RESERVED_COLLECTED_ELSEWHERE:<scene>`,
     `SURPLUS_BEFORE_RESERVED:<scene>`) so a report can name the exact failure."""
@@ -23,6 +25,8 @@ def check_wave_scheduling(plan, by_scene, roots, qualification):
         for collected in by_scene.values():
             counts[collected['worker_id']] += 1
         for worker in sorted(counts):
+            if worker in faulted_workers:
+                continue
             # a reserved slot owes exactly its own reserved cases (two on the gate plane, one or two on a functional wave)
             owed = len(assignment['reserved_by_worker'][worker]) if assignment is not None else 2
             if counts[worker] < owed:
@@ -32,12 +36,15 @@ def check_wave_scheduling(plan, by_scene, roots, qualification):
     done = {}
     for worker, reserved in assignment['reserved_by_worker'].items():
         for scene in reserved:
-            if by_scene[scene]['worker_id'] != worker:
+            if scene in by_scene and by_scene[scene]['worker_id'] != worker:
                 raise ValueError('RESERVED_COLLECTED_ELSEWHERE:'+scene)
-        done[worker] = max(by_scene[scene]['collected_monotonic_s'] for scene in reserved)
+        if worker not in faulted_workers:
+            done[worker] = max(by_scene[scene]['collected_monotonic_s'] for scene in reserved)
     for scene in assignment['surplus']:
-        collected = by_scene[scene]
-        if collected['assigned_monotonic_s'] < done[collected['worker_id']]:
+        collected = by_scene.get(scene)
+        if collected is None:
+            continue   # never recorded: it is in the wave's missing list
+        if collected['worker_id'] not in done or collected['assigned_monotonic_s'] < done[collected['worker_id']]:
             raise ValueError('SURPLUS_BEFORE_RESERVED:'+scene)
 
 
@@ -49,6 +56,11 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
     journal records, which is what an independent verifier has; with them (the live verifier passes the coordinator's rows) each
     row must equal its collected record. Every task is read back through `verify_container_task_registration` against the
     scene's own scope and inputs manifest; FAILED Teacher and INVALID/QC-failed data stay in the denominator.
+
+    A task whose failure the journal records is a FAULT entry, not a refusal: the wave record then lists it under `faults`
+    (scene, worker, task, launch and reason) and lists the plan's scenes without any record under `missing`; both keys are present
+    only when non-empty, so a fault-free wave record is unchanged. A task that was assigned and neither collected nor failed is
+    still refused.
 
     `partial` is for a wave that phase 1 ended on its deadline: `plan` then names only the scenes collected, and the scheduling rule
     (two tasks per qualification instance, reserved before surplus) is the one check that is skipped; the scenes that were never
@@ -76,19 +88,32 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
         if not roots or type(scene_order) is not list or not scene_order or len(set(scene_order)) != len(scene_order):
             raise ValueError('denominator')
         journal = read_task_journal(journal_root, instances)
-        if any(item['failed'] is not None or item['collected'] is None for item in journal.values()):
-            raise ValueError('failed or unfinished task')
+        if any(item['failed'] is None and item['collected'] is None for item in journal.values()):
+            raise ValueError('unfinished task')
+        done_tasks = {task_id: item for task_id, item in journal.items() if item['collected'] is not None}
+        failed_tasks = {task_id: item['failed'] for task_id, item in journal.items() if item['failed'] is not None}
         rows = case_rows
         if rows is None:
             rows = [dict(scene_id=item['collected']['scene_id'], worker_id=item['collected']['worker_id'],
                          location=item['collected']['host_output'], task_id=task_id,
-                         launch_id=item['collected']['instance_id']) for task_id, item in journal.items()]
-        if type(rows) is not list or not rows or len(rows) != len(scene_order) or len(journal) != len(rows):
+                         launch_id=item['collected']['instance_id']) for task_id, item in done_tasks.items()]
+        if (type(rows) is not list or (not rows and not failed_tasks) or len(rows) + len(failed_tasks) > len(scene_order)
+                or len(done_tasks) != len(rows)):
             raise ValueError('denominator')
+        faults, faulted_workers, seen_scenes = [], set(), set()
+        for task_id, failed in failed_tasks.items():
+            if (failed['scene_id'] not in scene_order or failed['owner_root'] != str(roots.get(failed['worker_id']))
+                    or failed['scene_id'] in seen_scenes or type(failed['reason']) is not str):
+                raise ValueError('failed identity')
+            seen_scenes.add(failed['scene_id'])
+            faulted_workers.add(failed['worker_id'])
+            faults.append(dict(scene_id=failed['scene_id'], worker_id=failed['worker_id'], task_id=task_id,
+                               launch_id=failed['instance_id'], reason=failed['reason']))
         by_scene = {}
-        for task_id, item in journal.items():
+        for task_id, item in done_tasks.items():
             collected = item['collected']
             if (collected['scene_id'] in by_scene or collected['scene_id'] not in scene_order
+                    or collected['scene_id'] in seen_scenes
                     or collected['owner_root'] != str(roots.get(collected['worker_id']))):
                 raise ValueError('journal identity')
             by_scene[collected['scene_id']] = collected
@@ -143,12 +168,21 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
                 finish(row, paths, answer)
             if early is not None:
                 raise early
-        if set(verified) != set(scene_order):
+        faults.sort(key=lambda item: scene_order.index(item['scene_id']))
+        missing = [name for name in scene_order if name not in verified and name not in seen_scenes]
+        if missing and not faults:
+            raise ValueError('missing scene')
+        if not set(verified) <= set(scene_order):
             raise ValueError('missing scene')
         if not partial:
-            check_wave_scheduling(plan, by_scene, roots, qualification)
-        return dict(wave_index=wave_index, scene_count=len(scene_order),
-            coordinator_root=str(journal_root), case_results=[verified[name] for name in scene_order])
+            check_wave_scheduling(plan, by_scene, roots, qualification, faulted_workers)
+        record = dict(wave_index=wave_index, scene_count=len(scene_order),
+            coordinator_root=str(journal_root), case_results=[verified[name] for name in scene_order if name in verified])
+        if faults:
+            record['faults'] = faults
+        if missing:
+            record['missing'] = missing
+        return record
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
         raise ValueError('CONTAINER_WAVE_COMMIT_READBACK_INVALID') from error
 
@@ -177,7 +211,7 @@ class ContainerWaveResultVerifier:
         """The live verification: the coordinator's outcome and the live shard owners are checked, then the records recompute."""
         try:
             if (type(plan) is not dict or type(outcome) is not dict
-                    or set(outcome) != {'wave_index', 'coordinator_root', 'case_results', 'infra_errors'}
+                    or set(outcome) - {'scene_faults'} != {'wave_index', 'coordinator_root', 'case_results', 'infra_errors'}
                     or type(plan['wave_index']) is not int or type(outcome['wave_index']) is not int
                     or outcome['wave_index'] != plan['wave_index']
                     or type(outcome['infra_errors']) is not list or outcome['infra_errors']):
@@ -193,9 +227,16 @@ class ContainerWaveResultVerifier:
                 launch_records.append(record)
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
             raise ValueError('CONTAINER_WAVE_COMMIT_READBACK_INVALID') from error
-        return verify_wave_records(self.root, plan, launch_records, self.case_inputs, self.qualification,
-                                   case_rows=outcome['case_results'], readback_workers=self.readback_workers,
-                                   readback_timeout_s=self.readback_timeout_s, partial=partial)
+        record = verify_wave_records(self.root, plan, launch_records, self.case_inputs, self.qualification,
+                                     case_rows=outcome['case_results'], readback_workers=self.readback_workers,
+                                     readback_timeout_s=self.readback_timeout_s, partial=partial)
+        # the coordinator's fault list must be exactly the journal's FAILED tasks
+        claimed = outcome.get('scene_faults', [])
+        journaled = record.get('faults', ()) if type(record) is dict else ()
+        if (type(claimed) is not list or any(type(item) is not dict for item in claimed)
+                or sorted(str(item.get('task_id')) for item in claimed) != sorted(item['task_id'] for item in journaled)):
+            raise ValueError('CONTAINER_WAVE_COMMIT_READBACK_INVALID')
+        return record
 
     def verify_processing(self, waves, scene_ids):
         """The combined proof of both phases (`processing_verifier.verify_processing`) over the verified phase-1 waves."""

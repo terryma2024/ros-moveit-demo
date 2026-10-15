@@ -11,7 +11,8 @@ A scene always appears, in the frozen order. Its `state` is
 
     PROCESSED         a final processing attempt whose processed result read back (the data verdict is VALID or INVALID)
     FINAL_AT_PHASE1   the phase-1 record is already final (a pre-motion Teacher failure that recorded nothing): nothing to process
-    FAULT             processing was refused, retries were exhausted, or the processed result or the records disagree
+    FAULT             processing was refused, retries were exhausted, or the processed result or the records disagree; or the
+                      scene's phase-1 task faulted (`PHASE1_TASK_FAULT: <reason>`, listed in its wave's `faults`, no phase-1 proof)
     MISSING           no evidence: phase 1 never recorded the scene, phase 2 ran out of time, or the scene was never processed
 
 `FAULT` and `MISSING` are never a pass: their `verdict` carries `PROCESSING_FAULT` / `PROCESSING_MISSING` as the data status, the gates
@@ -155,9 +156,15 @@ def verify_processing(root, waves, scene_ids, *, readback_workers=None, readback
     rows = {row["scene_id"]: row for wave in waves for row in wave["case_results"]}
     if len(rows) != sum(len(wave["case_results"]) for wave in waves):
         raise ValueError("PROCESSING_PHASE1_ROWS_INVALID")
+    task_faults = {item["scene_id"]: item for wave in waves for item in wave.get("faults", ())}
     entries, jobs = {}, []
     for scene in scene_ids:
         row = rows.get(scene)
+        if row is None and scene in task_faults:
+            fault = task_faults[scene]
+            entries[scene] = _record(None, "FAULT", f"PHASE1_TASK_FAULT: {fault['reason']}")
+            entries[scene].update(worker_id=fault["worker_id"], task_id=fault["task_id"], launch_id=fault["launch_id"])
+            continue
         if row is None:
             entries[scene] = _record(None, "MISSING", "PHASE1_NOT_RECORDED")
             continue

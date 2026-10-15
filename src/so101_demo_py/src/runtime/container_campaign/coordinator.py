@@ -102,6 +102,10 @@ class InstanceFault(RuntimeError):
 
 
 PHASE1_EXPIRED = 'CONTAINER_PHASE1_DEADLINE_EXPIRED'
+#: Faults of one task on one instance. When such a fault ends a claimed task whose failure was journaled, the scene is a FAULT entry
+#: and the rest of the wave goes on; any other fault (a store or journal inconsistency, a fault outside a task) stops the campaign.
+SCENE_FAULT_PREFIXES = ('CONTAINER_INSTANCE_REPORTED_FAULT', 'CONTAINER_TASK_FAILED', 'CONTAINER_INSTANCE_UNREACHABLE',
+                        'CONTAINER_STATUS_QUERY_REFUSED', 'CONTAINER_TASK_DEADLINE_EXCEEDED')
 
 
 class RecordingGate:
@@ -398,6 +402,8 @@ class InstanceDispatch:
         if self.current is not None:
             try:
                 await asyncio.to_thread(self.journal.fail, task_id=self.current[0].task_id, reason=reason)
+                if reason.startswith(SCENE_FAULT_PREFIXES):
+                    self.error['scene_id'] = self.current[1]   # isolated: this scene is a FAULT entry, nothing else stops
             except ValueError as error:
                 self.error['journal_error'] = str(error)[:200]
 
@@ -554,7 +560,9 @@ class ConcurrentCollectionCoordinator:
             await self._barrier(dispatches)
             outcomes = await asyncio.gather(*(item.run(lambda: self.stop_reason) for item in dispatches),
                                             return_exceptions=True)
-            errors = [item.error for item in dispatches if item.error is not None]
+            found = [item.error for item in dispatches if item.error is not None]
+            scene_faults = [error for error in found if 'scene_id' in error]
+            errors = [error for error in found if 'scene_id' not in error]
             errors += [dict(type=type(value).__name__, reason=str(value)) for value in outcomes
                        if isinstance(value, BaseException)]
             if errors:
@@ -564,9 +572,12 @@ class ConcurrentCollectionCoordinator:
                 worker_id=record['collected']['worker_id'], location=record['collected']['host_output'],
                 task_id=record['collected']['task_id'], launch_id=record['collected']['instance_id'])
                 for record in records.values() if record['collected'] is not None}
-            return dict(wave_index=wave, coordinator_root=str(root/'task-journal'),
-                        case_results=[rows[scene] for scene in scene_order if scene in rows],
-                        infra_errors=errors)
+            outcome = dict(wave_index=wave, coordinator_root=str(root/'task-journal'),
+                           case_results=[rows[scene] for scene in scene_order if scene in rows],
+                           infra_errors=errors)
+            if scene_faults:
+                outcome['scene_faults'] = scene_faults
+            return outcome
         finally:
             for item in dispatches:   # every exit path leaves the weights as launched; a no-op after `finish`
                 if item.cpu is not None:

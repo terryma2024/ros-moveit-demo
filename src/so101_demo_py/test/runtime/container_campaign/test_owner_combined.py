@@ -6,6 +6,8 @@ which documents it writes from the answer. `phase1-result.json` stays the phase-
 import asyncio
 import json
 
+import pytest
+
 from so101_demo.runtime.container_campaign.processing_verifier import build_campaign_result
 from so101_demo.runtime.container_campaign.result_verifier import build_frozen_index
 from test_owner_phase1 import pending_verified
@@ -120,6 +122,71 @@ def test_scenes_a_phase_one_deadline_left_unrecorded_appear_in_the_combined_docu
         index = json.loads((owner.root/'collection-index.json').read_text())
         assert [item['scene_id'] for item in index['scenes_without_evidence']] == stored['missing_evidence']
         await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        phase.world.registry.close()
+
+
+def test_a_task_fault_in_one_scene_does_not_stop_the_campaign_and_the_other_scenes_get_a_verdict(tmp_path, monkeypatch):
+    order = []
+    faulted = 'scene-03'
+
+    def verify(plan, outcome, shards, partial=False):
+        value = pending_verified(order)(plan, dict(outcome), shards)
+        if faulted in plan['scene_ids']:
+            value['case_results'] = [row for row in value['case_results'] if row['scene_id'] != faulted]
+            value['faults'] = [dict(scene_id=faulted, worker_id='w00', task_id='wave-0-w00-'+faulted, launch_id='l',
+                                    reason='CONTAINER_TASK_FAILED: boom')]
+        return value
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=21, verify=verify)
+    owner = phase.owner
+    seen = []
+
+    def verify_processing(waves, ids):
+        seen.append((waves, list(ids)))
+        return combined_for(waves, ids)
+    owner.verifier.verify_processing = verify_processing
+
+    async def run_wave(*, plan, shards, endpoints, dispatch_allowed):
+        outcome = dict(wave_index=plan['wave_index'], coordinator_root='x', case_results=[], infra_errors=[])
+        if faulted in plan['scene_ids']:
+            outcome['scene_faults'] = [dict(scene_id=faulted, task_id='wave-0-w00-'+faulted, worker_id='w00')]
+        return outcome
+    owner.coordinator.run_wave = run_wave
+
+    async def run():
+        result = await owner.run(phase.world.manifest)
+        assert owner.stop_reason is None, 'a task fault stops nothing'
+        assert phase.order.count('syncfs') == 1 and len(seen) == 1, 'the owner went on to phase 2 and the combined proof'
+        queued = [row['scene_id'] for row in phase.scheduler.calls[0]['rows']]
+        assert faulted not in queued and len(queued) == 20
+        assert result['task_faults'] == [dict(scene_id=faulted, reason='CONTAINER_TASK_FAILED: boom')]
+        assert (owner.root/'host/campaign-result.json').is_file() and (owner.root/'collection-index.json').is_file()
+        assert [wave.get('faults') for wave in seen[0][0]] == [[dict(scene_id=faulted, worker_id='w00',
+            task_id='wave-0-w00-'+faulted, launch_id='l', reason='CONTAINER_TASK_FAILED: boom')], None]
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        phase.world.registry.close()
+
+
+def test_an_infrastructure_error_in_a_wave_still_stops_the_campaign(tmp_path, monkeypatch):
+    def refuse(plan, outcome, shards, partial=False):
+        raise ValueError('CONTAINER_WAVE_COMMIT_READBACK_INVALID')
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=21, verify=refuse)
+
+    async def run_wave(*, plan, shards, endpoints, dispatch_allowed):
+        return dict(wave_index=plan['wave_index'], coordinator_root='x', case_results=[],
+                    infra_errors=[dict(type='InstanceFault', reason='CONTAINER_INSTANCE_TERMINATE_FAILED: x')])
+    phase.owner.coordinator.run_wave = run_wave
+
+    async def run():
+        with pytest.raises(ValueError, match='CONTAINER_WAVE_COMMIT_READBACK_INVALID'):
+            await phase.owner.run(phase.world.manifest)
+        assert phase.scheduler.calls == []
+        await phase.owner.close()
     try:
         asyncio.run(run())
     finally:

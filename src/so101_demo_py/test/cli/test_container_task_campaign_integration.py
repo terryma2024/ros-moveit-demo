@@ -718,6 +718,22 @@ def test_two_waves_start_teacher_once(tmp_path, shared, monkeypatch, capsys):
     assert spies.lease() is None and spies.active_slots() == () and len(spies.finishes) == 1
 
 
+def test_a_campaign_completed_with_task_faults_settles_and_exits_non_zero_with_a_distinct_reason(tmp_path, shared, monkeypatch, capsys):
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1')
+    spies = Spies(monkeypatch)
+    controlled_verifier(monkeypatch)
+    faults = [dict(scene_id='scene-01', reason='CONTAINER_TASK_FAILED: boom')]
+    real_run = composition.ContainerCampaignOwner.run
+
+    async def finished(self, manifest):
+        return dict(await real_run(self, manifest), task_faults=faults)   # a real run, as if one scene had faulted
+    monkeypatch.setattr(composition.ContainerCampaignOwner, 'run', finished)
+    code, out, err = run(world, capsys)
+    assert code == 1 and 'CAMPAIGN_COMPLETED_WITH_FAULTS' in err and 'CAMPAIGN_RUN_FAILED' not in err
+    assert json.loads(out)['task_faults'] == faults
+    assert len(spies.finishes) == 1 and spies.finishes[0][1] is True, 'the run still settled: a fault is not a cleanup failure'
+
+
 def test_disk_floor_comes_from_frozen_inputs(tmp_path, shared, monkeypatch, capsys):
     """The owner's disk floor is the frozen runtime policy's, whatever that is; the command line has no such option."""
     world = make_world(tmp_path, shared, monkeypatch, plane='W1')

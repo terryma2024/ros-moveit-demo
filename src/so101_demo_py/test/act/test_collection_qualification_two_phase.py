@@ -156,3 +156,20 @@ def test_a_functional_two_phase_run_is_still_refused_as_qualification_evidence(t
         controlled_identity=world.contract['controlled_identity']))
     with pytest.raises(ValueError, match='QUALIFICATION_CONTRACT_UNREADABLE'):
         recompute.recompute(world.run, functional, readback_workers=1)
+
+
+def test_a_phase_1_task_fault_is_re_verified_as_a_named_reason_and_the_wave_is_not_invalid(tmp_path, patched):
+    world = two_phase(tmp_path, task_faults=(15,))    # the second reserved scene of w07 in wave 0
+    report = run(world)
+    scene = world.scenes[15]
+    assert report['status'] == 'NOT_QUALIFIED'
+    assert f'TASK_FAILED:wave-0-w07-{scene}' in report['reasons']
+    refused = [reason for reason in report['reasons'] if reason.split(':')[0] in (
+        'WAVE_RECOMPUTE_INVALID', 'WAVE_RECORD_MISMATCH', 'INSTANCE_SHORT', 'PROCESSING_RECORD_INVALID', 'PROCESSING_FAULT',
+        'CAMPAIGN_RESULT_MISMATCH', 'FROZEN_INDEX_MISMATCH', 'LAUNCH_TOPOLOGY_INVALID', 'CLEANUP_UNCONFIRMED')]
+    assert refused == [], 'the stored documents of the fault shape recompute byte for byte'
+    for name in ('recorder_lossless', 'frame_continuity', 'qc_valid_rate', 'teacher_physical_success_rate'):
+        assert report['quality'][name]['result']['denominator'] == 40, name
+        assert scene not in [item['scene_id'] for item in report['quality'][name]['evidence'] if item['outcome'] == 'PASS']
+    stored = json.loads((world.run/'host/campaign-result.json').read_bytes())
+    assert next(item for item in stored['scenes'] if item['scene_id'] == scene)['state'] == 'FAULT'

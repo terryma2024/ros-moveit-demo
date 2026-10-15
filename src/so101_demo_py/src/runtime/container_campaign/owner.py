@@ -209,7 +209,9 @@ class ContainerCampaignOwner:
                 collected={row['scene_id'] for row in outcome['case_results']}
                 if len(collected)<len(plan['scene_ids']) and self._phase1_limit_reached() and not outcome['infra_errors']:
                     # Phase 1 ended on its deadline inside this wave: verify the scenes that were recorded, as they are.
-                    kept=dict(plan,scene_ids=[scene for scene in plan['scene_ids'] if scene in collected],assignment=None)
+                    faulted={item['scene_id'] for item in outcome.get('scene_faults',())}
+                    kept=dict(plan,scene_ids=[scene for scene in plan['scene_ids'] if scene in collected or scene in faulted],
+                              assignment=None)
                     if not kept['scene_ids']:
                         break
                     verified=await asyncio.to_thread(self.verifier.verify_wave,kept,outcome,prepared,partial=True)
@@ -230,6 +232,10 @@ class ContainerCampaignOwner:
             await self._finish_phase1(ids,completed)
             phase2=await self.start_phase_two(completed)
             result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed)
+            task_faults=[item for wave in completed for item in wave.get('faults',())]
+            if task_faults:
+                # A task fault is isolated to its scene: the run goes on and holds complete results, and the CLI exits non-zero.
+                result['task_faults']=[dict(scene_id=item['scene_id'],reason=item['reason']) for item in task_faults]
             if phase2 is not None:
                 result['phase2']=phase2
             if missing:

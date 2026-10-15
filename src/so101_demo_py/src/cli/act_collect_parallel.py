@@ -272,8 +272,15 @@ def main(argv=None, *, edges=None) -> int:
         return _fail('CAMPAIGN_SETTLE_REFUSED: ' + str(error), 1)
     if failure is not None:
         return _fail('CAMPAIGN_RUN_FAILED: ' + _describe(failure), 1)
-    print(json.dumps(dict(campaign_id=result['campaign_id'], run=str(run), plane=plane,
-                          scene_count=result['scene_count'], waves=len(result['waves'])), sort_keys=True))
+    summary = dict(campaign_id=result['campaign_id'], run=str(run), plane=plane,
+                   scene_count=result['scene_count'], waves=len(result['waves']))
+    task_faults = result.get('task_faults')
+    if task_faults:
+        summary['task_faults'] = task_faults
+    print(json.dumps(summary, sort_keys=True))
+    if task_faults:
+        # The run root holds complete results; the exit code only tells scripts that some scenes faulted.
+        return _fail('CAMPAIGN_COMPLETED_WITH_FAULTS: ' + str(len(task_faults)) + ' scene(s) faulted; see host/campaign-result.json', 1)
     return 0
 
 

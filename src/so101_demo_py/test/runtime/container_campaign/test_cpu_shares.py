@@ -116,7 +116,7 @@ def test_restore_writes_the_launch_time_weight_not_a_constant(tmp_path, config):
 def test_a_fault_during_offline_processing_restores_the_weight(tmp_path, config):
     world, result, docker, _, _ = run(tmp_path, config, shares=64, workers=('w00',), scenes=('s1', 's2'),
                                       fault_after=PRE+REC+20)
-    assert result['infra_errors']   # the instance faulted
+    assert result['scene_faults'] and result['infra_errors'] == []   # the instance faulted on its task
     values = [value for _, value in docker.timeline('c-w00')]
     assert values.count(64) >= 1 and values[-1] == 1024
     assert journal_lines(world)[-1]['requested'] == 1024
