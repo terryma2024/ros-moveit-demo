@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3681
-next_experiment: EXP-604 (PLANNED): two-phase debug run with the processor path fix.
+latest_checkpoint: CP-3682
+next_experiment: EXP-605 (to be planned) after the goals_stopped stop-receipt fix.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3682 — EXP-604 VALID failure: phase 1 complete; one shard's stop receipt lacked goals_stopped, exit 1, stop unconfirmed; lease released under the standing authorisation
+
+- Manual release by R/manual-lease-release-20261016-exp604.py under the standing human authorisation of CP-3628, same preconditions as before:
+  - all eight shard containers exited (w05 with code 1) with no process and no other container running;
+  - the store in exactly the held state;
+  - the lease owner pid 3354739 gone.
+- Parent operation 36523b51e7184f31a7f1936cb5162062 written CANCELLED; read back IDLE, no lease, no active slot. A human-authorised override, not a proof.
+- Fix of the goals_stopped confirmation handed to Sonnet.
 
 ## CP-3681 — Processor path fix, two flaky gate tests fixed (one with a production fail-open); gate PASS; EXP-604 planned
 
@@ -100,7 +109,7 @@ next_experiment: EXP-604 (PLANNED): two-phase debug run with the processor path 
 
 ```yaml
 experiment_id: EXP-604
-status: PLANNED
+status: VALID
 prior_experiment: EXP-603 (VALID failure; phase 1 and transition fine, every processor unreachable)
 hypothesis: With the processor reading the sealed attempt, phase 2 processes every recorded scene. The two-phase run gives VALID at or above EXP-599's 13 of 16, in about 20 minutes in total.
 prediction: Phase 1 about 11 minutes; phase 2 about 10 to 15 minutes with eight processors; few retries; CLI exit 0 if no scene faults, else CAMPAIGN_COMPLETED_WITH_FAULTS.
@@ -124,15 +133,25 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T195716Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after removing the EXP-603 processor containers
     exit_code: 1 (processor containers present), then 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T195716Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run 20:00:04Z to 20:12:42Z. Phase 1, first shard launch to last shard stop, 740 s; all 16 task journals collected.
+  - CLI CAMPAIGN_RUN_FAILED CAMPAIGN_SHARD_STOP_UNCONFIRMED and CAMPAIGN_CLEANUP_UNCONFIRMED; no syncfs and no phase 2.
+  - campaign-cleanup.json: shard w05 not terminated, LAUNCH_STOP_UNCONFIRMED; the other seven terminated.
+  - Container w05 Exited (1); the others Exited (0).
+  - w05 completed both of its tasks (SUCCEEDED).
+    - Its shard-stop.json: controllers_stopped true, ros_children_exited true, ros_graph_empty true, goals_stopped false.
+    - Its instance-exit.json: cleanup_confirmed false, cleanup_errors empty, fault_reason WAVE_COMPLETE.
+  - The store held the lease and slots w00 to w07.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The in-container stop receipt did not confirm goals_stopped although every ROS child had exited and the graph was empty, so the instance exited 1 and the Host could not prove the stop. Likely the same defect as EXP-591.
+  - Cause under analysis.
+conclusion: VALID failure. Phase 1 complete; the run stopped on an unconfirmed in-container goal stop at wave end.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T195716Z (host/campaign-cleanup.json, wave-0/w05/g1/shard-stop.json, instance-exit.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T195716Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp604 and exp604-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
