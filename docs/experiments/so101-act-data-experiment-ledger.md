@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: b6be0f582b5f3c521acc8e8ec8afe84189e61175
+current_commit: 753dbbd9cc4527dc105c4f4bbcea01c3c6b99638
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,64 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3676
-next_experiment: EXP-602 (to be planned): EXP-601 repeated after the stop-proof retry fix.
+latest_checkpoint: CP-3677
+next_experiment: EXP-602 (PLANNED): two-phase debug run repeated after the stop-proof retry fix.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3677 — Stop-proof inspect retried; gate PASS; EXP-602 planned
+
+- Commit `eb2e7ac03` (Sonnet), a new bounded_docker_inspect:
+  - A docker inspect TimeoutExpired or transient daemon error is retried with backoff (2 s doubling to 20 s) up to 180 s before a stop counts as unconfirmed, with the attempts recorded.
+  - A definite answer returns at once, and what counts as proof is unchanged.
+  - Used by the shard, processor and service owners and by the provenance read.
+  - Tests: 7 new; 3 integration tests failed with the call sites reverted; container_campaign 990 passed.
+- Gate on 753dbbd9c (eb2e7ac03 plus the EXP-601 ledger commit), R/gates/753dbbd9cc45: build rc 0, demo rc 0, colcon rc 0, dirty_after 0. PASSED.
+- Images from 753dbbd9c:
+  - inference sha256:c507a500eba55627fdd200061304270b2b9889403945afb6596a9bb5004c4b2d (R/image-build-20261015T151316Z)
+  - shard sha256:084dcb986f517ee7bfbb273f1e4e43199c7d84729133cd155575a8863b5af5f2 (R/image-build-20261015T151432Z)
+- Inputs REG/act-w8d-inputs-20261015T151828Z: sources cloned from the EXP-601 inputs, log directory exp602. Validation 77 of 77 PASS.
+
+```yaml
+experiment_id: EXP-602
+status: PLANNED
+prior_experiment: EXP-601 (VALID failure; phase 1 complete, stop proof failed on inspect timeouts)
+hypothesis: With the stop proof tolerating a transiently slow daemon, the two-phase run completes - phase 1, syncfs, phase 2 on processor containers, combined records - and gives VALID at or above EXP-599's 13 of 16.
+prediction:
+  - Phase 1 about 12 minutes; phase 2 about 12 to 15 minutes; no execution fault; every stop proven, some after retries.
+  - INPUT_STALE rare; late camera frames possibly present at eight concurrent recordings.
+single_variable: Commit eb2e7ac03 relative to EXP-601.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 753dbbd9c.
+success_criteria:
+  - As EXP-601.
+failure_criteria:
+  - As EXP-601.
+invalid_criteria:
+  - As EXP-601, for commit 753dbbd9c.
+provenance:
+  source_commit: 753dbbd9cc4527dc105c4f4bbcea01c3c6b99638 (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/753dbbd9cc45/install plus worktree import
+  runtime_executable: as EXP-601
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T151828Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261015T151828Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3676 — EXP-601 VALID failure: phase 1 recorded 16 of 16 at eight concurrent recordings; stop proof failed on docker inspect timeouts; lease released under the standing authorisation
 
