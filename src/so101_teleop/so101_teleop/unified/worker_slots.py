@@ -18,16 +18,23 @@ class ActWorkerSlot:
 
     A slot names an instance, not a ROS graph: every instance runs at the fixed identity of
     `so101_demo.runtime.act_instance.identity` and the container is its isolation, so a slot carries no domain,
-    namespace or controller name that could collide."""
+    namespace or controller name that could collide.
+
+    `wNN` is a collection shard. `pNN` is a phase-2 processor of the same campaign generation: it is admitted like a shard slot
+    (reserved before launch, released with the campaign) and is not counted among the campaign's workers."""
 
     campaign_id: str
     worker_id: str
     execution_generation: int
 
+    @property
+    def is_processor(self):
+        return self.worker_id.startswith('p')
+
     def __post_init__(self):
         if (type(self.campaign_id) is not str
                 or re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]*', self.campaign_id) is None
-                or type(self.worker_id) is not str or re.fullmatch(r'w[0-9]{2}', self.worker_id) is None
+                or type(self.worker_id) is not str or re.fullmatch(r'[wp][0-9]{2}', self.worker_id) is None
                 or type(self.execution_generation) is not int or self.execution_generation < 0):
             raise ValueError('WORKER_SLOT_INVALID')
 

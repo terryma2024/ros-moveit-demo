@@ -124,10 +124,31 @@ def _layout(owned_root):
     raise ValueError("unknown owned directory")
 
 
+#: A phase-1 attempt directory a processor may read: the sealed result of one attempt of one shard task of this run.
+PHASE1_ATTEMPT_PARTS = (r"wave-[0-9]+", r"w[0-9]{2}", r"g[1-9][0-9]*", r"output", r"tasks", r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}",
+                        r"attempts", r"[a-zA-Z0-9][a-zA-Z0-9_-]*", r"[a-zA-Z0-9][a-zA-Z0-9_-]*", r"sealed")
+
+
+def _phase1_attempt(source, run):
+    """The one shape of directory a processor mounts read-only: `<run>/wave-N/wNN/gK/output/tasks/<task>/attempts/<scene>/<attempt>/sealed`."""
+    path = _path(source, directory=True)
+    parts = path.relative_to(run).parts if path.is_relative_to(run) else ()
+    if len(parts) != len(PHASE1_ATTEMPT_PARTS) or any(
+            re.fullmatch(pattern, part) is None for pattern, part in zip(PHASE1_ATTEMPT_PARTS, parts)):
+        raise ValueError("phase-1 attempt")
+    return path
+
+
 def _owned_role(role, owned, run):
     if role in ("head", "teacher"):
         if owned != run / "services" / role:
             raise ValueError("service private directory")
+        return
+    if role == "processor":
+        parts = owned.relative_to(run).parts
+        if (len(parts) != 3 or parts[0] != "processing" or re.fullmatch(r"p[0-9]{2}", parts[1]) is None
+                or re.fullmatch(r"g[1-9][0-9]*", parts[2]) is None):
+            raise ValueError("processor private directory")
         return
     if role != "shard":
         raise ValueError("unknown role")
@@ -143,43 +164,58 @@ def _owned_role(role, owned, run):
 
 
 def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config_paths,
-                      task_output_root=None):
+                      task_output_root=None, phase1_attempts=None, processing_root=None):
     """Produce launch mounts; artifact contents/path contracts remain unchanged.
 
     This checks local mount provenance only. Campaign resource authorization
     remains at the unified entry and is never repeated in inference services.
+
+    A processor (phase 2) is the one role that reads phase-1 attempts: `phase1_attempts` names the sealed directories of this run
+    it is assigned, each mounted read-only, and `processing_root` (`<run>/processing`) is its one writable output tree. It has
+    no service socket. Nothing else under `wave-*` or `host` is mountable by any role.
     """
     try:
         owned = _path(owned_root, directory=True)
         run = _layout(owned)
         _owned_role(role, owned, run)
+        processor = role == "processor"
         if type(approved_inputs) is not tuple or type(config_paths) is not tuple:
             raise ValueError("input list")
-        mounts = [RoleMount(owned, owned, False, "evidence" if role == "shard" else "service_logs")]
+        if processor != (processing_root is not None) or processor != (phase1_attempts is not None):
+            raise ValueError("processor mounts")
+        mounts = [RoleMount(owned, owned, False, "evidence" if role in ("shard", "processor") else "service_logs")]
         if task_output_root is not None:
             output = _path(task_output_root, directory=True)
             if role != 'shard' or output != owned/'output':
                 raise ValueError('task output owner')
             mounts.append(RoleMount(output, TASK_OUTPUT_MOUNT, False, 'task_output'))
+        if processor:
+            output = _path(processing_root, directory=True)
+            if output != run / "processing" or type(phase1_attempts) is not tuple:
+                raise ValueError("processing output owner")
+            mounts.append(RoleMount(output, output, False, "processing_output"))
+            for source in phase1_attempts:
+                attempt = _phase1_attempt(source, run)
+                mounts.append(RoleMount(attempt, attempt, True, "phase1_attempt"))
         for source in (*approved_inputs, *config_paths):
             source = _path(source)
             # Do not expose the root, another shard, or any Host journal to a role.
             private = False
             if source.is_relative_to(run) and source != run:
                 first = source.relative_to(run).parts[0]
-                private = first in {"host", "services", "ipc", "measurement", "live", ".campaign-layout.json"}
+                private = first in {"host", "services", "ipc", "measurement", "live", "processing", ".campaign-layout.json"}
                 private = private or re.fullmatch(r"wave-[0-9]+", first) is not None
             if (source == run or private or run.is_relative_to(source)
                     or source.is_relative_to("/act/source") or source.is_relative_to("/act/install")):
                 raise ValueError("broad, Host-owned, or source override input")
             mounts.append(RoleMount(source, source, True, "input"))
-        for service_role in (("head", "teacher") if role == "shard" else (role,)):
+        for service_role in (() if processor else ("head", "teacher") if role == "shard" else (role,)):
             source = _path(socket_roots[service_role], directory=True)
             if source != run / "ipc" / service_role:
                 raise ValueError("service socket owner")
             target = CONTAINER_IPC_ROOT / service_role if role == "shard" else CONTAINER_IPC_ROOT
             mounts.append(RoleMount(source, target, role == "shard", "ipc"))
-        if role == "shard":
+        if role in ("shard", "processor"):
             control = _path(socket_roots["control"], directory=True)
             if control != owned / "control":
                 raise ValueError("control socket owner")

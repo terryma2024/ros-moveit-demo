@@ -663,6 +663,37 @@ class UnifiedWorkloadService:
                     raise
                 return context
 
+    def admit_processor_slots(self, context: AdmittedCampaignContext, slots):
+        """Reserve the phase-2 processor slots `(campaign, pNN, generation)` of an admitted container campaign.
+
+        The context must be this owner's durable record. Slots are reserved like shard slots (the same table, the same duplicate
+        and launcher exclusivity rules) before any processor container is launched, and `finish` releases them with the
+        campaign. Native campaigns have no processor slots here."""
+        if not isinstance(context, AdmittedCampaignContext) or context.workload_kind != 'act_collection_start':
+            raise ValueError('CAMPAIGN_CONTEXT_MISMATCH')
+        if (type(slots) is not tuple or not slots
+                or any(type(slot) is not ActWorkerSlot or not slot.is_processor for slot in slots)
+                or any(slot.campaign_id != context.campaign_id or slot.execution_generation != context.execution_generation
+                       for slot in slots)
+                or [slot.worker_id for slot in slots] != [f'p{index:02d}' for index in range(len(slots))]):
+            raise ValueError('PROCESSOR_SLOT_INVALID')
+        with self._start_lock:
+            if not self.owner_identity_valid(self.owner_pid, self.owner_started_ticks):
+                raise ValueError("CAMPAIGN_OWNER_IDENTITY_DRIFT")
+            store = self.arbiter.store
+            row = store._query_one("SELECT context_json FROM act_campaign_contexts WHERE operation_id=?", (context.operation_id,))
+            if row is None or AdmittedCampaignContext.from_dict(json.loads(row[0])) != context:
+                raise ValueError("CAMPAIGN_CONTEXT_MISMATCH")
+            parent = store._query_one("SELECT payload_json FROM parents WHERE operation_id=?", (context.operation_id,))
+            if parent is None or json.loads(parent[0]).get('instance_launcher') != 'container':
+                raise ValueError('PROCESSOR_SLOT_LAUNCHER_UNSUPPORTED')
+            if not any(not slot.is_processor and slot.campaign_id == context.campaign_id
+                       and slot.execution_generation == context.execution_generation for slot in self.slot_registry.slots()):
+                raise ValueError('CAMPAIGN_NOT_ACTIVE')
+            with self.slot_registry.reserve_many(slots):
+                pass
+        return slots
+
     def finish(self, context: AdmittedCampaignContext, *, cleanup_confirmed: bool):
         """Settle only this admitted campaign after its child owner proves cleanup.
 
@@ -689,6 +720,10 @@ class UnifiedWorkloadService:
             launches = tuple(item for item in resources
                              if item.campaign_id == context.campaign_id
                              and item.execution_generation == context.execution_generation)
+            # processor slots (`pNN`) are released with the campaign but are not its workers: the worker count and the frozen
+            # slot map cover the `wNN` slots only
+            processor_slots = tuple(item for item in launches if getattr(item, 'is_processor', False))
+            launches = tuple(item for item in launches if item not in processor_slots)
             if not launches:
                 lease_row = store._query_one(
                     "SELECT * FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
@@ -705,7 +740,7 @@ class UnifiedWorkloadService:
             if len(launches) != context.worker_count or child_map_sha256 != context.domain_session_map_sha256:
                 raise ValueError("CHILD_RELEASE_MISMATCH")
             if container_collection:
-                self._verify_container_cleanup(context, launches)
+                self._verify_container_cleanup(context, launches + processor_slots)
             with store.immediate_transaction():
                 gpu_row = store._query_one(
                     "SELECT * FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
@@ -724,7 +759,7 @@ class UnifiedWorkloadService:
                 outcome = store.settle_locked(context.operation_id, cleanup_confirmed=True)
                 if outcome.code is None:
                     if container_collection:
-                        self.slot_registry.release_many_locked(launches)
+                        self.slot_registry.release_many_locked(launches + processor_slots)
                     store._connection.execute(
                         "DELETE FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
                         (context.stable_host_id, context.physical_gpu_uuid),
@@ -761,6 +796,12 @@ class UnifiedWorkloadService:
                 if item['role'] in ('head','teacher'):
                     if Path(item['owned_root']) != root/'services'/item['role']:
                         raise ValueError('foreign service root')
+                elif item['role'] == 'processor':
+                    slot = by_worker[item['worker_id']]
+                    if (not slot.is_processor
+                            or Path(item['owned_root']) != root/'processing'/slot.worker_id/f"g{item['launch_generation']}"
+                            or item['launch_id'] != f"processing-{slot.worker_id}-g{item['launch_generation']}"):
+                        raise ValueError('foreign processor scope')
                 elif item['role'] == 'shard':
                     slot = by_worker[item['worker_id']]
                     owned = Path(item['owned_root'])

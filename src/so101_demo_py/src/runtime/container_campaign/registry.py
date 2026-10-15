@@ -60,11 +60,17 @@ class ContainerLaunch:
                 if (type(self.image_digest) is not str
                         or re.fullmatch(r'sha256:[0-9a-f]{64}', self.image_digest) is None):
                     raise ValueError('role/image/generation')
-            if (self.role not in ('head', 'teacher', 'shard')
+            if (self.role not in ('head', 'teacher', 'shard', 'processor')
                     or type(self.launch_generation) is not int or self.launch_generation <= 0):
                 raise ValueError('role/image/generation')
             _path(self.owned_root, directory=True)
-            if self.role != 'shard':
+            if self.role == 'processor':
+                # a processor slot `pNN` of the run's phase 2; it has no wave and no simulation session
+                if (type(self.worker_id) is not str or re.fullmatch(r'p[0-9]{2}', self.worker_id) is None
+                        or self.wave_id is not None or self.session_id is not None
+                        or self.launch_id != f'processing-{self.worker_id}-g{self.launch_generation}'):
+                    raise ValueError('processor scope')
+            elif self.role != 'shard':
                 if any(value is not None for value in (self.worker_id, self.wave_id, self.session_id)):
                     raise ValueError('service scope')
             elif (type(self.worker_id) is not str or re.fullmatch(r'w[0-9]{2}', self.worker_id) is None
@@ -142,8 +148,12 @@ class ContainerLaunchRegistry:
                         or launch.container_name is not None and previous['container_name'] == launch.container_name
                         or previous['owned_root'] == launch.owned_root):
                     raise ValueError('LAUNCH_COLLISION')
-                if launch.role != 'shard' and previous['role'] == launch.role:
+                if launch.role not in ('shard', 'processor') and previous['role'] == launch.role:
                     raise ValueError('LAUNCH_COLLISION: services start once per campaign')
+                if launch.role == previous['role'] == 'processor' and previous['worker_id'] == launch.worker_id:
+                    if record['exit_inspect'] is None or previous['launch_generation'] >= launch.launch_generation:
+                        raise ValueError('LAUNCH_COLLISION: slot not retired')
+                    self.prove_terminated(previous['launch_id'], record['exit_inspect'])
                 if launch.role == previous['role'] == 'shard':
                     if previous['session_id'] == launch.session_id:
                         raise ValueError('LAUNCH_COLLISION: session reuse')
@@ -187,7 +197,7 @@ class ContainerLaunchRegistry:
         self._writable()
         with self._lock, self._connection:
             record = self._record(launch_id)
-            if (type(binding) is not ContainerChildBinding or record['launch']['role'] != 'shard'
+            if (type(binding) is not ContainerChildBinding or record['launch']['role'] not in ('shard', 'processor')
                     or record['binding'] is not None or record['owner'] != asdict(binding.container)
                     or binding.control_socket != str(Path(record['launch']['owned_root'])/'control/normal.sock')):
                 raise ValueError('LAUNCH_BINDING_MISMATCH')
@@ -196,7 +206,8 @@ class ContainerLaunchRegistry:
 
     def prove_terminated(self, launch_id, inspect_document):
         """Prove the registered owner is gone from `inspect_document`: the Docker inspection of a container, the native exit
-        observation of a native instance. A shard also needs the instance's own original stop receipt either way."""
+        observation of a native instance. A shard also needs the instance's own original stop receipt either way; a processor
+        needs only its container's exit."""
         with self._lock, self._connection:
             record = self._record(launch_id)
             if record['owner'] is None:
@@ -205,6 +216,8 @@ class ContainerLaunchRegistry:
             owner = (NativeOwnerKey if native else ContainerOwnerKey)(**record['owner'])
             if not owner_exit_proven(owner, inspect_document):
                 raise ValueError('LAUNCH_STOP_UNCONFIRMED')
+            # A processor has no ROS graph, goal or controller, so it has no shard stop receipt: the exit of its exact container
+            # (which ends every process in it) is the whole proof.
             if record['launch']['role'] == 'shard':
                 try:
                     data = record['binding']
