@@ -45,7 +45,7 @@ def test_a_processed_task_reports_no_pending_processing(tmp_path, monkeypatch):
     assert proof['processing'] == 'NOT_PENDING' and proof['receipt_sha256'] is None
 
 
-@pytest.mark.parametrize('edit', ['bag_byte', 'unlisted_file', 'missing_file', 'receipt_removed', 'receipt_edited'])
+@pytest.mark.parametrize('edit', ['bag_byte', 'unlisted_file', 'missing_file', 'receipt_removed', 'receipt_edited', 'orchestration_edited', 'orchestration_removed'])
 def test_a_pending_task_whose_receipt_does_not_match_its_files_is_refused(pending, edit):
     raw = pending.location/'raw'
     if edit == 'bag_byte':
@@ -54,6 +54,10 @@ def test_a_pending_task_whose_receipt_does_not_match_its_files_is_refused(pendin
         (raw/'extra.bin').write_bytes(b'x')
     elif edit == 'missing_file':
         (raw/'record-stats.json').unlink()
+    elif edit == 'orchestration_edited':
+        (pending.location/'recorder-orchestration.json').write_text('{"fault_deferred_to_processing": "bag_drop"}\n')
+    elif edit == 'orchestration_removed':
+        (pending.location/'recorder-orchestration.json').unlink()
     elif edit == 'receipt_removed':
         (raw/'recording-receipt.json').unlink()
     else:

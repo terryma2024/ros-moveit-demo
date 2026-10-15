@@ -80,6 +80,7 @@ def seal_phase1_pending_result(task_dir, lease, scope, inputs, *, teacher_outcom
     identity = {name: getattr(lease, name) for name in LEASE_FIELDS}
     (raw/'lease.json').write_text(json.dumps(identity, sort_keys=True)+'\n')
     claim = sealed_teacher(store, teacher_outcome, data='PENDING_QC')
+    (store.working/'recorder-orchestration.json').write_text('{"fault": "none"}\n')
     write_recording_receipt(store.working, lease_identity=identity,
         identity=dict(session_id='session-1', reset_epoch=2, attempt_id=lease.attempt_id), inputs_manifest=inputs, scope=scope)
     return store.seal(store.episode_root/'seal.json', teacher=claim, recording_receipt_path=raw/'recording-receipt.json')

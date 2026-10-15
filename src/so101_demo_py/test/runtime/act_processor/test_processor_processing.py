@@ -52,8 +52,8 @@ class Fixture:
         self.scope = shared / "scope.json"
         self.inputs.write_text('{"inputs": 1}\n')
         self.scope.write_text('{"scope": 1}\n')
-        if fault is not None:
-            (self.sealed / "recorder-orchestration.json").write_text(json.dumps({"fault_deferred_to_processing": fault}))
+        (self.sealed / "recorder-orchestration.json").write_text(
+            json.dumps({} if fault is None else {"fault_deferred_to_processing": fault}))
         write_recording_receipt(self.sealed, lease_identity=LEASE, identity=IDENTITY, inputs_manifest=self.inputs, scope=self.scope)
         self.result = dict(kind="ACT_COLLECTION_RESULT", schema_version=3, lease_identity=LEASE, status="PASSED",
                            teacher_execution_status="COMPLETED", teacher_task_result="SUCCESS", act_data_status="PENDING_QC",
@@ -176,11 +176,16 @@ def test_phase1_record_binds_result_and_receipt(tmp_path):
 
 
 @pytest.mark.parametrize("tamper", ["raw_file", "unlisted_file", "missing_file", "not_pending", "result_changed", "foreign_scope",
-                                    "unknown_fault"])
+                                    "unknown_fault", "fault_removed", "fault_injected"])
 def test_phase1_record_is_refused_when_anything_disagrees(tmp_path, tamper):
-    fixture = Fixture(tmp_path, fault="no_such_fault" if tamper == "unknown_fault" else None)
+    fixture = Fixture(tmp_path, fault="no_such_fault" if tamper == "unknown_fault"
+                      else "source_gap" if tamper == "fault_removed" else None)
     spec = fixture.task()
-    if tamper == "raw_file":
+    if tamper == "fault_removed":
+        (fixture.sealed / "recorder-orchestration.json").write_text("{}")
+    elif tamper == "fault_injected":
+        (fixture.sealed / "recorder-orchestration.json").write_text('{"fault_deferred_to_processing": "source_gap"}')
+    elif tamper == "raw_file":
         (fixture.sealed / "raw/bag/data.mcap").write_bytes(b"changed")
     elif tamper == "unlisted_file":
         (fixture.sealed / "raw/extra.bin").write_bytes(b"x")

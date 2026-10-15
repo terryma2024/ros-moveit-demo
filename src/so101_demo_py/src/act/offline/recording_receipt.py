@@ -2,7 +2,8 @@
 
 Written under `<attempt>/raw/recording-receipt.json` after the bag is closed. It holds the attempt's lease identity, the sha256 and
 size of every file under `raw/` (the bag, scene reads, record stats, pilot result, ready.json, lease.json) and of the documents the
-offline processor reads: the Teacher manifest, the inputs manifest, the scope and the lease. Hashing reads the bag back through the
+offline processor reads: the Teacher manifest, the recorder orchestration record (which carries any deferred diagnostic fault), the inputs manifest, the scope
+and the lease. Hashing reads the bag back through the
 page cache; nothing here fsyncs the bag. The receipt itself is written atomically (temporary file, rename).
 
 All paths of files inside the attempt are relative to the attempt directory, so they survive the rename of the working directory to
@@ -23,6 +24,7 @@ RECEIPT_SCHEMA_VERSION = 1
 RECEIPT_RELATIVE = Path("raw") / "recording-receipt.json"
 TEACHER_MANIFEST_RELATIVE = Path("dynamic") / "dynamic-execute-manifest.json"
 LEASE_RELATIVE = Path("raw") / "lease.json"
+ORCHESTRATION_RELATIVE = Path("recorder-orchestration.json")
 EXTERNAL_DOCUMENTS = ("inputs_manifest", "scope")
 _CHUNK = 4 * 1024 * 1024
 _LEASE_FIELDS = ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id", "attempt_id", "lease_generation",
@@ -69,7 +71,7 @@ def _raw_files(root: Path) -> list[Path]:
     return sorted(found)
 
 
-def write_recording_receipt(attempt_root, *, lease_identity: dict, identity: dict, inputs_manifest, scope,
+def write_recording_receipt(attempt_root, *, lease_identity: dict, identity: dict, inputs_manifest, scope, orchestration_record=None,
                             teacher_manifest=None) -> dict:
     """Hash everything and write `raw/recording-receipt.json` atomically; returns the facts the caller records
     (`path`, `sha256`, `files`, `bytes`). `lease.json` must already be under `raw/`. `teacher_manifest` defaults to
@@ -83,6 +85,9 @@ def write_recording_receipt(attempt_root, *, lease_identity: dict, identity: dic
         "teacher_manifest": _entry(TEACHER_MANIFEST_RELATIVE.as_posix(),
                                   root / TEACHER_MANIFEST_RELATIVE if teacher_manifest is None else teacher_manifest),
         "lease": dict(by_path[LEASE_RELATIVE.as_posix()]),
+        # carries `fault_deferred_to_processing`, which decides how phase 2 treats the bag: bound like the Teacher manifest
+        "recorder_orchestration": _entry(ORCHESTRATION_RELATIVE.as_posix(),
+                                         root / ORCHESTRATION_RELATIVE if orchestration_record is None else orchestration_record),
     }
     for name, source in (("inputs_manifest", inputs_manifest), ("scope", scope)):
         sha256, size = hash_regular_file(source)
@@ -117,7 +122,8 @@ def verify_recording_receipt(attempt_root, *, lease_identity: dict | None = None
     if (type(receipt) is not dict or set(receipt) != {"kind", "schema_version", "lease_identity", "identity", "raw_files", "documents"}
             or receipt["kind"] != RECEIPT_KIND or receipt["schema_version"] != RECEIPT_SCHEMA_VERSION
             or type(receipt["raw_files"]) is not list or type(receipt["documents"]) is not dict
-            or set(receipt["documents"]) != {"teacher_manifest", "inputs_manifest", "scope", "lease"}):
+            or set(receipt["documents"]) != {"teacher_manifest", "inputs_manifest", "scope", "lease",
+                                                       "recorder_orchestration"}):
         raise ValueError("RECORDING_RECEIPT_SHAPE_INVALID")
     if lease_identity is not None and receipt["lease_identity"] != {name: lease_identity[name] for name in _LEASE_FIELDS}:
         raise ValueError("RECORDING_RECEIPT_LEASE_MISMATCH")
@@ -144,6 +150,9 @@ def verify_recording_receipt(attempt_root, *, lease_identity: dict | None = None
         raise ValueError("RECORDING_RECEIPT_DOCUMENT_MISMATCH")
     _check_entry(root, documents["teacher_manifest"])
     if documents["teacher_manifest"]["path"] != TEACHER_MANIFEST_RELATIVE.as_posix():
+        raise ValueError("RECORDING_RECEIPT_DOCUMENT_MISMATCH")
+    _check_entry(root, documents["recorder_orchestration"])
+    if documents["recorder_orchestration"]["path"] != ORCHESTRATION_RELATIVE.as_posix():
         raise ValueError("RECORDING_RECEIPT_DOCUMENT_MISMATCH")
     for name in EXTERNAL_DOCUMENTS:
         item = documents[name]

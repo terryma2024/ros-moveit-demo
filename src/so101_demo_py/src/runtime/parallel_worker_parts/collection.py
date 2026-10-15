@@ -89,15 +89,10 @@ class CollectionRecorder:
 
     @staticmethod
     def _write_collection_record(point_root: Path, facts: dict, reason) -> None:
-        try:
-            payload = json.dumps({"schema": "SO101_RECORDER_ORCHESTRATION", "schema_version": 1, "reason": reason, **facts},
-                                 sort_keys=True, default=str, allow_nan=False).encode() + b"\n"
-            with open(Path(point_root) / "recorder-orchestration.json", "xb") as stream:
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-        except (OSError, ValueError, TypeError):
-            pass
+        from so101_demo.act.offline.orchestration import write_orchestration_record
+
+        # A PENDING_QC attempt's record was written before its receipt (which hashes it); it is never rewritten.
+        write_orchestration_record(point_root, facts, reason)
 
     @staticmethod
     def _reset_epoch_integer(value):

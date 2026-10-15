@@ -56,7 +56,9 @@ def test_the_phase_one_finish_seals_pending_qc_without_starting_a_processor(tmp_
     for relative, item in listed.items():
         assert item["sha256"] == _sha(point / relative) and item["size"] == (point / relative).stat().st_size
     documents = receipt["documents"]
-    assert set(documents) == {"teacher_manifest", "inputs_manifest", "scope", "lease"}
+    assert set(documents) == {"teacher_manifest", "inputs_manifest", "scope", "lease", "recorder_orchestration"}
+    assert documents["recorder_orchestration"]["path"] == "recorder-orchestration.json"
+    assert documents["recorder_orchestration"]["sha256"] == _sha(point / "recorder-orchestration.json")
     assert documents["teacher_manifest"]["path"] == "dynamic/dynamic-execute-manifest.json"
     assert documents["teacher_manifest"]["sha256"] == _sha(point / "dynamic" / "dynamic-execute-manifest.json")
     assert documents["inputs_manifest"]["sha256"] == _sha(tmp_path / "inputs" / "inputs-manifest.json")
@@ -157,5 +159,25 @@ def test_the_runtime_finish_ends_in_pending_qc_with_the_teachers_fields_untouche
         baseline.status, baseline.reason, baseline.teacher_execution_status, baseline.teacher_task_result)
     assert not any(spec.role == "act-offline-processor" for spec in group.specs)
     record = json.loads((point / "recorder-orchestration.json").read_text())
-    assert record["act_data_status"] == "PENDING_QC" and record["recording_receipt"]["files"] >= 4
+    assert record["act_data_status"] == "PENDING_QC" and record["fault"] == "none"
+    # the receipt hashes this very record, so the record cannot also name the receipt
+    assert "recording_receipt" not in record
+    receipt = json.loads((point / "raw" / "recording-receipt.json").read_text())
+    assert receipt["documents"]["recorder_orchestration"]["sha256"] == _sha(point / "recorder-orchestration.json")
     assert (point / "raw" / "recording-receipt.json").is_file()
+
+
+def test_the_receipt_binds_the_orchestration_record_that_carries_the_deferred_fault(tmp_path):
+    from so101_demo.act.offline.recording_receipt import verify_recording_receipt
+    collection, point, _ = collection_for(tmp_path)
+    collection.start_before_teacher()
+    _phase1_files(tmp_path, point)
+    collection.finish(lease=LEASE)
+    record = point / "recorder-orchestration.json"
+    verify_recording_receipt(point)
+    record.write_text(record.read_text().replace('"fault": "none"', '"fault": "none", "fault_deferred_to_processing": "x"'))
+    with pytest.raises(ValueError, match="RECORDING_RECEIPT_FILE_CHANGED"):
+        verify_recording_receipt(point)
+    record.unlink()
+    with pytest.raises(ValueError, match="RECORDING_RECEIPT_FILE_MISSING"):
+        verify_recording_receipt(point)

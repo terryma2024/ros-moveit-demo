@@ -106,6 +106,21 @@ def read_processor_result(path, identity: dict):
     return document
 
 
+def write_orchestration_record(point_root, facts: dict, reason) -> bool:
+    """Write `<point_root>/recorder-orchestration.json` once (exclusive create, fsync). False when it cannot be written or already
+    exists; the data side never decides control's result."""
+    try:
+        payload = json.dumps({"schema": "SO101_RECORDER_ORCHESTRATION", "schema_version": 1, "reason": reason, **facts},
+                             sort_keys=True, default=str, allow_nan=False).encode() + b"\n"
+        with open(Path(point_root) / "recorder-orchestration.json", "xb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 class OfflineCollection:
     """One attempt's data lifecycle: record, then (after the Teacher) process. `processes` is the Worker's owned process tree or a
     fake with its surface: `start(spec, environment=)`, `exit_code`, `wait_exit(identity, timeout_s)`, `terminate(identity, grace_s)`,
@@ -330,9 +345,13 @@ class OfflineCollection:
         (self.raw_root / "lease.json").write_text(json.dumps(lease, sort_keys=True) + "\n")
         if self._fault != "none":
             facts["fault_deferred_to_processing"] = self._fault   # a diagnostic bag/output fault is applied by the phase-2 processor
+        # The orchestration record carries the deferred fault, so the receipt must hash it: it is written first and, because the
+        # receipt's own facts cannot be inside a file the receipt hashes, without them.
+        record = self._point_root / "recorder-orchestration.json"
+        write_orchestration_record(self._point_root, dict(facts, act_data_status="PENDING_QC"), None)
         facts["recording_receipt"] = write_recording_receipt(
             self._base, lease_identity=lease, identity=self._identity, inputs_manifest=self._inputs_manifest, scope=self._scope,
-            teacher_manifest=self._point_root / "dynamic" / "dynamic-execute-manifest.json")
+            teacher_manifest=self._point_root / "dynamic" / "dynamic-execute-manifest.json", orchestration_record=record)
         return RecorderOutcome("PENDING_QC", None, facts)
 
     # ---- the offline processor ----------------------------------------------------------------------------------
