@@ -51,6 +51,8 @@ LATE_START_DELAY_S = 5.0
 FAULT_DROP_COUNT = {"queue_overflow": 40, "source_gap": 60}
 FAULT_TOPIC = {"queue_overflow": "/so101/simulation/physics_step_chunks", "source_gap": "/arm_controller/controller_state"}
 BAG_FAULTS = tuple(FAULT_TOPIC)
+#: faults the phase-2 processor applies (to a copy under its own output directory); phase 1 records them like a fault-free attempt
+DEFERRED_FAULTS = BAG_FAULTS + ("output_write_failure",)
 _REASON_CHARS = 300
 LEASE_FIELDS = ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id", "attempt_id", "lease_generation",
                 "lease_issued_monotonic_s", "lease_deadline_monotonic_s")
@@ -130,14 +132,17 @@ class OfflineCollection:
                  scope, identity: dict, policy: dict, clock=time.monotonic, sleep=time.sleep,
                  python: str | None = None, pilot_factory=None, bag_fault=None,
                  processing_timeout_s: float = PROCESSING_TIMEOUT_S, late_delay_s: float = LATE_START_DELAY_S,
-                 memo_check=None, on_recorder_stopped=None) -> None:
+                 memo_check=None, on_recorder_stopped=None, defer_faults: bool = False) -> None:
         self._processes = processes
         self._on_recorder_stopped = on_recorder_stopped
         self._point_root = Path(point_root)
         self._fault = fault
         self._sandbox_root = None if sandbox_root is None else Path(sandbox_root)
+        #: `defer_faults` (the two-phase worker): a bag or output fault is applied by the phase-2 processor, so phase 1 records it in
+        #: the point root like any attempt; only the recorder faults (and the retired inline path) use the fault sandbox
+        self._in_point_root = fault == "none" or (defer_faults and fault in DEFERRED_FAULTS)
         #: where this attempt's data side writes: the point root itself, or a directory inside the fault sandbox
-        self._base = self._point_root if fault == "none" else self._sandbox_root / str(identity["attempt_id"])
+        self._base = self._point_root if self._in_point_root else self._sandbox_root / str(identity["attempt_id"])
         self._environment = dict(environment)
         self._spec_factory = spec_factory
         self._inputs_manifest = Path(inputs_manifest)
@@ -164,7 +169,11 @@ class OfflineCollection:
         self.events: list[str] = []
         self.identity_of_pilot = None
         if fault != "none":
-            require_under_sandbox(self._sandbox_root, self._base, self._base / "raw", self._base / "out")
+            # a requested fault always needs its sandbox, even when this attempt records into the point root
+            if self._in_point_root:
+                require_under_sandbox(self._sandbox_root)
+            else:
+                require_under_sandbox(self._sandbox_root, self._base, self._base / "raw", self._base / "out")
 
     # ---- before the Teacher -------------------------------------------------------------------------------------
 

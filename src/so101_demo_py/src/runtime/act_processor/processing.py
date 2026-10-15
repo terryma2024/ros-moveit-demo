@@ -30,7 +30,7 @@ import threading
 import time
 
 from so101_demo.act.offline.orchestration import (
-    BAG_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, drop_bag_messages, read_processor_result, _memo_covers, _read_report)
+    BAG_FAULTS, DEFERRED_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, drop_bag_messages, read_processor_result, _memo_covers, _read_report)
 from so101_demo.act.offline.recording_receipt import RECEIPT_RELATIVE, verify_recording_receipt
 from so101_demo.act.parallel_collection_contracts import read_document
 from so101_demo.act.processed_result import PROCESSED_KIND, PROCESSED_NAME  # noqa: F401 - the Host reads the same document
@@ -40,7 +40,6 @@ from so101_demo.runtime.inference.config import validate_file_ref
 TASK_KIND = "ACT_PROCESSING_TASK"
 TASK_RESULT_KIND = "ACT_PROCESSING_TASK_RESULT"
 PHASE1_ATTEMPT = re.compile(r"/attempts/(?P<scene>[a-zA-Z0-9][a-zA-Z0-9_-]*)/(?P<attempt>[a-zA-Z0-9][a-zA-Z0-9_-]*)/sealed")
-DEFERRED_FAULTS = BAG_FAULTS + ("output_write_failure",)
 #: the processor is told to stop this long before the task deadline so the task result is still written
 DEADLINE_MARGIN_S = 5.0
 TERM_GRACE_S = 10.0

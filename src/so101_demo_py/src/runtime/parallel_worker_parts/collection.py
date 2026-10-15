@@ -41,7 +41,7 @@ class CollectionRecorder:
             spec_factory=lambda role, argv: StackProcessSpec(role, tuple(argv)),
             inputs_manifest=self.episode_inputs_manifest, scope=self.episode_scope_path, identity=identity,
             policy=self._recorder_policy, clock=self._recorder_clock, sleep=self._recorder_sleep,
-            on_recorder_stopped=self._recorder_stopped_callback)
+            on_recorder_stopped=self._recorder_stopped_callback, defer_faults=True)
         self._recorders[key] = collection
         collection.start_before_teacher()
 
