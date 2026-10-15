@@ -200,6 +200,13 @@ class RosDynamicMujocoExecution(ExecutionEvidence, TeacherRun, JointStateIntake,
         self._apply_scene = node.create_client(ApplyPlanningScene, "/apply_planning_scene")
         self._get_scene = node.create_client(GetPlanningScene, "/get_planning_scene")
         self._scene_service_calls: list[dict] = []
+        self._clock_probe = None   # diagnostics only (TEACHER_SOURCE_TRACE): newest /clock receipt
+        try:
+            from so101_demo.ros.teacher_source_trace import ClockReceiptProbe
+
+            self._clock_probe = ClockReceiptProbe(node)
+        except Exception:
+            pass
         self._load_teacher_policies(urdf_path)
         self._document: dict[str, object] = {
             "schema": SCHEMA_GENERAL,

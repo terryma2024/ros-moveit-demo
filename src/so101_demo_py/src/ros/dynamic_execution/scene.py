@@ -18,6 +18,8 @@ class SceneOperations:
             raise RuntimeError(f"{code}_UNAVAILABLE")
 
         def invoke():
+            if client is self._apply_scene:
+                self._trace_apply_request(code)
             if before_dispatch is not None:
                 before_dispatch()
             future = client.call_async(request)
@@ -39,6 +41,17 @@ class SceneOperations:
             ros_clock=(self._node.get_clock() if hasattr(self._node, "get_clock") else None),
             clock_refresh=self._refresh_node_clock, clock_floor=self._world_sim_floor_ns,
             on_record=self._scene_operation_hook())
+
+    def _trace_apply_request(self, code: str) -> None:
+        """Diagnostics only: one TEACHER_SOURCE_TRACE line per apply request. Never raises, changes nothing."""
+        try:
+            from so101_demo.ros.teacher_source_trace import emit_source_trace
+
+            emit_source_trace(self._node, getattr(self, "_clock_probe", None), phase=code,
+                              state=getattr(self, "_scene_state_value", None),
+                              source=getattr(self, "_scene_op_source", None) or getattr(self, "_diag_source", None))
+        except Exception:
+            pass
 
     def _refresh_node_clock(self) -> None:
         """Drain the node's queued callbacks so its simulation clock is current (stamps only; never raises)."""
@@ -127,8 +140,15 @@ class SceneOperations:
         # One request form: the plain attach. The independent Recorder derives its scene association from the
         # `scene_operation` events of this apply and read-back; nothing here depends on it.
         before = self._snapshot()
-        response = self._call(self._apply_scene, ApplyPlanningScene.Request(scene=make_plain_attach_scene()),
-                              5.0, "DYNAMIC_ATTACH")
+        # diagnostics only: the sample the attach followed, named on its TEACHER_SOURCE_TRACE line
+        self._diag_source = {"simulation_step": getattr(before, "simulation_step", None),
+                             "publisher_sequence": getattr(before, "publisher_sequence", None),
+                             "simulation_time_s": getattr(before, "simulation_time_s", None)}
+        try:
+            response = self._call(self._apply_scene, ApplyPlanningScene.Request(scene=make_plain_attach_scene()),
+                                  5.0, "DYNAMIC_ATTACH")
+        finally:
+            self._diag_source = None
         if not response.success:
             raise RuntimeError("DYNAMIC_ATTACH_FAILED")
         attached_ids, world = self._scene_membership()

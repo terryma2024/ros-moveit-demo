@@ -29,6 +29,7 @@ from pathlib import Path
 from so101_demo.runtime.act_instance.identity import instance_output, instance_root
 from .bag_root import bag_root_decision
 from .delivery_diag import DeliveryGapMonitor
+from .probe_trace import ProbeTrace
 from .scene_read_writer import CLOSE_TIMEOUT_S, SceneReadWriter, SceneReadWriterError
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
@@ -282,6 +283,7 @@ class RawRecorder:
         self._recording_ready = False
         self._matched_counts = {}
         self._gap_monitor = DeliveryGapMonitor()   # diagnostics only: probe receipt gaps (RECORDER_DELIVERY_SLOW)
+        self._trace = None   # diagnostics only: per-message receipt trace beside the bag (<bag>-probe-trace.jsonl)
         self.bag_root=None   # instance mode: where the bag may live and the directory identities that decided it
 
     def start(self) -> None:
@@ -300,6 +302,7 @@ class RawRecorder:
             if self.bag_root['code'] is not None:raise ValueError(self.bag_root['code'])
         if not rclpy.ok():
             rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO)
+        self._trace = ProbeTrace(self.bag_dir.parent / (self.bag_dir.name + "-probe-trace.jsonl"))
         self._probe = rclpy.create_node(self.node_name + "_probe",
                                         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)])
         self._executor = SingleThreadedExecutor()
@@ -336,6 +339,8 @@ class RawRecorder:
                 def received(_message, name=topic):
                     self._received[name] = self._received.get(name, 0) + 1
                     self._gap_monitor.on_message(name)
+                    if self._trace is not None:
+                        self._trace.on_message(name, _message)
 
                 self._subscriptions[topic] = self._probe.create_subscription(get_message(infos[0].topic_type), topic,
                                                                             received, profile, raw=True)
@@ -454,6 +459,10 @@ class RawRecorder:
                 self._spin_thread.join(3.0)
             if self._probe is not None:
                 self._probe.destroy_node()
+            if self._trace is not None:
+                self._trace.close()   # after the last receipt; diagnostics only
+                stats["probe_trace"] = {"count": self._trace.count, "dropped": self._trace.dropped,
+                                         "failure": self._trace.failure}
         except BaseException as error:   # noqa: BLE001
             stats["stop_error"] = repr(error)
         stats.update(self.verify_closed())
