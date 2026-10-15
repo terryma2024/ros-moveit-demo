@@ -356,15 +356,6 @@ class CollectionTaskExecution:
         self._deadline_hit=False
         self._shutdown_lock=threading.Lock()
         self._shutdown_result=None
-        self._recorder_finished=threading.Event()
-        bind=getattr(runtime,'bind_recorder_stopped',None)
-        if callable(bind):
-            bind(self._recorder_finished.set)
-
-    def recording_phase(self):
-        """RECORDING until the bag recorder has stopped (or the run is over), then POST_RECORDING; the instance reports it in status."""
-        return 'POST_RECORDING' if self._recorder_finished.is_set() or self._run_done.is_set() else 'RECORDING'
-
     # ---- causes, guards and boundaries -------------------------------------------------------------------------------------
 
     def _note(self,code):
@@ -579,8 +570,6 @@ class CollectionTaskExecution:
         except Exception as error:
             raise self._fault(('RESULT_READBACK_FAILED: '+(str(error) or type(error).__name__))[:300],
                               sealed_location=location) from error
-        if sealed_decision.act_data_status=='VALID' and (summary['act_data_status'],summary['act_data_qc'])!=('VALID','PASS'):
-            raise self._fault('RESULT_DATA_REGRADED_AT_SEAL',sealed_location=location)
         return summary
 
     # ---- stop and cleanup ----------------------------------------------------------------------------------------------------
@@ -633,25 +622,6 @@ class CollectionTaskExecution:
         return bool(self.retire_proofs) and all(value is True for value in self.retire_proofs.values())
 
 
-def _data_verdict(facts,reason):
-    """True only when the offline processor itself judged the data invalid: a rule or the engine said so, nothing crashed."""
-    try:
-        processor=facts[0]['processor']
-        if facts[1]!=reason or type(processor['returncode']) is not int or processor['returncode']!=3:
-            return False
-        if processor['report']['verdict']!='INVALID':
-            return False
-        qc=processor['qc']
-        if qc['status']=='NOT_RUN':
-            return True
-        if qc['status']=='FAIL':
-            return type(qc.get('rc')) is int and qc['rc']==1
-        return (qc['status']=='ERROR' and type(qc.get('rc')) is int and qc['rc']==2
-                and type(qc.get('reason')) is str and qc['reason'].startswith('ValueError: '))
-    except (KeyError,TypeError,IndexError):
-        return False
-
-
 def _receipt_written(facts):
     try:
         receipt=facts[0]['recording_receipt']
@@ -664,10 +634,10 @@ def _receipt_written(facts):
 def classify_task_fault(decision,facts):
     """None for a business result (the task succeeded, even if the cup was dropped or the data is invalid), else the fault code.
 
-    `facts` is the runtime's `collection_facts` pair. Only a valid datum, or an invalid one the processor itself
-    judged (an engine verdict, a QC failure or a QC rule that raised), is business. Every other path -- a crashed or
-    timed-out processor or QC process, a recorder that did not start or close, an unverifiable Teacher receipt -- is a
-    fault; so is any perception terminal except the model's own no-pose result (`perception_business_decision`)."""
+    `facts` is the runtime's `collection_facts` pair. Phase 1 ends PENDING_QC with a written recording receipt, or with the
+    Teacher's own pre-motion failure; those are business. Every other path -- a recorder that did not start or close, an
+    unverifiable Teacher receipt -- is a fault; so is any perception terminal except the model's own no-pose result
+    (`perception_business_decision`)."""
     if isinstance(decision,ActPerceptionDecision):
         return None if perception_business_decision(decision) is not None else 'ACT_PERCEPTION_TERMINAL_UNSEALABLE'
     if (not isinstance(decision,RuntimeDecision) or decision.teacher_execution_status is None
@@ -686,8 +656,6 @@ def classify_task_fault(decision,facts):
             and decision.teacher_execution_status=='FAILED' and decision.teacher_task_result=='UNCONFIRMED'
             and decision.physical_action_proven_absent is True):
         # The Teacher's own pre-motion decision, verified from its manifest: a sealed Teacher failure with nothing recorded.
-        return None
-    if decision.act_data_status=='INVALID' and reason.startswith('OFFLINE_PROCESSOR_INVALID: rc=3') and _data_verdict(facts,reason):
         return None
     return ('DATA_PIPELINE_FAULT: '+decision.act_data_status+' '+reason)[:200]
 

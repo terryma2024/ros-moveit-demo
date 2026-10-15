@@ -41,7 +41,7 @@ def test_the_phase_one_finish_seals_pending_qc_without_starting_a_processor(tmp_
     collection.start_before_teacher()
     _phase1_files(tmp_path, point)
     collection.teacher_started_now()
-    outcome = collection.finish(lease=LEASE, deadline_s=clock() + 1000.0)
+    outcome = collection.finish(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("PENDING_QC", None)
     assert processes.specs == [] and processes.events == [], "phase 1 starts no processor and waits for none"
     assert "processor" not in outcome.facts and "seal" not in outcome.facts and "qc_report_path" not in outcome.facts

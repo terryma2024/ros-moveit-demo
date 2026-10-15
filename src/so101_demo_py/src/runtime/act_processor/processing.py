@@ -1,9 +1,8 @@
 """One processing task: verify the phase-1 record, run `act_offline_episode`, grade the data, write `processed-result.json`.
 
 Phase 1 left a sealed attempt whose `result.json` says `PENDING_QC` and whose `raw/recording-receipt.json` binds every raw file.
-This module trusts neither until it has re-read them. It then runs the offline processor with exactly the arguments the retired
-inline path used (`OfflineCollection._process`), maps the processor's exit code, and grades the episode the way the result store
-graded an inline episode, so `processed-result.json` carries the data verdict fields `result.json` carried inline.
+This module trusts neither until it has re-read them. It then runs the offline processor and maps the processor's exit code. It
+grades the episode the way the result store grades data, so `processed-result.json` carries the data verdict fields.
 
 Exit code mapping (the retry itself is the Host's scheduler, not here):
 
@@ -12,8 +11,8 @@ Exit code mapping (the retry itself is the Host's scheduler, not here):
     rc 2, or a refused input   REFUSED (a fault)          not retried
     rc 4, crash, timeout, stop, output write error        INFRASTRUCTURE_FAILURE: retryable in a new `-proc-<n+1>` directory
 
-A diagnostic fault the Teacher attempt deferred (`fault_deferred_to_processing`) is applied the way `finish_inline` applied it,
-and then any non-zero processor exit is the fault's expected INVALID data, not an infrastructure failure.
+A diagnostic fault the Teacher attempt deferred (`fault_deferred_to_processing`) is applied here (a bag or output fault), and
+then any non-zero processor exit is the fault's expected INVALID data, not an infrastructure failure.
 
 The phase-1 `sealed/` directory is only read. Everything is written under `output_dir`.
 """
@@ -29,8 +28,8 @@ import subprocess
 import threading
 import time
 
-from so101_demo.act.offline.orchestration import (
-    BAG_FAULTS, DEFERRED_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, drop_bag_messages, read_processor_result, _memo_covers, _read_report)
+from so101_demo.act.offline.engine import RESULT_SCHEMA
+from so101_demo.act.offline.orchestration import BAG_FAULTS, DEFERRED_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, drop_bag_messages
 from so101_demo.act.offline.recording_receipt import RECEIPT_RELATIVE, verify_recording_receipt
 from so101_demo.act.parallel_collection_contracts import read_document
 from so101_demo.act.processed_result import PROCESSED_KIND, PROCESSED_NAME  # noqa: F401 - the Host reads the same document
@@ -273,10 +272,51 @@ def write_processed_result(output_dir, document):
     return dict(path=PROCESSED_NAME, sha256=hashlib.sha256(payload).hexdigest())
 
 
+def read_processor_result_document(path, identity: dict):
+    """The processor's `recorder-result.json` as a validated document, or the reason string it could not be trusted."""
+    try:
+        document = json.loads(Path(path).read_bytes())
+    except FileNotFoundError:
+        return "OFFLINE_RESULT_MISSING"
+    except (OSError, ValueError):
+        return "OFFLINE_RESULT_UNREADABLE"
+    if type(document) is not dict or document.get("schema") != RESULT_SCHEMA:
+        return "OFFLINE_RESULT_SCHEMA_INVALID"
+    observed = document.get("identity")
+    if type(observed) is not dict or any(observed.get(key) != value for key, value in identity.items()):
+        return "OFFLINE_RESULT_IDENTITY_MISMATCH"
+    if document.get("status") not in ("VALID", "INVALID"):
+        return "OFFLINE_RESULT_STATUS_INVALID"
+    if document["status"] == "VALID" and type(document.get("seal")) is not dict:
+        return "OFFLINE_RESULT_VALID_WITHOUT_SEAL"
+    return document
+
+
+def qc_memo_matches(*, qc_output, episode_root, scope, inputs_manifest, teacher_manifest=None) -> bool:
+    """True if a memo beside the QC report covers this report, the QC code and the files on disk now."""
+    from so101_demo.act import qc_memo
+    from so101_demo.act.episode_qc import read_qc_report
+
+    try:
+        report = read_qc_report(qc_output)
+        return qc_memo.memo_matches(qc_output, report, episode_root=episode_root, scope=scope, inputs_manifest=inputs_manifest,
+                                    teacher_manifest=teacher_manifest)
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+
+
+def _read_report(path):
+    try:
+        document = json.loads(Path(path).read_bytes())
+    except (OSError, ValueError):
+        return None
+    return document if isinstance(document, dict) else None
+
+
 class ProcessingExecution:
     """One processing task over injected parts. `run` is called on one thread, `request_stop` and `shutdown_owned` from others."""
 
-    def __init__(self, *, task, python, runner=None, environment=None, grader=grade_episode, memo_check=_memo_covers,
+    def __init__(self, *, task, python, runner=None, environment=None, grader=grade_episode, memo_check=qc_memo_matches,
                  clock=time.monotonic):
         self.task, self.python = task, str(python)
         self.runner = SubprocessRunner() if runner is None else runner
@@ -386,7 +426,7 @@ class ProcessingExecution:
             error = InfrastructureFailure(f"OFFLINE_PROCESSOR_FAILED: rc={rc}")
             error.rc = rc
             raise error
-        result = read_processor_result(out / "recorder-result.json", phase1["identity"])
+        result = read_processor_result_document(out / "recorder-result.json", phase1["identity"])
         if isinstance(result, str):
             if result in ("OFFLINE_RESULT_MISSING", "OFFLINE_RESULT_UNREADABLE"):
                 raise InfrastructureFailure(result)

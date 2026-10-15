@@ -1,6 +1,5 @@
-"""The Teacher's window closes when the Teacher exits, and the processor's wait is capped by the time left on the lease."""
+"""The Teacher's window closes when the Teacher exits."""
 
-import json
 import os
 import threading
 import time
@@ -9,11 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.act.offline import orchestration
-from so101_demo.act.offline.orchestration import MIN_PROCESSING_S, SEAL_MARGIN_S, OfflineCollection
 from so101_demo.parallel_batch.contracts.common import RunMode
 
-from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision,
-                                    collection_for, pilot_factory, worker_runtime)
+from test_offline_recording_switch import (FakePilot, FakeProcesses, ScriptedGroup, _decision, pilot_factory,
+                                           worker_runtime)
 
 
 @pytest.fixture(autouse=True)
@@ -95,66 +93,6 @@ def test_the_worker_runtime_tells_the_worker_the_teacher_exited_before_it_finish
     runtime.execute_expert(lease, admitted)
     assert order == ["teacher_receipt", "teacher_exit_callback", "collection"]
 
-
-# ---- the processor's wait is capped by the time left on the lease ------------------------------------------------------------
-
-def _collection_with_deadline(tmp_path, *, left_s, processes=None, **kwargs):
-    processes = processes or FakeProcesses()
-    collection, point, clock = collection_for(tmp_path, processes=processes, **kwargs)
-    collection.start_before_teacher()
-    deadline = clock() + left_s
-    return collection, processes, deadline, clock
-
-
-def test_the_processor_wait_is_the_time_left_on_the_lease_minus_the_seal_margin_when_that_is_shorter_than_the_cap(tmp_path):
-    processes = FakeProcesses(exits=False, outputs=None)
-    collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=500.0, processes=processes)
-    outcome = collection.finish_inline(lease=LEASE, deadline_s=deadline)
-    assert ("wait_exit", 500.0 - SEAL_MARGIN_S) in processes.events
-    assert (outcome.data_status, outcome.reason) == ("INVALID", f"OFFLINE_PROCESSOR_TIMEOUT: {500.0 - SEAL_MARGIN_S:.0f}s")
-    assert ("terminate", orchestration.PROCESSOR_TERM_GRACE_S) in processes.events
-    assert outcome.facts["processing_budget"]["budget_s"] == 440.0 and outcome.facts["processing_budget"]["seal_margin_s"] == SEAL_MARGIN_S
-
-
-def test_with_plenty_of_time_left_the_cap_is_the_fixed_bound(tmp_path):
-    collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=100_000.0)
-    outcome = collection.finish_inline(lease=LEASE, deadline_s=deadline)
-    assert outcome.data_status == "VALID" and ("wait_exit", orchestration.PROCESSING_TIMEOUT_S) in processes.events
-
-
-@pytest.mark.parametrize("left_s", [SEAL_MARGIN_S + MIN_PROCESSING_S - 0.5, SEAL_MARGIN_S, 10.0, -5.0])
-def test_without_enough_time_left_the_processor_is_not_started_and_the_data_is_invalid(tmp_path, left_s):
-    collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=left_s)
-    outcome = collection.finish_inline(lease=LEASE, deadline_s=deadline)
-    assert outcome.data_status == "INVALID" and outcome.reason.startswith("OFFLINE_PROCESSOR_NO_TIME_LEFT")
-    assert processes.specs == [] and FakePilot.instances[0].finished, "the bag was still closed"
-
-
-def test_just_enough_time_starts_the_processor(tmp_path):
-    collection, processes, deadline, _clock = _collection_with_deadline(tmp_path, left_s=SEAL_MARGIN_S + MIN_PROCESSING_S + 1.0)
-    assert collection.finish_inline(lease=LEASE, deadline_s=deadline).data_status == "VALID"
-    assert ("wait_exit", MIN_PROCESSING_S + 1.0) in processes.events
-
-
-
-
-def test_the_runtime_passes_the_lease_deadline_to_the_collection(tmp_path, monkeypatch):
-    from parallel_worker_runtime_support import _lease
-
-    from so101_demo.act.collection_orchestration import CollectionOptions
-
-    monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
-    seen = {}
-    real = OfflineCollection.finish
-    monkeypatch.setattr(OfflineCollection, "finish", lambda self, **kwargs: seen.update(kwargs) or real(self, **kwargs))
-    events = []
-    runtime, group, events, clock = worker_runtime(tmp_path, CollectionOptions("on"), events=events,
-                                                   group=ScriptedGroup(events, FakeProcesses(returncode=3, outputs="invalid")))
-    runtime.start_physical_runtime()
-    lease = _lease()
-    runtime.reset_and_validate_point(lease)
-    runtime._finish_collection(lease, _decision())
-    assert seen["deadline_s"] == lease.lease_deadline_monotonic_s == 310.0
 
 # ---- the Teacher has exited only when the child really exited -----------------------------------------------------
 

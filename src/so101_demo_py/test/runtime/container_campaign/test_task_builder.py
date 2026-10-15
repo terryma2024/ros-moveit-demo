@@ -560,14 +560,14 @@ def test_resources_socket_is_a_neutral_never_created_name_under_the_control_dire
 
 # ---- the business-vs-fault split (design section 6) ---------------------------------------------------------------------------
 
-def offline_facts(tmp_path,*,processes=None,pilot=None,deadline_s=None,skip=None,**extra):
-    """Facts and reason from the real `OfflineCollection.finish()` over its documented fakes (fake bag recorder, scripted
-    processor process); shaped as the runtime stores them."""
+def offline_facts(tmp_path,*,processes=None,pilot=None,skip=None,**extra):
+    """Facts and reason from the real `OfflineCollection.finish()` over its documented fakes (fake bag recorder); shaped as the
+    runtime stores them."""
     from test_offline_recording_switch import LEASE,collection_for,pilot_factory
     tmp_path.mkdir(parents=True,exist_ok=True)
     collection,point,_clock=collection_for(tmp_path,processes=processes,pilot=pilot or pilot_factory(),**extra)
     collection.start_before_teacher()
-    outcome=collection.finish_inline(lease=LEASE,skip_processing=skip,deadline_s=deadline_s)
+    outcome=collection.finish(lease=LEASE,skip_processing=skip)
     facts=dict(outcome.facts,act_data_status=outcome.data_status)
     return outcome,(facts,outcome.reason)
 
@@ -579,22 +579,6 @@ def teacher_decision(outcome,*,status='PASSED',execution='COMPLETED',result='PAS
         teacher_execution_status=execution,teacher_task_result=result,act_data_status=outcome.data_status,
         act_data_reason=outcome.reason)
     return RuntimeDecision(**(values|changes))
-
-
-def qc_report(status,**fields):
-    return {'verdict':'INVALID','rc':3,'reasons':['OFFLINE_QC_'+status+': x'],'qc':{'status':status,**fields},
-            'timing':{'wall_s':1.}}
-
-
-def test_valid_data_is_a_business_result_whatever_the_teacher_said(tmp_path):
-    from test_offline_recording_switch import FakeProcesses
-    outcome,facts=offline_facts(tmp_path,processes=FakeProcesses())
-    assert outcome.data_status=='VALID'
-    for status,execution,result in (('PASSED','COMPLETED','PASS'),('FAILED','COMPLETED','FAIL'),
-                                    ('FAILED','DEADLINE','UNCONFIRMED'),('FAILED','STOPPED_SAFETY','UNCONFIRMED'),
-                                    ('INDETERMINATE','COMPLETED','UNCONFIRMED')):
-        decision=teacher_decision(outcome,status=status,execution=execution,result=result)
-        assert builder().classify_task_fault(decision,facts) is None,(execution,result)
 
 
 def unreachable_decision(**changes):
@@ -617,58 +601,6 @@ def test_only_the_proven_pre_motion_unreachable_form_is_a_business_result(change
     assert type(builder().classify_task_fault(unreachable_decision(**changes),None)) is str
 
 
-def test_qc_invalid_is_business_result(tmp_path):
-    from test_offline_recording_switch import FakeProcesses
-    cases={'engine_invalid':FakeProcesses(returncode=3,outputs='invalid'),
-           'qc_fail':FakeProcesses(returncode=3,outputs='invalid',report=qc_report('FAIL',rc=1,reason='geometry')),
-           'qc_rule_raised':FakeProcesses(returncode=3,outputs='invalid',
-                                          report=qc_report('ERROR',rc=2,reason='ValueError: rule violated'))}
-    for name,processes in cases.items():
-        outcome,facts=offline_facts(tmp_path/name,processes=processes)
-        assert outcome.reason.startswith('OFFLINE_PROCESSOR_INVALID: rc=3'),name
-        assert builder().classify_task_fault(teacher_decision(outcome),facts) is None,name
-        assert builder().classify_task_fault(teacher_decision(outcome,status='FAILED',result='FAIL'),facts) is None,name
-
-
-def test_qc_rule_raise_is_business_invalid(tmp_path):
-    from test_offline_recording_switch import FakeProcesses
-    outcome,facts=offline_facts(tmp_path,processes=FakeProcesses(returncode=3,outputs='invalid',
-        report=qc_report('ERROR',rc=2,reason='ValueError: scene colours differ')))
-    assert facts[0]['processor']['qc']=={'status':'ERROR','rc':2,'reason':'ValueError: scene colours differ'}
-    assert builder().classify_task_fault(teacher_decision(outcome),facts) is None
-
-
-@pytest.mark.parametrize('qc',[
-    dict(status='ERROR',rc=2,reason='OSError: [Errno 2] no such file'),
-    dict(status='ERROR',rc=2,reason='TimeoutExpired'),
-    dict(status='ERROR',rc=-9,reason='ValueError: killed'),
-    dict(status='ERROR',rc=1,reason='ValueError: x'),
-    dict(status='ERROR',rc=None,reason='ValueError: x'),
-    dict(status='ERROR',rc=2),
-    dict(status='FAIL',rc=2,reason='x'),
-    dict(status='PASS',rc=0),
-    dict(status='SURPRISE',rc=3)])
-def test_qc_process_crash_is_execution_fault(tmp_path,qc):
-    from test_offline_recording_switch import FakeProcesses
-    outcome,facts=offline_facts(tmp_path,processes=FakeProcesses(returncode=3,outputs='invalid',
-        report=qc_report('ERROR')|{'qc':qc}))
-    code=builder().classify_task_fault(teacher_decision(outcome),facts)
-    assert type(code) is str and code
-
-
-@pytest.mark.parametrize('how',['rc2','rc4','killed','timeout','no_time_left','start_failed','bad_result'])
-def test_offline_timeout_or_processor_crash_is_execution_fault(tmp_path,how):
-    from test_offline_recording_switch import FakeProcesses
-    processes={'rc2':FakeProcesses(returncode=2,outputs=None),'rc4':FakeProcesses(returncode=4,outputs=None),
-               'killed':FakeProcesses(returncode=-9,outputs=None),'timeout':FakeProcesses(exits=False,outputs=None),
-               'bad_result':FakeProcesses(returncode=0,outputs=None)}.get(how) or FakeProcesses()
-    if how=='start_failed':
-        processes.start=lambda spec,**kwargs:1/0
-    outcome,facts=offline_facts(tmp_path,processes=processes,deadline_s=120. if how=='no_time_left' else None)
-    assert outcome.data_status=='INVALID'
-    assert type(builder().classify_task_fault(teacher_decision(outcome),facts)) is str,outcome.reason
-
-
 @pytest.mark.parametrize('how',['start_raises','not_ready','not_closed'])
 def test_recorder_start_or_close_failure_is_execution_fault(tmp_path,how):
     from test_offline_recording_switch import FakeProcesses,pilot_factory
@@ -687,22 +619,6 @@ def test_unverifiable_teacher_receipt_is_execution_fault(tmp_path,reason):
     outcome,facts=offline_facts(tmp_path,processes=FakeProcesses(),skip=reason)
     assert outcome.reason==reason
     assert type(builder().classify_task_fault(teacher_decision(outcome),facts)) is str
-
-
-def test_classification_fails_closed_without_matching_facts(tmp_path):
-    from test_offline_recording_switch import FakeProcesses
-    outcome,facts=offline_facts(tmp_path,processes=FakeProcesses(returncode=3,outputs='invalid'))
-    decision=teacher_decision(outcome)
-    assert builder().classify_task_fault(decision,facts) is None
-    for broken in (None,(None,outcome.reason),({},outcome.reason),({'processor':{}},outcome.reason),
-                   ({'processor':{'returncode':2,'report':{'verdict':'INVALID'},'qc':{'status':'NOT_RUN'}}},outcome.reason),
-                   ({'processor':{'returncode':3,'report':{'verdict':'VALID'},'qc':{'status':'NOT_RUN'}}},outcome.reason),
-                   ({'processor':{'returncode':3,'report':{'verdict':'INVALID'}}},outcome.reason)):
-        assert type(builder().classify_task_fault(decision,broken)) is str
-    assert type(builder().classify_task_fault(teacher_decision(outcome,act_data_status='DISABLED',act_data_reason=None),
-                                              facts)) is str
-    assert type(builder().classify_task_fault(teacher_decision(outcome,teacher_execution_status=None),facts)) is str
-    assert type(builder().classify_task_fault(object(),facts)) is str
 
 
 def phase1_facts(tmp_path,*,receipt=True):
@@ -872,7 +788,6 @@ class Rig:
         LoggedPilot.events=self.events
         LoggedPilot.rig=self
         monkeypatch.setattr(orchestration,'PilotRecording',lambda **kwargs:LoggedPilot(facts={'schema':STATS_SCHEMA,**(pilot_facts or {})},**kwargs))
-        monkeypatch.setattr(orchestration,'_memo_covers',lambda **kwargs:True)
         # the Teacher child command is a short real helper process instead of the dynamic pick-and-place CLI
         monkeypatch.setattr(ContainerCollectionRuntime,'consumer_argv',lambda runtime,reset_epoch,lease=None:SLEEP)
         for key,value in dict(session_id=session,reset_epoch=2,attempt_id='default-lease-1').items():
@@ -1411,3 +1326,17 @@ def test_shutdown_owned_caches_only_a_proven_true(flow,monkeypatch):
     assert rig.execution._shutdown_result is None
     assert rig.execution.shutdown_owned() is True      # a later proof is used
     assert rig.execution.shutdown_owned() is True      # and a proven True is cached, not recomputed
+
+
+def test_classification_fails_closed_without_matching_facts(tmp_path):
+    outcome,facts=phase1_facts(tmp_path)
+    decision=teacher_decision(outcome)
+    assert builder().classify_task_fault(decision,facts) is None
+    for broken in (None,(None,outcome.reason),({},outcome.reason),({'recording_receipt':{}},outcome.reason),
+                   ({'recording_receipt':{'sha256':'x','files':3}},outcome.reason),
+                   ({'recording_receipt':{'sha256':'a'*64,'files':0}},outcome.reason)):
+        assert type(builder().classify_task_fault(decision,broken)) is str
+    assert type(builder().classify_task_fault(teacher_decision(outcome,act_data_status='DISABLED',act_data_reason=None),
+                                              facts)) is str
+    assert type(builder().classify_task_fault(teacher_decision(outcome,teacher_execution_status=None),facts)) is str
+    assert type(builder().classify_task_fault(object(),facts)) is str

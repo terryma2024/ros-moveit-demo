@@ -15,12 +15,6 @@ from so101_demo.runtime.task_stack import (
 
 
 class CollectionRecorder:
-    _recorder_stopped_callback: Callable[[], None] | None = None
-
-    def bind_recorder_stopped(self, callback: Callable[[], None] | None) -> None:
-        """The owner's callback for the moment this runtime's bag recorder has stopped (status data; it never decides a result)."""
-        self._recorder_stopped_callback = callback
-
     def _offline_identity(self, lease: Any, reset_epoch: object) -> dict:
         return {"session_id": self.resources.session_id, "reset_epoch": self._reset_epoch_integer(reset_epoch),
                 "attempt_id": lease.attempt_id}
@@ -41,7 +35,7 @@ class CollectionRecorder:
             spec_factory=lambda role, argv: StackProcessSpec(role, tuple(argv)),
             inputs_manifest=self.episode_inputs_manifest, scope=self.episode_scope_path, identity=identity,
             policy=self._recorder_policy, clock=self._recorder_clock, sleep=self._recorder_sleep,
-            on_recorder_stopped=self._recorder_stopped_callback, defer_faults=True)
+            defer_faults=True)
         self._recorders[key] = collection
         collection.start_before_teacher()
 
@@ -74,18 +68,14 @@ class CollectionRecorder:
             skip = decision.act_data_reason or "TEACHER_MANIFEST_UNVERIFIABLE"
         from so101_demo.act.offline.orchestration import LEASE_FIELDS
 
-        outcome = collection.finish(lease={name: getattr(lease, name) for name in LEASE_FIELDS}, skip_processing=skip,
-                                    deadline_s=float(lease.lease_deadline_monotonic_s))
+        outcome = collection.finish(lease={name: getattr(lease, name) for name in LEASE_FIELDS}, skip_processing=skip)
         status, reason = outcome.data_status, outcome.reason
-        qc_path = receipt_path = None
-        if status == "VALID":
-            qc_path = Path(outcome.facts["qc_report_path"])
-        elif status == "PENDING_QC":
+        receipt_path = None
+        if status == "PENDING_QC":
             receipt_path = Path(point_root) / outcome.facts["recording_receipt"]["path"]
         outcome.facts["act_data_status"] = status
         self._write_collection_record(point_root, outcome.facts, reason)
-        return replace(decision, act_data_status=status, act_data_reason=reason, qc_report_path=qc_path,
-                       recording_receipt_path=receipt_path)
+        return replace(decision, act_data_status=status, act_data_reason=reason, recording_receipt_path=receipt_path)
 
     @staticmethod
     def _write_collection_record(point_root: Path, facts: dict, reason) -> None:

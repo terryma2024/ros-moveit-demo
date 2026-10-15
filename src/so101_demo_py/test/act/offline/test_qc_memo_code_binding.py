@@ -7,10 +7,9 @@ from pathlib import Path
 import pytest
 
 from so101_demo.act import episode_qc, qc_memo
-from so101_demo.act.offline import orchestration
+from so101_demo.runtime.act_processor import processing
 
-from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision,
-                                    collection_for, pilot_factory, worker_runtime)
+from test_offline_recording_switch import FakePilot
 from test_independent_qc_memo import episode, paths
 
 
@@ -66,21 +65,10 @@ def test_the_default_memo_check_is_the_real_memo_match(tmp_path, monkeypatch):
     root, scope, inputs, teacher, report, report_path = episode(tmp_path)
     monkeypatch.setattr(episode_qc, "read_qc_report", lambda path: copy.deepcopy(report))
     kwargs = dict(qc_output=report_path, episode_root=root, scope=scope, inputs_manifest=inputs)
-    assert orchestration._memo_covers(**kwargs) is False, "no memo yet"
+    assert processing.qc_memo_matches(**kwargs) is False, "no memo yet"
     qc_memo.write_memo(report_path, report, **paths(root, scope, inputs, teacher))
-    assert orchestration._memo_covers(**kwargs) is True
+    assert processing.qc_memo_matches(**kwargs) is True
     (root / "audit" / "events.jsonl").write_text('{"x": 99}\n')
-    assert orchestration._memo_covers(**kwargs) is False, "stale: the episode changed after the memo"
+    assert processing.qc_memo_matches(**kwargs) is False, "stale: the episode changed after the memo"
     monkeypatch.setattr(episode_qc, "read_qc_report", lambda path: (_ for _ in ()).throw(ValueError("unreadable")))
-    assert orchestration._memo_covers(**kwargs) is False
-
-
-@pytest.mark.parametrize("memo", ["missing", "stale"])
-def test_a_processor_verdict_without_a_covering_memo_is_invalid_data_not_valid_data(tmp_path, memo):
-    collection, point, _ = collection_for(tmp_path, memo_check=lambda **kwargs: False)
-    collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE, deadline_s=collection._clock() + 100_000.0)
-    assert (outcome.data_status, outcome.reason) == ("INVALID", "OFFLINE_QC_MEMO_NOT_VALID")
-    assert "qc_report_path" not in outcome.facts
-
-
+    assert processing.qc_memo_matches(**kwargs) is False

@@ -5,7 +5,6 @@ Everything here runs with fakes: no stack, no ROS graph, no live process. The ba
 """
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,7 +15,7 @@ from so101_demo.act.collection_orchestration import (
 from so101_demo.act.offline.engine import RESULT_SCHEMA
 from so101_demo.act.offline import orchestration
 from so101_demo.act.offline.orchestration import (
-    BAG_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, LEASE_FIELDS, OfflineCollection, drop_bag_messages)
+    BAG_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, OfflineCollection, drop_bag_messages)
 from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 from so101_demo.runtime.parallel_worker_parts.receipts import RuntimeDecision
@@ -275,106 +274,10 @@ def collection_for(tmp_path, *, fault="none", processes=None, pilot=None, **extr
     options = dict(processes=processes or FakeProcesses(), point_root=point, sandbox_root=sandbox, fault=fault,
                    environment={"ROS_DOMAIN_ID": "181"}, spec_factory=lambda role, argv: StackProcessSpec(role, tuple(argv)),
                    inputs_manifest=tmp_path / "inputs" / "inputs-manifest.json", scope=tmp_path / "scope.json",
-                   identity=dict(IDENTITY), policy=POLICY, clock=clock, sleep=clock.sleep, python="/venv/bin/python",
-                   pilot_factory=pilot or pilot_factory(), memo_check=lambda **kwargs: True)
+                   identity=dict(IDENTITY), policy=POLICY, clock=clock, sleep=clock.sleep,
+                   pilot_factory=pilot or pilot_factory())
     options.update(extra)
     return OfflineCollection(**options), point, clock
-
-
-def test_a_ready_bag_recorder_then_a_valid_processor_gives_valid_data_with_the_attempts_qc_report(tmp_path):
-    processes = FakeProcesses()
-    collection, point, clock = collection_for(tmp_path, processes=processes)
-    collection.start_before_teacher()
-    assert collection.ready is True and collection.events == ["recorder_started", "recorder_ready"]
-    collection.teacher_started_now()
-    outcome = collection.finish_inline(lease=LEASE)
-    assert (outcome.data_status, outcome.reason) == ("VALID", None)
-    assert outcome.facts["seal"]["sha256"] == "a" * 64 and outcome.facts["qc_report_path"] == str(point / "qc-report.json")
-    assert FakePilot.instances[0].finished and FakePilot.instances[0].root == point / "raw"
-    spec = processes.specs[0]
-    assert spec.role == "act-offline-processor" and spec.argv[:3] == ("/venv/bin/python", "-m", "so101_demo.cli.act_offline_episode")
-    argv = spec.argv
-    assert argv[argv.index("--out") + 1] == str(point), "the episode lands in the attempt's canonical location"
-    assert argv[argv.index("--bag") + 1] == str(point / "raw" / "bag")
-    assert argv[argv.index("--teacher-manifest") + 1] == str(point / "dynamic" / "dynamic-execute-manifest.json")
-    assert argv[argv.index("--qc-output") + 1] == str(point / "qc-report.json")
-    assert processes.environments[0] == {"ROS_DOMAIN_ID": "181"}
-    assert json.loads((point / "raw" / "lease.json").read_text()) == LEASE and set(LEASE) == set(LEASE_FIELDS)
-    assert clock.sleeps == [], "a ready recorder costs the Teacher no wait"
-
-
-def test_a_processor_that_judges_the_data_invalid_gives_invalid_data_with_its_reasons(tmp_path):
-    collection, point, _ = collection_for(tmp_path, processes=FakeProcesses(returncode=3, outputs="invalid"))
-    collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE)
-    assert outcome.data_status == "INVALID"
-    assert outcome.reason.startswith("OFFLINE_PROCESSOR_INVALID: rc=3; OFFLINE_SOURCE_GAP: arm")
-    assert "qc_report_path" not in outcome.facts and outcome.facts["processor"]["returncode"] == 3
-
-
-@pytest.mark.parametrize("code", [2, 4, -9])
-def test_a_processor_that_fails_is_invalid_data_never_an_exception(tmp_path, code):
-    collection, _, _ = collection_for(tmp_path, processes=FakeProcesses(returncode=code, outputs=None))
-    collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE)
-    assert outcome.data_status == "INVALID" and outcome.reason == f"OFFLINE_PROCESSOR_FAILED: rc={code}"
-
-
-def test_a_processor_that_outlives_its_bound_is_terminated_and_the_data_is_invalid(tmp_path):
-    processes = FakeProcesses(exits=False, outputs=None)
-    collection, _, _ = collection_for(tmp_path, processes=processes, processing_timeout_s=33.0)
-    collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE)
-    assert outcome.data_status == "INVALID" and outcome.reason == "OFFLINE_PROCESSOR_TIMEOUT: 33s"
-    assert ("wait_exit", 33.0) in processes.events and ("terminate", orchestration.PROCESSOR_TERM_GRACE_S) in processes.events
-
-
-@pytest.mark.parametrize("mutate,expected", [
-    ("exit_zero_but_invalid_verdict", "OFFLINE_PROCESSOR_RESULT_NOT_VALID_AND_QC_PASS"),
-    ("qc_not_pass", "OFFLINE_PROCESSOR_RESULT_NOT_VALID_AND_QC_PASS"),
-    ("no_qc_file", "OFFLINE_PROCESSOR_RESULT_NOT_VALID_AND_QC_PASS"),
-    ("foreign_identity", "OFFLINE_RESULT_IDENTITY_MISMATCH"),
-    ("bad_schema", "OFFLINE_RESULT_SCHEMA_INVALID"),
-    ("no_result", "OFFLINE_RESULT_MISSING"),
-])
-def test_exit_zero_alone_is_not_valid_data(tmp_path, mutate, expected):
-    def break_it(processes, argv):
-        pass
-
-    processes = FakeProcesses(on_start=break_it)
-    collection, point, _ = collection_for(tmp_path, processes=processes)
-    collection.start_before_teacher()
-    real = processes.wait_exit
-
-    def wait_exit(identity, timeout_s):
-        code = real(identity, timeout_s)
-        result = processes.out / "recorder-result.json"
-        report_path = processes.out / "offline-processor-report.json"
-        if mutate == "exit_zero_but_invalid_verdict":
-            report = json.loads(report_path.read_text())
-            report["verdict"] = "INVALID"
-            report_path.write_text(json.dumps(report))
-        if mutate == "qc_not_pass":
-            report = json.loads(report_path.read_text())
-            report["qc"] = {"status": "FAIL"}
-            report_path.write_text(json.dumps(report))
-        if mutate == "no_qc_file":
-            processes.qc.unlink()
-        if mutate == "foreign_identity":
-            document = json.loads(result.read_text())
-            document["identity"]["attempt_id"] = "foreign"
-            result.write_text(json.dumps(document))
-        if mutate == "bad_schema":
-            document = json.loads(result.read_text())
-            document["schema"] = "other"
-            result.write_text(json.dumps(document))
-        if mutate == "no_result":
-            result.unlink()
-        return code
-
-    processes.wait_exit = wait_exit
-    outcome = collection.finish_inline(lease=LEASE)
-    assert outcome.data_status == "INVALID" and outcome.reason == expected
 
 
 def test_a_recorder_that_never_became_ready_is_invalid_and_nothing_is_processed(tmp_path):
@@ -383,7 +286,7 @@ def test_a_recorder_that_never_became_ready_is_invalid_and_nothing_is_processed(
                                       pilot=pilot_factory(ready=False, failure="RAW_PILOT_READY_TIMEOUT"))
     collection.start_before_teacher()
     assert collection.ready is False and collection.events[-1] == "recorder_not_ready:RAW_PILOT_READY_TIMEOUT"
-    outcome = collection.finish_inline(lease=LEASE)
+    outcome = collection.finish(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("INVALID", "RAW_PILOT_READY_TIMEOUT") and processes.specs == []
 
 
@@ -391,7 +294,7 @@ def test_a_recorder_that_cannot_be_started_is_invalid_data_and_never_an_exceptio
     processes = FakeProcesses()
     collection, _, _ = collection_for(tmp_path, processes=processes, pilot=pilot_factory(raises="no ros2"))
     collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE)
+    outcome = collection.finish(lease=LEASE)
     assert outcome.data_status == "INVALID" and outcome.reason == "RAW_PILOT_START_FAILED: no ros2" and processes.specs == []
 
 
@@ -400,7 +303,7 @@ def test_a_bag_that_was_not_closed_cleanly_is_invalid_and_nothing_is_processed(t
     processes = FakeProcesses()
     collection, _, _ = collection_for(tmp_path, processes=processes, pilot=pilot_factory(facts=facts))
     collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE)
+    outcome = collection.finish(lease=LEASE)
     assert outcome.data_status == "INVALID" and outcome.reason.startswith("RAW_BAG_NOT_CLOSED_CLEANLY") and processes.specs == []
 
 
@@ -408,7 +311,7 @@ def test_a_data_verdict_already_made_closes_the_bag_and_skips_the_processor(tmp_
     processes = FakeProcesses()
     collection, _, _ = collection_for(tmp_path, processes=processes)
     collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE, skip_processing="TERMINAL_CAPTURE_FAILED: x")
+    outcome = collection.finish(lease=LEASE, skip_processing="TERMINAL_CAPTURE_FAILED: x")
     assert (outcome.data_status, outcome.reason) == ("INVALID", "TERMINAL_CAPTURE_FAILED: x")
     assert FakePilot.instances[0].finished and processes.specs == []
 
@@ -420,7 +323,7 @@ def test_a_bag_that_is_missing_is_invalid(tmp_path):
 
     collection, _, _ = collection_for(tmp_path, pilot=lambda **kw: NoBag(**kw))
     collection.start_before_teacher()
-    assert collection.finish_inline(lease=LEASE).reason == "RAW_BAG_MISSING"
+    assert collection.finish(lease=LEASE).reason == "RAW_BAG_MISSING"
 
 
 # ---- the five faults ---------------------------------------------------------------------------------------------------------
@@ -430,7 +333,7 @@ def test_recorder_absent_records_nothing_and_is_invalid(tmp_path):
     collection, point, _ = collection_for(tmp_path, fault="recorder_absent", processes=processes)
     collection.start_before_teacher()
     assert FakePilot.instances == [] and collection.events == ["recorder_not_started:fault_recorder_absent"]
-    outcome = collection.finish_inline(lease=LEASE)
+    outcome = collection.finish(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("INVALID", "RECORDER_ABSENT") and processes.specs == []
 
 
@@ -446,53 +349,8 @@ def test_recorder_late_starts_the_bag_only_after_the_teachers_setup_evidence_and
     collection._late_thread.join(timeout=10)
     assert FakePilot.instances and FakePilot.instances[0].started and collection.late_started is True
     assert 5.0 in clock.sleeps, "the late start waited for the Teacher's first command"
-    outcome = collection.finish_inline(lease=LEASE)
+    outcome = collection.finish(lease=LEASE)
     assert (outcome.data_status, outcome.reason) == ("INVALID", "RECORDER_STARTED_AFTER_TEACHER") and processes.specs == []
-
-
-def test_a_bag_fault_processes_a_sandbox_copy_and_writes_only_beneath_the_sandbox(tmp_path):
-    for fault in BAG_FAULTS:
-        copies = []
-
-        def bag_fault(source, destination, *, topic, count, _copies=copies):
-            _copies.append((Path(source), Path(destination), topic, count))
-            Path(destination).mkdir(parents=True)
-            return {"topic": topic, "dropped": count}
-
-        sandbox_tmp = tmp_path / fault
-        processes = FakeProcesses(returncode=3, outputs="invalid")
-        collection, point, _ = collection_for(sandbox_tmp, fault=fault, processes=processes, bag_fault=bag_fault)
-        collection.start_before_teacher()
-        outcome = collection.finish_inline(lease=LEASE)
-        sandbox = sandbox_tmp / "run" / "fault-sandbox"
-        assert outcome.data_status == "INVALID" and outcome.reason.startswith("OFFLINE_PROCESSOR_INVALID: rc=3")
-        (source, destination, topic, count), = copies
-        assert topic == FAULT_TOPIC[fault] and count == FAULT_DROP_COUNT[fault]
-        assert source == sandbox / "attempt-1" / "raw" / "bag" and destination == sandbox / "attempt-1" / "fault-bag"
-        argv = processes.specs[0].argv
-        assert argv[argv.index("--bag") + 1] == str(destination), "the processor reads the copy, never the original"
-        for flag in ("--out", "--qc-output", "--lease"):
-            assert Path(argv[argv.index(flag) + 1]).is_relative_to(sandbox), flag
-        assert not (point / "episode").exists() and not (point / "qc-report.json").exists()
-
-
-def test_output_write_failure_makes_the_processors_output_directory_read_only_for_the_run_and_restores_it(tmp_path):
-    seen = {}
-
-    def inspect(processes, argv):
-        out = Path(argv[argv.index("--out") + 1])
-        seen["mode"] = out.stat().st_mode & 0o777
-        seen["writable"] = os.access(out, os.W_OK)
-
-    processes = FakeProcesses(returncode=4, outputs=None, on_start=inspect)
-    collection, point, _ = collection_for(tmp_path, fault="output_write_failure", processes=processes)
-    collection.start_before_teacher()
-    outcome = collection.finish_inline(lease=LEASE)
-    out = tmp_path / "run" / "fault-sandbox" / "attempt-1" / "out"
-    assert seen["mode"] == 0o555
-    assert os.geteuid() == 0 or seen["writable"] is False
-    assert outcome.data_status == "INVALID" and outcome.reason == "OFFLINE_PROCESSOR_FAILED: rc=4"
-    assert out.stat().st_mode & 0o777 == 0o755, "the sandbox stays removable"
 
 
 def test_a_fault_output_outside_the_sandbox_is_refused_before_any_process_starts(tmp_path):
@@ -785,35 +643,3 @@ def test_execute_expert_adds_the_pending_data_status_beside_the_teachers_fields(
     assert (decision.teacher_execution_status, decision.teacher_task_result) == ("COMPLETED", "PASS")
     assert decision.act_data_status == "PENDING_QC" and decision.act_data_reason is None
     assert not any(spec.role == "act-offline-processor" for spec in group.specs)
-
-
-def test_the_recorder_stopped_callback_fires_once_the_bag_is_closed_and_before_processing(tmp_path):
-    order = []
-    class OrderedPilot(FakePilot):
-        def finish(self):
-            order.append("pilot_finished")
-            return super().finish()
-    processes = FakeProcesses()
-    collection, _point, _clock = collection_for(tmp_path, processes=processes, pilot=OrderedPilot,
-                                                on_recorder_stopped=lambda: order.append("recorder_stopped"))
-    collection.start_before_teacher()
-    collection.teacher_started_now()
-    collection.finish_inline(lease=LEASE)
-    assert order == ["pilot_finished", "recorder_stopped"]
-
-
-def test_a_failing_recorder_stopped_callback_never_changes_the_data_verdict(tmp_path):
-    def boom():
-        raise RuntimeError("status side channel")
-    collection, _point, _clock = collection_for(tmp_path, on_recorder_stopped=boom)
-    collection.start_before_teacher()
-    collection.teacher_started_now()
-    assert collection.finish_inline(lease=LEASE).data_status == "VALID"
-
-
-def test_a_retired_collection_also_reports_the_recorder_stopped(tmp_path):
-    fired = []
-    collection, _point, _clock = collection_for(tmp_path, on_recorder_stopped=lambda: fired.append(1))
-    collection.start_before_teacher()
-    collection.retire()
-    assert fired == [1]

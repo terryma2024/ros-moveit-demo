@@ -2,9 +2,7 @@
 
 Before the Teacher: one record-only process (`ros2 bag record`, owned by `PilotRecording`) is started and waited for a bounded time;
 the Teacher starts whatever happened to it. After the Teacher ended (phase 1 of the two-phase collection): the bag is closed, a
-recording receipt binds every raw file, and the data side ends PENDING_QC; no processor runs here. The retired inline form
-(`finish_inline`: the offline processor builds the sealed episode and runs the fresh-process QC inside the attempt) is not reachable
-from the shard task path and is deleted with the inline mode.
+recording receipt binds every raw file, and the data side ends PENDING_QC; no processor runs here.
 
 Direction of dependence (unchanged from the live Recorder's orchestration): the Teacher never waits for, reads from or is stopped by
 anything here after its own start. Every defect on this side is a verdict on the data (INVALID) and never an input to the Teacher.
@@ -30,21 +28,10 @@ import time
 from pathlib import Path
 
 from ..collection_orchestration import RecorderOutcome, require_under_sandbox
-from .engine import RESULT_SCHEMA
 from .pilot import PilotRecording
 
 PROCESSOR_ROLE = "act-offline-processor"
 RAW_ROLE = "act-raw-pilot"
-#: The processor builds the episode and runs the fresh QC in about ten minutes for a 100 s episode; this bounds a stuck one.
-PROCESSING_TIMEOUT_S = 1200.0
-PROCESSOR_TERM_GRACE_S = 10.0
-#: Time that must remain on the lease after the processor ended, for everything the Worker still does before the stage deadline:
-#: the SIGTERM grace of a processor that hit its cap (10 s), the ResultStore seal (the memo path measured under 2 s; a full
-#: recomputation fallback is not budgeted), the `begin_finalizing` acknowledgement (`result_ack_timeout_s` = 10 s), and slack for
-#: scheduling and the heartbeat round trip. 60 s is six times the sum of the two acknowledged bounds.
-SEAL_MARGIN_S = 60.0
-#: A processor given less than this cannot even scan the bag (about 15 s) and start its replay; it is not started.
-MIN_PROCESSING_S = 60.0
 #: `recorder_late` starts the bag this long after the Teacher's setup evidence appeared (its first command follows within ~2 s).
 LATE_START_DELAY_S = 5.0
 #: messages dropped by the bag faults
@@ -88,26 +75,6 @@ def drop_bag_messages(source, destination, *, topic: str, count: int) -> dict:
             "last_dropped_stamp_ns": dropped_stamps[-1]}
 
 
-def read_processor_result(path, identity: dict):
-    """The processor's `recorder-result.json` as a validated document, or the reason string it could not be trusted."""
-    try:
-        document = json.loads(Path(path).read_bytes())
-    except FileNotFoundError:
-        return "OFFLINE_RESULT_MISSING"
-    except (OSError, ValueError):
-        return "OFFLINE_RESULT_UNREADABLE"
-    if type(document) is not dict or document.get("schema") != RESULT_SCHEMA:
-        return "OFFLINE_RESULT_SCHEMA_INVALID"
-    observed = document.get("identity")
-    if type(observed) is not dict or any(observed.get(key) != value for key, value in identity.items()):
-        return "OFFLINE_RESULT_IDENTITY_MISMATCH"
-    if document.get("status") not in ("VALID", "INVALID"):
-        return "OFFLINE_RESULT_STATUS_INVALID"
-    if document["status"] == "VALID" and type(document.get("seal")) is not dict:
-        return "OFFLINE_RESULT_VALID_WITHOUT_SEAL"
-    return document
-
-
 def write_orchestration_record(point_root, facts: dict, reason) -> bool:
     """Write `<point_root>/recorder-orchestration.json` once (exclusive create, fsync). False when it cannot be written or already
     exists; the data side never decides control's result."""
@@ -124,22 +91,20 @@ def write_orchestration_record(point_root, facts: dict, reason) -> bool:
 
 
 class OfflineCollection:
-    """One attempt's data lifecycle: record, then (after the Teacher) process. `processes` is the Worker's owned process tree or a
-    fake with its surface: `start(spec, environment=)`, `exit_code`, `wait_exit(identity, timeout_s)`, `terminate(identity, grace_s)`,
-    `stop(identity)`."""
+    """One attempt's phase-1 data lifecycle: record the bag, then (after the Teacher) close it and bind it in the recording
+    receipt. `processes` is the Worker's owned process tree or a fake with its surface: `start(spec, environment=)`, `exit_code`,
+    `wait_exit(identity, timeout_s)`, `terminate(identity, grace_s)`, `stop(identity)`."""
 
     def __init__(self, *, processes, point_root, sandbox_root, fault: str, environment: dict, spec_factory, inputs_manifest,
                  scope, identity: dict, policy: dict, clock=time.monotonic, sleep=time.sleep,
-                 python: str | None = None, pilot_factory=None, bag_fault=None,
-                 processing_timeout_s: float = PROCESSING_TIMEOUT_S, late_delay_s: float = LATE_START_DELAY_S,
-                 memo_check=None, on_recorder_stopped=None, defer_faults: bool = False) -> None:
+                 pilot_factory=None,
+                 late_delay_s: float = LATE_START_DELAY_S, defer_faults: bool = False) -> None:
         self._processes = processes
-        self._on_recorder_stopped = on_recorder_stopped
         self._point_root = Path(point_root)
         self._fault = fault
         self._sandbox_root = None if sandbox_root is None else Path(sandbox_root)
         #: `defer_faults` (the two-phase worker): a bag or output fault is applied by the phase-2 processor, so phase 1 records it in
-        #: the point root like any attempt; only the recorder faults (and the retired inline path) use the fault sandbox
+        #: the point root like any attempt; only the recorder faults use the fault sandbox
         self._in_point_root = fault == "none" or (defer_faults and fault in DEFERRED_FAULTS)
         #: where this attempt's data side writes: the point root itself, or a directory inside the fault sandbox
         self._base = self._point_root if self._in_point_root else self._sandbox_root / str(identity["attempt_id"])
@@ -150,12 +115,8 @@ class OfflineCollection:
         self._identity = dict(identity)
         self._policy = policy
         self._clock, self._sleep = clock, sleep
-        self._python = python
         self._pilot_factory = pilot_factory
-        self._bag_fault = bag_fault
-        self._processing_timeout_s = float(processing_timeout_s)
         self._late_delay_s = float(late_delay_s)
-        self._memo_check = memo_check
         self._pilot = None
         self._late_thread = None
         #: `recorder_late` evidence (system-clock ns): when the Teacher's setup evidence was seen, when the bag was started
@@ -257,15 +218,6 @@ class OfflineCollection:
         except Exception as error:   # noqa: BLE001
             return {"bag_first_stamp_error": repr(error)[:120]}
 
-    def _recorder_stopped(self) -> None:
-        """Tell the owner the bag recorder has stopped (a status side channel). It never changes the data verdict."""
-        callback = self._on_recorder_stopped
-        if callback is not None:
-            try:
-                callback()
-            except Exception:   # noqa: BLE001
-                pass
-
     def retire(self) -> bool:
         """A cancelled attempt ends its bag recorder too, best effort. Returns whether the recorder is PROVEN stopped: its process
         exited and its stop stats were written (design 2026-10-10 section 1.2). Nothing started is vacuously proven."""
@@ -280,48 +232,34 @@ class OfflineCollection:
             facts = pilot.finish()
         except Exception:   # noqa: BLE001
             return False
-        finally:
-            self._recorder_stopped()
         failure = facts.get("failure") if isinstance(facts, dict) else None
         return (isinstance(facts, dict) and facts.get("rc") is not None and facts.get("schema") == STATS_SCHEMA
                 and not str(failure or "").startswith("RAW_PILOT_STOP_FAILED"))
 
-    def finish(self, *, lease: dict, skip_processing: str | None = None, deadline_s: float | None = None) -> RecorderOutcome:
+    def finish(self, *, lease: dict, skip_processing: str | None = None) -> RecorderOutcome:
         """Phase 1, after the Teacher ended: close the bag and seal the data side as PENDING_QC. Never raises.
 
         No processor is started and none is waited for: the episode and the QC are built later, by the phase-2 processor, from the
         closed bag. The recording receipt (`raw/recording-receipt.json`) binds every raw file and the documents the processor needs.
         `lease` is the Worker's lease at this instant; `skip_processing` is the reason (a data verdict already made) for which the bag
-        is closed and the data stays INVALID with no receipt. `deadline_s` is accepted for the callers' signature and unused: phase 1
-        has no processing budget."""
-        return self._run_finish(lease, skip_processing, deadline_s, inline=False)
+        is closed and the data stays INVALID with no receipt."""
+        return self._run_finish(lease, skip_processing)
 
-    def finish_inline(self, *, lease: dict, skip_processing: str | None = None, deadline_s: float | None = None) -> RecorderOutcome:
-        """The retired inline form: close the bag and run the processor inside the attempt. Not reachable from the shard task path
-        (plan task 11 deletes it).
-
-        `deadline_s` is the lease deadline on the same clock as `clock`: the processor's wait is capped at the time left on it minus
-        `SEAL_MARGIN_S`, so the Teacher's result is always sealed in time (the data is INVALID instead)."""
-        return self._run_finish(lease, skip_processing, deadline_s, inline=True)
-
-    def _run_finish(self, lease: dict, skip_processing, deadline_s, *, inline: bool) -> RecorderOutcome:
+    def _run_finish(self, lease: dict, skip_processing) -> RecorderOutcome:
         self.teacher_ended = True
         facts: dict = {"fault": self._fault, "events": self.events, "ready": self.ready, "mode": "RAW_BAG_OFFLINE",
                        "policy_sha256": self._policy.get("policy_sha256")}
         try:
-            return self._finish(facts, skip_processing, {name: lease[name] for name in LEASE_FIELDS}, deadline_s, inline)
+            return self._finish(facts, skip_processing, {name: lease[name] for name in LEASE_FIELDS})
         except Exception as error:   # noqa: BLE001
             return RecorderOutcome("INVALID", ("RECORDER_ORCHESTRATION_FAILED: " + (str(error) or type(error).__name__))
                                    [:_REASON_CHARS], facts)
 
-    def _finish(self, facts: dict, skip_processing, lease: dict, deadline_s=None, inline: bool = True) -> RecorderOutcome:
+    def _finish(self, facts: dict, skip_processing, lease: dict) -> RecorderOutcome:
         if self._late_thread is not None:
             self._late_thread.join(timeout=float(self._policy["ready_timeout_s"]) + 5.0)
         pilot = self._pilot
-        try:
-            recorded = {} if pilot is None else pilot.finish()
-        finally:
-            self._recorder_stopped()
+        recorded = {} if pilot is None else pilot.finish()
         facts["raw_pilot"] = recorded
         if pilot is None:
             reason = self.start_error or ("RECORDER_ABSENT" if self._fault == "recorder_absent" else "RECORDER_NEVER_STARTED")
@@ -338,8 +276,6 @@ class OfflineCollection:
                 default=str))[:_REASON_CHARS], facts)
         if skip_processing is not None:
             return RecorderOutcome("INVALID", skip_processing, facts)
-        if inline:
-            return self._process(facts, lease, deadline_s)
         return self._seal_pending(facts, lease)
 
     # ---- phase 1: the recording receipt -------------------------------------------------------------------------------
@@ -363,120 +299,5 @@ class OfflineCollection:
             teacher_manifest=self._point_root / "dynamic" / "dynamic-execute-manifest.json", orchestration_record=record)
         return RecorderOutcome("PENDING_QC", None, facts)
 
-    # ---- the offline processor ----------------------------------------------------------------------------------
 
-    def _process(self, facts: dict, lease: dict, deadline_s=None) -> RecorderOutcome:
-        bag = self.raw_root / "bag"
-        if not (bag / "metadata.yaml").is_file():
-            return RecorderOutcome("INVALID", "RAW_BAG_MISSING", facts)
-        budget_s = self._processing_timeout_s
-        if deadline_s is not None:
-            left = float(deadline_s) - self._clock() - SEAL_MARGIN_S
-            facts["processing_budget"] = {"lease_left_s": round(float(deadline_s) - self._clock(), 3), "seal_margin_s": SEAL_MARGIN_S,
-                                          "cap_s": self._processing_timeout_s, "budget_s": round(min(budget_s, left), 3)}
-            if left < MIN_PROCESSING_S:
-                return RecorderOutcome("INVALID", f"OFFLINE_PROCESSOR_NO_TIME_LEFT: {max(left, 0.0):.0f}s", facts)
-            budget_s = min(budget_s, left)
-        if self._fault in BAG_FAULTS:
-            copy = self._base / "fault-bag"
-            self._base.mkdir(parents=True, exist_ok=True)
-            facts["bag_fault"] = (self._bag_fault or drop_bag_messages)(bag, copy, topic=FAULT_TOPIC[self._fault], count=FAULT_DROP_COUNT[self._fault])
-            bag = copy
-        out = self._point_root if self._fault == "none" else self._base / "out"
-        qc_output = self._point_root / "qc-report.json" if self._fault == "none" else out / "offline-qc-report.json"
-        lease_file = self.raw_root / "lease.json"
-        lease_file.write_text(json.dumps(lease, sort_keys=True) + "\n")
-        out.mkdir(parents=True, exist_ok=True)
-        read_only = self._fault == "output_write_failure"
-        argv = (self._python or _python(), "-m", "so101_demo.cli.act_offline_episode",
-                "--bag", str(bag), "--inputs", str(self._inputs_manifest), "--out", str(out), "--lease", str(lease_file),
-                "--scope", str(self._scope), "--record-stats", str(self.raw_root / "record-stats.json"),
-                "--teacher-manifest", str(self._point_root / "dynamic" / "dynamic-execute-manifest.json"),
-                "--qc-output", str(qc_output))
-        facts["processor"] = {"argv_tail": list(argv[2:4]), "out": str(out), "bag": str(bag), "qc_output": str(qc_output)}
-        returncode = None
-        began = time.monotonic()
-        if read_only:
-            os.chmod(out, 0o555)   # the processor must fail to write its episode
-        try:
-            identity = self._processes.start(self._spec_factory(PROCESSOR_ROLE, argv), environment=self._environment)
-            returncode = self._processes.wait_exit(identity, budget_s)
-            if returncode is None:
-                facts["processor"]["timed_out"] = True
-                returncode = self._processes.terminate(identity, PROCESSOR_TERM_GRACE_S)
-                self._retire(identity)
-                return RecorderOutcome("INVALID", f"OFFLINE_PROCESSOR_TIMEOUT: {budget_s:.0f}s", facts)
-            self._retire(identity)
-        except Exception as error:   # noqa: BLE001
-            return RecorderOutcome("INVALID", ("OFFLINE_PROCESSOR_START_FAILED: " + (str(error) or type(error).__name__))
-                                   [:_REASON_CHARS], facts)
-        finally:
-            if read_only:
-                os.chmod(out, 0o755)
-            facts["processor"]["wall_s"] = round(time.monotonic() - began, 3)
-        facts["processor"]["returncode"] = returncode
-        report = _read_report(out / "offline-processor-report.json")
-        if report is not None:
-            facts["processor"]["report"] = {key: report.get(key) for key in ("verdict", "rc", "reasons", "timing")}
-            facts["processor"]["qc"] = report.get("qc")
-        if returncode != 0:
-            reasons = [] if report is None else [str(item)[:120] for item in (report.get("reasons") or ())[:4]]
-            what = "OFFLINE_PROCESSOR_INVALID" if returncode == 3 else "OFFLINE_PROCESSOR_FAILED"
-            return RecorderOutcome("INVALID", (f"{what}: rc={returncode}" + ("; " + "; ".join(reasons) if reasons else ""))
-                                   [:_REASON_CHARS], facts)
-        result = read_processor_result(out / "recorder-result.json", self._identity)
-        if isinstance(result, str):
-            return RecorderOutcome("INVALID", result, facts)
-        qc = (report or {}).get("qc") or {}
-        if (result["status"] != "VALID" or report is None or report.get("verdict") != "VALID" or qc.get("status") != "PASS"
-                or not qc_output.is_file()):
-            return RecorderOutcome("INVALID", "OFFLINE_PROCESSOR_RESULT_NOT_VALID_AND_QC_PASS", facts)
-        # VALID needs the fresh QC's memo to cover these exact files. Without it the Worker's seal and the
-        # Coordinator's commit would recompute the QC in full (about 290 s each, the Coordinator's twice under its lock), after the
-        # processing budget was spent, and the Teacher's result would die at seal with RESULT_AFTER_LEASE_DEADLINE. Data that cannot
-        # be sealed in time is INVALID data, not a lost Teacher result.
-        covered = (self._memo_check or _memo_covers)(qc_output=qc_output, episode_root=out / "episode", scope=self._scope,
-                                                     inputs_manifest=self._inputs_manifest,
-                                                     teacher_manifest=None if self._fault == "none" else
-                                                     self._point_root / "dynamic" / "dynamic-execute-manifest.json")
-        if covered is not True:
-            return RecorderOutcome("INVALID", "OFFLINE_QC_MEMO_NOT_VALID", facts)
-        facts["seal"] = result["seal"]
-        facts["qc_report_path"] = str(qc_output)
-        return RecorderOutcome("VALID", None, facts)
-
-    def _retire(self, identity) -> None:
-        try:
-            self._processes.stop(identity)
-        except Exception:   # noqa: BLE001
-            pass
-
-
-def _memo_covers(*, qc_output, episode_root, scope, inputs_manifest, teacher_manifest=None) -> bool:
-    """True if a memo beside the QC report covers this report, the QC code and the files on disk now."""
-    from .. import qc_memo
-    from ..episode_qc import read_qc_report
-
-    try:
-        report = read_qc_report(qc_output)
-        return qc_memo.memo_matches(qc_output, report, episode_root=episode_root, scope=scope, inputs_manifest=inputs_manifest,
-                                    teacher_manifest=teacher_manifest)
-    except (OSError, ValueError, TypeError, KeyError):
-        return False
-
-
-def _python() -> str:
-    import sys
-
-    return sys.executable
-
-
-def _read_report(path):
-    try:
-        document = json.loads(Path(path).read_bytes())
-    except (OSError, ValueError):
-        return None
-    return document if isinstance(document, dict) else None
-
-
-__all__ = ["OfflineCollection", "drop_bag_messages", "read_processor_result", "PROCESSOR_ROLE", "RAW_ROLE", "BAG_FAULTS"]
+__all__ = ["OfflineCollection", "drop_bag_messages", "PROCESSOR_ROLE", "RAW_ROLE", "BAG_FAULTS"]
