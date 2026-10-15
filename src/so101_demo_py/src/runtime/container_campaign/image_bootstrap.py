@@ -21,12 +21,13 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
         role = read_role()
-        expected = {"inference": "campaign_inference", "shard": "campaign_shard"}.get(role)
-        if not argv or expected is None or argv[0] != expected or sys.executable != "/act/venv/bin/python":
+        # The shard image also runs the phase-2 processor (same image, no GPU), so its role admits both programs.
+        allowed = {"inference": ("campaign_inference",), "shard": ("campaign_shard", "campaign_processor")}.get(role, ())
+        if not argv or argv[0] not in allowed or sys.executable != "/act/venv/bin/python":
             raise ValueError("IMAGE_ROLE_COMMAND_INVALID")
         report = readback()
         print(canonical_json(report).decode(), flush=True)
-        os.execv(sys.executable, [sys.executable, "-I", "-m", "so101_demo.cli."+expected, *argv[1:]])
+        os.execv(sys.executable, [sys.executable, "-I", "-m", "so101_demo.cli."+argv[0], *argv[1:]])
         return 0
     except (OSError, ValueError, TypeError, KeyError, ImportError) as error:
         print(f"IMAGE_BOOTSTRAP_REFUSED: {error}", file=sys.stderr)

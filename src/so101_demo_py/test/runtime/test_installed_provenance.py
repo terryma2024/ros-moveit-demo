@@ -15,6 +15,7 @@ from paths import TEST_ROOT
 EXPECTED_EXECUTABLES = {
     "act_instance_native",
     "campaign_shard",
+    "campaign_processor",
     "act_offline_episode",
     "camera_preset",
     "dynamic_cup_pick_place",
