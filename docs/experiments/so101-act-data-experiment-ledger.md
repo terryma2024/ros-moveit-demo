@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3679
-next_experiment: EXP-603 (PLANNED): two-phase debug run with the release-marker fix and per-scene fault isolation.
+latest_checkpoint: CP-3680
+next_experiment: EXP-604 (to be planned) after the processor control readiness fix.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3680 — EXP-603 VALID failure: phase 1 and the transition work (16 of 16 recorded in 677 s, syncfs 6 ms); every processor unreachable; exit code 0 despite faults
+
+- First end-to-end two-phase run. Phase 2 could not reach any processor (CONTAINER_CONTROL_OWNER_NOT_READY), although the processor containers started and reported ready.
+- The CLI exit code ignored the phase-2 faults.
+- Both handed to Sonnet.
 
 ## CP-3679 — Release-marker fix, per-scene fault isolation; gate PASS; EXP-603 planned
 
@@ -97,7 +103,7 @@ next_experiment: EXP-603 (PLANNED): two-phase debug run with the release-marker 
 
 ```yaml
 experiment_id: EXP-603
-status: PLANNED
+status: VALID
 prior_experiment: EXP-602 (VALID failure; Teacher release-marker fault before phase 2)
 hypothesis: The two-phase run completes end to end at eight concurrent recordings, with VALID at or above EXP-599's 13 of 16.
 prediction: Phase 1 about 12 minutes, phase 2 about 12 to 15 minutes. A Teacher release-marker failure, if any, seals as a Teacher failure, and any other per-scene fault is isolated. VALID at least 13 of 16.
@@ -121,15 +127,27 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T161808Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T161808Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 16:19:44Z to 16:32:53Z, CLI exit 0; every host record written; store IDLE afterwards.
+  - Phase 1 (first shard launch to last shard stop): 677 s; 16 of 16 recorded, Teacher 16 of 16 PASS; every shard stop proven.
+  - syncfs (libc.syncfs) 0.006 s.
+  - Phase 2: 76 s.
+    - 48 processor launches (8 slots, 6 generations each), all lost with PROCESSOR_UNREACHABLE CONTAINER_CONTROL_OWNER_NOT_READY; 48 dispatches with no result; 32 retries.
+    - All 16 scenes ended FAULT PROCESSING_RETRIES_EXHAUSTED; VALID 0 of 16.
+    - Each processor container did start: its root holds processor-ready.json, control/child-ready.json and both control sockets, and its log holds only the image readback line.
+  - The CLI exited 0 although every scene was a phase-2 FAULT.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The two-phase path works through phase 1, the stop proofs, syncfs and the phase-2 scheduler, retries and journal.
+  - Two defects:
+    - the Host never reaches the processor's control interface although the child reports ready;
+    - the exit code ignores phase-2 faults.
+conclusion: VALID failure. Phase 1 and the phase transition work; phase 2 cannot reach its processors.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T161808Z (host/processing-journal.jsonl, processing-result.json, campaign-result.json, processing/pNN/gK)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T161808Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp603 (shard, teacher and 48 processor logs) and exp603-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
