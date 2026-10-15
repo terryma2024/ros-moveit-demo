@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3669
-next_experiment: EXP-599 (PLANNED): 16-scene debug run, recording cap 4 with at most 4 tasks in flight.
+latest_checkpoint: CP-3670
+next_experiment: NONE until the human chooses between the in-flight limit for qualification and reducing the offline-processing interference.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3670 — EXP-599 VALID: at most four tasks in flight gives 13 of 16 VALID; other shards' offline processing is the main interferer
+
+- Recording cap 4 with tasks in flight limited to 4. 13 of 16 VALID in 32 minutes, against 4 of 16 (cap 4, no limit) and 11 of 16 (cap 2).
+- Human question "现在能定位出是，发送端延迟，还是rosbag的延迟，亦或其他部分":
+  - Late wrist frames are a delivery delay after an on-time, fast publish call. Transport and the rosbag subscriber are not separated yet.
+  - INPUT_STALE comes from the Teacher process lagging behind /clock while the bag is continuous.
+  - Simulation stalls are rare.
+  - Per-message traces were proposed to separate the remaining cases.
 
 ## CP-3669 — EXP-599 planned: recording cap 4, at most 4 tasks in flight
 
@@ -82,7 +91,7 @@ next_experiment: EXP-599 (PLANNED): 16-scene debug run, recording cap 4 with at 
 
 ```yaml
 experiment_id: EXP-599
-status: PLANNED
+status: VALID
 prior_experiment: EXP-598 (VALID; cap 2, 11 of 16) and EXP-597 (VALID; cap 4 without an in-flight limit, 4 of 16)
 hypothesis: The interference comes from other shards' offline processing running during recordings; with at most four tasks in flight, VALID rises well above EXP-597's 4 of 16.
 prediction: VALID near or above EXP-598's 11 of 16 if offline processing is the interferer; near 4 of 16 if four concurrent recordings themselves interfere. Run time longer than EXP-597.
@@ -106,15 +115,23 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T070725Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T070725Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 07:08:30Z to 07:40:46Z, 32 minutes (cap 4 without the limit 21, cap 2 25), CLI exit 0; 16 of 16 collected; Teacher 16 of 16 PASS.
+  - Data 13 of 16 VALID. INVALID:
+    - NO_NEW_ACQUISITION 1;
+    - INPUT_STALE 1;
+    - one episode with topic loss on /clock, /joint_states and scene_state and COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE.
 inferred:
-  - NONE
-conclusion: PENDING
+  - With the recording cap unchanged at 4, keeping other shards' offline processing out of the recording window raised VALID from 4 of 16 (EXP-597) to 13 of 16. The main interferer is the concurrent offline processing, not four concurrent recordings as such (single comparison per setting).
+  - 13 of 16 (81 percent) projects to about 32 of 40, near the 34 required. The cost is a run about 50 percent longer.
+  - The mechanism by which offline processing delays the Teacher and message delivery (CPU, memory bandwidth or cache, IO) is not established; disk IO alone was not reproduced as the cause (CP-3668).
+conclusion: VALID. Concurrent offline processing in other shards is the main source of the INVALID episodes; the in-flight limit is an effective mitigation at a time cost.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T070725Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T070725Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp599 and exp599-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
