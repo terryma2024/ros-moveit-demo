@@ -16,6 +16,8 @@ import os
 import queue
 import threading
 
+from .delivery_diag import LOG as _DIAG_LOG, timed as _timed
+
 QUEUE_CAPACITY = 1024          # about 50 s of reads at 20 Hz
 FSYNC_EVERY = 20
 CLOSE_TIMEOUT_S = 30.0
@@ -84,16 +86,16 @@ class SceneReadWriter:
                 if self._broken:
                     continue                      # the failure is recorded; nothing more can be written
                 try:
-                    self._write(record)
+                    _timed(_DIAG_LOG, "sidecar_write", lambda: self._write(record), written=self.written)
                     self.written += 1
                     if self.written % self._fsync_every == 0:
-                        self._sync()
+                        _timed(_DIAG_LOG, "sidecar_fsync", self._sync, written=self.written, queued=self._queue.qsize())
                 except Exception as error:   # noqa: BLE001 - any write or fsync error is a recorder failure
                     self._broken = True
                     self._fail(f"RAW_SCENE_SIDECAR_WRITE_FAILED: {error!r}"[:300])
             if not self._broken:
                 try:
-                    self._sync()
+                    _timed(_DIAG_LOG, "sidecar_final_fsync", self._sync, written=self.written)
                 except Exception as error:   # noqa: BLE001
                     self._fail(f"RAW_SCENE_SIDECAR_WRITE_FAILED: {error!r}"[:300])
         finally:

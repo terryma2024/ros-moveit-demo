@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 from so101_demo.runtime.act_instance.identity import instance_output, instance_root
 from .bag_root import bag_root_decision
+from .delivery_diag import DeliveryGapMonitor
 from .scene_read_writer import CLOSE_TIMEOUT_S, SceneReadWriter, SceneReadWriterError
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
@@ -280,6 +281,7 @@ class RawRecorder:
         self._spin_thread = None
         self._recording_ready = False
         self._matched_counts = {}
+        self._gap_monitor = DeliveryGapMonitor()   # diagnostics only: probe receipt gaps (RECORDER_DELIVERY_SLOW)
         self.bag_root=None   # instance mode: where the bag may live and the directory identities that decided it
 
     def start(self) -> None:
@@ -333,6 +335,7 @@ class RawRecorder:
 
                 def received(_message, name=topic):
                     self._received[name] = self._received.get(name, 0) + 1
+                    self._gap_monitor.on_message(name)
 
                 self._subscriptions[topic] = self._probe.create_subscription(get_message(infos[0].topic_type), topic,
                                                                             received, profile, raw=True)
@@ -362,6 +365,7 @@ class RawRecorder:
             if core_ok and others_ok and self.failure is None:
                 self.anchor_start = clock_anchor()
                 self._recording_ready = True
+                self._gap_monitor.start()
                 return True, state
             if clock() >= deadline or self.failure is not None:
                 return False, state
@@ -420,6 +424,7 @@ class RawRecorder:
     def stop(self) -> dict:
         """Stop recording, close the bag and read it back. Never raises."""
         stats = {"schema": STATS_SCHEMA, "schema_version": 1, "failure": self.failure}
+        self._gap_monitor.stop()
         try:
             if self._sidecar is not None:
                 self._sidecar.stop()
