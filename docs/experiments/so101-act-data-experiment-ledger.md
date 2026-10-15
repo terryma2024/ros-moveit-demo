@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3685
-next_experiment: EXP-606 (PLANNED): two-phase debug run with phase-1 recording cap 4.
+latest_checkpoint: CP-3686
+next_experiment: EXP-607 (to be planned): EXP-606 repeated at recording cap 4 on the code after plan task 11.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3686 — EXP-606 INVALID: the worktree source changed during the run (coordinator error)
+
+- The Host CLI loads modules from the worktree at runtime. The task-11 writer was released after the launch check and edited Host modules mid-run, and four tasks failed together.
+- Rule recorded in the coordinator's memory: no edits to src/, scripts/ or third_party/ while a collection run is active.
+- The cap-4 debug run is repeated as EXP-607 on the code after task 11, with a new gate and new images.
 
 ## CP-3685 — Human decision: phase-1 recording cap 4; EXP-606 planned; plan task 11 drafted
 
@@ -85,7 +91,7 @@ next_experiment: EXP-606 (PLANNED): two-phase debug run with phase-1 recording c
 
 ```yaml
 experiment_id: EXP-606
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-605 (VALID; first complete two-phase run, 7 of 16 at eight concurrent recordings)
 hypothesis: With at most four concurrent recordings in phase 1 and no processing overlap, VALID reaches at least 14 of 16.
 prediction: VALID 13 to 16 of 16. Phase 1 about 1.5 to 2 times EXP-605's 626 s; phase 2 about 540 s.
@@ -109,15 +115,21 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261015T232201Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261015T232201Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Run 23:30:37Z to 23:37:22Z; CLI CAMPAIGN_RUN_FAILED CONTAINER_WAVE_COMMIT_READBACK_INVALID.
+  - Phase 1 had collected 6 tasks when four tasks failed in the same second (failed.json mtime 07:37:07 local) with CONTAINER_INSTANCE_UNREACHABLE TimeoutError: wave-0-w01-dbg-03, w02-dbg-05, w03-dbg-06, w05-dbg-11.
+  - Stops proven; store IDLE afterwards.
+  - The plan-task-11 writer, released by the coordinator after the launch check had passed, edited the worktree source between 07:31:44 and 07:36:38 local (uncommitted). The Host-side modules coordinator.py, task_contracts.py, task_executor.py, processor_owner.py, shard_owner.py and config.py changed between 07:35:28 and 07:36:00.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The Host CLI imports so101_demo from the worktree at runtime, so it picked up half-edited code mid-run; the simultaneous unreachable failures follow from that.
+  - Coordinator error: the launch check only guards the start.
+conclusion: INVALID - the source trees changed during the run (invalid criterion). No data result.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261015T232201Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261015T232201Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp606 and exp606-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
