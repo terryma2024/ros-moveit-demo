@@ -16,6 +16,7 @@ from so101_demo.act.parallel_collection import plan_campaign_waves
 from so101_demo.act.parallel_collection_contracts import (
     read_document,scene_ids,validate_run_contract,
 )
+from so101_demo.runtime.container_campaign.durability import sync_filesystem
 from so101_demo.runtime.container_campaign.resource_log import (
     append_resource_log,check_disk_dispatch_guard,read_disk_free_bytes,
 )
@@ -31,7 +32,7 @@ from so101_teleop.unified.worker_slots import ActWorkerSlot
 class ContainerCampaignOwner:
     def __init__(self,*,admitted_context,config,root,service_owner,slots,manifest_path,
                  qualification,launcher,coordinator,verifier,monotonic_ns=time.monotonic_ns,
-                 approved_disk_floor_bytes=0,disk_reader=read_disk_free_bytes):
+                 approved_disk_floor_bytes=0,disk_reader=read_disk_free_bytes,syncfs=sync_filesystem):
         root=Path(root)
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind!='act_collection_start'
@@ -42,7 +43,7 @@ class ContainerCampaignOwner:
                 or type(slots) is not tuple or len(slots)!=admitted_context.worker_count
                 or any(type(slot) is not ActWorkerSlot for slot in slots)
                 or not callable(launcher) or not callable(monotonic_ns) or not callable(disk_reader)
-                or type(approved_disk_floor_bytes) is not int or approved_disk_floor_bytes<0):
+                or type(approved_disk_floor_bytes) is not int or approved_disk_floor_bytes<0 or not callable(syncfs)):
             raise ValueError('CAMPAIGN_OWNER_CONFIG_INVALID')
         if (load_campaign_config(admitted_context.campaign_config_path,roles=('teacher',),
                 expected_sha256=admitted_context.campaign_config_sha256)!=config or service_owner.config!=config):
@@ -60,6 +61,7 @@ class ContainerCampaignOwner:
         self.manifest_path=Path(manifest_path)
         self.qualification,self.launcher,self.coordinator,self.verifier=qualification,launcher,coordinator,verifier
         self.clock,self.approved_disk_floor_bytes,self.disk_reader=monotonic_ns,approved_disk_floor_bytes,disk_reader
+        self.syncfs=syncfs
         self.dispatch_stopped=False
         self.stop_reason=None
         self.shards=[]
@@ -165,7 +167,14 @@ class ContainerCampaignOwner:
                 verified=await asyncio.to_thread(self.verifier.verify_wave,plan,outcome,prepared)
                 _write(self.root/'host'/('wave-'+str(plan['wave_index'])+'-verified.json'),verified)
                 completed.append(verified)
+            await self._finish_phase1(ids,completed)
+            await self.start_phase_two(completed)
             result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed)
+            if any(row['proof'].get('processing')=='PENDING' for wave in completed for row in wave['case_results']):
+                # Only the Teacher half is proven. The campaign result and the frozen index need processed episodes (phase 2).
+                result['processing']='PENDING'
+                _write(self.root/'host/phase1-result.json',result)
+                return result
             _write(self.root/'host/campaign-result.json',result)
             _write(self.root/'collection-index.json',build_frozen_index(campaign_id=self.context.campaign_id,
                 qualification=self.qualification,scene_count=len(ids),waves=completed))
@@ -175,6 +184,28 @@ class ContainerCampaignOwner:
                 monitor.cancel()
                 await asyncio.gather(monitor,return_exceptions=True)
             self._run_done.set()
+
+    async def _finish_phase1(self,ids,completed):
+        """After the last phase-1 wave is verified: prove every shard stopped, then make the run root durable with one syncfs.
+
+        Phase 1 writes the raw bags without fsync; nothing that reads them (phase 2) may start before this record exists."""
+        proven=await asyncio.to_thread(self.registry.role_terminated,'shard',self.services.inspect_container)
+        if proven is not True:
+            self.stop_dispatch('CAMPAIGN_PHASE1_STOP_UNPROVEN')
+            raise ValueError('CAMPAIGN_PHASE1_STOP_UNPROVEN')
+        try:
+            synced=await asyncio.to_thread(self.syncfs,self.root)
+        except Exception as error:
+            self.stop_dispatch('CAMPAIGN_PHASE1_SYNC_FAILED')
+            _write(self.root/'host/phase1-sync-fault.json',dict(type=type(error).__name__,reason=str(error)))
+            raise ValueError('CAMPAIGN_PHASE1_SYNC_FAILED') from error
+        _write(self.root/'host/phase1-durability.json',dict(schema_version=1,kind='act_collection_phase1_durability',
+            campaign_id=self.context.campaign_id,scene_count=len(ids),waves=len(completed),shards_proven_stopped=True,
+            **synced))
+
+    async def start_phase_two(self,waves):
+        """The hook between the phase-1 durability record and phase 2 (plan task 5 starts the processor scheduler here)."""
+        return None
 
     async def close(self):
         self._closing=True

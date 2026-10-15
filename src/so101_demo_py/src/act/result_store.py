@@ -1191,9 +1191,25 @@ def verify_container_task_registration(registration_path, *, scope, inputs_manif
                     or any(verdict[key] != summary[key] for key in (*_DATA_FIELDS, *binding))):
                 raise ValueError('summary differs from the verified result')
             _parity_physical_audit(verdict, sealed/'episode', scope, trust_independent_qc_memo=trust_independent_qc_memo)
+        receipt = None
+        if verdict['act_data_status'] == 'PENDING_QC' and verdict['episode_seal_sha256'] is None:
+            # Phase 1: the Teacher half is proven by the result above. The data waits for the processor, which will trust only
+            # the raw files this receipt binds; every listed file is re-hashed here, none may be missing, changed or unlisted.
+            from .offline.recording_receipt import verify_recording_receipt
+            reset_epoch = summary['reset']['reset_epoch']
+            if type(reset_epoch) is not str or not reset_epoch.startswith('reset-') or not reset_epoch[6:].isdecimal():
+                raise ValueError('reset identity')
+            receipt = verify_recording_receipt(sealed, lease_identity=summary['lease'],
+                identity=dict(session_id=summary['reset']['simulation_session_id'], reset_epoch=int(reset_epoch[6:]),
+                              attempt_id=lease.attempt_id),
+                external={name: summary['inputs'][name]['sha256'] for name in ('scope', 'inputs_manifest')})
         return dict(kind='ACT_CONTAINER_TASK_READBACK', schema_version=1, status='PASS', result_schema_version=3,
             result_status=verdict['status'], **{key: verdict[key] for key in (*_DATA_FIELDS, *binding)},
             result_sha256=verdict['sha256'], task_result_sha256=record['task_result_sha256'], task_id=task_id,
-            scene_id=scene, worker_id=record['worker_id'], location=str(sealed))
+            scene_id=scene, worker_id=record['worker_id'], location=str(sealed),
+            processing='NOT_PENDING' if receipt is None else 'PENDING',
+            receipt_sha256=None if receipt is None else receipt['sha256'],
+            recording_files=None if receipt is None else receipt['files'],
+            recording_bytes=None if receipt is None else receipt['bytes'])
     except (OSError, ValueError, TypeError, KeyError, AttributeError, UnicodeError) as error:
         raise ValueError('CONTAINER_TASK_READBACK_INVALID') from error

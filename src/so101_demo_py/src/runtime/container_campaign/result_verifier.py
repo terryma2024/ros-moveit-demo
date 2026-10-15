@@ -203,11 +203,14 @@ _TASK_DATA = ('result_status', 'teacher_execution_status', 'teacher_task_result'
 def build_frozen_index(*, campaign_id, qualification, scene_count, waves):
     """The one document export reads: every collected task, and the episodes a formal export may take.
 
-    A qualification campaign never lists committed episodes."""
+    A qualification campaign never lists committed episodes. A proof whose processing is still pending (phase 1 only) has no episode
+    or QC to list: the index is refused with PROCESSING_PENDING until the combined proof exists."""
     tasks, committed = [], []
     for wave in waves:
         for row in wave['case_results']:
             proof = row['proof']
+            if proof.get('processing') == 'PENDING':
+                raise ValueError('PROCESSING_PENDING')
             tasks.append(dict(scene_id=row['scene_id'], worker_id=row['worker_id'], task_id=row['task_id'],
                 launch_id=row['launch_id'], location=row['location'], **{name: proof[name] for name in _TASK_DATA}))
             if proof['export_eligible'] is True and not qualification:

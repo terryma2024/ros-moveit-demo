@@ -102,7 +102,8 @@ def write_recording_receipt(attempt_root, *, lease_identity: dict, identity: dic
             "bytes": sum(item["size"] for item in raw_files)}
 
 
-def verify_recording_receipt(attempt_root, *, lease_identity: dict | None = None, external: dict | None = None) -> dict:
+def verify_recording_receipt(attempt_root, *, lease_identity: dict | None = None, identity: dict | None = None,
+                             external: dict | None = None) -> dict:
     """Re-hash every file the receipt lists and compare; refuses an unlisted file under `raw/`, a missing or changed file, a lease
     identity other than `lease_identity` and external document hashes other than `external` (`{name: sha256}`).
 
@@ -120,6 +121,8 @@ def verify_recording_receipt(attempt_root, *, lease_identity: dict | None = None
         raise ValueError("RECORDING_RECEIPT_SHAPE_INVALID")
     if lease_identity is not None and receipt["lease_identity"] != {name: lease_identity[name] for name in _LEASE_FIELDS}:
         raise ValueError("RECORDING_RECEIPT_LEASE_MISMATCH")
+    if identity is not None and receipt["identity"] != identity:
+        raise ValueError("RECORDING_RECEIPT_IDENTITY_MISMATCH")
     listed = set()
     total = 0
     for item in receipt["raw_files"]:

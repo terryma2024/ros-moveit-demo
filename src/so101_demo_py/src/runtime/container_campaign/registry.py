@@ -239,6 +239,19 @@ class ContainerLaunchRegistry:
             except (OSError, ValueError, RuntimeError, KeyError):
                 return False
 
+    def role_terminated(self, role, inspect_container, inspect_native=None):
+        """Re-prove the stop of every launch of one role (the end of phase 1 proves the shards while the services still run). A
+        role with no launch is vacuously proven; a launch that was never bound or never settled is not."""
+        with self._lock:
+            records = [item for item in self.records() if item['launch']['role'] == role]
+            if any(item['owner'] is None or item['exit_inspect'] is None for item in records):
+                return False
+            try:
+                return all(self.prove_terminated(item['launch']['launch_id'], self._exit_document(
+                    item, inspect_container, inspect_native)) for item in records)
+            except (OSError, ValueError, RuntimeError, KeyError):
+                return False
+
     @staticmethod
     def _exit_document(record, inspect_container, inspect_native):
         if record['launch'].get('launcher', 'container') == 'native':

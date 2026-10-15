@@ -98,6 +98,9 @@ def _export_gates(scope,proof,evidence):
         raise ValueError('EXPORT_EPISODE_RESULT_SCHEMA_INVALID')
     if proof['result_status']!='PASSED':
         raise ValueError('EXPORT_EPISODE_NOT_PASSED')
+    if proof.get('processing')=='PENDING':
+        # phase 1 only: the Teacher half is proven, the episode and the QC do not exist yet
+        raise ValueError('EXPORT_EPISODE_PROCESSING_PENDING')
     if proof.get('act_data_qc')!='PASS' or proof.get('export_eligible') is not True:
         # the Teacher passed, but only an independent data QC PASS makes the episode training data
         raise ValueError('EXPORT_EPISODE_DATA_QC_NOT_PASSED')

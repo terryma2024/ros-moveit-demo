@@ -62,8 +62,31 @@ def seal_manifest_free_perception_result(task_dir, lease, scope, inputs):
         task_result='UNCONFIRMED', data_status='INVALID', data_reason='PERCEPTION_NO_POSE'))
 
 
+def seal_phase1_pending_result(task_dir, lease, scope, inputs, *, teacher_outcome='PASSED'):
+    """What a phase-1 shard task seals: the Teacher manifest and result, a closed (synthetic) raw bag with its recording receipt,
+    PENDING_QC data, no episode and no QC."""
+    from act_result_teacher import sealed_teacher
+    from so101_demo.act.offline.orchestration import LEASE_FIELDS
+    from so101_demo.act.offline.recording_receipt import write_recording_receipt
+    from so101_demo.act.result_store import ActCollectionResultStore
+    workspace = task_dir/'attempts'/lease.point_id/lease.attempt_id
+    store = ActCollectionResultStore(workspace, lease, clock=lambda: lease.lease_issued_monotonic_s+.5,
+        audit_manifest=workspace/'working/episode/audit/audit-manifest.json', scope=scope, inputs_manifest=inputs)
+    raw = store.working/'raw'
+    (raw/'bag').mkdir(parents=True)
+    (raw/'bag'/'metadata.yaml').write_text('rosbag2_bagfile_information: {}\n')
+    (raw/'bag'/'bag_0.db3').write_bytes(b'bag' * 4096)
+    (raw/'record-stats.json').write_text('{"rc": 0}\n')
+    identity = {name: getattr(lease, name) for name in LEASE_FIELDS}
+    (raw/'lease.json').write_text(json.dumps(identity, sort_keys=True)+'\n')
+    claim = sealed_teacher(store, teacher_outcome, data='PENDING_QC')
+    write_recording_receipt(store.working, lease_identity=identity,
+        identity=dict(session_id='session-1', reset_epoch=2, attempt_id=lease.attempt_id), inputs_manifest=inputs, scope=scope)
+    return store.seal(store.episode_root/'seal.json', teacher=claim, recording_receipt_path=raw/'recording-receipt.json')
+
+
 def build_task(tmp_path, monkeypatch, *, teacher_outcome='PASSED', qc='FAIL', assigned_offset=-1., deadline_offset=5.,
-               perception_no_pose=False):
+               perception_no_pose=False, phase1_pending=False):
     """One real sealed result under <owner>/output/tasks/<id>, its real summary, and the journal's collected record.
 
     With `perception_no_pose` the sealed result is the manifest-free perception form instead of a Teacher episode; the
@@ -77,12 +100,14 @@ def build_task(tmp_path, monkeypatch, *, teacher_outcome='PASSED', qc='FAIL', as
     fixture = tmp_path/'fixture'
     fixture.mkdir()
     _, location, scope, inputs, _ = controlled_committed_result(fixture, monkeypatch, teacher_outcome=teacher_outcome,
-        commit=False, qc=qc, worker_root=fixture/'unused-worker' if perception_no_pose else task_dir,
+        commit=False, qc=qc, worker_root=fixture/'unused-worker' if perception_no_pose or phase1_pending else task_dir,
         run_root=fixture/'unused-coordinator')
     audit = json.loads((location/'episode/audit/audit-manifest.json').read_text())
     lease = LeaseIdentity(**audit['identity']['lease'])
     if perception_no_pose:
         location = seal_manifest_free_perception_result(task_dir, lease, scope, inputs)
+    if phase1_pending:
+        location = seal_phase1_pending_result(task_dir, lease, scope, inputs, teacher_outcome=teacher_outcome)
     summary = result_summary(task_input=SimpleNamespace(scene_id='point-1',
         refs=dict(scope=ref(scope), inputs_manifest=ref(inputs))), lease=lease,
         reset=SimpleNamespace(reset_epoch='reset-2', simulation_session_id='session-1'),
