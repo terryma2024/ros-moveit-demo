@@ -17,6 +17,9 @@ All times are Host monotonic seconds, the unit of `AdmittedCampaignContext.deadl
 DEFAULT_RESERVE_S = 1800
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_VERIFICATION_RESERVE_S = 600
+#: one processing task: the offline processor (`act.offline.orchestration.PROCESSING_TIMEOUT_S`, 1200 s) plus its seal margin and the
+#: task-result publication; the config key `processing_task_timeout_s` may not be lower (`runtime.inference.config`)
+DEFAULT_TASK_TIMEOUT_S = 1800
 MAX_DEFAULT_PROCESSORS = 12
 #: the processor peaks at 2.2 GiB and its QC child runs after it
 PROCESSOR_MEMORY_BYTES = 3 * 2**30
@@ -49,6 +52,10 @@ def phase2_deadline_s(config, *, phase2_start_s, total_deadline_s):
     end = total_deadline_s - config.get("verification_reserve_s", DEFAULT_VERIFICATION_RESERVE_S)
     return end if process is None else min(phase2_start_s + process, end)
 
+
+def processing_task_timeout_s(config):
+    """The time budget of one processing task (never the Teacher stage limits), before the phase deadline caps it."""
+    return config.get("processing_task_timeout_s", DEFAULT_TASK_TIMEOUT_S)
 
 
 def default_processor_count(available_bytes):

@@ -110,8 +110,11 @@ _PROCESSING_RESERVE_S = "processing_reserve_s"
 _COLLECT_TIMEOUT_S = "collect_timeout_s"
 _PROCESS_TIMEOUT_S = "process_timeout_s"
 _VERIFICATION_RESERVE_S = "verification_reserve_s"
+_PROCESSING_TASK_TIMEOUT_S = "processing_task_timeout_s"
+# the task timeout may not be lower than the offline processor's 1200 s plus its 60 s seal margin
 _INT_LIMITS = {_PROCESSOR_COUNT: (1, 16), _PROCESSING_MAX_ATTEMPTS: (1, 5), _PROCESSING_RESERVE_S: (1, 86400),
-               _COLLECT_TIMEOUT_S: (1, 86400), _PROCESS_TIMEOUT_S: (1, 86400), _VERIFICATION_RESERVE_S: (1, 86400)}
+               _COLLECT_TIMEOUT_S: (1, 86400), _PROCESS_TIMEOUT_S: (1, 86400), _VERIFICATION_RESERVE_S: (1, 86400),
+               _PROCESSING_TASK_TIMEOUT_S: (1260, 86400)}
 _OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _POST_RECORDING_SHARES, *_INT_LIMITS)
 
 

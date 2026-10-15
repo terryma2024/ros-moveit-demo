@@ -39,7 +39,7 @@ import time
 
 from so101_demo.act.parallel_collection_contracts import read_document
 from so101_demo.runtime.container_campaign.processing_limits import (
-    processing_max_attempts, processor_count_for, read_mem_available_bytes)
+    processing_max_attempts, processing_task_timeout_s, processor_count_for, read_mem_available_bytes)
 from so101_demo.runtime.container_campaign.service_owner import _write
 from so101_demo.runtime.container_campaign.task_contracts import TASK_ID_PATTERN, InputRef, TaskSpec
 from so101_demo.runtime.container_campaign.task_control import ContainerTaskControl
@@ -288,8 +288,7 @@ class ProcessingScheduler:
         path = Path(worker.owner.launch.owned_root) / "task-inputs" / (task_id + ".json")
         _write(path, document)
         digest = hashlib.sha256(canonical_json(document) + b"\n").hexdigest()
-        runtime = self.runtime
-        budget = runtime.executing_hard_timeout_s + runtime.finalizing_hard_timeout_s + runtime.worker_recovery_timeout_s
+        budget = processing_task_timeout_s(self.config)   # its own key: the Teacher stage limits are not a processing budget
         deadline = min(self.clock() + budget, self.deadline_s, self.context.deadline_monotonic_s)
         return TaskSpec(task_id=task_id, inputs_ref=InputRef(path=str(path), sha256=digest), deadline_monotonic_s=deadline), output
 

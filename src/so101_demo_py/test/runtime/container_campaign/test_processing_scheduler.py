@@ -333,6 +333,21 @@ def test_a_task_never_outlives_the_phase_deadline(tmp_path):
     assert world.assigned[0]["deadline"] <= deadline + 1e-6
 
 
+def test_a_task_gets_the_dedicated_processing_budget_not_the_teacher_stage_limits(tmp_path):
+    world = World(tmp_path)
+    world.context.deadline_monotonic_s = time.monotonic() + 5000.
+    scheduler, rows, _ = world.scheduler(config={"processor_count": 1, "processing_task_timeout_s": 1500}, rows=make_rows(world, 1))
+    began = time.monotonic()
+    run(scheduler.run(rows, deadline_s=began + 5000.))
+    assert 1499. <= world.assigned[0]["deadline"] - began <= 1502., "the budget is processing_task_timeout_s, not 40 s of Teacher stages"
+    other = World(tmp_path / "default")
+    other.context.deadline_monotonic_s = time.monotonic() + 5000.
+    scheduler, rows, _ = other.scheduler(config={"processor_count": 1}, rows=make_rows(other, 1))
+    began = time.monotonic()
+    run(scheduler.run(rows, deadline_s=began + 5000.))
+    assert 1799. <= other.assigned[0]["deadline"] - began <= 1802., "default 1800 s"
+
+
 def test_an_infrastructure_failure_after_the_deadline_is_not_retried(tmp_path):
     world = World(tmp_path, script={"scene-00": ("INFRA", "OFFLINE_PROCESSOR_TIMEOUT")})
     scheduler, rows, _ = world.scheduler(config={"processor_count": 1}, rows=make_rows(world, 1))

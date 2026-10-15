@@ -14,6 +14,7 @@ KEYS = {
     "collect_timeout_s": (3000, [0, -1, True, 3000.5, "3000", None]),
     "process_timeout_s": (2000, [0, -1, True, 2000.5, "2000", None]),
     "verification_reserve_s": (600, [0, -1, True, 600.5, "600", None]),
+    "processing_task_timeout_s": (1800, [1259, 0, -1, True, 1800.5, "1800", None]),
 }
 
 

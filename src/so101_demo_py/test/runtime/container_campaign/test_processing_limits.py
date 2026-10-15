@@ -3,7 +3,7 @@
 import pytest
 
 from so101_demo.runtime.container_campaign.processing_limits import (
-    DEFAULT_MAX_ATTEMPTS, DEFAULT_RESERVE_S, DEFAULT_VERIFICATION_RESERVE_S, check_phase_limits, default_processor_count, phase1_deadline_s,
+    DEFAULT_MAX_ATTEMPTS, DEFAULT_RESERVE_S, DEFAULT_TASK_TIMEOUT_S, DEFAULT_VERIFICATION_RESERVE_S, processing_task_timeout_s, check_phase_limits, default_processor_count, phase1_deadline_s,
     phase2_deadline_s, processing_max_attempts, processor_count_for)
 
 GIB = 2**30
@@ -53,6 +53,11 @@ def test_phase_two_leaves_a_verification_reserve_for_the_hosts_readback():
                              total_deadline_s=5400.) == 3000.
     with pytest.raises(ValueError, match="CAMPAIGN_PHASE_LIMITS_EXCEED_TOTAL"):
         check_phase_limits({"verification_reserve_s": TOTAL}, TOTAL)
+
+
+def test_a_processing_task_has_its_own_time_budget():
+    assert DEFAULT_TASK_TIMEOUT_S == 1800
+    assert processing_task_timeout_s({}) == 1800 and processing_task_timeout_s({"processing_task_timeout_s": 2400}) == 2400
 
 
 @pytest.mark.parametrize("available_gib,expected", [(0.5, 1), (2.9, 1), (3, 1), (8.9, 2), (36, 12), (500, 12), (100, 12)])
