@@ -1,7 +1,9 @@
 """The planning-scene sidecar file, written off the read loop.
 
 The read loop (about 20 Hz, and the Recorder's causal join needs every read) only `put`s finished lines. A single writer thread
-appends them to the file in order, flushes and `fsync`s every `fsync_every` lines and once more at `close`. The file bytes are exactly
+appends them to the file in order and flushes every `flush_every` lines (to the page cache, never an fsync: eight shards share one
+filesystem and an in-episode fsync waits for all dirty data and stalls the process 100-400 ms). The file and its directory are `fsync`ed
+once, at `close`, when the episode's recording ends. The file bytes are exactly
 the bytes that were put, in the order they were put.
 
 Nothing is dropped silently. A full queue and a write or fsync error both set `failure`, a code the recorder reports in its stats
@@ -19,7 +21,7 @@ import threading
 from .delivery_diag import LOG as _DIAG_LOG, timed as _timed
 
 QUEUE_CAPACITY = 1024          # about 50 s of reads at 20 Hz
-FSYNC_EVERY = 20
+FLUSH_EVERY = 20
 CLOSE_TIMEOUT_S = 30.0
 
 
@@ -28,10 +30,10 @@ class SceneReadWriterError(RuntimeError):
 
 
 class SceneReadWriter:
-    def __init__(self, path, *, capacity: int = QUEUE_CAPACITY, fsync_every: int = FSYNC_EVERY) -> None:
+    def __init__(self, path, *, capacity: int = QUEUE_CAPACITY, flush_every: int = FLUSH_EVERY) -> None:
         self._path = Path(path)
         self._queue: queue.Queue = queue.Queue(maxsize=capacity)
-        self._fsync_every = fsync_every
+        self._flush_every = flush_every
         self._closing = threading.Event()
         self._lock = threading.Lock()
         self._thread = None
@@ -70,9 +72,18 @@ class SceneReadWriter:
     def _write(self, record: bytes) -> None:
         self._stream.write(record)
 
+    def _flush(self) -> None:
+        self._stream.flush()
+
     def _sync(self) -> None:
+        """The one durable write: the file, then its directory entry."""
         self._stream.flush()
         os.fsync(self._stream.fileno())
+        directory = os.open(self._path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
     def _run(self) -> None:
         try:
@@ -88,8 +99,8 @@ class SceneReadWriter:
                 try:
                     _timed(_DIAG_LOG, "sidecar_write", lambda: self._write(record), written=self.written)
                     self.written += 1
-                    if self.written % self._fsync_every == 0:
-                        _timed(_DIAG_LOG, "sidecar_fsync", self._sync, written=self.written, queued=self._queue.qsize())
+                    if self.written % self._flush_every == 0:
+                        _timed(_DIAG_LOG, "sidecar_flush", self._flush, written=self.written, queued=self._queue.qsize())
                 except Exception as error:   # noqa: BLE001 - any write or fsync error is a recorder failure
                     self._broken = True
                     self._fail(f"RAW_SCENE_SIDECAR_WRITE_FAILED: {error!r}"[:300])

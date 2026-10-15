@@ -18,7 +18,7 @@ def lines(count):
 
 
 def old_path_bytes(path, records):
-    """What the previous read-loop code produced: buffered writes in order, flush and fsync every 20 records and at the end."""
+    """What the previous read-loop code produced: buffered writes in order, flush and fsync every 20 records and at the end (the reference bytes only)."""
     with open(path, "ab") as stream:
         for index, record in enumerate(records, start=1):
             stream.write(record)
@@ -42,12 +42,13 @@ def test_every_record_is_written_in_order_and_identical_to_the_old_path(tmp_path
     assert (tmp_path / "new.jsonl").read_bytes() == expected == b"".join(records)
 
 
-def test_close_fsyncs_everything_it_wrote_before_it_returns(tmp_path, monkeypatch):
-    sizes = []
+def test_no_fsync_while_recording_and_one_file_plus_directory_fsync_at_close(tmp_path, monkeypatch):
+    """Eight shards share one filesystem: an in-episode fsync waits for every dirty page and stalls the writer 100-400 ms."""
+    synced = []
     real = os.fsync
 
     def spy(descriptor):
-        sizes.append(os.fstat(descriptor).st_size)
+        synced.append((os.fstat(descriptor).st_size, os.path.isdir(f"/proc/self/fd/{descriptor}")))
         return real(descriptor)
 
     monkeypatch.setattr(os, "fsync", spy)
@@ -56,9 +57,25 @@ def test_close_fsyncs_everything_it_wrote_before_it_returns(tmp_path, monkeypatc
     writer.start()
     for record in records:
         writer.put(record)
+    deadline = time.monotonic() + 5.0
+    while writer.written < 45 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert writer.written == 45 and synced == []   # recording: written and flushed, never fsync'd
+    assert len((tmp_path / "scene.jsonl").read_bytes()) >= len(b"".join(records[:40]))   # flushed, readable by the recorder
     writer.close()
-    assert len(sizes) == 3 and sizes[0] == len(b"".join(records[:20])) and sizes[1] == len(b"".join(records[:40]))   # every 20 records
-    assert sizes[-1] == len(b"".join(records)) == (tmp_path / "scene.jsonl").stat().st_size   # the final one covers all of it
+    total = len(b"".join(records))
+    assert synced == [(total, False), (synced[1][0], True)]   # the file once, covering all of it, then its directory
+    assert total == (tmp_path / "scene.jsonl").stat().st_size
+
+
+def test_close_fsyncs_the_file_even_when_it_is_empty_of_new_lines(tmp_path, monkeypatch):
+    calls = []
+    real = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda descriptor: (calls.append(descriptor), real(descriptor))[1])
+    writer = SceneReadWriter(tmp_path / "scene.jsonl")
+    writer.start()
+    writer.close()
+    assert writer.failure is None and len(calls) == 2
 
 
 def test_a_slow_writer_never_delays_put(tmp_path, monkeypatch):
@@ -88,13 +105,10 @@ def test_a_write_error_is_a_failure_and_later_puts_refuse(tmp_path, monkeypatch)
     writer.start()
     for record in lines(20):
         writer.put(record)
-    deadline = time.monotonic()+5.0
-    while writer.failure is None and time.monotonic() < deadline:
-        time.sleep(0.01)
+    writer.close()   # the only fsync is the final one: its failure is the recorder failure
     assert writer.failure is not None and writer.failure.startswith("RAW_SCENE_SIDECAR_WRITE_FAILED")
     with pytest.raises(SceneReadWriterError, match="RAW_SCENE_SIDECAR_WRITE_FAILED"):
         writer.put(b"{}\n")
-    writer.close()
     assert writer.failure.startswith("RAW_SCENE_SIDECAR_WRITE_FAILED")
     monkeypatch.setattr(os, "fsync", real)
 
