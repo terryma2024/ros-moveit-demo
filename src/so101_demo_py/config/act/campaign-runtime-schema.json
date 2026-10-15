@@ -341,6 +341,11 @@
       "minimum": 0,
       "maximum": 3600
     },
+    "post_recording_cpu_shares": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 1024
+    },
     "qualification_contract": {
       "oneOf": [
         {

@@ -182,6 +182,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
         coordinator = ConcurrentCollectionCoordinator(context=context, config=runtime, case_inputs=case_inputs,
             scene_manifest=scene_manifest, max_recording_shards=config.get('max_concurrent_recordings'),
             max_tasks_in_flight=config.get('max_tasks_in_flight'), min_assignment_gap_s=config.get('min_assignment_gap_s'),
+            post_recording_cpu_shares=config.get('post_recording_cpu_shares'),
             **given(control_factory=control_factory))
         verifier = ContainerWaveResultVerifier(root=paths['run'], registry=registry, case_inputs=case_inputs,
             qualification=qualification)

@@ -101,7 +101,8 @@ def _service(service, role, *, readback):
 _RECORDING_CAP = "max_concurrent_recordings"
 _TASKS_IN_FLIGHT = "max_tasks_in_flight"
 _ASSIGNMENT_GAP = "min_assignment_gap_s"
-_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP)
+_POST_RECORDING_SHARES = "post_recording_cpu_shares"
+_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _POST_RECORDING_SHARES)
 
 
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
@@ -135,6 +136,9 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
         if _ASSIGNMENT_GAP in document:
             # Minimum Host monotonic seconds between two assignments across shards.
             _require(type(document[_ASSIGNMENT_GAP]) in (int, float) and 0 <= document[_ASSIGNMENT_GAP] <= 3600)
+        if _POST_RECORDING_SHARES in document:
+            # Docker CPU weight a shard container holds during offline processing (restored afterwards); absent: feature off.
+            _require(type(document[_POST_RECORDING_SHARES]) is int and 2 <= document[_POST_RECORDING_SHARES] <= 1024)
         _require(type(document["schema_version"]) is int and document["schema_version"] == 1
                  and document["kind"] == "ACT_CONTAINER_CAMPAIGN")
         root = _absolute(document["evidence_root"])
