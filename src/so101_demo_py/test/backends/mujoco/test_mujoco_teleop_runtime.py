@@ -76,7 +76,7 @@ def test_pause_snapshot_accepts_fresh_already_paused_evidence(monkeypatch) -> No
 
     class Client:
         def wait_for_service(self, *, timeout_sec):
-            assert timeout_sec == 1.0
+            assert 0.0 < timeout_sec <= 1.0
             return True
 
         def call_async(self, request):
@@ -118,7 +118,7 @@ def test_pause_snapshot_retries_idempotent_request_after_volatile_frame_loss(
         calls = 0
 
         def wait_for_service(self, *, timeout_sec):
-            assert timeout_sec == 1.0
+            assert 0.0 < timeout_sec <= 1.0
             return True
 
         def call_async(self, request):
@@ -328,3 +328,104 @@ def test_current_evidence_observer_tolerates_a_replayed_previous_epoch(monkeypat
     monkeypatch.setattr(teleop_runtime, "_pause_snapshot", lambda *_a, **_k: paused)
     assert teleop_runtime.current_evidence("sess") is paused
     assert captured["rebaseline_stale_join"] is True
+
+
+def _slice_harness(monkeypatch, *, appears_after):
+    from so101_demo.backends.mujoco import teleop_runtime
+
+    clock = [0.0]
+    monkeypatch.setattr(teleop_runtime.time, "monotonic", lambda: clock[0])
+    spins = []
+
+    class Future:
+        def done(self):
+            return True
+
+        def result(self):
+            return SimpleNamespace(success=True)
+
+    class Client:
+        waits = []
+
+        def wait_for_service(self, *, timeout_sec):
+            self.waits.append(timeout_sec)
+            clock[0] += timeout_sec
+            return appears_after is not None and len(self.waits) >= appears_after
+
+        def call_async(self, request):
+            return Future()
+
+    client = Client()
+    evidence = SimpleNamespace(paused=True)
+    observer = SimpleNamespace(publisher_count=1, snapshot=lambda: evidence)
+    monkeypatch.setattr(
+        teleop_runtime, "rclpy",
+        SimpleNamespace(ok=lambda: True, spin_once=lambda *_a, **_k: spins.append(1)),
+    )
+    node = SimpleNamespace(create_client=lambda *_args: client)
+    return teleop_runtime, node, observer, client, evidence, spins
+
+
+def test_pause_snapshot_waits_for_service_in_slices_within_bound(monkeypatch) -> None:
+    runtime, node, observer, client, evidence, spins = _slice_harness(monkeypatch, appears_after=4)
+    assert runtime._pause_snapshot(node, observer, 5.0) is evidence
+    assert client.waits == [runtime.PAUSE_SERVICE_WAIT_SLICE_S] * 4
+    assert len(spins) >= 3
+
+
+def test_pause_snapshot_service_never_appearing_fails_after_bound(monkeypatch) -> None:
+    runtime, node, observer, client, _evidence, _spins = _slice_harness(monkeypatch, appears_after=None)
+    with pytest.raises(RuntimeError, match="^pause service unavailable$"):
+        runtime._pause_snapshot(node, observer, 2.0)
+    assert sum(client.waits) == pytest.approx(2.0)
+
+
+def test_pause_snapshot_resends_a_call_whose_response_never_arrives(monkeypatch) -> None:
+    from so101_demo.backends.mujoco import teleop_runtime
+
+    clock = [0.0]
+
+    def monotonic():
+        clock[0] += 0.1
+        return clock[0]
+
+    monkeypatch.setattr(teleop_runtime.time, "monotonic", monotonic)
+    monkeypatch.setattr(teleop_runtime, "PAUSE_CALL_TIMEOUT_S", 1.0)
+
+    class Future:
+        def __init__(self, done):
+            self._done = done
+
+        def done(self):
+            return self._done
+
+        def result(self):
+            return SimpleNamespace(success=True)
+
+    class Client:
+        calls = 0
+
+        def wait_for_service(self, *, timeout_sec):
+            return True
+
+        def call_async(self, request):
+            self.calls += 1
+            return Future(done=self.calls >= 2)  # first response is dropped
+
+    client = Client()
+    evidence = SimpleNamespace(paused=True)
+
+    def snapshot():
+        if client.calls < 2:
+            from so101_demo.backends.mujoco.observer import EvidenceStale
+            raise EvidenceStale("not yet")
+        return evidence
+
+    observer = SimpleNamespace(publisher_count=1, snapshot=snapshot)
+    monkeypatch.setattr(
+        teleop_runtime, "rclpy",
+        SimpleNamespace(ok=lambda: True, spin_once=lambda *_a, **_k: None),
+    )
+    node = SimpleNamespace(create_client=lambda *_args: client)
+    assert teleop_runtime._pause_snapshot(node, observer, 5.0) is evidence
+    assert client.calls == 2

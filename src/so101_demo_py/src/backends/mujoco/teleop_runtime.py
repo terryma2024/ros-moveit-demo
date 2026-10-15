@@ -20,6 +20,10 @@ from ...core.simulation.types import ResetReceipt
 CONTROLLERS = ("arm_controller", "gripper_controller")
 RESET_JOINTS = (0.0,) * 6
 CUP_START = (0.02, -0.28, 0.165)
+# A fresh node discovers the pause service from scratch; under load one long wait can miss it. Wait in slices
+# (spinning between them) up to the unchanged overall bound, and resend a pause call whose response never came.
+PAUSE_SERVICE_WAIT_SLICE_S = 0.5
+PAUSE_CALL_TIMEOUT_S = 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,11 +153,17 @@ class _RosScope:
 def _pause_snapshot(node, observer, timeout_s: float, scope: _RosScope | None = None):
     started_s = time.monotonic()
     client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
-    if not client.wait_for_service(timeout_sec=timeout_s):
-        raise RuntimeError("pause service unavailable")
-    discovery_deadline = time.monotonic() + timeout_s
     ok = rclpy.ok if scope is None else scope.ok
     spin_once = rclpy.spin_once if scope is None else scope.spin_once
+    service_deadline = time.monotonic() + timeout_s
+    while True:
+        remaining_s = service_deadline - time.monotonic()
+        if remaining_s <= 0.0 or not ok():
+            raise RuntimeError("pause service unavailable")
+        if client.wait_for_service(timeout_sec=min(PAUSE_SERVICE_WAIT_SLICE_S, remaining_s)):
+            break
+        spin_once(node, timeout_sec=0.0)
+    discovery_deadline = time.monotonic() + timeout_s
     while ok() and time.monotonic() <= discovery_deadline:
         if observer.publisher_count > 0:
             break
@@ -166,6 +176,7 @@ def _pause_snapshot(node, observer, timeout_s: float, scope: _RosScope | None = 
     retry_period_s = min(0.05, timeout_s / 2.0)
     next_request_s = time.monotonic()
     future = None
+    sent_s = 0.0
     pause_accepted = False
     response_received = False
     requests_sent = 0
@@ -173,9 +184,12 @@ def _pause_snapshot(node, observer, timeout_s: float, scope: _RosScope | None = 
     non_paused_reads = 0
     while ok() and time.monotonic() <= deadline:
         now = time.monotonic()
+        if future is not None and not future.done() and now - sent_s >= PAUSE_CALL_TIMEOUT_S:
+            future = None  # response lost: abandon this call; pause is idempotent, so send it again
         if future is None and now >= next_request_s:
             requests_sent += 1
             future = client.call_async(request)
+            sent_s = now
             next_request_s = now + retry_period_s
         spin_once(node, timeout_sec=0.01)
         if future is not None and future.done():
