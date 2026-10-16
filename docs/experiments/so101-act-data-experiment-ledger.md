@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3698
-next_experiment: EXP-612 (PLANNED): 16-scene eight-shard debug at recording cap 6; then EXP-613 at cap 8.
+latest_checkpoint: CP-3699
+next_experiment: EXP-613 (PLANNED): 16-scene eight-shard debug at recording cap 8.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3699 — EXP-612 at cap 6: 15 of 16 VALID, one endpoint-initial phase failure; EXP-613 at cap 8 planned
+
+- The eight exited EXP-612 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp612-processors.jsonl). The first EXP-613 authoring (REG/act-w8d-inputs-20261016T084720Z, kept, not used) failed only because they still existed.
+- EXP-613 inputs REG/act-w8d-inputs-20261016T084900Z: w8d-debug with --max-concurrent-recordings 8, same commit and images; validation 77 items PASS.
+- EXP-613: hypothesis and criteria as EXP-612 with max_concurrent_recordings 8 (every shard records at once); prediction 14 to 16 of 16 VALID, phase 1 shorter than EXP-612.
 
 ## CP-3698 — EXP-612 planned: the 16-scene debug run at recording cap 6
 
@@ -83,7 +89,7 @@ next_experiment: EXP-612 (PLANNED): 16-scene eight-shard debug at recording cap 
 
 ```yaml
 experiment_id: EXP-612
-status: PLANNED
+status: VALID
 prior_experiment: EXP-610 (VALID; 16 of 16 at cap 4, phase 1 738 s)
 hypothesis: Six concurrent recordings keep the eight-shard debug batch fully VALID with lossless zstd recording, and shorten phase 1.
 prediction:
@@ -101,11 +107,19 @@ provenance:
   source_commit: 76069e0cb0d217fdc4fd077d9f59f1263268f288 (images and Host gate install)
 commands:
   - command: zsh <registered root>/act-w8d-inputs-20261016T082213Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
-conclusion: PENDING
-decision: PENDING
+  - Run 08:23:53Z to 08:45:08Z, 21 minutes (EXP-610 at cap 4, 24 minutes), CLI exit 0; every stop proven; logs saved 8 of 8 shards, 8 of 8 processors.
+  - Teacher 16 of 16 PASS; phase 2 15 VALID, 1 INVALID, 0 FAULT, 0 retries.
+  - The INVALID scene dbg-04 (w02): offline processor rc 3, ENDPOINT_INITIAL_CAPTURE_INVALID then RECORDER_SEAL_FAILED AUDIT_WINDOW_INVALID. ENDPOINT_INITIAL_CAPTURE_FACTS (processor-p00-g1.log) delta_sim_ms 102.0 against the 100 ms rule; selected step 5351, the first step of a native chunk (5351 to 5400); capture start sim 153.316 s, selected source 153.320 s, capture 153.422 s, after the chunk ending at step 5400 arrived.
+  - Diagnostic lines per shard similar to EXP-610 (RECORDER_DELIVERY_SLOW 0 to 8 per shard; EXP-610 1 to 3).
+inferred:
+  - The INVALID scene is the residual form of the CP-3490 endpoint-initial defect: when the first eligible world source is the first step of a 50-step native chunk, the capture waits for that chunk and lands about 100 ms plus delivery after the source. The replay uses recorded sim time, so the outcome depends on the phase of the capture start against the chunk grid, not on the recording cap.
+conclusion: VALID as an experiment. Cap 6 adds no load failure mode; one phase-dependent endpoint failure, to be quantified across EXP-610 to EXP-612.
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261016T082213Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp612 and exp612-console.log
+decision: KEEP
 next_experiment: EXP-613
 ```
 
