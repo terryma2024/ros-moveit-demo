@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: ddd3aee5fe23c8fcca5332cd0be2c24106c5839f
+current_commit: 86dc59657621b599dc11c28223e38ce0e086cf69
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,67 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3686
-next_experiment: EXP-607 (to be planned): EXP-606 repeated at recording cap 4 on the code after plan task 11.
+latest_checkpoint: CP-3687
+next_experiment: EXP-607 (PLANNED): two-phase debug run at recording cap 4 on the code after plan task 11.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3687 — Plan task 11 done (inline mode removed); gate PASS; EXP-607 planned
+
+- Commits (Sonnet; reviewed by Opus):
+  - `7c1c66df7`: remove the inline record-then-process mode. The phase-2 helpers moved into the processor module as read_processor_result_document and qc_memo_matches.
+  - `66c36bb8e`: remove recording phases, the POST_RECORDING gate branches and CPU shares.
+  - `1185ec0a5`: remove the post_recording_cpu_shares key.
+- Kept: max_concurrent_recordings, max_tasks_in_flight and min_assignment_gap_s, and the pre-motion Teacher-failure seal.
+- rg sweeps over src, test and config find none of the removed names. Targeted suites: 7775 passed, 29 skipped, 0 failed.
+- Gate on 86dc59657 (task 11 plus the EXP-606 ledger commit), R/gates/86dc59657621: all rc 0, dirty_after 0. PASSED.
+- Images from 86dc59657:
+  - inference sha256:222be0fb1fa812c179bc71d8c7047349fc3cf9e3065a3020f67076cdd7e23736 (R/image-build-20261016T001210Z)
+  - shard sha256:0094f8034a5b0125f4907625fb5985334f9d6b92abe23af658e360aea85d19b9 (R/image-build-20261016T001334Z)
+- Inputs REG/act-w8d-inputs-20261016T001617Z, cloned from the EXP-606 cap-4 inputs.
+  - The coordinator validation check was updated, because task 11 removed post_recording_cpu_shares: the coordinator no longer accepts the keyword.
+  - Validation 77 of 77 PASS on the second run; sha256sums regenerated.
+- No writer is active during the run (CP-3686 rule).
+
+```yaml
+experiment_id: EXP-607
+status: PLANNED
+prior_experiment: EXP-606 (INVALID; source changed during the run) and EXP-605 (VALID; 7 of 16 at eight concurrent recordings)
+hypothesis: At most four concurrent recordings in phase 1, with no processing overlap, give VALID of at least 14 of 16; the code after task 11 runs the two-phase pipeline unchanged.
+prediction: VALID 13 to 16 of 16; phase 1 about 1.5 to 2 times EXP-605's 626 s; phase 2 about 540 s; exit 0 unless a scene faults.
+single_variable: Recording cap 4 and the task-11 removal relative to EXP-605.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers, at most four recording; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 86dc59657.
+  - No code writer active.
+success_criteria:
+  - As EXP-605.
+failure_criteria:
+  - As EXP-605.
+invalid_criteria:
+  - As EXP-601, for commit 86dc59657; and any change of the worktree source during the run.
+provenance:
+  source_commit: 86dc59657621b599dc11c28223e38ce0e086cf69 (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/86dc59657621/install plus worktree import
+  runtime_executable: as EXP-605
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T001617Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after the coordinator check fix
+    exit_code: 1 (stale cpu-shares check), then 0
+  - command: zsh <registered root>/act-w8d-inputs-20261016T001617Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3686 — EXP-606 INVALID: the worktree source changed during the run (coordinator error)
 
