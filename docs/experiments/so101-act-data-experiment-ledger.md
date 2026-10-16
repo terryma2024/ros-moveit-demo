@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3701
-next_experiment: EXP-615 (PLANNED): the formal 70-scene collection in one campaign, admitted with the EXP-614 report.
+latest_checkpoint: CP-3702
+next_experiment: NONE planned. Human decision needed on the phase-1 delivery-timing losses (20 percent of formal train scenes) before any further collection.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3702 — EXP-615 formal collection complete: 70 of 70 processed, 56 committed (36 train, 10 validation, 10 offline_test)
+
+- The formal plane ran end to end in one 92-minute campaign on the EXP-614 qualification; Teacher 70 of 70; 14 train scenes INVALID from phase-1 delivery timing.
+- The eight exited EXP-615 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp615-processors.jsonl).
+- Open for the human: the delivery-timing losses (fix options in CP-3701, plus the alignment and stale-input variants), the 100 ms endpoint-initial margin (CP-3700), and whether to re-collect the formal set after a fix; the assignment gap (30 s) now bounds phase-1 speed.
+- Retained runs: EXP-610, EXP-611, EXP-612, EXP-613, EXP-614, EXP-615 and their inputs. Kept but unused inputs: act-w8d-inputs-20261016T081855Z, act-w8d-inputs-20261016T084720Z. Deletion candidates (need authorization): those two unused inputs directories, the gate run 76069e0cb0d2.run1-flaky, the old superseded image builds.
 
 ## CP-3701 — EXP-614 QUALIFIED at cap 8 (36 of 40 VALID, four wrist-stall NO_NEW_ACQUISITION); EXP-615 formal collection planned
 
@@ -85,7 +92,7 @@ next_experiment: EXP-615 (PLANNED): the formal 70-scene collection in one campai
 
 ```yaml
 experiment_id: EXP-615
-status: PLANNED
+status: VALID
 prior_experiment: EXP-614 (QUALIFIED, report e76e1c6d…)
 hypothesis: The formal 70-scene campaign on the qualified configuration completes within 9000 s with every stop proven and commits every VALID scene.
 prediction:
@@ -99,12 +106,26 @@ failure_criteria:
 provenance:
   source_commit: 76069e0cb0d217fdc4fd077d9f59f1263268f288 (images and Host gate install)
 commands:
-  - command: zsh <registered root>/act-w8f-inputs-20261016T101649Z/run-w8f.zsh, then formal-result.zsh
-    exit_code: PENDING
+  - command: zsh <registered root>/act-w8f-inputs-20261016T101649Z/run-w8f.zsh
+    exit_code: 0
+  - command: zsh <registered root>/act-w8f-inputs-20261016T101649Z/formal-result.zsh
+    exit_code: 0
 observed:
-  - PENDING
-conclusion: PENDING
-decision: PENDING
+  - Run 10:23:42Z to 11:55:31Z, 92 minutes against the 9000 s total, CLI exit 0; admission accepted the EXP-614 report; four waves (20, 20, 20, 10); every stop proven; logs saved (32 shard, 8 processor, 1 Teacher containers).
+  - Teacher 70 of 70 PASS; phase 2 70 PROCESSED, 0 FAULT, 0 MISSING, 0 retries; 56 VALID, 14 INVALID.
+  - formal-result.json: committed_episodes 56 equal to export_eligible 56; scenes_without_evidence 0.
+  - By split: train 36 of 50 VALID, validation 10 of 10, offline_test 10 of 10. By wave: 14 of 20, 14 of 20, 18 of 20, 10 of 10.
+  - INVALID reasons: NO_NEW_ACQUISITION 7; RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW with INPUT_STALE 5; INPUT_TIMESTAMP_FUTURE 1; OFFLINE_TOPIC_LOSS (/joint_states, scene_state) with NO_NEW_ACQUISITION 1.
+  - Host sampler, 5-minute buckets: campaign 8 to 15 cores of 32, other load about 0.7 cores, MemAvailable at least 10.9 GB, io full avg10 peaks 2 to 25 percent; waves 0 and 1 had a load similar to EXP-614.
+  - Run root 49 GB.
+inferred:
+  - The losses are phase-1 delivery-timing failures (late or stalled source delivery into the bag) of the family found in EXP-614, plus alignment and stale-input variants; not a phase-2 or capacity failure. The train scenes come first, so the split skew is the wave order. Their rate (20 percent here, 10 percent in EXP-614) is too high to ignore for the training set.
+conclusion: VALID. The Docker eight-shard two-phase data collection runs end to end on the formal plane and commits 56 episodes (36 train, 10 validation, 10 offline_test).
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8f-20261016T101649Z (host/campaign-result.json, collection-index.json, campaign-index.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8f-inputs-20261016T101649Z (formal-result.json, validate-inputs.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp615 and exp615-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
