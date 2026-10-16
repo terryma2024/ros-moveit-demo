@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 40ed95e4285c6913d33c0665e1c8cac9aba74a22
+current_commit: e8bf34d754504a976c165910fcacfd37d8228401
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,80 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3692
-next_experiment: EXP-610 (to be planned): lossless zstd bag compression to cut write volume and IO stalls.
+latest_checkpoint: CP-3693
+next_experiment: EXP-610 (PLANNED): two-phase debug run at cap 4 with lossless zstd bag compression.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3693 — Lossless bag compression; recording-cap test made deterministic; gate PASS; historical evidence deleted; EXP-610 planned
+
+- Commit `85a10c1c0` (Sonnet), under the human decision "先试降录制并发，再做压缩":
+  - mcap chunk compression with zstd, level Fastest, 4 MiB chunks (raw_recorder.BAG_STORAGE_CONFIG via --storage-config-file). No file-level or message-level compression; topics, QoS and log_time unchanged.
+  - record-stats.json records the setting and the observed chunk compression. The readers all go through rosbag2_py, so no change was needed.
+  - Equivalence:
+    - fixture test: identical topic, type, log_time, bytes and order;
+    - one real EXP-609 bag recompressed in scratch: all 284657 messages identical;
+    - 2.04 GB to 0.29 GB (7.11 times), 2.8 s CPU.
+  - Tests: 384 passed.
+  - The 2.2 GB scratch was deleted (R/scratch-deletions.log).
+- Commit `e8bf34d75`: test_recording_cap's makespan flake (1683 against a 1680 bound) was harness nondeterminism. The virtual clock advanced while claim preparation ran in a thread; it now runs inline, and the bound is derived. Serial runs give exactly 1431 s.
+- Gate on 85a10c1c0 failed on that test; gate on e8bf34d75, R/gates/e8bf34d75450, all rc 0, dirty_after 0. PASSED.
+- Images from e8bf34d75:
+  - inference sha256:5e0ef232d7d4d3b2f32d9f39ab0177e039dd49d24cbe36a28e30ba6fc51c4b30 (R/image-build-20261016T041528Z)
+  - shard sha256:6a877e4275b136a92051647cc3d838e71d0c6fff7d426997c8e69efcfd6d8921 (R/image-build-20261016T041658Z)
+- Human request "清理历史证据数据" (2026-10-16). Disk was at 97 percent (60 GB free). Deleted under the policy of R/evidence-deletion-20261014 and -20261015; record in R/evidence-deletion-20261016 (plan.json, record.jsonl, docker.jsonl):
+  - 1927 entries, 883.0 GiB by du;
+  - run roots of EXP-595 to EXP-604 and EXP-606 to EXP-608, each except host/;
+  - every superseded gate reduced to its result, rc and timing files and the offline yaml; the stopped gate f96191358b98 removed whole;
+  - superseded image build contexts;
+  - R/scratch except the memory-measurement directories and entries newer than one hour;
+  - 117 exited so101-act containers (logs saved by each run) and 24 old campaign images; the e8bf34d75450 pair remains.
+- Disk used 1.7T before, 744G after (42 percent).
+- Kept:
+  - EXP-605 and EXP-609 run roots whole; the reference runs;
+  - all inputs directories, scene lists, run-logs, analyses;
+  - gates e8bf34d75450 and 9cc0068b8592;
+  - everything outside this campaign.
+- Inputs REG/act-w8d-inputs-20261016T041955Z (cap 4, cloned from the EXP-607 inputs). Two tool self-tests referenced the deleted EXP-595 launch records and EXP-600 bags; they were repointed to EXP-609 (8 shard launches, 16 scenes). Validation 77 of 77 PASS on the fourth run; sha256sums regenerated.
+
+```yaml
+experiment_id: EXP-610
+status: PLANNED
+prior_experiment: EXP-609 (VALID; 12 of 16 at cap 4, mostly late camera frames)
+hypothesis: With about seven times fewer bytes written, host IO stalls and the late camera frames and Teacher stalls they cause fall, giving VALID of at least 14 of 16.
+prediction: NO_NEW_ACQUISITION at most 1, INPUT_STALE at most 1, VALID 14 to 16 of 16; observed_chunk_compression zstd in every record-stats; timings as EXP-609 or shorter.
+single_variable: Commits 85a10c1c0 and e8bf34d75 relative to EXP-609.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers, at most four recording; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit e8bf34d75; no code writer active.
+success_criteria:
+  - As EXP-605.
+failure_criteria:
+  - As EXP-605.
+invalid_criteria:
+  - As EXP-607, for commit e8bf34d75.
+provenance:
+  source_commit: e8bf34d754504a976c165910fcacfd37d8228401 (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/e8bf34d75450/install plus worktree import
+  runtime_executable: as EXP-605
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T041955Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after repointing the self-tests
+    exit_code: 1 (deleted references), then 0
+  - command: zsh <registered root>/act-w8d-inputs-20261016T041955Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3692 — EXP-609 VALID: 12 of 16 (INPUT_STALE 1); next lossless bag compression per the human decision
 
