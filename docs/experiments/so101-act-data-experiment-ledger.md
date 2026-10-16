@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3695
-next_experiment: EXP-611 (PLANNED): 40-scene eight-shard qualification on the two-phase path (plan task 12).
+latest_checkpoint: CP-3696
+next_experiment: formal collection (70 scenes) on the qualified configuration, after the human confirms its settings.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3696 — EXP-611 QUALIFIED: the eight-shard two-phase qualification passes, 40 of 40 on every gate, independently verified
+
+- Report sha256 e2a4ccc2…, QUALIFIED with no reasons; verify-report PASS.
+- Teacher 40 of 40, QC 40 of 40, lossless 40 of 40, continuity 40 of 40.
+- About 53 minutes including both reports, within the 5400 s limit.
+- Plan task 12 complete. Next: formal collection of the 70 formal scenes with this qualification report, settings to be confirmed by the human.
 
 ## CP-3695 — EXP-611 planned: the 40-scene qualification on the two-phase path
 
@@ -92,7 +99,7 @@ next_experiment: EXP-611 (PLANNED): 40-scene eight-shard qualification on the tw
 
 ```yaml
 experiment_id: EXP-611
-status: PLANNED
+status: VALID
 prior_experiment: EXP-610 (VALID; 16 of 16 at eight shards, two-phase, cap 4, zstd)
 hypothesis: The two-phase eight-shard collection with recording cap 4 and lossless compression qualifies. Teacher passes at least 38 of 40 and QC at least 34 of 40, with every gate defined by the unchanged rule files; the run finishes within 5400 s and every stop is proven.
 prediction:
@@ -119,18 +126,34 @@ commands:
   - command: author.py, readback-images.zsh, inspect.zsh and validate-inputs.zsh in <registered root>/act-w8-inputs-20261016T051800Z
     exit_code: 0 (validation on the third run)
   - command: zsh <registered root>/act-w8-inputs-20261016T051800Z/run-w8q.zsh
-    exit_code: PENDING
-  - command: zsh <registered root>/act-w8-inputs-20261016T051800Z/build-report.zsh, then verify-report.zsh
-    exit_code: PENDING
+    exit_code: 0
+  - command: zsh <registered root>/act-w8-inputs-20261016T051800Z/build-report.zsh
+    exit_code: 0
+  - command: zsh <registered root>/act-w8-inputs-20261016T051800Z/verify-report.zsh
+    exit_code: 0
 observed:
-  - PENDING
+  - Run start 05:29:18Z, CLI exit 0.
+  - Phase 1, two waves of 20 on eight shards at recording cap 4: 1765 s; 40 of 40 recorded, Teacher 40 of 40 PASS.
+  - syncfs 0.003 s.
+  - Phase 2: 1260 s; 8 processors, 40 of 40 processed, 0 retries, 0 faults.
+  - Every stop proven; store IDLE afterwards.
+  - Qualification report host/qualification-report.json sha256 e2a4ccc2da7f1785f7041195d9a15596cae73c6b8f2ee0d406647eb09bf1f95b, status QUALIFIED, no reasons:
+    - teacher_physical_success_rate 40 of 40 PASS;
+    - qc_valid_rate 40 of 40 PASS;
+    - recorder_lossless 40 of 40 PASS;
+    - frame_continuity 40 of 40 PASS.
+  - verify-report-proof.json: status PASS; contract sha256 6108842a9b62775f9666d2906d523701ed682200ca4f8ac65eb05652a36b68eb; task_count 40; the controlled identity names both image digests.
+  - Phase 2 resource use, one sample: each processor about 1.1 CPU cores and 1.1 to 1.9 GiB; host load about 9 of 32 cores.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The Docker eight-shard data collection qualifies on the two-phase path with recording cap 4 and lossless zstd compression.
+  - Phase 2 is bound by memory, not CPU. processor_count could rise from 8 (the memory default) to about 10 to 11 once the phase-2 peak memory is read from this run's sampler.
+conclusion: VALID and QUALIFIED. The qualification report is built and independently verified; the formal plane can now be admitted with this report.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261016T051800Z (host/qualification-report.json, campaign-result.json, collection-index.json, processing-journal.jsonl)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T051800Z (build-report-result.json, verify-report-proof.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp611 and exp611-console.log
+decision: KEEP
+next_experiment: formal collection
 ```
 
 ## CP-3694 — EXP-610 VALID: 16 of 16 VALID at eight shards (two-phase, cap 4, zstd); next the 40-scene qualification
