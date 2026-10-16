@@ -12,7 +12,7 @@ execution:
   initializing_hard_timeout_s: 180.0
   executing_hard_timeout_s: 1500.0
   finalizing_hard_timeout_s: 120.0
-  batch_hard_timeout_s: 5400.0
+  batch_hard_timeout_s: 9000.0
   worker_recovery_timeout_s: 120.0
   broker_recovery_timeout_s: 90.0
   broker_max_frame_bytes: 8388608

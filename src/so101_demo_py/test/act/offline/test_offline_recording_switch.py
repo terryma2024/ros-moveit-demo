@@ -70,10 +70,11 @@ def test_the_act_runtime_config_carries_stage_bounds_long_enough_for_offline_pro
     original = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_linux_cuda.yaml")
     assert act.executing_hard_timeout_s == act.lease_duration_s == 1500.0
     assert (original.executing_hard_timeout_s, original.lease_duration_s) == (240.0, 300.0)
+    assert (act.batch_hard_timeout_s, original.batch_hard_timeout_s) == (9000.0, 5400.0)
     # everything else is the frozen v3 content
     differing = {name for name in vars(original) if getattr(original, name) != getattr(act, name)} if hasattr(original, "__dict__") else None
     if differing is not None:
-        assert differing <= {"executing_hard_timeout_s", "lease_duration_s"}
+        assert differing <= {"executing_hard_timeout_s", "lease_duration_s", "batch_hard_timeout_s"}
 
 
 def test_below_the_original_floor_a_version_three_config_is_refused_and_other_versions_stay_pinned(tmp_path):
@@ -83,9 +84,11 @@ def test_below_the_original_floor_a_version_three_config_is_refused_and_other_ve
 
     package = PACKAGE_ROOT
     text = (package / "config/mujoco/parallel_batch_act_offline.yaml").read_text()
-    for field, bad in (("executing_hard_timeout_s", "239.0"), ("lease_duration_s", "299.0")):
+    for field, bad in (("executing_hard_timeout_s", "239.0"), ("lease_duration_s", "299.0"),
+                       ("batch_hard_timeout_s", "5399.0")):
+        old = "9000.0" if field == "batch_hard_timeout_s" else "1500.0"
         broken = tmp_path / f"{field}.yaml"
-        broken.write_text(text.replace(f"{field}: 1500.0", f"{field}: {bad}"))
+        broken.write_text(text.replace(f"{field}: {old}", f"{field}: {bad}"))
         with pytest.raises(contracts_common.ContractError, match="FROZEN_RUNTIME_VALUE"):
             contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(broken)
     assert contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER["executing_hard_timeout_s"] == 240.0

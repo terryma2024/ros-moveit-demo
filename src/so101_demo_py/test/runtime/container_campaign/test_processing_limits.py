@@ -75,3 +75,11 @@ def test_a_configured_processor_count_overrides_the_default_but_never_exceeds_th
 
 def test_max_attempts_default_is_three():
     assert DEFAULT_MAX_ATTEMPTS == 3 and processing_max_attempts({}) == 3 and processing_max_attempts({"processing_max_attempts": 5}) == 5
+
+
+def test_the_9000_s_campaign_total_fits_both_phases_and_the_default_reserves():
+    from so101_demo.runtime.container_campaign.processing_limits import check_phase_limits, phase1_deadline_s
+    check_phase_limits({"collect_timeout_s": 5000, "process_timeout_s": 3400}, 9000.)
+    # phase 1 dispatch stops at total - processing_reserve_s (1800); phase 2 ends at total - verification_reserve_s (600)
+    assert phase1_deadline_s({}, admitted_s=0., total_deadline_s=9000.) == 7200.
+    assert phase2_deadline_s({}, phase2_start_s=7000., total_deadline_s=9000.) == 8400.

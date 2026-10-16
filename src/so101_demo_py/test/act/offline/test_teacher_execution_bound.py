@@ -39,7 +39,7 @@ def test_the_act_config_raises_the_stage_and_lease_bounds_and_the_teacher_bound_
     assert teacher_execution_bound_s(act) == 240.0, "the stage bound is 1500 s; the Teacher's bound is not"
     assert teacher_execution_bound_s(original) == 240.0
     differing = {name for name in act.__slots__ if getattr(act, name) != getattr(original, name)}
-    assert differing == {"executing_hard_timeout_s", "lease_duration_s"}
+    assert differing == {"executing_hard_timeout_s", "lease_duration_s", "batch_hard_timeout_s"}
     assert "teacher_execution_timeout_s" not in {item.name for item in contracts_linux_cuda.fields(contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)}
 
 

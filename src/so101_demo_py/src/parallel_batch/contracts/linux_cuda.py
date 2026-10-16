@@ -307,10 +307,12 @@ _FROZEN_RUNTIME_VALUES_LINUX_CUDA = {
 }
 
 
-#: Version three only. Two stage bounds are floors, not pins: a data pipeline with offline processing after the Teacher
-#: needs the stage and the lease to last longer than the original values (the Teacher's own execution deadline is a separate,
+#: Version three only. Two stage bounds and the campaign total are floors, not pins: a data pipeline with offline processing
+#: after the Teacher needs the stage and the lease to last longer than the original values, and a one-campaign collection of all
+#: scenes needs a longer campaign total (`batch_hard_timeout_s`, time budget only) (the Teacher's own execution deadline is a separate,
 #: unchanged policy). The original values stay valid. Versions four to six keep the exact pins above.
-_MINIMUM_RUNTIME_VALUES_LINUX_CUDA = {"lease_duration_s": 300.0, "executing_hard_timeout_s": 240.0}
+_MINIMUM_RUNTIME_VALUES_LINUX_CUDA = {"lease_duration_s": 300.0, "executing_hard_timeout_s": 240.0,
+                                       "batch_hard_timeout_s": 5400.0}
 
 
 _EXACT_RUNTIME_VALUES_LINUX_CUDA = {name: value for name, value in _FROZEN_RUNTIME_VALUES_LINUX_CUDA.items()

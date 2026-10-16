@@ -2,7 +2,7 @@ schema_version: 1
 kind: act_parallel_collection
 parallel_runtime:
   path: config/mujoco/parallel_batch_act_offline.yaml
-  sha256: 5775cb3b413816c9397b0d2a4206185f9047fdbeb30ab4664100083acd6ff9a3
+  sha256: d2104a7fb0e958e74639a9f40b18adaaeb03f0630de6decfa11641d6378ca481
   device: cuda
   allow_cpu_fallback: false
 qualification:
