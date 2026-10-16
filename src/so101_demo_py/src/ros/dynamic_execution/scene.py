@@ -11,6 +11,13 @@ from so101_demo.core.domain import State
 from so101_demo.ros.dynamic_execution.common import _spin_burst
 
 
+# A Teacher DETACH/SYNC request names the physics snapshot it was built from. If the thread was off-CPU between that snapshot and the
+# dispatch (EXP-607: 0.3-1.0 s), the named source is older than this against the simulation clock and the request is rebuilt from
+# a fresh snapshot, at most this many times. The Recorder's 100 ms window is not touched.
+STALE_SOURCE_RESNAP_S = 0.05
+STALE_SOURCE_RESNAP_MAX_ATTEMPTS = 3
+
+
 class SceneOperations:
     def _call(self, client, request, timeout_s: float, code: str, *, before_dispatch=None):
         self._check_stop()
@@ -52,6 +59,15 @@ class SceneOperations:
                               source=getattr(self, "_scene_op_source", None) or getattr(self, "_diag_source", None))
         except Exception:
             pass
+
+    def _source_age_s(self, source) -> float:
+        """Age (s) of a named physics sample against the node's simulation clock, refreshed and floored as a call's stamp is."""
+        self._refresh_node_clock()
+        now_ns = self._node.get_clock().now().nanoseconds
+        floor_ns = self._world_sim_floor_ns()
+        if type(floor_ns) is int and floor_ns > now_ns:
+            now_ns = floor_ns
+        return now_ns / 1e9 - source.simulation_time_s
 
     def _refresh_node_clock(self) -> None:
         """Drain the node's queued callbacks so its simulation clock is current (stamps only; never raises)."""
@@ -180,31 +196,51 @@ class SceneOperations:
                 or before.reset_epoch != self._expected_reset_epoch
                 or before.paused or (before.truncated and not self._teacher_run()) or before.object_state.body != "plastic_cup"):
             raise RuntimeError("DYNAMIC_DETACH_SYNC_SOURCE_INVALID")
-        expected_geometry = source_geometry(self._task_geometry, before)
-        cup = expected_geometry.object("plastic_cup")
-        # The apply's exact source survives refusal/timeout; a later failure snapshot cannot
-        # replace the sample from which this requested scene was derived.
         import uuid
 
-        transaction = {
-            "schema_version": 1, "transaction_id": str(uuid.uuid4()), "phase": state.value,
-            "source_physics": asdict(before), "expected_geometry": asdict(expected_geometry),
-            "apply_call_id": None, "query_call_id": None, "geometry_verification": None,
-        }
+        def build(source):
+            geometry = source_geometry(self._task_geometry, source)
+            remove = AttachedCollisionObject()
+            remove.object.id = "plastic_cup"
+            remove.object.operation = CollisionObject.REMOVE
+            planning_scene = PlanningScene()
+            planning_scene.is_diff = True
+            planning_scene.robot_state.is_diff = True
+            planning_scene.robot_state.attached_collision_objects = [remove]
+            planning_scene.world.collision_objects = [
+                _collision_object(geometry.object("plastic_cup"), geometry.frame_id)
+            ]
+            # The apply's exact source survives refusal/timeout; a later failure snapshot cannot
+            # replace the sample from which this requested scene was derived.
+            return geometry, planning_scene, {
+                "schema_version": 1, "transaction_id": str(uuid.uuid4()), "phase": state.value,
+                "source_physics": asdict(source), "expected_geometry": asdict(geometry),
+                "apply_call_id": None, "query_call_id": None, "geometry_verification": None,
+            }
+
+        expected_geometry, scene, transaction = build(before)
+        if self._teacher_run():
+            # Re-acquire a stale source right before the request (EXP-607): every derived value is rebuilt from the fresh snapshot,
+            # so the request still names exactly the snapshot it was built from. The last (freshest) one is dispatched as is.
+            ages = [self._source_age_s(before)]
+            while ages[-1] > STALE_SOURCE_RESNAP_S and len(ages) <= STALE_SOURCE_RESNAP_MAX_ATTEMPTS:
+                fresh = self._snapshot()
+                if (not isinstance(fresh, SimulationEvidence) or fresh.simulation_session_id != self._session_id
+                        or fresh.reset_epoch != self._expected_reset_epoch or fresh.paused
+                        or fresh.object_state.body != "plastic_cup"):
+                    break   # keep the last valid source; the rule judges it
+                before = fresh
+                expected_geometry, scene, transaction = build(before)
+                ages.append(self._source_age_s(before))
+            if len(ages) > 1:
+                transaction["source_resnap"] = {
+                    "attempts": len(ages) - 1, "source_ages_s": ages, "threshold_s": STALE_SOURCE_RESNAP_S,
+                    "max_attempts": STALE_SOURCE_RESNAP_MAX_ATTEMPTS,
+                }
         # No manifest write here: it sat between the physics snapshot this request names and the request itself, and a slow write
         # (IO pressure) aged the named source past the Recorder's 100 ms window. The transaction is persisted right after the call
         # (also when the call is refused, times out or raises), so the source still survives every outcome.
         self._document.setdefault("scene_transactions", []).append(transaction)
-        remove = AttachedCollisionObject()
-        remove.object.id = "plastic_cup"
-        remove.object.operation = CollisionObject.REMOVE
-        scene = PlanningScene()
-        scene.is_diff = True
-        scene.robot_state.is_diff = True
-        scene.robot_state.attached_collision_objects = [remove]
-        scene.world.collision_objects = [
-            _collision_object(cup, expected_geometry.frame_id)
-        ]
         def before_dispatch():
             if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT) and not self._teacher_run():
                 self._check_selected_release_freshness(before)
