@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 86dc59657621b599dc11c28223e38ce0e086cf69
+current_commit: 4e27b342662c8fe778f85e9776590c452ae6c78d
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,74 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3688
-next_experiment: NONE until the Teacher-lag analysis of EXP-607 is in.
+latest_checkpoint: CP-3689
+next_experiment: EXP-608 (PLANNED): two-phase debug run at recording cap 4 with the detach-source re-snapshot.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3689 — EXP-607 Teacher-lag analysis; detach source re-snapshot; clock probe fixed; gate PASS; EXP-608 planned
+
+- Read-only analysis (Sonnet), scripts in the job tmp t607/.
+  - All five INVALID are the Teacher's DETACH sync request after the release settle (some DETACH_MOVEIT requests were also stale), naming a source 196 to 892 ms old.
+  - The Teacher's /clock view was current. Its main thread was off-CPU for 0.3 to 1.0 s between the snapshot and the dispatch, with no run-queue delay, D state in 5 of 8 stale requests, and IO pressure around four of five.
+  - Valid requests: median 17 ms, maximum 50 ms.
+  - No correlation with the number of concurrent recordings (2 to 4).
+  - The rule works as designed: the source is the snapshot just before the call.
+- Under the human decision "修正规则缺口，阈值不变" (CP-3658), commit `4e27b3426` (Sonnet):
+  - _detach_or_sync re-reads the clock before the apply. If the named source is older than STALE_SOURCE_RESNAP_S 0.05 s, it re-snapshots and rebuilds the request, up to 3 attempts.
+  - Attempts and ages are journaled as source_resnap in the transaction.
+  - Exact source naming is unchanged and _WINDOW_NS stays 100 ms.
+  - Tests: 3 failed first; 129 passed in the related suites.
+- Commit `529711b95`: the TEACHER_SOURCE_TRACE clock probe had been failing silently, because it imported a QoS that rclpy does not have; it now builds QoSProfile(depth 1, best effort). Not yet tested against a live /clock.
+- Gate on 4e27b3426, R/gates/4e27b342662c: all rc 0, dirty_after 0. PASSED.
+- Images from 4e27b3426:
+  - inference sha256:291e76285bc2a55727af039be8a07600814ce1c85db3c113ebf4488c04e35b38 (R/image-build-20261016T011048Z)
+  - shard sha256:ecc40adaf69ddf19deee0cfa76533f544cfca2951643f5aa90ded920ea079ce0 (R/image-build-20261016T011201Z)
+- The eight EXP-607 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp607-processors.jsonl).
+- Inputs REG/act-w8d-inputs-20261016T011447Z, cloned from the EXP-607 inputs (cap 4): validation 77 of 77 PASS.
+
+```yaml
+experiment_id: EXP-608
+status: PLANNED
+prior_experiment: EXP-607 (VALID; 11 of 16 at cap 4, all INVALID Teacher-lag INPUT_STALE)
+hypothesis: Re-snapshotting a stale detach source removes most INPUT_STALE episodes, giving VALID of at least 14 of 16 at recording cap 4.
+prediction:
+  - VALID 14 to 16 of 16.
+  - source_resnap recorded on a few transactions.
+  - TEACHER_SOURCE_TRACE clock fields now filled.
+  - Phase 1 about 700 s; phase 2 about 540 s.
+single_variable: Commits 4e27b3426 and 529711b95 relative to EXP-607.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers, at most four recording; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 4e27b3426; no code writer active.
+success_criteria:
+  - As EXP-605.
+failure_criteria:
+  - As EXP-605.
+invalid_criteria:
+  - As EXP-607, for commit 4e27b3426.
+provenance:
+  source_commit: 4e27b342662c8fe778f85e9776590c452ae6c78d (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/4e27b342662c/install plus worktree import
+  runtime_executable: as EXP-605
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T011447Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261016T011447Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3688 — EXP-607 VALID: two-phase at recording cap 4, 11 of 16 VALID; the remaining INVALID are all Teacher-lag INPUT_STALE
 
