@@ -144,14 +144,15 @@ def _default_reader(output_dir, **kwargs):
     return verify_processed_result(output_dir, **kwargs)
 
 
-def verify_processing(root, waves, scene_ids, *, readback_workers=None, readback_timeout_s=None, processed_reader=None):
+def verify_processing(root, waves, scene_ids, *, host_dir=None, readback_workers=None, readback_timeout_s=None, processed_reader=None):
     """The combined proof of every scene in `scene_ids`, in that order; see the module docstring.
 
     `waves` are the verified phase-1 wave records (`case_results` rows with their readback proof). `processed_reader` is a seam
     (default: `act.processed_result.verify_processed_result`, in worker processes when more than one readback worker is allowed)."""
     root = Path(root)
-    events = read_journal(root / "host" / JOURNAL_NAME)
-    summary = read_summary(root / "host" / SUMMARY_NAME)
+    host_dir = root / 'host' if host_dir is None else Path(host_dir)
+    events = read_journal(host_dir / JOURNAL_NAME)
+    summary = read_summary(host_dir / SUMMARY_NAME)
     attempts, faulted, absent = _attempts(events)
     rows = {row["scene_id"]: row for wave in waves for row in wave["case_results"]}
     if len(rows) != sum(len(wave["case_results"]) for wave in waves):
@@ -210,8 +211,69 @@ def verify_processing(root, waves, scene_ids, *, readback_workers=None, readback
     counts = {state: sum(1 for item in scenes if item["state"] == state) for state in STATES}
     return dict(schema_version=1, kind=COMBINED_KIND, scene_count=len(scenes), counts=counts,
                 missing_evidence=[item["scene_id"] for item in scenes if item["phase1"] is None],
-                processing=dict(summary=_file_ref(root / "host" / SUMMARY_NAME), journal=_file_ref(root / "host" / JOURNAL_NAME)),
+                processing=dict(summary=_file_ref(host_dir / SUMMARY_NAME), journal=_file_ref(host_dir / JOURNAL_NAME)),
                 scenes=scenes)
+
+
+def retry_candidate(item):
+    """Only a completed INVALID recording with a passing Teacher may be recorded again."""
+    return (item['state'] == 'PROCESSED' and item['phase1'] is not None
+            and item['phase1']['result_status'] == 'PASSED' and item['verdict']['act_data_status'] == 'INVALID')
+
+
+def verify_rounds(root, rounds, scene_ids, *, readback_workers=None, readback_timeout_s=None, processed_reader=None):
+    """Read each round independently; retain failed retries while selecting the latest completed verdict per scene.
+
+    Each round holds `recording_round`, `scene_ids` and verified `waves`. Its Host files use the conventional retry directory.
+    The complete ordered scene list belongs to round zero; later lists are subsets of the preceding eligible recordings."""
+    root = Path(root)
+    scene_ids = list(scene_ids)
+    if not rounds or len(set(scene_ids)) != len(scene_ids):
+        raise ValueError('PROCESSING_ROUNDS_INVALID')
+    latest, histories, proc_counts, seen_waves, records = {}, {}, {}, set(), []
+    for number, recording in enumerate(rounds):
+        if type(recording.get('recording_round')) is not int or recording['recording_round'] != number:
+            raise ValueError('PROCESSING_ROUNDS_INVALID')
+        ids, waves = recording['scene_ids'], recording['waves']
+        if (not ids or len(set(ids)) != len(ids) or not set(ids).issubset(scene_ids)
+                or number == 0 and list(ids) != scene_ids):
+            raise ValueError('PROCESSING_ROUND_CANDIDATES_INVALID')
+        if number and any(not retry_candidate(histories[scene][-1]) for scene in ids):
+            raise ValueError('PROCESSING_ROUND_CANDIDATES_INVALID')
+        wave_for_scene = {}
+        for wave in waves:
+            index = wave['wave_index']
+            if type(index) is not int or index < 0 or index in seen_waves or seen_waves and index <= max(seen_waves):
+                raise ValueError('PROCESSING_ROUND_WAVES_INVALID')
+            seen_waves.add(index)
+            for row in (*wave['case_results'], *wave.get('faults', ())):
+                scene = row['scene_id']
+                if scene not in ids or scene in wave_for_scene:
+                    raise ValueError('PROCESSING_ROUND_CANDIDATES_INVALID')
+                wave_for_scene[scene] = index
+        host = root / 'host' if number == 0 else root / 'host' / f'retry-{number}'
+        combined = verify_processing(root, waves, ids, host_dir=host, readback_workers=readback_workers,
+                                     readback_timeout_s=readback_timeout_s, processed_reader=processed_reader)
+        for item in combined['scenes']:
+            scene = item['scene_id']
+            expected = proc_counts.get(scene, 0) + 1
+            for attempt in item['attempts']:
+                if (type(attempt['proc_attempt']) is not int or attempt['proc_attempt'] != expected
+                        or attempt['task_id'] != f'{scene}-proc-{expected}'):
+                    raise ValueError('PROCESSING_ROUND_ATTEMPTS_INVALID')
+                expected += 1
+            proc_counts[scene] = expected - 1
+            item = dict(item, recording_round=number, wave_index=wave_for_scene.get(scene))
+            histories.setdefault(scene, []).append(item)
+            if scene not in latest or item['state'] in ('PROCESSED', 'FINAL_AT_PHASE1'):
+                latest[scene] = item
+        records.append(dict(recording_round=number, scene_ids=list(ids), wave_indices=[wave['wave_index'] for wave in waves],
+                            counts=combined['counts'], missing_evidence=combined['missing_evidence'], processing=combined['processing']))
+    scenes = [dict(latest[scene], recording_attempts=histories[scene]) for scene in scene_ids]
+    counts = {state: sum(item['state'] == state for item in scenes) for state in STATES}
+    return dict(schema_version=1, kind=COMBINED_KIND, scene_count=len(scenes), counts=counts,
+                missing_evidence=[item['scene_id'] for item in scenes if item['phase1'] is None],
+                processing=records[0]['processing'], rounds=records, scenes=scenes)
 
 
 def _read_back(jobs, workers, timeout_s, reader):
@@ -238,6 +300,11 @@ def _read_back(jobs, workers, timeout_s, reader):
 
 def build_campaign_result(campaign_id, scene_count, combined):
     """`host/campaign-result.json` of a two-phase campaign: every scene's combined record and the processing files it came from."""
-    return dict(schema_version=2, kind=CAMPAIGN_RESULT_KIND, campaign_id=campaign_id, scene_count=scene_count,
+    result = dict(schema_version=2, kind=CAMPAIGN_RESULT_KIND, campaign_id=campaign_id, scene_count=scene_count,
                 counts=combined["counts"], missing_evidence=combined["missing_evidence"], processing=combined["processing"],
                 scenes=combined["scenes"])
+    if 'rounds' in combined:
+        result['rounds'] = combined['rounds']
+    if 'retry' in combined:
+        result['retry'] = combined['retry']
+    return result

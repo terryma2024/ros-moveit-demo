@@ -21,14 +21,15 @@ def sha(data):
 class Processed:
     """One scene: `sealed` (phase 1), `output` (phase 2, attempt `number`) and the hashes that bind them."""
 
-    def __init__(self, tmp_path, scene="scene-01", *, status="PASSED", number=1, valid=True, fault="none"):
+    def __init__(self, tmp_path, scene="scene-01", *, status="PASSED", number=1, valid=True, fault="none", wave_index=0):
         self.scene, self.number = scene, number
+        self.wave_index = wave_index
         self.run = Path(tmp_path) / "run"
         attempt = scene + "-lease-1"
         self.lease = dict(LEASE, point_id=scene, attempt_id=attempt)
         self.identity = dict(IDENTITY, attempt_id=attempt)
         self.result_lease = {name: self.lease[name] for name in ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id", "attempt_id", "lease_generation")}
-        self.sealed = self.run / f"wave-0/w00/g1/output/tasks/t-{scene}/attempts/{scene}/{attempt}/sealed"
+        self.sealed = self.run / f"wave-{wave_index}/w00/g{wave_index + 1}/output/tasks/t-{scene}/attempts/{scene}/{attempt}/sealed"
         (self.sealed / "raw").mkdir(parents=True)
         (self.sealed / "dynamic").mkdir()
         (self.sealed / "dynamic/dynamic-execute-manifest.json").write_text("{}\n")
@@ -77,7 +78,7 @@ class Processed:
 
     def row(self, *, pending=True, task_id=None):
         """The wave-verified case row the Host holds for this scene after phase 1 (`pending`: the Teacher half only)."""
-        task_id = task_id or f"wave-0-w00-{self.scene}"
+        task_id = task_id or f"wave-{self.wave_index}-w00-{self.scene}"
         proof = dict(kind="ACT_CONTAINER_TASK_READBACK", status="PASS", result_status=self.result["status"],
                      teacher_execution_status="COMPLETED", teacher_task_result="PASS",
                      act_data_status="PENDING_QC" if pending else "INVALID",
@@ -87,8 +88,10 @@ class Processed:
                      processing="PENDING" if pending else "NOT_PENDING",
                      receipt_sha256=self.receipt_sha256 if pending else None)
         return dict(scene_id=self.scene, worker_id="w00", location=str(self.sealed.parents[3]), task_id=task_id,
-                    launch_id="wave-0-w00-g1", proof=proof, registration=str(self.run / "host" / task_id / "collected.json"),
-                    owner_root=str(self.run / "wave-0/w00/g1"), scope_path=str(self.scope), inputs_manifest=str(self.inputs))
+                    launch_id=f"wave-{self.wave_index}-w00-g{self.wave_index + 1}", proof=proof,
+                    registration=str(self.run / "host" / task_id / "collected.json"),
+                    owner_root=str(self.run / f"wave-{self.wave_index}/w00/g{self.wave_index + 1}"),
+                    scope_path=str(self.scope), inputs_manifest=str(self.inputs))
 
     def verify(self, **kwargs):
         from so101_demo.act.processed_result import verify_processed_result

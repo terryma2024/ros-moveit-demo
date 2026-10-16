@@ -137,3 +137,26 @@ def test_a_qualification_index_never_exports_schema_4_either(tmp_path, monkeypat
     with pytest.raises(ValueError, match='EPISODE_FROZEN_INDEX_REQUIRED'):
         resolve_committed_episodes(manifest=MANIFEST, campaign_index=index)
     assert calls == []
+
+
+def test_a_schema_3_retry_index_exports_the_final_attempt_once(tmp_path, monkeypatch):
+    entries, calls, documents = schema4_entries(tmp_path, monkeypatch)
+    evidence = entries[0]['collection_evidence']
+    first = evidence['processing_output']
+    final = str(Path(first).with_name('001-lease-1-proc-2'))
+    shutil.copytree(first, final)
+    document = copy.deepcopy(documents[first])
+    document.update(output_dir=final, data_dir=final, proc_attempt=2, task_id='001-proc-2')
+    documents[final] = document
+    evidence['processing_output'] = final
+    index = frozen_index(tmp_path / 'collection-index.json', entries)
+    stored = json.loads(index.read_text())
+    stored.update(schema_version=3, collected_tasks=[dict(scene_id='001', recording_round=0, final=False),
+                                                   dict(scene_id='001', recording_round=1, final=True)])
+    index.write_text(json.dumps(stored))
+    resolved, = resolve_committed_episodes(manifest=MANIFEST, campaign_index=index)
+    assert resolved['collection_evidence']['processing_output'] == final
+    assert [call[1] for call in calls if call[0] == 'processed'] == [final]
+    exported = export_dataset(attach_episode_content((resolved,), root=tmp_path), tmp_path / 'dataset',
+                              source_manifest_sha256='a' * 64, campaign_index_sha256='b' * 64)
+    assert exported['scene_count'] == 1

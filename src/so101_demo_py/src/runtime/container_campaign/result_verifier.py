@@ -245,12 +245,33 @@ class ContainerWaveResultVerifier:
         return verify_processing(self.root, waves, scene_ids, readback_workers=self.readback_workers,
                                  readback_timeout_s=self.readback_timeout_s)
 
+    def verify_rounds(self, rounds, scene_ids):
+        """Recompute every recording round and select one final verdict per scene."""
+        from so101_demo.runtime.container_campaign.processing_verifier import verify_rounds
+
+        return verify_rounds(self.root, rounds, scene_ids, readback_workers=self.readback_workers,
+                             readback_timeout_s=self.readback_timeout_s)
+
     def _check_scheduling(self, plan, by_scene, roots):
         check_wave_scheduling(plan, by_scene, roots, self.qualification)
 
 
 _TASK_DATA = ('result_status', 'teacher_execution_status', 'teacher_task_result', 'act_data_status', 'act_data_reason',
               'act_data_qc', 'export_eligible', 'result_sha256', 'task_result_sha256')
+
+
+def _round_frozen_index(campaign_id, qualification, scene_count, combined):
+    final = {key: value for key, value in combined.items() if key != 'rounds'}
+    index = build_frozen_index(campaign_id=campaign_id, qualification=qualification, scene_count=scene_count, combined=final)
+    tasks = []
+    for scene in combined['scenes']:
+        for attempt in scene['recording_attempts']:
+            one = build_frozen_index(campaign_id=campaign_id, qualification=qualification, scene_count=1,
+                                     combined=dict(scenes=[attempt]))
+            tasks.extend(dict(item, recording_round=attempt['recording_round'], wave_index=attempt['wave_index'],
+                              final=attempt['recording_round'] == scene['recording_round']) for item in one['collected_tasks'])
+    index.update(schema_version=3, collected_tasks=tasks)
+    return index
 
 
 def build_frozen_index(*, campaign_id, qualification, scene_count, waves=None, combined=None):
@@ -264,6 +285,8 @@ def build_frozen_index(*, campaign_id, qualification, scene_count, waves=None, c
     `scenes_without_evidence` and never skipped."""
     if (waves is None) == (combined is None):
         raise ValueError('FROZEN_INDEX_SOURCE_INVALID')
+    if combined is not None and 'rounds' in combined:
+        return _round_frozen_index(campaign_id, qualification, scene_count, combined)
     tasks, committed, without = [], [], []
     if combined is not None:
         for item in combined['scenes']:
