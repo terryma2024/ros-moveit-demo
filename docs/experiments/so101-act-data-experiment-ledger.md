@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: d1c5926f325bc520f238e8f69349a4387768cd13
+current_commit: 8f8123dcba8620134f5eea4ae48bd4d8cc139720
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,79 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3706
-next_experiment: EXP-616 (pending fresh installed Host gate and matching image builds): 16-scene debug at cap 8 with the Fast DDS profile, retry off.
+latest_checkpoint: CP-3707
+next_experiment: EXP-616 (PLANNED): validated inputs act-w8d-inputs-20261016T150033Z, 16-scene debug at cap 8 with the Fast DDS profile, retry off.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3707 — Installed gates and both images pass; EXP-616 inputs validated and debug planned
+
+- Source implementation 8f8123dcba8620134f5eea4ae48bd4d8cc139720 is pushed to origin. Host gate R/gates/8f8123dcba86: build_rc=0, demo_rc=0, colcon_rc=0, dirty_after=0, HEAD unchanged, elapsed 1789 s. All seventeen packages built. Ordinary demo scope: 13366 passed, 187 skipped, 22 warnings, 8 xdist workers / 32 logical CPUs, 395.52 s; all eight worker tempfile proofs retained. The fourteen baseline shim/process failures did not recur with the new installed artifacts.
+- Colcon/CTest includes the required ros2_control and JTC upstream suites after the installed apt-set change: 3348 tests, 0 errors, 0 failures, 60 skipped. Teleop CTest: 126 tests passed. Supplemental complete ordinary teleop scope used the CTest-declared /usr/bin/python3 with the same frozen dependencies and eight xdist workers: 1433 passed, 43 skipped, 9 warnings, rc 0, 42.89 s. Evidence: R/gates/8f8123dcba86 and R/scratch/codex-teleop-full.I8ceSkpf (fresh NVMe tempfile and worker proofs, JUnit, elapsed, rc).
+- Both images built with HEAD fixed at the gated commit; no commits occurred during the 330 s build. Inference: sha256:4f2786e4ed2dce5d34c284fb21eaad3c3c713ce324b0ec1a8db29a4bf3348932, R/image-build-20261016T144704Z, install sha256 24ec7c5d777eced9396f51c65e5c8f699f9231afb005e2f770f553c6a67b8411. Shard: sha256:1fca232a10b14f06575a440b42bb186aadd4fff0cdafd320936a8c0012792c39, R/image-build-20261016T144841Z, install sha256 8c9ab1967b270713929d21b54b35c7b90d0946f9b5c082cca04074d2a05660f8. Both package-source hashes b330eca05caae84f5bc65d4aa4a749936ab26313e00cf16af666977b8b9c3113.
+- Independent shard-file readback confirms /act/install/share/so101_demo_py/config/dds/fastdds-collection.xml matches the source SHA256 0f8cc9a4a9e0570d93c799e102392aeac601aabfd4cb625f7bd1ec1b84ebf234 and has heartbeat 20 ms / NACK response 1 ms. /act/install/lib/so101_demo_py/campaign_shard exists and is executable. Evidence: REG/handoffs/codex-resume-20261016T134641Z/{images-result.txt,shard-profile-proof.json,shard-executable-file-proof.json}.
+- First EXP-616 authoring attempt (act-w8d-inputs-20261016T145332Z) failed two template self-checks because historical EXP-609 raw/launch evidence had been reduced to host-only during the authorized cleanup. It did not start a campaign. Fixed the template self-checks at their boundary: own eight-shard/processor/Teacher log fixtures, missing-processor discovery and failed-log negative control, own six-frame MCAP exercising all five trace verdicts, combined and partial summaries. All six checks across debug/qualification/formal templates passed in R/authoring-validation-scratch/selfcheck.CUO0GpnL. Historical raw data is no longer required by these self-checks. The trace_join.py algorithm is unchanged (SHA256 02978d012f388efe6fb357de8efec86a0a74168c2c77abad9cebd1366765a8a6).
+- Template validation scratch now stays under R/authoring-validation-scratch/exp<N>; no new evidence roots are introduced. Latest template before/after manifest: REG/handoffs/codex-resume-20261016T134641Z/template-changes-fixture-recovery.json. Revised README uses English humanizer guidance. Second authoring attempt act-w8d-inputs-20261016T150033Z: AUTHOR_OK, all 77 items pass, rc 0; cap 8, assignment gap 30 s, retry 0. No running containers, ROS/ACT/native processor processes or GPU compute processes; unified store schema 2 IDLE, no active lease or slot; about 27.9 GB RAM available and 1.08 TB disk free at validation.
+- The retained an5 image-event baseline recomputes as A=24, B=25, C=15, UNKNOWN=3 across 110 episodes (EXP-614: 9/8/5; EXP-615: 15/17/10 plus three UNKNOWN). The handoff reports B=26; keep that historical one-event difference explicit. New audit helper reproduces the retained classifications and keeps thresholds unchanged. MCAP extractor and job map are copied into the durable resume handoff directory rather than depending on Claude job cleanup.
+- Retained: EXP-614/615, diagnostics, all gates and images, original templates, failed/successful authoring inputs and every test/self-check run. Archived: none this checkpoint. Deletion candidates: the cancelled d1c5926f325b build, all read-back codex scratch/self-check trees, failed 145332Z inputs and inherited synthetic diagnosis extracts; no evidence deleted. Visual N/A: headless delivery investigation and offline verification.
+
+```yaml
+checkpoint_id: CP-3707
+last_valid_experiment: EXP-615
+current_hypothesis: The installed DDS publisher profile removes class-A delivery events in the real 16-scene debug run.
+working_tree_status: docs-only checkpoint; src/scripts/third_party equal gated source 8f8123dcba86
+owned_processes: NONE before EXP-616 launch
+preserved_processes: existing Codex/app-server sessions
+open_risks:
+  - Class B/C causes remain unconfirmed; endpoint-initial 100 ms capture margin remains unchanged.
+  - Stop before qualification if class A persists; stop before formal if new qualification is NOT_QUALIFIED.
+next_command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T150033Z/run-w8d.zsh
+```
+
+```yaml
+experiment_id: EXP-616
+status: PLANNED
+prior_experiment: EXP-614 and EXP-615
+hypothesis: A real campaign on the installed Fast DDS profile no longer exhibits the class-A single-camera single-frame transport repair delay.
+prediction:
+  - Sixteen recorded scenes and proven campaign cleanup, with zero class-A events under the retained an4/an5 classification.
+  - Class-B/C and endpoint-initial timing losses may remain; report them separately without changing data rules.
+single_variable: Fast DDS publisher repair timing; retry is explicitly zero and the new recorder-stall instrumentation is diagnostic only.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - AUTHOR_OK for act-w8d-inputs-20261016T150033Z, all 77 validation items pass; cap 8, gap 30 s, retry 0.
+  - Source trees equal the gated commit and both images; store IDLE; no competing stack, test or image build.
+success_criteria:
+  - All owned stops proven; complete recorded/probe/publish coverage; zero class-A events in the sixteen-scene campaign.
+  - Read back Teacher/data counts, recorder diagnostic lines and camera_info delivery; preserve all evidence.
+failure_criteria:
+  - Any class-A event: stop and report before EXP-617.
+  - Campaign infrastructure failure or incomplete readback: investigate before accepting the delivery result.
+invalid_criteria:
+  - Source edits during collection, wrong image/install/source provenance, competing workload or unproven stop.
+provenance:
+  source_commit: 8f8123dcba8620134f5eea4ae48bd4d8cc139720
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/gates/8f8123dcba86/install
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python
+  container_executable: /act/install/lib/so101_demo_py/campaign_shard
+  shard_image: sha256:1fca232a10b14f06575a440b42bb186aadd4fff0cdafd320936a8c0012792c39
+  inference_image: sha256:4f2786e4ed2dce5d34c284fb21eaad3c3c713ce324b0ec1a8db29a4bf3348932
+  ros_domain_id: 181
+  ros_graph_isolation: one private IPC/network namespace per shard container
+  gz_partition: N/A (MuJoCo headless)
+commands:
+  - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T150033Z/run-w8d.zsh
+    exit_code: PENDING
+observed: PENDING
+inferred: NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T150033Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261016T150033Z
+decision: PENDING
+next_experiment: EXP-617 only if class-A acceptance passes
+```
 
 ## CP-3706 — Budget self-review follow-up; first build cancelled before testing
 
