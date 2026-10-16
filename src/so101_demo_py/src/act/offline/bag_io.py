@@ -7,9 +7,40 @@ from pathlib import Path
 STORAGE_ID = "mcap"
 
 
-def _storage(uri: Path, storage_id: str = STORAGE_ID):
+def _storage(uri: Path, storage_id: str = STORAGE_ID, storage_config_path=None):
     import rosbag2_py
-    return rosbag2_py.StorageOptions(uri=str(uri), storage_id=storage_id)
+    options = rosbag2_py.StorageOptions(uri=str(uri), storage_id=storage_id)
+    if storage_config_path is not None:
+        options.storage_config_uri = str(storage_config_path)
+    return options
+
+
+def mcap_chunk_compressions(path) -> set:
+    """The compression names of every chunk record of one .mcap file ("" is uncompressed, "zstd", "lz4").
+
+    Walks the record headers and seeks over the bodies, so a multi-gigabyte bag costs one small read per chunk. The messages
+    themselves are read through rosbag2_py (`read_messages`), which decompresses chunks transparently."""
+    import struct
+
+    found = set()
+    with open(path, "rb") as stream:
+        if stream.read(8) != b"\x89MCAP0\r\n":
+            raise ValueError("not an MCAP file")
+        while True:
+            header = stream.read(9)
+            if len(header) < 9:
+                break
+            opcode, length = header[0], struct.unpack("<Q", header[1:])[0]
+            if opcode == 0x0F:      # DataEnd: no chunk follows
+                break
+            if opcode == 0x06:      # Chunk: start u64, end u64, uncompressed size u64, crc u32, compression (u32 length + bytes)
+                head = stream.read(32)
+                size = struct.unpack("<I", head[28:32])[0]
+                found.add(stream.read(size).decode("ascii"))
+                stream.seek(length - 32 - size, 1)
+            else:
+                stream.seek(length, 1)
+    return found
 
 
 def bag_info(uri) -> dict:
@@ -47,11 +78,11 @@ def read_messages(uri, topics=None):
 class BagWriter:
     """A tiny writer for tests and synthetic bags: `create(topic, type)` then `write(topic, message, stamp_ns)`."""
 
-    def __init__(self, uri):
+    def __init__(self, uri, storage_config_path=None):
         import rosbag2_py
 
         self._writer = rosbag2_py.SequentialWriter()
-        self._writer.open(_storage(Path(uri)), rosbag2_py.ConverterOptions("cdr", "cdr"))
+        self._writer.open(_storage(Path(uri), storage_config_path=storage_config_path), rosbag2_py.ConverterOptions("cdr", "cdr"))
         self._topics = set()
 
     def create(self, topic: str, type_name: str, qos: str = "") -> None:

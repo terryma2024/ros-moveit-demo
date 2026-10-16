@@ -10,7 +10,7 @@ from so101_demo.act.offline.raw_recorder import DEEP_RELIABLE, TOPICS, RECORDER_
 
 
 def test_the_recorder_argv_runs_the_stock_verb_without_a_global_debug_level():
-    argv = record_argv("/b/bag", "/b/bag-qos.yaml", "so101_raw_recorder", TOPICS)
+    argv = record_argv("/b/bag", "/b/bag-qos.yaml", "so101_raw_recorder", TOPICS, "/b/bag-storage.yaml")
     assert argv[:3] == [sys.executable, "-m", "so101_demo.act.offline.bag_record_entry"]
     assert "--log-level" not in argv, "a process-wide DEBUG level prints two rcl lines per taken message"
     assert RECORDER_LOG_LEVEL == "debug"     # applied by the entry to the recorder's own logger only
@@ -20,8 +20,22 @@ def test_the_recorder_argv_runs_the_stock_verb_without_a_global_debug_level():
     assert argv[argv.index("--qos-profile-overrides-path") + 1] == "/b/bag-qos.yaml"
     assert "--disable-keyboard-controls" in argv
     assert argv[argv.index("--topics") + 1:] == list(TOPICS), "topics named explicitly, not the deprecated positional list"
-    for absent in ("--compression-mode", "--use-sim-time", "--include-unpublished-topics", "--storage-preset-profile"):
+    # lossless MCAP chunk compression comes from the storage config file, not from rosbag2's file or message compression
+    assert argv[argv.index("--storage-config-file") + 1] == "/b/bag-storage.yaml"
+    for absent in ("--compression-mode", "--compression-format", "--use-sim-time", "--include-unpublished-topics",
+                   "--storage-preset-profile"):
         assert absent not in argv
+
+
+def test_the_storage_config_asks_for_zstd_chunk_compression_and_is_recorded_as_such():
+    import yaml
+    from so101_demo.act.offline.raw_recorder import BAG_STORAGE_CONFIG, bag_compression_setting
+
+    assert BAG_STORAGE_CONFIG["compression"] == "Zstd" and BAG_STORAGE_CONFIG["compressionLevel"] == "Fastest"
+    assert BAG_STORAGE_CONFIG["chunkSize"] >= 1024 * 1024
+    assert yaml.safe_load(yaml.safe_dump(BAG_STORAGE_CONFIG)) == BAG_STORAGE_CONFIG
+    assert bag_compression_setting() == {"mechanism": "mcap_chunk", "compression": "Zstd", "level": "Fastest",
+                                         "chunk_size": BAG_STORAGE_CONFIG["chunkSize"]}
 
 
 def test_every_deep_topic_is_subscribed_with_the_scoped_recorders_profile():

@@ -144,16 +144,29 @@ def build_options(bag_dir: Path, topics=TOPICS, node_name=NODE_NAME):
     return storage, options
 
 
+#: Lossless MCAP chunk compression (zstd, fastest level): the camera images are most of the ~2.2 GB an episode's bag wrote, and the
+#: writeback of those bytes stalled the host (EXP-609). It is the mcap storage plugin's own setting (`--storage-config-file`), not
+#: rosbag2's file or message compression; the topics, QoS and the receipt `log_time` of every message are untouched.
+BAG_STORAGE_CONFIG = {"compression": "Zstd", "compressionLevel": "Fastest", "chunkSize": 4 * 1024 * 1024}
+
+
+def bag_compression_setting() -> dict:
+    """What the record stats say about the bag's compression (the setting, then what the closed bag's chunks show)."""
+    return {"mechanism": "mcap_chunk", "compression": BAG_STORAGE_CONFIG["compression"],
+            "level": BAG_STORAGE_CONFIG["compressionLevel"], "chunk_size": BAG_STORAGE_CONFIG["chunkSize"]}
+
+
 def qos_overrides_for(topics) -> dict:
     """{topic: QoS profile} for the deep reliable queues of the recorded topics (keep_last, reliable, volatile, depth > 0)."""
     return {topic: {"history": "keep_last", "depth": depth, "reliability": "reliable", "durability": "volatile"}
             for topic, depth in DEEP_RELIABLE.items() if topic in topics}
 
 
-def record_argv(bag_dir, qos_path, node_name, topics) -> list:
+def record_argv(bag_dir, qos_path, node_name, topics, storage_config_path=None) -> list:
     """The stock `ros2 bag record` verb through `bag_record_entry`, which keeps the process-wide log level at INFO and raises only
     the recorder's own logger to RECORDER_LOG_LEVEL (a global `--log-level debug` makes rcl print two lines per taken message)."""
-    return [sys.executable, "-m", "so101_demo.act.offline.bag_record_entry", "-s", "mcap", "-o", str(bag_dir),
+    storage = [] if storage_config_path is None else ["--storage-config-file", str(storage_config_path)]
+    return [sys.executable, "-m", "so101_demo.act.offline.bag_record_entry", "-s", "mcap", "-o", str(bag_dir), *storage,
             "--node-name", node_name, "--disable-keyboard-controls", "--max-cache-size", str(256 * 1024 * 1024),
             "--qos-profile-overrides-path", str(qos_path), "--topics", *topics]
 
@@ -314,8 +327,10 @@ class RawRecorder:
         qos_path = self.bag_dir.parent / (self.bag_dir.name + "-qos.yaml")
         overrides = qos_overrides_for(self.topics)
         qos_path.write_text(yaml.safe_dump(overrides))
+        storage_path = self.bag_dir.parent / (self.bag_dir.name + "-storage.yaml")
+        storage_path.write_text(yaml.safe_dump(BAG_STORAGE_CONFIG))
         self._log = open(self.bag_dir.parent / (self.bag_dir.name + "-record.log"), "xb")
-        argv=record_argv(self.bag_dir, qos_path, self.node_name, self.topics)
+        argv=record_argv(self.bag_dir, qos_path, self.node_name, self.topics, storage_path)
         self._recorder = subprocess.Popen(argv,
                                          stdout=self._log, stderr=subprocess.STDOUT, start_new_session=True,
                                          env=dict(os.environ, ROS_DOMAIN_ID=str(self._probe.context.get_domain_id())))
@@ -475,14 +490,21 @@ class RawRecorder:
         return stats
 
     def verify_closed(self) -> dict:
-        from .bag_io import bag_info
+        from .bag_io import bag_info, mcap_chunk_compressions
 
         try:
             info = bag_info(self.bag_dir)
         except Exception as error:   # noqa: BLE001
             return {"closed": False, "bag_error": repr(error)[:300]}
         missing = [topic for topic in self.core_topics if info["topics"].get(topic, {}).get("count", 0) == 0]
-        return {"closed": True, "bag": info, "missing_core_topics": missing}
+        compression = bag_compression_setting()
+        try:
+            files = sorted(self.bag_dir.glob("*.mcap"))
+            compression["observed_chunk_compression"] = sorted(set().union(*(mcap_chunk_compressions(f) for f in files)))
+            compression["bag_bytes"] = sum(f.stat().st_size for f in files)
+        except Exception as error:   # noqa: BLE001
+            compression["observed_error"] = repr(error)[:300]
+        return {"closed": True, "bag": info, "missing_core_topics": missing, "bag_compression": compression}
 
 
 def _bag_root_evidence(recorder) -> dict:

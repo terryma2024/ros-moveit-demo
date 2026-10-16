@@ -64,6 +64,8 @@ def test_the_bag_records_everything_published_after_recording_and_closes_with_it
         stats = recorder.stop()
         node.destroy_node()
     assert stats["closed"] and stats["failure"] is None and stats["missing_core_topics"] == [], stats
+    # lossless zstd chunk compression is configured and observed in the closed bag's own chunks, and recorded in the stats
+    assert stats["bag_compression"]["compression"] == "Zstd" and stats["bag_compression"]["observed_chunk_compression"] == ["zstd"], stats
     # C5: the recorder runs with debug logging (the per-topic loss lines exist only there) and reports the per-topic breakdown, an
     # empty one when nothing was lost
     assert stats["transport_lost"] == 0 and stats["transport_lost_by_topic"] == {} and stats["transport_lost_events"] == [], stats
