@@ -86,11 +86,16 @@ def retry_round_plan(config, *, now_s, total_deadline_s, scene_count, worker_cou
     waves = -(-scene_count // RETRY_MAX_WAVE_SIZE)
     wave_s = max(observed.get("wave_wall_s") or (), default=None)
     if wave_s is None:
-        concurrency = max(1, min(worker_count, config.get('max_concurrent_recordings', worker_count)))
+        concurrency = max(1, min(worker_count, config.get('max_concurrent_recordings', worker_count),
+                                 config.get('max_tasks_in_flight', worker_count)))
         task_s = (runtime['executing_hard_timeout_s'] + runtime['finalizing_hard_timeout_s']
                   + runtime['worker_recovery_timeout_s'] + runtime['initializing_hard_timeout_s'])
-        wave_times = [runtime['initializing_hard_timeout_s'] + task_s * -(-min(RETRY_MAX_WAVE_SIZE, scene_count - offset)
-                      // concurrency) for offset in range(0, scene_count, RETRY_MAX_WAVE_SIZE)]
+        wave_times = []
+        for offset in range(0, scene_count, RETRY_MAX_WAVE_SIZE):
+            count = min(RETRY_MAX_WAVE_SIZE, scene_count - offset)
+            batches_s = task_s * -(-count // concurrency)
+            spaced_s = config.get('min_assignment_gap_s', 0) * (count - 1) + task_s
+            wave_times.append(runtime['initializing_hard_timeout_s'] + max(batches_s, spaced_s))
         recording_s = sum(wave_times)
         wave_s = max(wave_times, default=0)
     else:

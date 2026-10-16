@@ -112,3 +112,14 @@ def test_retry_observations_take_precedence_and_leave_the_verification_reserve()
                                              processor_start_s=[20, 30]), runtime={})
     assert estimate['needed_s'] == 250 and estimate['recording_deadline_s'] == 270
     assert estimate['fits'] is True and estimate['available_s'] == 300
+
+
+@pytest.mark.parametrize('extra,recording_s', [({'max_tasks_in_flight': 2}, 6780), ({'min_assignment_gap_s': 1000}, 19840)])
+def test_retry_fallback_respects_the_task_gate_and_assignment_spacing(extra, recording_s):
+    from so101_demo.runtime.container_campaign.processing_limits import retry_round_plan
+    runtime = dict(initializing_hard_timeout_s=180, executing_hard_timeout_s=300,
+                   finalizing_hard_timeout_s=120, worker_recovery_timeout_s=60)
+    estimate = retry_round_plan(extra, now_s=100, total_deadline_s=10000, scene_count=20, worker_count=8,
+                               processor_count=8, observed={}, runtime=runtime)
+    assert estimate['components']['recording_s'] == recording_s
+    assert estimate['fits'] is False

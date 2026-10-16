@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 533428e9e
+current_commit: d1c5926f325bc520f238e8f69349a4387768cd13
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3705
+latest_checkpoint: CP-3706
 next_experiment: EXP-616 (pending fresh installed Host gate and matching image builds): 16-scene debug at cap 8 with the Fast DDS profile, retry off.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3706 — Budget self-review follow-up; first build cancelled before testing
+
+- Codex inline self review found that the no-observation fallback also needs max_tasks_in_flight and min_assignment_gap_s. Added two regression cases: twenty scenes on two in-flight tasks require 6780 s; a 1000 s assignment gap requires 19840 s. RED: 2 failed (R/scratch/codex-focused.f8AjXMqc). GREEN: all 33 processing-limit tests passed, rc 0 (R/scratch/codex-focused.jOFpltaN). Observed wave timings remain authoritative when present.
+- The first Host gate at d1c5926f325b was deliberately cancelled during its build, before package testing, to keep source/install provenance fixed while applying this correction. It is INVALID for gate acceptance, not a quiet-host test failure. Owned gate process group 788981 and waiting teleop gate PID 793699 were stopped; readback confirmed no surviving members before restart. Its partial build/install/logs remain retained under R/gates/d1c5926f325b. Process snapshot and original head pointer retained in REG/handoffs/codex-resume-20261016T134641Z/gate-1-cancel-processes.txt and gated-head-1.txt. No evidence deleted.
+- The branch through d1c5926f3 was pushed to origin; remote previously matched 533428e9e. Next: commit this narrow correction and rerun the installed Host gate on the quiet host, then run the complete teleop ordinary pytest scope with eight workers in a fresh NVMe scratch tree. The latter supplements the CTest gate and starts only after it succeeds.
+- Retained: every prior run and cancelled gate artifacts. Archived: none. Deletion candidates: cancelled build tree and all read-back codex test scratch; authorization still required.
 
 ## CP-3705 — Review fixes, Tasks 6–8 implemented by Codex; installed Host gate next
 
