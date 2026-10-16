@@ -69,15 +69,46 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3709
-next_experiment: EXP-617 (PLANNED): act-w8-20261016T153456Z, forty qualification scenes, cap 8, retry absent/zero.
+latest_checkpoint: CP-3711
+next_experiment: NONE — EXP-617 NOT_QUALIFIED triggers the approved stop condition; EXP-618 not started.
 ---
 
 # SO-101 ACT Data Experiment Ledger
 
+## CP-3711 — EXP-617 NOT_QUALIFIED; stop before formal collection
+
+- EXP-617 finished normally, CLI rc 0, tee rc 0, elapsed 3099 s; Teacher physical success 40/40. All forty records are PROCESSED, missing evidence empty. Offline data: 32 VALID, 8 INVALID, 0 FAULT, 0 MISSING. This is a VALID experiment with a failed qualification result, not an invalidated experiment. Source/install/images remained fixed at 8f8123dcba86; recording retry stayed absent/zero, and no thresholds changed.
+- build-report.zsh independently read back originals and returned rc 3 after 252 s, status NOT_QUALIFIED, sole reason QUALITY_GATE_FAILED:qc_valid_rate. Frozen rule requires at least 34/40; observed 32/40 (80%). Teacher physical success passes 40/40; frame continuity and recorder losslessness pass on all 32 QC-valid episodes, with the eight invalid episodes explicitly excluded only from those QC-valid populations, not from the forty-scene valid-rate denominator. Report SHA256 61641c81c5dc7db89c2efb7718bee971b570ff050fcf977a7c8201f7c43f124e. verify-report.zsh returns rc 3, COLLECTION_QUALIFICATION_NOT_QUALIFIED; no accepted qualification proof was issued.
+- Eight invalid scenes, grouped by their primary observed refusal (not a root-cause claim): source alignment/INPUT_STALE qual-06, qual-30, qual-32; NO_NEW_ACQUISITION qual-12, qual-14, qual-27 (qual-12 also ENDPOINT_INITIAL_CAPTURE_INVALID; qual-27 also source alignment); capture-label revocation/retention qual-20; joint_states/scene_state topic loss plus source alignment/INPUT_STALE qual-34. Full exact reasons remain in host/processing-result.json and the retained per-scene processor reports. Causes remain unconfirmed; no compensating data-rule change or repeated qualification.
+- Secondary infrastructure observation: eight generation-1 processors lost Coordinator status polling/connection and were stopped before generation-2 relaunch; eight automatic processing retries, 48 dispatches, 40 final results, no scene faults/missing/deadline events. For example p00/g1 instance-exit.json reports Coordinator status polling timed out, cleanup_confirmed true; Docker exit 0 and OOMKilled false. This is processing retry on retained recordings, not recording retry, and does not recover the eight data-invalid scenes. No root-cause inference is made from exit code alone.
+- Timing readback: phase 1 1450 s (first shard launch to last stop); phase-1 libc.syncfs 0.003486 s, both waves/forty scenes stopped and durable before processing; phase 2 1385 s. All sixteen shard instances, sixteen processor instances and Teacher stopped; campaign-cleanup terminated true. All 33 saved container logs re-read with exact SHA256 and byte counts, failures empty. Host/thread/GPU sampler stops verified; Docker running list empty and owned tmux session ended. Exited EXP-617 containers retained; no broad cleanup. Evidence: REG/handoffs/codex-resume-20261016T134641Z/exp617-final-audit.json, exp617-{result,build-report-result,verify-report-result,summary-result}.txt and R/run-logs/exp617/summary-20261016T153456Z.txt. The summary ran with --no-trace; no new all-forty A/B/C classification is claimed.
+- STOP CONDITION REACHED: no EXP-618 inputs authored, no formal collection, training, threshold changes, further source fixes or repeated qualification. Retry implementation and installed gates are verified automatically, but successful live formal recording-round retry remains unverified. The debug-only class-A acceptance remains 0/16; it is not broadened to a claim about all qualification recordings.
+- Retained: complete EXP-614 qualified baseline, EXP-615 formal baseline, EXP-616 debug and EXP-617 failed qualification, all new raw bags/invalid results, reports, gates, images, templates/backups, authoring inputs and diagnostics. Archived: none in this continuation. Deletion candidates: cancelled d1c5926f325b build, read-back test/self-check/authoring scratch and diagnostic extracts, failed authoring inputs 145332Z and 153328Z, exited owned containers after saved-log proof. No evidence deleted or moved; only the previously authorized eight EXP-616 exited processor containers were removed after log/ownership checks. Visual N/A: headless collection/offline verification.
+- Execution followed the latest explicit human override: Codex implemented directly, no dst. Prior Sonnet tasks received independent Sol/high review; Codex changes received inline self-review. Complete ordinary gates, no benchmarks: demo 13366 passed/187 skipped (8 xdist); supplemental teleop 1433 passed/43 skipped (8 xdist); colcon/CTest 3348 tests, 0 errors/failures, 60 skipped. Host gate and both image builds passed before the runtime runs. Next proposed investigation, requiring a new decision after this stop: distinguish endpoint-initial freshness/capture-label/source-delivery failures using the eight retained original recordings, separately from the processor polling-loss boundary.
+
+```yaml
+checkpoint_id: CP-3711
+last_valid_experiment: EXP-617 (valid experiment; qualification failed)
+last_qualified_baseline: EXP-614
+current_hypothesis: Causes of the eight retained acquisition/alignment/retention/topic-loss refusals remain unconfirmed.
+working_tree_status: docs-only final checkpoint; src/scripts/third_party equal gated 8f8123dcba86
+owned_processes: NONE (all campaign/samplers stopped; tmux ended)
+preserved_processes: existing user Codex/app-server processes
+open_risks:
+  - Current images are not admitted to formal collection because EXP-617 is NOT_QUALIFIED.
+  - Live formal recording-round retry remains unverified; no completion claim for EXP-618.
+next_command: NONE — stop and report the failed qualification before any further execution.
+```
+
+## CP-3710 — EXP-617 running; source frozen
+
+- PLANNED entry committed/pushed at d6dfa19fa before launch. Started 2026-10-16T15:36:08Z in owned tmux so101-exp617-qualification, pane shell PID 1194709. Eight wave-0 shards and one Teacher observed running. Actual w00 image, private IPC/network, installed DDS profile environment and runtime argv retained in REG/handoffs/codex-resume-20261016T134641Z/exp617-running-provenance.json.
+- Source remains gated 8f8123dcba86; no source edits, tests, image builds or competing collection during the run. Only this ledger status changes. Owned workload is EXP-617 and its standard host/thread/GPU samplers. Other user Codex/app-server processes preserved.
+- Next: clean campaign finish, build-report and independent verify-report. NOT_QUALIFIED stops before EXP-618. Retained/archived/deletion candidates unchanged from CP-3709; no evidence deletion.
+
 ```yaml
 experiment_id: EXP-617
-status: PLANNED
+status: VALID
 prior_experiment: EXP-616 (A acceptance) and EXP-614 (previous qualified baseline)
 hypothesis: The gated DDS-profile images satisfy the independent forty-scene qualification without retry or quality-rule changes.
 prediction: Clean forty-scene two-wave run, qualification-report status QUALIFIED and independent verification proof accepted.
@@ -106,19 +137,19 @@ provenance:
   gz_partition: N/A (MuJoCo headless)
 commands:
   - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z/run-w8q.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z/build-report.zsh
-    exit_code: PENDING
+    exit_code: 3
   - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z/verify-report.zsh
-    exit_code: PENDING
-observed: PENDING
-inferred: NONE
-conclusion: PENDING
+    exit_code: 3
+observed: Teacher 40/40; data 32 VALID and 8 INVALID; all owned stops proven; qualification NOT_QUALIFIED because 32/40 is below the frozen 34/40 requirement.
+inferred: The qualification stop condition is met; individual failure causes remain unconfirmed.
+conclusion: Valid failed qualification; do not proceed to formal collection.
 evidence:
   - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z
   - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261016T153456Z
-decision: PENDING
-next_experiment: EXP-618 only after QUALIFIED and independent proof PASS
+decision: ABANDON progression to EXP-618 under this execution plan; retain all evidence and report.
+next_experiment: NONE pending a new human decision after the stop condition
 ```
 
 ## CP-3709 — EXP-616 delivery acceptance passes; qualification preparation
