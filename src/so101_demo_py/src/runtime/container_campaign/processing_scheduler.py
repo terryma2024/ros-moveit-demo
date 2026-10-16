@@ -121,11 +121,26 @@ class ProcessingScheduler:
         self.stop_state = {}      # launch id -> whether that processor container's stop was proven, every generation
         self.journal = ProcessingJournal(self.root / "host" / JOURNAL_NAME, clock)
         self.max_attempts = processing_max_attempts(config)
+        # kept across `run` calls (one per recording round): the admitted slots are admitted once, the workers keep their launch
+        # generation (a generation must rise over the campaign), and a scene's processing attempt numbers continue
+        self._admitted = None
+        self._workers = {}
+        self._proc_made = {}
 
     # ---- the run -----------------------------------------------------------------------------------------------------------
 
-    async def run(self, rows, *, deadline_s):
-        """Process every scene of `rows` (verified phase-1 rows with `proof.processing == PENDING`); returns the summary."""
+    async def run(self, rows, *, deadline_s, round=0, host_dir=None):
+        """Process every scene of `rows` (verified phase-1 rows with `proof.processing == PENDING`); returns the summary.
+
+        `round` is the recording round (0 for the first). Its journal is `host_dir / processing-journal.jsonl`, `host_dir` defaulting
+        to `root/host`. Later rounds reuse the processor slots admitted by the first run and continue the processing attempt numbers
+        of a scene (`<scene>-lease-1-proc-<n>`); a round's attempt counts and `processing_max_attempts` are relative to the round."""
+        if type(round) is not int or round < 0 or (round > 0) != (self._admitted is not None):
+            raise ValueError("PROCESSING_ROUND_INVALID")
+        journal_path = (Path(host_dir) if host_dir is not None else self.root / "host") / JOURNAL_NAME
+        if journal_path != self.journal.path:
+            self.journal = ProcessingJournal(journal_path, self.clock)
+        self.round = round
         items = [self._item(row) for row in rows]
         if not items or len({item["scene_id"] for item in items}) != len(items):
             raise ValueError("PROCESSING_QUEUE_INVALID")
@@ -133,21 +148,33 @@ class ProcessingScheduler:
         count = processor_count_for(self.config, queue_length=len(items), available_bytes=self._available_bytes())
         if self.max_processors is not None:
             count = min(count, self.max_processors)
-        slots = tuple(ActWorkerSlot(self.context.campaign_id, f"p{index:02d}", self.context.execution_generation)
-                      for index in range(count))
-        self.admit_slots(slots)
+        if self._admitted is None:
+            slots = tuple(ActWorkerSlot(self.context.campaign_id, f"p{index:02d}", self.context.execution_generation)
+                          for index in range(count))
+            self.admit_slots(slots)
+            self._admitted = slots
+        else:
+            slots = self._admitted[:min(count, len(self._admitted))]
+            count = len(slots)
         self.items = {item["scene_id"]: item for item in items}
         self.queue = deque(item["scene_id"] for item in items)
         self.inflight = 0
         self.state = {}            # scene_id -> dict(status, outcome, reason, attempts, output_dir)
         self._changed = asyncio.Event()
+        extra = {}
+        if round > 0:   # round 0 keeps the original line, byte for byte
+            extra = dict(round=round, first_proc={item["scene_id"]: item["first"] for item in items})
         self.journal.append("phase2_start", queue=[item["scene_id"] for item in items], processors=count,
-                            max_attempts=self.max_attempts, deadline_s=self.deadline_s)
-        workers = [_Worker(slot) for slot in slots]
+                            max_attempts=self.max_attempts, deadline_s=self.deadline_s, **extra)
+        workers = [self._workers.setdefault(slot.worker_id, _Worker(slot)) for slot in slots]
         try:
             await asyncio.gather(*(self._serve(worker) for worker in workers))
         finally:
             stopped = await self._stop_all(workers)
+            for worker in workers:   # stopped: a later round launches a new generation, never touches this container again
+                worker.owner = worker.control = None
+            for scene, item in self.items.items():
+                self._proc_made[scene] = self._proc_made.get(scene, 0) + item["made"]
         return self._summary(workers, stopped)
 
     def _available_bytes(self):
@@ -161,11 +188,12 @@ class ProcessingScheduler:
         proof = row["proof"]
         refs = self.case_inputs[scene]
         sealed = Path(proof["location"])   # `row["location"]` is the shard task directory; the sealed attempt is the proof's
-        if any(re.fullmatch(TASK_ID_PATTERN, f"{scene}-proc-{n}") is None for n in range(1, self.max_attempts + 1)):
+        first = 1 + self._proc_made.get(scene, 0)
+        if any(re.fullmatch(TASK_ID_PATTERN, f"{scene}-proc-{n}") is None for n in range(first, first + self.max_attempts)):
             raise ValueError("PROCESSING_TASK_ID_INVALID")
         return dict(scene_id=scene, phase1_attempt=str(sealed), attempt_name=sealed.parent.name, made=0,
                     phase1_result_sha256=proof["result_sha256"], inputs_manifest=dict(refs["inputs_manifest"]),
-                    scope=dict(refs["scope"]), attempt=1)
+                    scope=dict(refs["scope"]), attempt=first, first=first)
 
     # ---- one processor -----------------------------------------------------------------------------------------------------
 
@@ -258,7 +286,8 @@ class ProcessingScheduler:
             return False
         outcome = result["outcome"]
         if outcome in ("VALID", "INVALID"):
-            self.state[scene] = dict(status=FINAL, outcome=outcome, reason=result.get("reason"), attempts=attempt,
+            self.state[scene] = dict(status=FINAL, outcome=outcome, reason=result.get("reason"),
+                                     attempts=self._relative(scene, attempt),
                                      output_dir=result.get("output_dir"), processed_result=result.get("processed_result"))
         elif outcome == "REFUSED":
             self._fault(scene, attempt, REFUSED_FAULT, result.get("reason"))
@@ -269,16 +298,20 @@ class ProcessingScheduler:
     def _infrastructure_failure(self, scene, attempt, reason):
         if self.clock() >= self.deadline_s:
             self._missing(scene, DEADLINE_REASON)
-        elif attempt < self.max_attempts:
+        elif self._relative(scene, attempt) < self.max_attempts:
             self.items[scene]["attempt"] = attempt + 1
             self.journal.append("retry", scene_id=scene, next_attempt=attempt + 1, reason=str(reason)[:300])
             self.queue.appendleft(scene)
         else:
             self._fault(scene, attempt, EXHAUSTED_FAULT, reason)
 
+    def _relative(self, scene, attempt):
+        """The attempt number counted from the first attempt of this round."""
+        return attempt - self.items[scene]["first"] + 1
+
     def _fault(self, scene, attempt, fault, reason):
         self.state[scene] = dict(status=FAULT, fault=fault, reason=None if reason is None else str(reason)[:300],
-                                 attempts=attempt)
+                                 attempts=self._relative(scene, attempt))
         self.journal.append("scene_fault", scene_id=scene, fault=fault, reason=self.state[scene]["reason"])
 
     def _missing(self, scene, reason):

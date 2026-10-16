@@ -407,3 +407,64 @@ def test_a_bad_queue_is_refused_before_any_slot_is_admitted(tmp_path, problem):
     with pytest.raises(ValueError, match="PROCESSING_"):
         run(scheduler.run(rows, deadline_s=deadline))
     assert world.admitted == [] and world.launches == []
+
+
+# ---- a second run: the retry rounds ----------------------------------------------------------------------------------------
+
+def _round_journal(directory):
+    return [json.loads(line) for line in (directory / "processing-journal.jsonl").read_text().splitlines()]
+
+
+def test_a_second_run_does_not_readmit_continues_generations_and_proc_numbers_and_writes_its_own_journal(tmp_path):
+    world = World(tmp_path)
+    scheduler, rows, deadline = world.scheduler(config={"processor_count": 2}, rows=make_rows(world, 3))
+    first = run(scheduler.run(rows, deadline_s=deadline))
+    round_zero = (world.run / "host/processing-journal.jsonl").read_bytes()
+    assert first["counts"]["VALID"] == 3 and len(world.admitted) == 1
+    assert b'"round"' not in round_zero and b'"first_proc"' not in round_zero
+    retry_dir = world.run / "host/retry-1"
+    second = run(scheduler.run([rows[1]], deadline_s=deadline, round=1, host_dir=retry_dir))
+    assert len(world.admitted) == 1, "the admitted slots are kept"
+    assert (world.run / "host/processing-journal.jsonl").read_bytes() == round_zero, "the round-0 journal is not touched"
+    lines = _round_journal(retry_dir)
+    start = lines[0]
+    assert start["event"] == "phase2_start" and start["round"] == 1 and start["first_proc"] == {"scene-01": 2}
+    assert start["processors"] == 1 and start["queue"] == ["scene-01"]
+    launched = [item for item in world.launches if item[1] > 1]
+    assert len(launched) == 1 and launched[0][1] == 2, "one processor, the next generation"
+    task = [item for item in world.assigned if item["scene"] == "scene-01"][-1]
+    assert task["task_id"] == "scene-01-proc-2" and task["attempt"] == 2
+    assert task["document"]["output_dir"].endswith("scene-01/scene-01-lease-1-proc-2")
+    assert second["counts"]["VALID"] == 1 and second["scenes"][0]["attempts"] == 1
+    assert second["journal"] == str(retry_dir / "processing-journal.jsonl") and second["processors_stopped"] is True
+
+
+def test_attempt_counts_and_the_attempt_limit_are_relative_to_the_round(tmp_path):
+    world = World(tmp_path, script={("scene-00", 2): ("INFRA", "x"), ("scene-00", 3): ("INFRA", "y")})
+    scheduler, rows, deadline = world.scheduler(config={"processor_count": 1, "processing_max_attempts": 2}, rows=make_rows(world, 1))
+    run(scheduler.run(rows, deadline_s=deadline))
+    summary = run(scheduler.run(rows, deadline_s=deadline, round=1, host_dir=world.run / "host/retry-1"))
+    assert [item["attempt"] for item in world.assigned if item["scene"] == "scene-00"] == [1, 2, 3]
+    scene = summary["scenes"][0]
+    assert (scene["status"], scene["fault"], scene["attempts"]) == ("FAULT", "PROCESSING_RETRIES_EXHAUSTED", 2)
+
+
+def test_a_third_run_keeps_counting_after_lost_attempts(tmp_path):
+    world = World(tmp_path, script={("scene-00", 1): "DIE"})
+    scheduler, rows, deadline = world.scheduler(config={"processor_count": 1}, rows=make_rows(world, 1))
+    run(scheduler.run(rows, deadline_s=deadline))
+    run(scheduler.run(rows, deadline_s=deadline, round=1, host_dir=world.run / "host/retry-1"))
+    run(scheduler.run(rows, deadline_s=deadline, round=2, host_dir=world.run / "host/retry-2"))
+    assert [item["attempt"] for item in world.assigned if item["scene"] == "scene-00"] == [1, 2, 3, 4]
+    assert [generation for _, generation in world.launches] == [1, 2, 3, 4]
+    assert _round_journal(world.run / "host/retry-2")[0]["first_proc"] == {"scene-00": 4}
+
+
+def test_a_round_needs_the_first_run_before_it_and_only_round_zero_is_first(tmp_path):
+    world = World(tmp_path)
+    scheduler, rows, deadline = world.scheduler(rows=make_rows(world, 1))
+    with pytest.raises(ValueError, match="PROCESSING_ROUND_INVALID"):
+        run(scheduler.run(rows, deadline_s=deadline, round=1, host_dir=world.run / "host/retry-1"))
+    run(scheduler.run(rows, deadline_s=deadline))
+    with pytest.raises(ValueError, match="PROCESSING_ROUND_INVALID"):
+        run(scheduler.run(rows, deadline_s=deadline))
