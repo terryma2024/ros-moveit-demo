@@ -146,7 +146,6 @@ class SceneOperations:
             calls = getattr(self, "_scene_service_calls", ())
             if len(calls) > start:
                 transaction["query_call_id"] = calls[start]["call_id"]
-                self._write()
 
     def _attach(self, state: State) -> None:
         from moveit_msgs.srv import ApplyPlanningScene
@@ -237,9 +236,10 @@ class SceneOperations:
                     "attempts": len(ages) - 1, "source_ages_s": ages, "threshold_s": STALE_SOURCE_RESNAP_S,
                     "max_attempts": STALE_SOURCE_RESNAP_MAX_ATTEMPTS,
                 }
-        # No manifest write here: it sat between the physics snapshot this request names and the request itself, and a slow write
-        # (IO pressure) aged the named source past the Recorder's 100 ms window. The transaction is persisted right after the call
-        # (also when the call is refused, times out or raises), so the source still survives every outcome.
+        # No manifest write between the physics snapshot this request names and the request, nor between the apply response and
+        # the read-back request: a slow write (IO pressure, EXP-608) aged the source or delayed the read-back past the
+        # Recorder's 100 ms window. The transaction is persisted exactly once, after the read-back and verification, on every
+        # exit path (success, refusal, timeout, exception).
         self._document.setdefault("scene_transactions", []).append(transaction)
         def before_dispatch():
             if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT) and not self._teacher_run():
@@ -251,24 +251,24 @@ class SceneOperations:
                                  "publisher_sequence": before.publisher_sequence,
                                  "simulation_time_s": before.simulation_time_s}
         try:
-            response = self._call(
-                self._apply_scene, ApplyPlanningScene.Request(scene=scene), 5.0,
-                "DYNAMIC_DETACH_SYNC", before_dispatch=before_dispatch)
+            try:
+                response = self._call(
+                    self._apply_scene, ApplyPlanningScene.Request(scene=scene), 5.0,
+                    "DYNAMIC_DETACH_SYNC", before_dispatch=before_dispatch)
+            finally:
+                self._scene_op_source = None
+                calls = getattr(self, "_scene_service_calls", ())
+                if len(calls) > start:
+                    transaction["apply_call_id"] = calls[start]["call_id"]
+            if not response.success:
+                raise RuntimeError("DYNAMIC_DETACH_SYNC_FAILED")
+            attached_ids, world = self._transaction_scene_membership(transaction)
+            if "plastic_cup" in attached_ids or world.get("plastic_cup") != 13:
+                raise RuntimeError("DYNAMIC_DETACH_SYNC_READBACK_MISMATCH")
+            verification = verify_task_scene(self._last_scene_response, expected_geometry)
+            transaction["geometry_verification"] = verification.evidence
         finally:
-            self._scene_op_source = None
-            calls = getattr(self, "_scene_service_calls", ())
-            if len(calls) > start:
-                transaction["apply_call_id"] = calls[start]["call_id"]
-            self._write()
-        calls = getattr(self, "_scene_service_calls", ())
-        if not response.success:
-            raise RuntimeError("DYNAMIC_DETACH_SYNC_FAILED")
-        attached_ids, world = self._transaction_scene_membership(transaction)
-        if "plastic_cup" in attached_ids or world.get("plastic_cup") != 13:
-            raise RuntimeError("DYNAMIC_DETACH_SYNC_READBACK_MISMATCH")
-        verification = verify_task_scene(self._last_scene_response, expected_geometry)
-        transaction["geometry_verification"] = verification.evidence
-        self._write()
+            self._write()   # once, after the read-back, on every exit path (EXP-608)
         if not verification.success:
             raise RuntimeError("DYNAMIC_DETACH_SYNC_GEOMETRY_MISMATCH")
         self._attached = False
