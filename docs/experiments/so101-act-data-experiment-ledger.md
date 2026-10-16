@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3702
-next_experiment: NONE planned. Human decision needed on the phase-1 delivery-timing losses (20 percent of formal train scenes) before any further collection.
+latest_checkpoint: CP-3703
+next_experiment: EXP-616 (to be planned after plan Tasks 6-9 groundwork): 16-scene debug at cap 8 with the Fast DDS profile, retry off.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3703 — Delivery diagnosis, delivery-fix and retry design confirmed, plan Tasks 1-5 committed; handoff to Codex
+
+- Human decisions: "先修好阶段一的投递时序问题。", "代码改成支持重跑失败case（类似retry failures）。", "清理历史证据", "重跑70", then "确认执行" for the design and plan (recommended answers: retry every INVALID with Teacher PASS; 2 rounds formally; class B diagnostic only). Then "quota快用光了，我需要codex接手做。你写清楚handoff文档".
+- Evidence deletion batch b (R/evidence-deletion-20261016b): 87 entries, 204 GiB; 94 exited containers and 2 old images (docker.jsonl). Disk 936 GB to 719 GB used. EXP-614 and EXP-615 kept in full.
+- Delivery diagnosis (REG/diag-delivery-20261016, read-only plus throwaway containers): over 110 bags of EXP-614 and EXP-615, class A (24 events: one image 110 to 130 ms late, camera_info held up to about 1.5 s; reliable-DDS repair), class B (26: recorder-only stall 300 to 335 ms, cause unknown), class C (about 15: multi-frame holds). Reproduced class A with eight mini-shards; a Fast DDS profile with heartbeatPeriod 20 ms and nackResponseDelay 1 ms gave 0 late messages above 50 ms in two runs; a larger SHM segment did not help.
+- Design docs/superpowers/specs/2026-10-16-so101-act-delivery-fix-and-retry-design.md and plan docs/superpowers/plans/2026-10-16-so101-act-delivery-fix-and-retry-implementation.md, CONFIRMED.
+- Commits: 6f36a5142 (Task 1, Fast DDS profile for the shard role; reviewed), ebf5b9252 (Task 2, RECORDER_ONLY_STALL post-hoc at recorder stop; reviewed), ed124ae20, e96393f6e, 1dc2eabb9 (Tasks 3 to 5; not yet reviewed; targeted tests 129 passed, the broad run interrupted). Tasks 6 to 9 remain.
+- Handoff: REG/handoffs/claude-to-codex-handoff-20261016-delivery-retry.md; helper scripts in REG/handoffs/claude-tools-20261016/.
 
 ## CP-3702 — EXP-615 formal collection complete: 70 of 70 processed, 56 committed (36 train, 10 validation, 10 offline_test)
 
