@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4e27b342662c8fe778f85e9776590c452ae6c78d
+current_commit: 40ed95e4285c6913d33c0665e1c8cac9aba74a22
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,70 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3690
-next_experiment: NONE until the analysis of the remaining INPUT_STALE in EXP-608 is in.
+latest_checkpoint: CP-3691
+next_experiment: EXP-609 (PLANNED): two-phase debug run at cap 4 with the post-apply manifest write moved after the readback.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3691 — EXP-608 analysis; post-apply manifest write moved after the readback; gate PASS; EXP-609 planned
+
+- Read-only analysis (Sonnet), scripts in the job tmp t608/.
+  - In all five INPUT_STALE scenes the data is in the bag and on time; this is not a delivery burst.
+  - The replay waited more than 0.1 s for the association built from a Teacher apply readback that came back 0.16 to 0.5 s late (normal 20 to 60 ms). dbg-11 instead had a 391 ms get_planning_scene read gap.
+  - At every failure instant: host IO PSI full 10 to 35 percent, NVMe write latency 80 to 440 ms, about 1.1 GB dirty, 17 to 25 processes blocked.
+  - Inferred cause: the Teacher's post-apply manifest write (temp file plus os.replace) before the readback request.
+  - source_resnap worked in several scenes; dbg-06 exhausted its 3 attempts, the only window failure.
+  - dbg-01 NO_NEW_ACQUISITION was a genuine 192 ms simulation stall.
+  - A lower recording cap would help only partly: IO stalls also occur at one recording.
+- Human answer "只改 Teacher 写入，回放不动" (2026-10-16): no replay change. Commit `40ed95e42` (Sonnet):
+  - _detach_or_sync writes the manifest exactly once, after apply, readback and geometry check, on every exit path; the write after the apply and the one in _transaction_scene_membership are removed.
+  - Crash window: a death between apply and readback now omits that audit-only transaction. Nothing reads it back, and the apply stays on the event stream.
+  - Tests: 4 of 6 failed first; 181 passed.
+- Gate on 40ed95e42, R/gates/40ed95e4285c: all rc 0, dirty_after 0. PASSED.
+- Images from 40ed95e42:
+  - inference sha256:b6321904791bd1e16695d88b5655398f90f31ad100b55fcdbc5f19b596eea1a8 (R/image-build-20261016T024446Z)
+  - shard sha256:edfc953e839d35471ca2cb65ac00eb02848dec9507a7130a60a80420f42fe160 (R/image-build-20261016T024547Z)
+- The eight EXP-608 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp608-processors.jsonl).
+- Inputs REG/act-w8d-inputs-20261016T024842Z (cap 4): validation 77 of 77 PASS.
+
+```yaml
+experiment_id: EXP-609
+status: PLANNED
+prior_experiment: EXP-608 (VALID; 10 of 16 at cap 4, INPUT_STALE from late apply readbacks)
+hypothesis: With no manifest write between apply and readback, the late readbacks and their INPUT_STALE mostly disappear, giving VALID of at least 14 of 16.
+prediction: INPUT_STALE at most 1; VALID 13 to 16 of 16; the timings as EXP-608.
+single_variable: Commit 40ed95e42 relative to EXP-608.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers, at most four recording; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8d.zsh (preconditions.py), for commit 40ed95e42; no code writer active.
+success_criteria:
+  - As EXP-605.
+failure_criteria:
+  - As EXP-605.
+invalid_criteria:
+  - As EXP-607, for commit 40ed95e42.
+provenance:
+  source_commit: 40ed95e4285c6913d33c0665e1c8cac9aba74a22 (images and Host gate install)
+  install_overlay: /act/install in the two images above; Host R/gates/40ed95e4285c/install plus worktree import
+  runtime_executable: as EXP-605
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T024842Z/author.py (commit, gate and image arguments)
+    exit_code: 0
+  - command: zsh <registered root>/act-w8d-inputs-20261016T024842Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3690 — EXP-608 VALID: re-snapshot removed the source-age failures, but 10 of 16 VALID; INPUT_STALE without a source failure remains
 
