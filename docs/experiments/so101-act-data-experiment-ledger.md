@@ -69,11 +69,45 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3697
-next_experiment: EXP-612 (debug, recording cap 6), then EXP-613 (debug, cap 8); requalification at the chosen cap; then the formal 70-scene collection in one campaign.
+latest_checkpoint: CP-3698
+next_experiment: EXP-612 (PLANNED): 16-scene eight-shard debug at recording cap 6; then EXP-613 at cap 8.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3698 — EXP-612 planned: the 16-scene debug run at recording cap 6
+
+- Images built at 76069e0cb: inference sha256:8c6fcef1… (R/image-build-20261016T081320Z), shard sha256:1d559fbe… (R/image-build-20261016T081500Z).
+- Inputs REG/act-w8d-inputs-20261016T082213Z from the w8d-debug template with --max-concurrent-recordings 6; every other key as EXP-610. Validation 77 items PASS.
+- The first authoring (REG/act-w8d-inputs-20261016T081855Z, kept, not used) failed one item: the runtime YAML sha256 had to equal EXP-610's, which the 9000 s total changes on purpose. Both templates now require the sha to equal the pin in the gate install's parallel_collection.yaml and the install and worktree files; the reference sha is reported as info. The templates' batch_hard_timeout_s option now has the loader range 1800..14400.
+
+```yaml
+experiment_id: EXP-612
+status: PLANNED
+prior_experiment: EXP-610 (VALID; 16 of 16 at cap 4, phase 1 738 s)
+hypothesis: Six concurrent recordings keep the eight-shard debug batch fully VALID with lossless zstd recording, and shorten phase 1.
+prediction:
+  - 15 to 16 of 16 VALID; few RECORDER_DELIVERY_SLOW lines; no INPUT_STALE.
+  - Phase 1 about 550 to 650 s.
+single_variable: max_concurrent_recordings 6 instead of 4 (images rebuilt at 76069e0cb, total 9000 s; neither changes the per-scene path).
+lifecycle: ISOLATED_STACK (eight shard containers, at most six recording; then processor containers)
+success_criteria:
+  - 16 of 16 VALID, every stop proven, store IDLE afterwards.
+failure_criteria:
+  - Any scene not VALID through late frames, INPUT_STALE or recorder loss attributable to the higher cap.
+invalid_criteria:
+  - As EXP-607, for commit 76069e0cb.
+provenance:
+  source_commit: 76069e0cb0d217fdc4fd077d9f59f1263268f288 (images and Host gate install)
+commands:
+  - command: zsh <registered root>/act-w8d-inputs-20261016T082213Z/run-w8d.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+decision: PENDING
+next_experiment: EXP-613
+```
 
 ## CP-3697 — Launch parameters for scheduling and the total deadline; total raised to 9000 s; cap 6 and cap 8 to be tested
 
