@@ -16,6 +16,7 @@ KEYS = {
     "verification_reserve_s": (600, [0, -1, True, 600.5, "600", None]),
     "batch_hard_timeout_s": (9000, [1799, 14401, 0, -1, True, "9000", None]),
     "processing_task_timeout_s": (1800, [1259, 0, -1, True, 1800.5, "1800", None]),
+    "retry_invalid_max_rounds": (2, [-1, 4, True, 2.0, "2", None]),
 }
 
 
@@ -65,3 +66,14 @@ def test_batch_hard_timeout_accepts_a_number_on_its_closed_bounds(tmp_path):
             module.load_campaign_config(write_config(tmp_path, document | {"batch_hard_timeout_s": bad}))
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(document | {"batch_hard_timeout_s": bad}, schema)
+
+
+def test_retry_invalid_max_rounds_accepts_zero_to_three_and_refuses_a_bool(tmp_path):
+    module = config_module()
+    document = campaign_fixture(tmp_path)
+    for good in (0, 1, 2, 3):
+        assert module.load_campaign_config(write_config(tmp_path, document | {"retry_invalid_max_rounds": good}))[
+            "retry_invalid_max_rounds"] == good
+    for bad in (False, True):
+        with pytest.raises(ValueError, match="CAMPAIGN_CONFIG_INVALID"):
+            module.load_campaign_config(write_config(tmp_path, document | {"retry_invalid_max_rounds": bad}))

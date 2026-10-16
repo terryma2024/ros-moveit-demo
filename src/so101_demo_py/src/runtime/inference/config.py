@@ -119,7 +119,13 @@ _INT_LIMITS = {_PROCESSOR_COUNT: (1, 16), _PROCESSING_MAX_ATTEMPTS: (1, 5), _PRO
 _BATCH_HARD_TIMEOUT_S = "batch_hard_timeout_s"
 BATCH_HARD_TIMEOUT_MIN_S = 1800
 BATCH_HARD_TIMEOUT_MAX_S = 14400
-_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, *_INT_LIMITS)
+# In-campaign retry of INVALID scenes: 0 (absent) to 3 extra rounds. Like `batch_hard_timeout_s` it is not part of the controlled
+# identity (`unified.admission._collection_identity` reads only gpu_uuid and the images), so a qualification stays valid across values.
+# Its low bound is 0, unlike every `_INT_LIMITS` entry.
+_RETRY_INVALID_MAX_ROUNDS = "retry_invalid_max_rounds"
+RETRY_INVALID_MAX_ROUNDS_LIMITS = (0, 3)
+_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
+                    *_INT_LIMITS)
 
 
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
@@ -156,6 +162,9 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
         if _BATCH_HARD_TIMEOUT_S in document:
             _require(type(document[_BATCH_HARD_TIMEOUT_S]) in (int, float)
                      and BATCH_HARD_TIMEOUT_MIN_S <= document[_BATCH_HARD_TIMEOUT_S] <= BATCH_HARD_TIMEOUT_MAX_S)
+        if _RETRY_INVALID_MAX_ROUNDS in document:
+            low, high = RETRY_INVALID_MAX_ROUNDS_LIMITS
+            _require(type(document[_RETRY_INVALID_MAX_ROUNDS]) is int and low <= document[_RETRY_INVALID_MAX_ROUNDS] <= high)
         for name, (low, high) in _INT_LIMITS.items():
             if name in document:
                 _require(type(document[name]) is int and low <= document[name] <= high)

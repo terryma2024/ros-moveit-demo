@@ -65,6 +65,48 @@ def processing_task_timeout_s(config):
     return config.get("processing_task_timeout_s", DEFAULT_TASK_TIMEOUT_S)
 
 
+#: a retry round's sync when round 0 observed none
+DEFAULT_RETRY_SYNC_S = 60.0
+#: the largest wave `plan_campaign_waves` builds by default
+RETRY_MAX_WAVE_SIZE = 20
+
+
+def retry_invalid_max_rounds(config):
+    """How many retry rounds the campaign may run (absent means 0, today's behaviour)."""
+    return config.get("retry_invalid_max_rounds", 0)
+
+
+def retry_round_plan(config, *, now_s, total_deadline_s, scene_count, worker_count, processor_count, observed, runtime):
+    """Whether one more retry round (`scene_count` candidates) fits before the total minus `verification_reserve_s`.
+
+    `observed` holds round-0 measurements, each optional: `wave_wall_s` (wall seconds per wave), `sync_s`, `task_s` (seconds per
+    processing task) and `processor_start_s`. `runtime` holds the parallel-runtime hard timeouts used when nothing was observed.
+    `collect_timeout_s` does not apply to retry rounds. `worker_count` is the shard slot count (waves are packed by
+    `plan_campaign_waves`' rule, at most `RETRY_MAX_WAVE_SIZE` scenes per wave)."""
+    waves = -(-scene_count // RETRY_MAX_WAVE_SIZE)
+    wave_s = max(observed.get("wave_wall_s") or (), default=None)
+    if wave_s is None:
+        wave_s = (runtime["initializing_hard_timeout_s"] + runtime["executing_hard_timeout_s"] + runtime["finalizing_hard_timeout_s"]
+                  + runtime["worker_recovery_timeout_s"] + runtime["initializing_hard_timeout_s"])
+    recording_s = wave_s * waves
+    sync_s = observed.get("sync_s")
+    sync_s = DEFAULT_RETRY_SYNC_S if sync_s is None else sync_s
+    task_s = max(observed.get("task_s") or (), default=None)
+    task_s = processing_task_timeout_s(config) if task_s is None else task_s
+    start_s = max(observed.get("processor_start_s") or (), default=None)
+    start_s = processing_task_timeout_s(config) if start_s is None else start_s
+    processing_s = task_s * -(-scene_count // max(1, processor_count)) + start_s
+    end_s = total_deadline_s - config.get("verification_reserve_s", DEFAULT_VERIFICATION_RESERVE_S)
+    needed_s = recording_s + sync_s + processing_s
+    available_s = end_s - now_s
+    fits = needed_s <= available_s
+    return dict(fits=fits, reason=None if fits else "RETRY_ROUND_DOES_NOT_FIT_DEADLINE", available_s=available_s, needed_s=needed_s,
+                recording_deadline_s=end_s - processing_s - sync_s,
+                components=dict(recording_s=recording_s, sync_s=sync_s, processing_s=processing_s, waves=waves, wave_s=wave_s,
+                                task_s=task_s, processor_start_s=start_s, scene_count=scene_count, worker_count=worker_count,
+                                processor_count=processor_count))
+
+
 def default_processor_count(available_bytes):
     """min(12, floor(MemAvailable / 3 GiB)), at least 1."""
     return max(1, min(MAX_DEFAULT_PROCESSORS, int(available_bytes // PROCESSOR_MEMORY_BYTES)))
