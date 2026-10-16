@@ -89,3 +89,26 @@ def test_the_campaign_config_total_replaces_the_runtime_yaml_total_and_names_its
     assert effective_batch_total_s({}, 9000.0) == (9000.0, "runtime yaml")
     assert effective_batch_total_s({"batch_hard_timeout_s": 4000}, 9000.0) == (4000, "campaign config")
     assert effective_batch_total_s({"batch_hard_timeout_s": 14400}, 9000.0) == (14400, "campaign config")
+
+
+@pytest.mark.parametrize('cap,recording_s', [(8, 2160), (4, 3480)])
+def test_retry_fallback_covers_every_sequential_task_batch_and_real_processor_startup(cap, recording_s):
+    from so101_demo.runtime.container_campaign.processing_limits import retry_round_plan
+    runtime = dict(initializing_hard_timeout_s=180, executing_hard_timeout_s=300,
+                   finalizing_hard_timeout_s=120, worker_recovery_timeout_s=60)
+    estimate = retry_round_plan({'max_concurrent_recordings': cap}, now_s=100, total_deadline_s=10000,
+                               scene_count=20, worker_count=8, processor_count=8, observed={}, runtime=runtime)
+    assert estimate['components']['recording_s'] == recording_s
+    assert estimate['components']['processor_start_s'] == 180
+    assert estimate['components']['processing_s'] == 5580
+    assert estimate['needed_s'] == recording_s + 60 + 5580
+
+
+def test_retry_observations_take_precedence_and_leave_the_verification_reserve():
+    from so101_demo.runtime.container_campaign.processing_limits import retry_round_plan
+    estimate = retry_round_plan({'verification_reserve_s': 600}, now_s=100, total_deadline_s=1000,
+                               scene_count=2, worker_count=8, processor_count=2,
+                               observed=dict(wave_wall_s=[100, 120], task_s=[80, 90], sync_s=10,
+                                             processor_start_s=[20, 30]), runtime={})
+    assert estimate['needed_s'] == 250 and estimate['recording_deadline_s'] == 270
+    assert estimate['fits'] is True and estimate['available_s'] == 300

@@ -468,3 +468,22 @@ def test_a_round_needs_the_first_run_before_it_and_only_round_zero_is_first(tmp_
     run(scheduler.run(rows, deadline_s=deadline))
     with pytest.raises(ValueError, match="PROCESSING_ROUND_INVALID"):
         run(scheduler.run(rows, deadline_s=deadline))
+
+
+def test_retry_without_an_explicit_directory_preserves_the_first_round_journal(tmp_path):
+    world = World(tmp_path)
+    scheduler, rows, deadline = world.scheduler(rows=make_rows(world, 1))
+    run(scheduler.run(rows, deadline_s=deadline))
+    original = (world.run / 'host/processing-journal.jsonl').read_bytes()
+    second = run(scheduler.run(rows, deadline_s=deadline, round=1))
+    assert (world.run / 'host/processing-journal.jsonl').read_bytes() == original
+    assert second['journal'] == str(world.run / 'host/retry-1/processing-journal.jsonl')
+
+
+def test_round_numbers_must_be_contiguous_before_any_journal_write(tmp_path):
+    world = World(tmp_path)
+    scheduler, rows, deadline = world.scheduler(rows=make_rows(world, 1))
+    run(scheduler.run(rows, deadline_s=deadline))
+    with pytest.raises(ValueError, match='PROCESSING_ROUND_INVALID'):
+        run(scheduler.run(rows, deadline_s=deadline, round=2))
+    assert not (world.run / 'host/retry-2').exists()

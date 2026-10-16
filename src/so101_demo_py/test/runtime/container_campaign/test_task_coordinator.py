@@ -560,3 +560,14 @@ def test_reopen_dispatch_is_refused_when_the_fence_is_not_closed(tmp_path, confi
     world = make_world(tmp_path, config)
     with pytest.raises(ValueError, match="CONTAINER_DISPATCH_REOPEN_REFUSED"):
         world.coordinator.reopen_dispatch(PHASE1_DEADLINE_REASON)
+
+
+@pytest.mark.parametrize('reason', ['CONTAINER_FAULT', 'operator', 'CAMPAIGN_DEADLINE_EXPIRED'])
+def test_a_permanent_stop_after_the_phase1_deadline_cannot_be_reopened(tmp_path, config, reason):
+    from so101_demo.runtime.container_campaign.owner import PHASE1_DEADLINE_REASON
+    world = make_world(tmp_path, config)
+    world.coordinator.stop_dispatch(PHASE1_DEADLINE_REASON)
+    world.coordinator.stop_dispatch(reason)
+    with pytest.raises(ValueError, match='CONTAINER_DISPATCH_REOPEN_REFUSED'):
+        world.coordinator.reopen_dispatch(PHASE1_DEADLINE_REASON)
+    assert world.coordinator.stop_reason == reason

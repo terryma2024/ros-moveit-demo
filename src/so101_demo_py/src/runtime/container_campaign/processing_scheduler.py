@@ -133,11 +133,14 @@ class ProcessingScheduler:
         """Process every scene of `rows` (verified phase-1 rows with `proof.processing == PENDING`); returns the summary.
 
         `round` is the recording round (0 for the first). Its journal is `host_dir / processing-journal.jsonl`, `host_dir` defaulting
-        to `root/host`. Later rounds reuse the processor slots admitted by the first run and continue the processing attempt numbers
+        to `root/host` for round zero and `root/host/retry-<round>` otherwise. Later rounds reuse the admitted slots and processing numbers
         of a scene (`<scene>-lease-1-proc-<n>`); a round's attempt counts and `processing_max_attempts` are relative to the round."""
-        if type(round) is not int or round < 0 or (round > 0) != (self._admitted is not None):
+        if type(round) is not int or round != getattr(self, 'round', -1) + 1:
             raise ValueError("PROCESSING_ROUND_INVALID")
-        journal_path = (Path(host_dir) if host_dir is not None else self.root / "host") / JOURNAL_NAME
+        default_host = self.root / 'host' if round == 0 else self.root / 'host' / f'retry-{round}'
+        journal_path = (Path(host_dir) if host_dir is not None else default_host) / JOURNAL_NAME
+        if round and journal_path.exists():
+            raise ValueError("PROCESSING_ROUND_INVALID")
         if journal_path != self.journal.path:
             self.journal = ProcessingJournal(journal_path, self.clock)
         self.round = round

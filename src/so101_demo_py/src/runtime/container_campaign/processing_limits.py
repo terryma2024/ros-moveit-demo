@@ -86,15 +86,21 @@ def retry_round_plan(config, *, now_s, total_deadline_s, scene_count, worker_cou
     waves = -(-scene_count // RETRY_MAX_WAVE_SIZE)
     wave_s = max(observed.get("wave_wall_s") or (), default=None)
     if wave_s is None:
-        wave_s = (runtime["initializing_hard_timeout_s"] + runtime["executing_hard_timeout_s"] + runtime["finalizing_hard_timeout_s"]
-                  + runtime["worker_recovery_timeout_s"] + runtime["initializing_hard_timeout_s"])
-    recording_s = wave_s * waves
+        concurrency = max(1, min(worker_count, config.get('max_concurrent_recordings', worker_count)))
+        task_s = (runtime['executing_hard_timeout_s'] + runtime['finalizing_hard_timeout_s']
+                  + runtime['worker_recovery_timeout_s'] + runtime['initializing_hard_timeout_s'])
+        wave_times = [runtime['initializing_hard_timeout_s'] + task_s * -(-min(RETRY_MAX_WAVE_SIZE, scene_count - offset)
+                      // concurrency) for offset in range(0, scene_count, RETRY_MAX_WAVE_SIZE)]
+        recording_s = sum(wave_times)
+        wave_s = max(wave_times, default=0)
+    else:
+        recording_s = wave_s * waves
     sync_s = observed.get("sync_s")
     sync_s = DEFAULT_RETRY_SYNC_S if sync_s is None else sync_s
     task_s = max(observed.get("task_s") or (), default=None)
     task_s = processing_task_timeout_s(config) if task_s is None else task_s
     start_s = max(observed.get("processor_start_s") or (), default=None)
-    start_s = processing_task_timeout_s(config) if start_s is None else start_s
+    start_s = runtime['initializing_hard_timeout_s'] if start_s is None else start_s
     processing_s = task_s * -(-scene_count // max(1, processor_count)) + start_s
     end_s = total_deadline_s - config.get("verification_reserve_s", DEFAULT_VERIFICATION_RESERVE_S)
     needed_s = recording_s + sync_s + processing_s

@@ -437,7 +437,7 @@ class ConcurrentCollectionCoordinator:
     def stop_dispatch(self, reason):
         if type(reason) is not str or not reason:
             raise ValueError('CONTAINER_DISPATCH_STOP_REASON_INVALID')
-        if self.stop_reason is None:
+        if self.stop_reason is None or self.stop_reason == PHASE1_DEADLINE_STOP_REASON:
             self.stop_reason = reason
 
     def reopen_dispatch(self, previous_reason):
