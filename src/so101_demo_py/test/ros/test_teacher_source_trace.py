@@ -81,3 +81,10 @@ def test_a_failing_stream_never_raises():
         def flush(self):
             raise OSError('closed')
     emit_source_trace(Node(), None, phase='X', state=None, source=None, stream=Bad())
+
+
+def test_probe_default_qos_is_best_effort_depth_one_and_builds_without_an_rclpy_clock_preset():
+    node = Node()
+    ClockReceiptProbe(node, clock_type=object)   # rclpy has no qos_profile_clock: the default must not import one
+    qos = node.subscriptions[0][3]
+    assert (qos.depth, qos.reliability.name) == (1, 'BEST_EFFORT')

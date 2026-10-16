@@ -21,7 +21,10 @@ class ClockReceiptProbe:
         if clock_type is None:
             from rosgraph_msgs.msg import Clock as clock_type
         if qos is None:
-            from rclpy.qos import qos_profile_clock as qos
+            # rclpy has no clock preset (rclcpp's ClockQoS): the same best-effort, volatile, depth-1 profile its TimeSource uses.
+            from rclpy.qos import QoSProfile, ReliabilityPolicy
+
+            qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         self._mono, self._real = monotonic_ns, realtime_ns
         self._latest = None
         self._count = 0
