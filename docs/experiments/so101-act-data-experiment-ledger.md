@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3689
-next_experiment: EXP-608 (PLANNED): two-phase debug run at recording cap 4 with the detach-source re-snapshot.
+latest_checkpoint: CP-3690
+next_experiment: NONE until the analysis of the remaining INPUT_STALE in EXP-608 is in.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3690 — EXP-608 VALID: re-snapshot removed the source-age failures, but 10 of 16 VALID; INPUT_STALE without a source failure remains
+
+- Pipeline clean (23 minutes, 0 retries).
+- Remaining INVALID: 4 INPUT_STALE without the window failure, 1 with it, and 1 late camera frame.
+- A read-only analysis follows.
 
 ## CP-3689 — EXP-607 Teacher-lag analysis; detach source re-snapshot; clock probe fixed; gate PASS; EXP-608 planned
 
@@ -98,7 +104,7 @@ next_experiment: EXP-608 (PLANNED): two-phase debug run at recording cap 4 with 
 
 ```yaml
 experiment_id: EXP-608
-status: PLANNED
+status: VALID
 prior_experiment: EXP-607 (VALID; 11 of 16 at cap 4, all INVALID Teacher-lag INPUT_STALE)
 hypothesis: Re-snapshotting a stale detach source removes most INPUT_STALE episodes, giving VALID of at least 14 of 16 at recording cap 4.
 prediction:
@@ -126,15 +132,24 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T011447Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261016T011447Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 01:16:36Z to 01:40:04Z, 23 minutes, CLI exit 0.
+  - Phase 1 at cap 4: 755 s; 16 of 16 recorded, Teacher 16 of 16 PASS.
+  - syncfs 0.007 s.
+  - Phase 2: 529 s; 16 of 16 processed, 0 retries, 0 faults.
+  - Data 10 of 16 VALID. INVALID 6:
+    - INPUT_STALE 5, only one of them (dbg-06) with RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW;
+    - NO_NEW_ACQUISITION 1 (dbg-01).
 inferred:
-  - NONE
-conclusion: PENDING
+  - The re-snapshot removed most source-age failures: one of five INPUT_STALE carries the window failure, against five of five in EXP-607.
+  - The remaining INPUT_STALE is a different mechanism, an input not ready for more than 0.1 s in the Recorder's view; recorder-side delivery is suspected. VALID did not rise (10 against 11 of 16).
+conclusion: VALID. The detach re-snapshot works; INPUT_STALE without a source-age failure is now the limit.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261016T011447Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T011447Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp608 and exp608-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
