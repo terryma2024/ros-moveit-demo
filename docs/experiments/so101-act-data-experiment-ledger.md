@@ -69,11 +69,44 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3700
-next_experiment: EXP-614 (PLANNED): 40-scene eight-shard requalification at recording cap 8 on commit 76069e0cb; then the formal 70-scene collection.
+latest_checkpoint: CP-3701
+next_experiment: EXP-615 (PLANNED): the formal 70-scene collection in one campaign, admitted with the EXP-614 report.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3701 — EXP-614 QUALIFIED at cap 8 (36 of 40 VALID, four wrist-stall NO_NEW_ACQUISITION); EXP-615 formal collection planned
+
+- Decision (recommended option, recorded for the human): run the formal collection now on the qualified configuration, as decided ("加大总时限、重新资格、一轮 70 场景"), and report the wrist-stall fix options afterwards. Not chosen now: changing the offline wait or the phase-1 transport, which changes code and needs requalification.
+- Fix options recorded for the human: (1) an offline-only partner wait decoupled from max_source_age_s; (2) a stamp-ordered judgement at continuous_capture.py:557 for replay; (3) find and fix the wrist reliable-DDS delay in phase 1. Options 1 and 2 change a data rule and need the human's decision.
+- New template REG/act-templates/w8f-formal (Sonnet): the formal plane is act_collect_parallel --worker-count 8 without --qualification, with --qualification-report; four waves of 20, 20, 20 and 10; formal-70.scenes.json (sha256 b8ba749b…beeb5, 50 train, 10 validation, 10 offline_test) pinned to the qualification contract's formal_split_manifest; validation calls the real verify_collection_qualification with the new config's identity; formal-result.zsh after the run.
+- The eight exited EXP-614 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp614-processors.jsonl).
+- EXP-615 inputs REG/act-w8f-inputs-20261016T101649Z: cap 8, gap 30 s, batch_hard_timeout_s 9000 (campaign config), 8 processors by default; validation 78 items PASS, including identity equal to the report's and the real verifier PASS (277 s). Projection: margin about 946 s against 9000 s.
+
+```yaml
+experiment_id: EXP-615
+status: PLANNED
+prior_experiment: EXP-614 (QUALIFIED, report e76e1c6d…)
+hypothesis: The formal 70-scene campaign on the qualified configuration completes within 9000 s with every stop proven and commits every VALID scene.
+prediction:
+  - Teacher 68 to 70 of 70; VALID 62 to 68 of 70 (wrist stall and endpoint-initial losses).
+  - Phase 1 about 2800 s, phase 2 about 2200 s, about 90 minutes in total.
+lifecycle: ISOLATED_STACK
+success_criteria:
+  - Both phases complete before the deadline; collection-index.json commits every export-eligible PROCESSED scene; every stop proven; store IDLE afterwards.
+failure_criteria:
+  - Admission refused, a campaign-stopping failure, an unproven stop or a deadline stop.
+provenance:
+  source_commit: 76069e0cb0d217fdc4fd077d9f59f1263268f288 (images and Host gate install)
+commands:
+  - command: zsh <registered root>/act-w8f-inputs-20261016T101649Z/run-w8f.zsh, then formal-result.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3700 — EXP-613 at cap 8: 16 of 16 VALID; cap 8 chosen; EXP-614 requalification planned; endpoint-initial margin measured
 
@@ -87,7 +120,7 @@ next_experiment: EXP-614 (PLANNED): 40-scene eight-shard requalification at reco
 
 ```yaml
 experiment_id: EXP-614
-status: PLANNED
+status: VALID
 prior_experiment: EXP-611 (QUALIFIED at cap 4 on commit e8bf34d75); EXP-613 (VALID, cap 8)
 hypothesis: The eight-shard two-phase collection at recording cap 8 on commit 76069e0cb qualifies under the unchanged rule files (Teacher at least 38 of 40, QC at least 34 of 40).
 prediction:
@@ -105,13 +138,26 @@ invalid_criteria:
 provenance:
   source_commit: 76069e0cb0d217fdc4fd077d9f59f1263268f288 (images and Host gate install)
 commands:
-  - command: zsh <registered root>/act-w8-inputs-20261016T091304Z/run-w8q.zsh, then build-report.zsh and verify-report.zsh
-    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261016T091304Z/run-w8q.zsh
+    exit_code: 0
+  - command: zsh <registered root>/act-w8-inputs-20261016T091304Z/build-report.zsh, then verify-report.zsh
+    exit_code: 0, 0
 observed:
-  - PENDING
-conclusion: PENDING
-decision: PENDING
-next_experiment: formal collection
+  - Run 09:14:46Z to 10:04:26Z, 50 minutes, CLI exit 0; every stop proven; logs saved.
+  - Teacher 40 of 40 PASS; phase 2 36 VALID, 4 INVALID, 0 FAULT, 0 retries.
+  - Report host/qualification-report.json sha256 e76e1c6db18677e2c0c863e9585f642398ca1affe64f3c98dc22521b00ecd8d1, QUALIFIED, no reasons; verify-report-proof.json PASS (contract ed6a1eb7…).
+  - The four INVALID scenes (qual-12 w06, qual-14 and qual-15 w07, qual-35 w07): NO_NEW_ACQUISITION at continuous_capture.py:557 (wait for a missing camera partner longer than max_source_age_s 0.1 s). Bags complete (camera grid exact, head equals wrist, topic-loss PASS).
+  - Diagnosis (read-only, scratch in the job tmp nna/): the replay clock is the recorded clock (replay.py:79, 147, 483). In each failure one wrist image was received 117 to 128 ms after its publish (head 11 to 13 ms), seen by both the bag recorder and the probe subscriber, and arrived with its successor. No CAMERA_RENDER_SLOW, SIM_STEP_SLOW or RECORDER_DELIVERY_SLOW within 2 s; host busy 40 to 62 percent, IO pressure 0.
+  - Skew events of 95 ms or more per run, inside or outside the window: EXP-611 (cap 4) 6, EXP-613 (cap 8) 3, EXP-614 (cap 8) 12; per 1000 camera-seconds 1.5, 1.9, 3.0. VALID scenes with 101 to 103 ms in-window skew exist in EXP-611, EXP-613 and EXP-614. The shard containers have identical settings.
+inferred:
+  - A phase-1 wrist delivery stall of about 100 to 130 ms, consistent with a reliable-DDS repair delay (not confirmed), turns into NO_NEW_ACQUISITION when it falls inside the collection window. The mechanism exists at cap 4; cap 8 may raise its rate, but the counts are too small to show it.
+conclusion: VALID and QUALIFIED at cap 8 on commit 76069e0cb. A yield loss of about 5 to 10 percent from the wrist stall is expected in the formal run.
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261016T091304Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T091304Z (build-report-result.json, verify-report-proof.json)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp614 and exp614-console.log
+decision: KEEP
+next_experiment: EXP-615
 ```
 
 ## CP-3699 — EXP-612 at cap 6: 15 of 16 VALID, one endpoint-initial phase failure; EXP-613 at cap 8 planned
