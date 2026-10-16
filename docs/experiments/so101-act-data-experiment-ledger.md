@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3691
-next_experiment: EXP-609 (PLANNED): two-phase debug run at cap 4 with the post-apply manifest write moved after the readback.
+latest_checkpoint: CP-3692
+next_experiment: EXP-610 (to be planned): lossless zstd bag compression to cut write volume and IO stalls.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3692 — EXP-609 VALID: 12 of 16 (INPUT_STALE 1); next lossless bag compression per the human decision
+
+- The manifest-write move worked. The remaining INVALID are mostly late camera frames.
+- Under the earlier human decision "先试降录制并发，再做压缩" (CP-3667), the next step is lossless zstd chunk compression of the mcap bags. It reduces bytes written and so the IO stalls; the data is identical after decompression, and no rule or threshold changes.
 
 ## CP-3691 — EXP-608 analysis; post-apply manifest write moved after the readback; gate PASS; EXP-609 planned
 
@@ -98,7 +103,7 @@ next_experiment: EXP-609 (PLANNED): two-phase debug run at cap 4 with the post-a
 
 ```yaml
 experiment_id: EXP-609
-status: PLANNED
+status: VALID
 prior_experiment: EXP-608 (VALID; 10 of 16 at cap 4, INPUT_STALE from late apply readbacks)
 hypothesis: With no manifest write between apply and readback, the late readbacks and their INPUT_STALE mostly disappear, giving VALID of at least 14 of 16.
 prediction: INPUT_STALE at most 1; VALID 13 to 16 of 16; the timings as EXP-608.
@@ -122,15 +127,25 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T024842Z/author.py (commit, gate and image arguments)
     exit_code: 0
   - command: zsh <registered root>/act-w8d-inputs-20261016T024842Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 02:50:24Z to 03:13:29Z, 23 minutes, CLI exit 0.
+  - Phase 1 713 s; 16 of 16 recorded, Teacher 16 of 16 PASS.
+  - syncfs 0.006 s.
+  - Phase 2 545 s; 16 of 16 processed, 0 retries.
+  - Data 12 of 16 VALID. INVALID 4:
+    - NO_NEW_ACQUISITION 3 (dbg-05, dbg-12, dbg-13);
+    - INPUT_STALE with the window failure 1 (dbg-01).
 inferred:
-  - NONE
-conclusion: PENDING
+  - Moving the post-apply manifest write removed most INPUT_STALE (five in EXP-608, one here).
+  - Late camera frames are now the main cause. Host IO stalls during bag writeback are the common candidate (EXP-608 analysis); not yet analysed for this run.
+  - 12 of 16 (75 percent) is below the 85 percent qualification rate.
+conclusion: VALID. Best two-phase result so far; IO stalls remain the limit.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261016T024842Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T024842Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp609 and exp609-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
