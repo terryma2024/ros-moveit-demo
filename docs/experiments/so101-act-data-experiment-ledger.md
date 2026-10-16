@@ -69,11 +69,69 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3694
-next_experiment: EXP-611 (to be planned): the 40-scene eight-shard qualification on the two-phase path (plan task 12).
+latest_checkpoint: CP-3695
+next_experiment: EXP-611 (PLANNED): 40-scene eight-shard qualification on the two-phase path (plan task 12).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3695 — EXP-611 planned: the 40-scene qualification on the two-phase path
+
+- Inputs REG/act-w8-inputs-20261016T051800Z (Sonnet), qualification plane, from the EXP-595 qualification template and the EXP-610 two-phase debug inputs:
+  - gate contract sha256 6108842a…, for the reachability-filtered qualification-40;
+  - the four rule files byte-equal to EXP-595's (Teacher at least 38 of 40, QC at least 34 of 40);
+  - recording cap 4 and gap 30 s; two-phase keys at code defaults;
+  - processor preconditions, readback and log saving.
+- build-report.zsh and verify-report.zsh need no change; collection_qualification_recompute reads campaign-result.json schema 2. report_preconditions.py gained the phase-1 and phase-2 host files.
+- Time projection from EXP-610, against batch_hard_timeout_s 5400:
+  - phase 1 about 1905 s;
+  - phase 2 about 1224 to 1364 s with 8 processors;
+  - total about 3430 s typical, 4570 s pessimistic.
+- The eight exited EXP-610 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp610-processors.jsonl).
+- Validation 80 items PASS on the third run (the first two are kept as validate-inputs.run1 and run2); sha256sums regenerated.
+
+```yaml
+experiment_id: EXP-611
+status: PLANNED
+prior_experiment: EXP-610 (VALID; 16 of 16 at eight shards, two-phase, cap 4, zstd)
+hypothesis: The two-phase eight-shard collection with recording cap 4 and lossless compression qualifies. Teacher passes at least 38 of 40 and QC at least 34 of 40, with every gate defined by the unchanged rule files; the run finishes within 5400 s and every stop is proven.
+prediction:
+  - Teacher 39 to 40 of 40; QC-valid 36 to 40 of 40.
+  - About 57 minutes in total.
+  - build-report QUALIFIED and verify-report verified.
+single_variable: The 40-scene qualification plane relative to EXP-610's 16-scene functional plane; same commit, images and settings.
+lifecycle: ISOLATED_STACK (phase 1 eight shard containers in two waves, at most four recording; phase 2 processor containers)
+preconditions:
+  - Enforced by run-w8q.zsh (preconditions.py), for commit e8bf34d75; no code writer active.
+success_criteria:
+  - Both phases complete; the qualification report is built and QUALIFIED, then independently verified; every stop proven; store IDLE afterwards.
+failure_criteria:
+  - NOT_QUALIFIED with named reasons, a campaign-stopping failure, an unproven stop, or a deadline stop.
+invalid_criteria:
+  - As EXP-607, for commit e8bf34d75.
+provenance:
+  source_commit: e8bf34d754504a976c165910fcacfd37d8228401 (images and Host gate install)
+  install_overlay: /act/install in inference sha256:5e0ef232… and shard sha256:6a877e42…; Host R/gates/e8bf34d75450/install plus worktree import
+  runtime_executable: container entrypoints campaign_inference, campaign_shard and campaign_processor; Host /data/work/venvs/so101-grounded-sam/bin/python running so101_demo.cli.act_collect_parallel --worker-count 8 --qualification
+  ros_domain_id: 181 in every shard container
+  gz_partition: each shard's simulation session id written into its spec
+commands:
+  - command: author.py, readback-images.zsh, inspect.zsh and validate-inputs.zsh in <registered root>/act-w8-inputs-20261016T051800Z
+    exit_code: 0 (validation on the third run)
+  - command: zsh <registered root>/act-w8-inputs-20261016T051800Z/run-w8q.zsh
+    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261016T051800Z/build-report.zsh, then verify-report.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING
+decision: PENDING
+next_experiment: NONE
+```
 
 ## CP-3694 — EXP-610 VALID: 16 of 16 VALID at eight shards (two-phase, cap 4, zstd); next the 40-scene qualification
 
