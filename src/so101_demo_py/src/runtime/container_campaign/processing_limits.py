@@ -25,6 +25,13 @@ MAX_DEFAULT_PROCESSORS = 12
 PROCESSOR_MEMORY_BYTES = 3 * 2**30
 
 
+def effective_batch_total_s(config, runtime_batch_hard_timeout_s):
+    """The campaign total and where it came from: the campaign config's `batch_hard_timeout_s` when present, else the runtime yaml's."""
+    if "batch_hard_timeout_s" in config:
+        return config["batch_hard_timeout_s"], "campaign config"
+    return runtime_batch_hard_timeout_s, "runtime yaml"
+
+
 def check_phase_limits(config, batch_hard_timeout_s):
     """Refuse limits that cannot fit the admitted total. `config` is the campaign config (absent keys are not limits)."""
     collect, process = config.get("collect_timeout_s"), config.get("process_timeout_s")

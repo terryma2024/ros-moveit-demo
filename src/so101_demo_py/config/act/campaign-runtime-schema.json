@@ -371,6 +371,11 @@
       "minimum": 1,
       "maximum": 86400
     },
+    "batch_hard_timeout_s": {
+      "type": "number",
+      "minimum": 1800,
+      "maximum": 14400
+    },
     "processing_task_timeout_s": {
       "type": "integer",
       "minimum": 1260,

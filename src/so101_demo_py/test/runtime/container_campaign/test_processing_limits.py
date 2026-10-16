@@ -3,7 +3,7 @@
 import pytest
 
 from so101_demo.runtime.container_campaign.processing_limits import (
-    DEFAULT_MAX_ATTEMPTS, DEFAULT_RESERVE_S, DEFAULT_TASK_TIMEOUT_S, DEFAULT_VERIFICATION_RESERVE_S, processing_task_timeout_s, check_phase_limits, default_processor_count, phase1_deadline_s,
+    DEFAULT_MAX_ATTEMPTS, DEFAULT_RESERVE_S, DEFAULT_TASK_TIMEOUT_S, DEFAULT_VERIFICATION_RESERVE_S, processing_task_timeout_s, check_phase_limits, default_processor_count, effective_batch_total_s, phase1_deadline_s,
     phase2_deadline_s, processing_max_attempts, processor_count_for)
 
 GIB = 2**30
@@ -83,3 +83,9 @@ def test_the_9000_s_campaign_total_fits_both_phases_and_the_default_reserves():
     # phase 1 dispatch stops at total - processing_reserve_s (1800); phase 2 ends at total - verification_reserve_s (600)
     assert phase1_deadline_s({}, admitted_s=0., total_deadline_s=9000.) == 7200.
     assert phase2_deadline_s({}, phase2_start_s=7000., total_deadline_s=9000.) == 8400.
+
+
+def test_the_campaign_config_total_replaces_the_runtime_yaml_total_and_names_its_source():
+    assert effective_batch_total_s({}, 9000.0) == (9000.0, "runtime yaml")
+    assert effective_batch_total_s({"batch_hard_timeout_s": 4000}, 9000.0) == (4000, "campaign config")
+    assert effective_batch_total_s({"batch_hard_timeout_s": 14400}, 9000.0) == (14400, "campaign config")

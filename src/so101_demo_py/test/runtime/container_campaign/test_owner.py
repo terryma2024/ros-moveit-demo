@@ -59,6 +59,41 @@ def test_partial_service_start_has_single_cleanup_and_keeps_unknown_launch_fence
         registry.close()
 
 
+def _recorded_totals(owner):
+    rows=[json.loads(line) for line in (owner.root/'host/resources.jsonl').read_text().splitlines()]
+    return [row['observed'] for row in rows if 'campaign_total_s' in row['observed']]
+
+
+def test_owner_records_the_effective_total_and_its_source_in_resources(tmp_path):
+    owner,service,registry,calls,containers,manifest,stopped=fixture(tmp_path,fail_teacher=True)
+    owner.campaign_total_s=4000.0
+    owner.config['batch_hard_timeout_s']=4000.0
+    async def run():
+        with pytest.raises(ValueError,match="SERVICE_OWNER_START_FAILED"):
+            await owner.run(manifest)
+        await owner.close()
+    try:
+        asyncio.run(run())
+        assert _recorded_totals(owner)==[dict(campaign_total_s=4000.0,campaign_total_source='campaign config')]
+    finally:
+        registry.close()
+
+
+def test_owner_records_the_runtime_yaml_source_when_the_config_has_no_total(tmp_path):
+    owner,service,registry,calls,containers,manifest,stopped=fixture(tmp_path,fail_teacher=True)
+    owner.campaign_total_s=9000.0
+    assert 'batch_hard_timeout_s' not in owner.config
+    async def run():
+        with pytest.raises(ValueError,match="SERVICE_OWNER_START_FAILED"):
+            await owner.run(manifest)
+        await owner.close()
+    try:
+        asyncio.run(run())
+        assert _recorded_totals(owner)==[dict(campaign_total_s=9000.0,campaign_total_source='runtime yaml')]
+    finally:
+        registry.close()
+
+
 def test_owner_refuses_head_role_for_collection(tmp_path):
     owner,service,registry,calls,containers,manifest,stopped=fixture(tmp_path)
     module=importlib.import_module('so101_demo.runtime.container_campaign.owner')

@@ -39,7 +39,8 @@ PHASE1_DEADLINE_REASON='CAMPAIGN_PHASE1_DEADLINE_EXPIRED'
 class ContainerCampaignOwner:
     def __init__(self,*,admitted_context,config,root,service_owner,slots,manifest_path,
                  qualification,launcher,coordinator,verifier,monotonic_ns=time.monotonic_ns,
-                 approved_disk_floor_bytes=0,disk_reader=read_disk_free_bytes,syncfs=sync_filesystem,processing=None):
+                 approved_disk_floor_bytes=0,disk_reader=read_disk_free_bytes,syncfs=sync_filesystem,processing=None,
+                 campaign_total_s=None):
         root=Path(root)
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind!='act_collection_start'
@@ -71,6 +72,8 @@ class ContainerCampaignOwner:
         self.syncfs=syncfs
         #: the phase-2 scheduler (`ProcessingScheduler`) or None: without one a campaign ends after phase 1, as before
         self.processing=processing
+        #: the effective campaign total as admitted (config or runtime yaml); None records the admitted deadline span instead
+        self.campaign_total_s=campaign_total_s
         self.phase1_deadline_s=None
         self.phase2=None
         self.dispatch_stopped=False
@@ -168,6 +171,13 @@ class ContainerCampaignOwner:
             if callable(setter):
                 setter(self.phase1_deadline_s)
             plans=plan_campaign_waves(ids,worker_ids,plane=plane,max_wave_size=20)
+            total=self.campaign_total_s
+            if total is None:
+                total=round(context.deadline_monotonic_s-context.admitted_at_monotonic_s,3)
+            append_resource_log(self.root/'host/resources.jsonl',monotonic_ns=self.clock(),
+                observed={'campaign_total_s':total,
+                          'campaign_total_source':'campaign config' if 'batch_hard_timeout_s' in self.config else 'runtime yaml'},
+                missing={})
             self._disk_guard()
             _write(self.root/'campaign-index.json',dict(schema_version=1,kind='act_collection_campaign_index',
                 qualification=self.qualification,scene_count=len(ids),waves=plans))

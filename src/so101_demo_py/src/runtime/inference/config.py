@@ -114,7 +114,12 @@ _PROCESSING_TASK_TIMEOUT_S = "processing_task_timeout_s"
 _INT_LIMITS = {_PROCESSOR_COUNT: (1, 16), _PROCESSING_MAX_ATTEMPTS: (1, 5), _PROCESSING_RESERVE_S: (1, 86400),
                _COLLECT_TIMEOUT_S: (1, 86400), _PROCESS_TIMEOUT_S: (1, 86400), _VERIFICATION_RESERVE_S: (1, 86400),
                _PROCESSING_TASK_TIMEOUT_S: (1260, 86400)}
-_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, *_INT_LIMITS)
+# The campaign total deadline as a launch parameter: when present it replaces the parallel-runtime yaml's `batch_hard_timeout_s`
+# (`processing_limits.effective_batch_total_s`). It is not part of the controlled identity, so a qualification stays valid across values.
+_BATCH_HARD_TIMEOUT_S = "batch_hard_timeout_s"
+BATCH_HARD_TIMEOUT_MIN_S = 1800
+BATCH_HARD_TIMEOUT_MAX_S = 14400
+_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, *_INT_LIMITS)
 
 
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
@@ -148,6 +153,9 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
         if _ASSIGNMENT_GAP in document:
             # Minimum Host monotonic seconds between two assignments across shards.
             _require(type(document[_ASSIGNMENT_GAP]) in (int, float) and 0 <= document[_ASSIGNMENT_GAP] <= 3600)
+        if _BATCH_HARD_TIMEOUT_S in document:
+            _require(type(document[_BATCH_HARD_TIMEOUT_S]) in (int, float)
+                     and BATCH_HARD_TIMEOUT_MIN_S <= document[_BATCH_HARD_TIMEOUT_S] <= BATCH_HARD_TIMEOUT_MAX_S)
         for name, (low, high) in _INT_LIMITS.items():
             if name in document:
                 _require(type(document[name]) is int and low <= document[name] <= high)

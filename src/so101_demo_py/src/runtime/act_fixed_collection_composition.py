@@ -83,8 +83,9 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
     runtime = _collection_runtime(arguments.collection_config)
     # collect_timeout_s, process_timeout_s and processing_reserve_s are optional; any of them must fit the admitted total
-    from so101_demo.runtime.container_campaign.processing_limits import check_phase_limits
-    check_phase_limits(config,runtime.batch_hard_timeout_s)
+    from so101_demo.runtime.container_campaign.processing_limits import check_phase_limits,effective_batch_total_s
+    total_s,_source = effective_batch_total_s(config,runtime.batch_hard_timeout_s)
+    check_phase_limits(config,total_s)
     launcher = getattr(arguments, 'instance_launcher', 'container')
     if launcher not in ('container', 'native'):
         raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
@@ -126,7 +127,7 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     return OperationSpec(command_id='collection-'+campaign_id,domain=Domain.VALIDATION,
         kind='act_collection_start',payload=payload,runtime_id=workload.runtime_id,
         execution_generation=generation,
-        deadline_ns=workload.clock_ns()+int(runtime.batch_hard_timeout_s*1e9))
+        deadline_ns=workload.clock_ns()+int(total_s*1e9))
 
 def _digest(path) -> str:
     target = Path(path)
@@ -148,7 +149,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
       - Teacher receive budget = the campaign config's `teacher_service.queue_timeout_s + inference_timeout_s`;
       - Teacher stop budget = the parallel runtime's `worker_recovery_timeout_s`;
       - the shard launcher derives its own budgets from the same runtime; the coordinator reads the runtime itself;
-      - the campaign deadline is the one admission froze into `context` (`batch_hard_timeout_s`, not changed here).
+      - the campaign deadline is the one admission froze into `context` (the campaign config's `batch_hard_timeout_s`, else the runtime yaml's; not changed here).
     `approved_disk_floor_bytes` is the caller's value from the frozen inputs. `docker_runner`, `service_query`,
     `namespace_reader` and `control_factory` are the external edges (Docker, the Teacher socket, `/proc`, the container's control
     channel); `None` keeps each owner's production default.
@@ -171,6 +172,8 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
     registry = ContainerLaunchRegistry(Path(paths['host'])/'launches.sqlite3', create=True)
     try:
         runtime = _load_runtime_config(validate_file_ref(parallel_runtime))
+        from so101_demo.runtime.container_campaign.processing_limits import effective_batch_total_s
+        campaign_total_s,_total_source = effective_batch_total_s(config,runtime.batch_hard_timeout_s)
         teacher = config['teacher_service']
         services = ContainerServiceOwner(admitted_context=context, config=config, paths=paths, roles=('teacher',),
             registry=registry, startup_timeout_s=runtime.initializing_hard_timeout_s,
@@ -221,7 +224,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
         return ContainerCampaignOwner(admitted_context=context, config=config, root=paths['run'], service_owner=services,
             slots=slots, manifest_path=manifest_path, qualification=qualification, launcher=launcher,
             coordinator=coordinator, verifier=verifier, approved_disk_floor_bytes=approved_disk_floor_bytes,
-            processing=processing)
+            processing=processing,campaign_total_s=campaign_total_s)
     except BaseException:
         registry.close()
         raise

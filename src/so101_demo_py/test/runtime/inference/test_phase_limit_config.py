@@ -14,6 +14,7 @@ KEYS = {
     "collect_timeout_s": (3000, [0, -1, True, 3000.5, "3000", None]),
     "process_timeout_s": (2000, [0, -1, True, 2000.5, "2000", None]),
     "verification_reserve_s": (600, [0, -1, True, 600.5, "600", None]),
+    "batch_hard_timeout_s": (9000, [1799, 14401, 0, -1, True, "9000", None]),
     "processing_task_timeout_s": (1800, [1259, 0, -1, True, 1800.5, "1800", None]),
 }
 
@@ -46,3 +47,21 @@ def test_the_published_schema_accepts_only_a_valid_value(tmp_path, name):
             continue   # JSON Schema integers include 4.0; the loader's `type is int` check is the stricter one
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(document | {name: bad}, schema)
+
+
+def test_batch_hard_timeout_accepts_a_number_on_its_closed_bounds(tmp_path):
+    from paths import PACKAGE_ROOT
+    import jsonschema
+    schema = json.loads((PACKAGE_ROOT / "config/act/campaign-runtime-schema.json").read_text())
+    document = campaign_fixture(tmp_path)
+    module = config_module()
+    assert (module.BATCH_HARD_TIMEOUT_MIN_S, module.BATCH_HARD_TIMEOUT_MAX_S) == (1800, 14400)
+    for good in (1800, 1800.5, 9000.25, 14400, 14400.0):
+        loaded = module.load_campaign_config(write_config(tmp_path, document | {"batch_hard_timeout_s": good}))
+        assert loaded["batch_hard_timeout_s"] == good
+        jsonschema.validate(document | {"batch_hard_timeout_s": good}, schema)
+    for bad in (1799.9, 14400.1):
+        with pytest.raises(ValueError, match="CAMPAIGN_CONFIG_INVALID"):
+            module.load_campaign_config(write_config(tmp_path, document | {"batch_hard_timeout_s": bad}))
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document | {"batch_hard_timeout_s": bad}, schema)

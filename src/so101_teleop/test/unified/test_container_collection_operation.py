@@ -280,3 +280,78 @@ def test_phase_limits_that_exceed_the_batch_total_are_refused_before_admission(t
         assert store.execution_generation(Domain.VALIDATION) == 0
     finally:
         store.close()
+
+
+def _prepared_with_total(tmp_path,monkeypatch,total):
+    tmp_path.mkdir(exist_ok=True)
+    """The fixture's start arguments under a campaign config that carries `batch_hard_timeout_s=total` (absent when None)."""
+    paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
+    args = arguments(spec)
+    document = json.loads(args.campaign_config.read_bytes())
+    if total is not None:
+        args.campaign_config.write_text(json.dumps(document|dict(batch_hard_timeout_s=total)))
+    return store,workload,spec,args
+
+
+def _deadline_seconds(prepared,workload):
+    return (prepared.deadline_ns-workload.clock_ns())/1e9
+
+
+def test_campaign_config_total_is_the_deadline_and_absent_keeps_the_runtime_yaml(tmp_path,monkeypatch):
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    store,workload,spec,args = _prepared_with_total(tmp_path/'absent',monkeypatch,None)
+    try:
+        assert 8990 < _deadline_seconds(prepare(module,args,workload,spec),workload) <= 9000   # parallel_batch_act_offline.yaml
+    finally:
+        store.close()
+    store,workload,spec,args = _prepared_with_total(tmp_path/'present',monkeypatch,4000)
+    try:
+        assert 3990 < _deadline_seconds(prepare(module,args,workload,spec),workload) <= 4000
+    finally:
+        store.close()
+
+
+def test_phase_limits_are_checked_against_the_campaign_config_total(tmp_path,monkeypatch):
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    store,workload,spec,args = _prepared_with_total(tmp_path,monkeypatch,None)
+    document = json.loads(args.campaign_config.read_bytes())
+    try:
+        # 2500 + 2000 fits the 9000 s yaml total but not a 4000 s campaign total
+        args.campaign_config.write_text(json.dumps(document|dict(collect_timeout_s=2500,process_timeout_s=2000)))
+        assert prepare(module,args,workload,spec).payload['worker_count'] == 1
+        args.campaign_config.write_text(json.dumps(document|dict(
+            batch_hard_timeout_s=4000,collect_timeout_s=2500,process_timeout_s=2000)))
+        with pytest.raises(ValueError,match='CAMPAIGN_PHASE_LIMITS_EXCEED_TOTAL'):
+            prepare(module,args,workload,spec)
+        assert store.execution_generation(Domain.VALIDATION) == 0
+    finally:
+        store.close()
+
+
+def test_campaign_config_total_out_of_range_is_refused_by_the_loader(tmp_path,monkeypatch):
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    store,workload,spec,args = _prepared_with_total(tmp_path,monkeypatch,None)
+    document = json.loads(args.campaign_config.read_bytes())
+    try:
+        for bad in (1799,14401):
+            args.campaign_config.write_text(json.dumps(document|dict(batch_hard_timeout_s=bad)))
+            with pytest.raises(ValueError,match='CAMPAIGN_CONFIG_INVALID'):
+                prepare(module,args,workload,spec)
+    finally:
+        store.close()
+
+
+def test_the_controlled_identity_ignores_the_campaign_config_total(tmp_path,monkeypatch):
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    from so101_demo.runtime.inference.config import load_campaign_config
+    from so101_teleop.unified.admission import _collection_identity
+    identities,hashes = [],[]
+    for name,total in (('absent',None),('four',4000),('twelve',12000)):
+        store,workload,spec,args = _prepared_with_total(tmp_path/name,monkeypatch,total)
+        try:
+            payload = prepare(module,args,workload,spec).payload
+            identities.append(_collection_identity(payload,load_campaign_config(args.campaign_config,roles=('teacher',))))
+            hashes.append(payload['campaign_config_sha256'])
+        finally:
+            store.close()
+    assert identities[0] == identities[1] == identities[2] and len(set(hashes)) == 3

@@ -537,6 +537,18 @@ def test_formal_admits_when_teacher_weights_and_instance_count_differ(qualified_
         store.close()
 
 
+def test_formal_admits_the_same_report_under_a_different_campaign_total(qualified_world, tmp_path, monkeypatch):
+    """`batch_hard_timeout_s` is a launch parameter, not part of the qualified identity."""
+    assert 'batch_hard_timeout_s' not in json.loads(qualified_world.campaign_path.read_bytes())
+    paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch,
+        config_edit=lambda campaign, inputs: campaign.update(batch_hard_timeout_s=4000))
+    try:
+        assert json.loads(Path(spec.payload['campaign_config_path']).read_bytes())['batch_hard_timeout_s'] == 4000
+        assert workload.start(spec, allow_existing=False).workload_kind == 'act_collection_start'
+    finally:
+        store.close()
+
+
 def assert_formal_refused(workload, store, spec, code):
     with pytest.raises(ValueError, match=code) as raised:
         workload.start(spec, allow_existing=False)
