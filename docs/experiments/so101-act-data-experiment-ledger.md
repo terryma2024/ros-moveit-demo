@@ -69,11 +69,26 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3696
-next_experiment: formal collection (70 scenes) on the qualified configuration, after the human confirms its settings.
+latest_checkpoint: CP-3697
+next_experiment: EXP-612 (debug, recording cap 6), then EXP-613 (debug, cap 8); requalification at the chosen cap; then the formal 70-scene collection in one campaign.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3697 — Launch parameters for scheduling and the total deadline; total raised to 9000 s; cap 6 and cap 8 to be tested
+
+- Human decisions, in order:
+  - "先验证一下 采集阶段 6 并发和8 并发": test recording caps 6 and 8 in debug runs before the formal collection.
+  - "上面这些并发参数，做成启动参数吧。下次带动参数，不需要改代码，写测试。" and "并发参数和timeout": the scheduling keys and the time limits become authoring options, with tests.
+  - "加大总时限、重新资格、一轮 70 场景": the formal collection runs as one 70-scene campaign under a larger total, after requalification.
+  - "移到 campaign 配置，不进身份": the total deadline is a campaign-config key outside the controlled identity.
+- Commits:
+  - 2f4cd204d: parallel_batch_act_offline.yaml batch_hard_timeout_s 5400 to 9000; its pinned sha256 in config/act/parallel_collection.yaml updated (identity changes, so requalification is required).
+  - 76069e0cb: optional campaign key batch_hard_timeout_s (1800 to 14400) that overrides the YAML; the effective value and its source are written to host/resources.jsonl.
+- Templates REG/act-templates/w8d-debug and w8q-qualification: author.py takes every scheduling key and time limit as an option (defaults cap 4 and gap 30 s, others absent); validate-inputs derives its expectations from params.json. README in REG/act-templates.
+- Phase-2 memory from the EXP-611 sampler: per-processor cgroup peak 4.53 GiB including page cache; host used peak 22.6 of 31 GB at 8 processors. The earlier suggestion of 10 to 11 processors is withdrawn; keep 8.
+- Host gate on 76069e0cb: the first run failed two tests (test_act_live_physical_audit boolean_measurement with SOURCE_ALIGNMENT_SOURCE_CLOCK_MAPPING_INVALID; HeadNeckTrajectoryController ConfigureLeavesNoSpeedScalingSubscriptionAndNoQueryService with an unexpected subscriber). The run overlapped template self-tests using ROS; kept as gates/76069e0cb0d2.run1-flaky. The serial rerun on a quiet host passed: build_rc 0, demo_rc 0, colcon_rc 0, clean tree.
+- The eight exited EXP-611 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp611-processors.jsonl).
 
 ## CP-3696 — EXP-611 QUALIFIED: the eight-shard two-phase qualification passes, 40 of 40 on every gate, independently verified
 
