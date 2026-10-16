@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3693
-next_experiment: EXP-610 (PLANNED): two-phase debug run at cap 4 with lossless zstd bag compression.
+latest_checkpoint: CP-3694
+next_experiment: EXP-611 (to be planned): the 40-scene eight-shard qualification on the two-phase path (plan task 12).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3694 — EXP-610 VALID: 16 of 16 VALID at eight shards (two-phase, cap 4, zstd); next the 40-scene qualification
+
+- Compression removed the IO stalls: no late camera frame, no INPUT_STALE, 24 minutes in total.
+- Plan task 12, the 40-scene qualification run, is prepared next on commit e8bf34d75 with the same settings.
 
 ## CP-3693 — Lossless bag compression; recording-cap test made deterministic; gate PASS; historical evidence deleted; EXP-610 planned
 
@@ -108,7 +113,7 @@ next_experiment: EXP-610 (PLANNED): two-phase debug run at cap 4 with lossless z
 
 ```yaml
 experiment_id: EXP-610
-status: PLANNED
+status: VALID
 prior_experiment: EXP-609 (VALID; 12 of 16 at cap 4, mostly late camera frames)
 hypothesis: With about seven times fewer bytes written, host IO stalls and the late camera frames and Teacher stalls they cause fall, giving VALID of at least 14 of 16.
 prediction: NO_NEW_ACQUISITION at most 1, INPUT_STALE at most 1, VALID 14 to 16 of 16; observed_chunk_compression zstd in every record-stats; timings as EXP-609 or shorter.
@@ -132,16 +137,25 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T041955Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after repointing the self-tests
     exit_code: 1 (deleted references), then 0
   - command: zsh <registered root>/act-w8d-inputs-20261016T041955Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 04:50:21Z to 05:14:02Z, 24 minutes, CLI exit 0.
+  - Phase 1 at cap 4: 738 s; 16 of 16 recorded, Teacher 16 of 16 PASS.
+  - syncfs 0.002 s.
+  - Phase 2: 540 s; 8 processors, 16 of 16 processed, 0 retries, 0 faults.
+  - Data 16 of 16 VALID with QC PASS.
+  - Every record-stats.json reports observed_chunk_compression ["zstd"].
+  - RECORDER_DELIVERY_SLOW 0 to 3 lines per shard (dozens in EXP-596 to EXP-609).
 inferred:
-  - NONE
-conclusion: PENDING
+  - Cutting the bytes written about seven times removed the host IO stalls that delayed the simulator, the cameras and the Teacher.
+  - With the two-phase split, recording cap 4, the stop-proof, release-marker, detach re-snapshot and write-order fixes, and compression, the eight-shard debug batch is fully VALID.
+conclusion: VALID. First 16 of 16 VALID eight-shard run; the configuration is ready for the 40-scene qualification.
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261016T041955Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T041955Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp610 and exp610-console.log
+decision: KEEP
+next_experiment: EXP-611
 ```
 
 ## CP-3692 — EXP-609 VALID: 12 of 16 (INPUT_STALE 1); next lossless bag compression per the human decision
