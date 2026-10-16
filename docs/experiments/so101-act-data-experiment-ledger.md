@@ -69,11 +69,74 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3707
-next_experiment: EXP-616 (PLANNED): validated inputs act-w8d-inputs-20261016T150033Z, 16-scene debug at cap 8 with the Fast DDS profile, retry off.
+latest_checkpoint: CP-3709
+next_experiment: EXP-617 (PLANNED): act-w8-20261016T153456Z, forty qualification scenes, cap 8, retry absent/zero.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+```yaml
+experiment_id: EXP-617
+status: PLANNED
+prior_experiment: EXP-616 (A acceptance) and EXP-614 (previous qualified baseline)
+hypothesis: The gated DDS-profile images satisfy the independent forty-scene qualification without retry or quality-rule changes.
+prediction: Clean forty-scene two-wave run, qualification-report status QUALIFIED and independent verification proof accepted.
+single_variable: New gated delivery-fix images versus EXP-614; scheduling cap 8 and first-attempt qualification contract unchanged.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - AUTHOR_OK for act-w8-inputs-20261016T153456Z; all 80 validation items pass, including self-contained fixtures and restored time projection.
+  - Source equals gated 8f8123dcba86; store schema 2 IDLE, no lease/active slot, no competing container/ROS/GPU workload or processor container.
+  - About 28 GB RAM and 1.06 TB disk available; projected forty-scene disk cost 90 GB leaves the unchanged dispatch floor intact.
+success_criteria:
+  - CLI rc 0, all owned stops and durability proven; complete original evidence and saved container logs.
+  - build-report.zsh returns QUALIFIED and verify-report.zsh independently accepts the exact controlled identity.
+failure_criteria:
+  - NOT_QUALIFIED stops progression to formal; preserve evidence and report without retrying qualification or changing thresholds.
+invalid_criteria:
+  - Source edits during collection, wrong provenance, competing workload or unproven stop.
+provenance:
+  source_commit: 8f8123dcba8620134f5eea4ae48bd4d8cc139720
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/gates/8f8123dcba86/install
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python
+  container_executable: /act/install/lib/so101_demo_py/campaign_shard
+  shard_image: sha256:1fca232a10b14f06575a440b42bb186aadd4fff0cdafd320936a8c0012792c39
+  inference_image: sha256:4f2786e4ed2dce5d34c284fb21eaad3c3c713ce324b0ec1a8db29a4bf3348932
+  ros_domain_id: 181
+  ros_graph_isolation: private IPC/network per shard container
+  gz_partition: N/A (MuJoCo headless)
+commands:
+  - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z/run-w8q.zsh
+    exit_code: PENDING
+  - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z/build-report.zsh
+    exit_code: PENDING
+  - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z/verify-report.zsh
+    exit_code: PENDING
+observed: PENDING
+inferred: NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261016T153456Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261016T153456Z
+decision: PENDING
+next_experiment: EXP-618 only after QUALIFIED and independent proof PASS
+```
+
+## CP-3709 — EXP-616 delivery acceptance passes; qualification preparation
+
+- EXP-616 finished normally: rc 0, tee rc 0, elapsed 1296 s. Teacher 16/16 PASSED; processing 14 VALID, 2 INVALID, 0 FAULT, 0 MISSING; combined result PROCESSED 16. All shard/service/processor stops proven, cleanup terminated true; phase-1 libc.syncfs completed in 0.002737 s. Saved all 17 container logs with no failures. Evidence: REG/handoffs/codex-resume-20261016T134641Z/exp616-result.txt and R/run-logs/exp616.
+- All sixteen MCAPs read with all four camera topics matched (minimum 919 matches per topic/scene). Retained an4/an5 classifier yields A=0, B=1, C=1, UNKNOWN=0. B: dbg-00, both cameras/three frames, recorder-only delay up to 330.2 ms; exactly one RECORDER_ONLY_STALL diagnostic. C: dbg-03, both cameras/one frame, probe and recorder late up to 106.9 ms. Six late camera_info messages, maximum 326.9 ms; no old 1.5 s repair hold. Complete classifier rules, coverage, events and extracts: REG/handoffs/codex-resume-20261016T134641Z/exp616-delivery. A acceptance passes; B/C causes remain unconfirmed.
+- The two data-invalid scenes remain invalid: dbg-00 arm/gripper source gaps; dbg-03 source alignment outside timing window/INPUT_STALE/recorder seal failure. No threshold, quality rule or first-attempt result changed. Source/install/image provenance remains gated 8f8123dcba86 throughout the collection. Visual N/A: headless collection and delivery analysis.
+- Inline template self-review caught that replacing the historical fixture checks had also removed the qualification/formal time_projection functions. Restored both before either campaign was authored or launched. AST audit now confirms every original top-level function retained exactly once; only synthetic_trace_run is added. Qualification projection uses the retained 738 s ledger measurement when the historical top-level index is unavailable; formal projection includes both configured retry rounds and the unchanged 14400 s ceiling. This is an authoring-template repair, not a source/image change.
+- The first EXP-617 authoring attempt (153328Z) then exposed missing adjacent projection constants (NameError: EXP610_RUN); no campaign started. Added a preservation assertion for all original top-level assignments as well as functions: genuine rc 1 RED, restored the qualification path and five formal constants, rc 0 GREEN. Evidence: template-preservation-red.log and template-preservation-green.json in the resume handoff. Failed authoring inputs and its scratch are retained deletion candidates, not a collection or Host gate failure.
+- After saved-log SHA256/size, launch argv, exact image and exited-state checks, removed only the eight owned EXP-616 processor containers by immutable Docker ID. No raw evidence removed. Journal: REG/handoffs/codex-resume-20261016T134641Z/exp616-processor-cleanup.jsonl. Retained: EXP-614/615/616 and every gate/image/input/diagnostic; archived: none. Deletion candidates remain cancelled gate, read-back scratch/self-check/extract trees and failed 145332Z inputs; no evidence deletion authorized or performed.
+- Next: fresh EXP-617 authoring/validation, then forty-scene qualification at cap 8 with retry absent/zero. Stop before formal if NOT_QUALIFIED.
+
+## CP-3708 — EXP-616 started on the validated images; source frozen
+
+- PLANNED entry committed and pushed at b85bbb3df before launch. Run started 2026-10-16T15:04:00Z through task-owned tmux so101-exp616-debug (pane shell PID 939025). Eight shard containers so101-act-d207bd11573128b3-w00..w07-g1 and Teacher so101-act-w8d-20261016T150033Z-teacher-g1 were observed running.
+- Actual w00 Docker readback confirms the new shard digest, private IPC/network and FASTRTPS_DEFAULT_PROFILES_FILE=/act/install/share/so101_demo_py/config/dds/fastdds-collection.xml, with RMW_FASTRTPS_USE_QOS_FROM_XML absent. Image file and executable proofs were read before launch; src/scripts/third_party still equal gated source 8f8123dcba86. Evidence: REG/handoffs/codex-resume-20261016T134641Z/exp616-running-provenance.json and R/run-logs/exp616-console.log.
+- Owned workload: EXP-616 only, its standard host/thread/GPU samplers and task-owned tmux. Preserve existing Codex/app-server processes. No source edits, tests, builds or second collection while this campaign runs. This status update touches the ledger only.
+- Next: observe phase completion and stop proof, then classify all sixteen recordings with the retained diagnostic method. A class-A event stops progression to EXP-617. Retained/archived/deletion candidates unchanged from CP-3707; no evidence deleted.
 
 ## CP-3707 — Installed gates and both images pass; EXP-616 inputs validated and debug planned
 
@@ -101,7 +164,7 @@ next_command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/ac
 
 ```yaml
 experiment_id: EXP-616
-status: PLANNED
+status: VALID
 prior_experiment: EXP-614 and EXP-615
 hypothesis: A real campaign on the installed Fast DDS profile no longer exhibits the class-A single-camera single-frame transport repair delay.
 prediction:
@@ -132,14 +195,14 @@ provenance:
   gz_partition: N/A (MuJoCo headless)
 commands:
   - command: zsh /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T150033Z/run-w8d.zsh
-    exit_code: PENDING
-observed: PENDING
-inferred: NONE
-conclusion: PENDING
+    exit_code: 0
+observed: Teacher 16/16 PASSED; data 14 VALID and 2 INVALID; class A/B/C/UNKNOWN 0/1/1/0; all owned stops proven; elapsed 1296 s.
+inferred: The installed DDS profile removes the previously observed class-A pattern in this sixteen-scene debug sample; this is not a claim that all delivery delays are eliminated.
+conclusion: Debug delivery acceptance passes; retain and separately report the two unchanged data failures.
 evidence:
   - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T150033Z
   - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261016T150033Z
-decision: PENDING
+decision: Proceed to fresh forty-scene qualification with retry disabled.
 next_experiment: EXP-617 only if class-A acceptance passes
 ```
 
