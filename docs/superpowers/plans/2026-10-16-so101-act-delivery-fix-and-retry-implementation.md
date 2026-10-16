@@ -1,6 +1,6 @@
 # Implementation plan: phase-1 delivery fix and in-campaign retry
 
-Design: `docs/superpowers/specs/2026-10-16-so101-act-delivery-fix-and-retry-design.md`. Status: PROPOSED, awaiting human confirmation.
+Design: `docs/superpowers/specs/2026-10-16-so101-act-delivery-fix-and-retry-design.md`. Status: CONFIRMED by the human on 2026-10-16 ("确认执行"); executing.
 
 The plan follows the project rules:
 - The execution model is Claude Sonnet 5.5, one writer at a time; Opus reviews each task.

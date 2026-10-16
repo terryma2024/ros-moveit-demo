@@ -1,6 +1,6 @@
 # SO-101 ACT collection: phase-1 delivery fix and in-campaign retry of INVALID scenes
 
-Status: PROPOSED on 2026-10-16, awaiting human confirmation. This amends the two-phase collection design (2026-10-15).
+Status: CONFIRMED by the human on 2026-10-16 ("确认执行"), with the recommended answers to the open questions. This amends the two-phase collection design (2026-10-15).
 
 ## Why
 
