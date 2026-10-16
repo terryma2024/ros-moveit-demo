@@ -18,6 +18,7 @@ from so101_demo.runtime.container_campaign.task_contracts import InstanceStatus,
 from test_task_coordinator import Instance, config, make_world  # noqa: F401  (config is the module fixture)
 
 PRE, REC = 30., 110.
+QUIESCE_ITERATIONS = 200   # event-loop turns granted to settle every ready callback before virtual time moves
 EIGHT_WORKERS = tuple(f'w{i:02d}' for i in range(8))
 SCENES = tuple(f'scene-{i:02d}' for i in range(20))
 
@@ -93,13 +94,20 @@ def run_wave(tmp_path, config, *, workers, scenes, cap, assignment=True, in_flig
         wave = asyncio.create_task(coordinator.run_wave(plan=world.plan, shards=world.shards,
             endpoints=world.endpoints, dispatch_allowed=lambda: True))
         while not wave.done():
-            await asyncio.sleep(0.001)
+            # Advance the virtual clock only once the loop is quiescent: a real-time pause would let it jump while a
+            # claim is still being prepared, which made the makespan depend on host load.
+            for _ in range(QUIESCE_ITERATIONS):
+                await asyncio.sleep(0)
             vt.advance()
         return await wave
 
     begin = vt()
+    async def inline(function, /, *args, **kwargs):
+        return function(*args, **kwargs)   # no worker thread: its completion time would be real, not virtual
+
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(InstanceDispatch, 'prepare_task', spy)
+        patch.setattr(asyncio, 'to_thread', inline)
         result = asyncio.run(drive())
     run_wave.prepared = prepared
     return world, result, timeline, vt()-begin
@@ -199,7 +207,12 @@ def test_tasks_in_flight_and_gap_bound_a_wave_of_twenty_scenes_on_eight_shards(t
     assert all(got[scene] == worker for worker, scenes in reserved.items() for scene in scenes)
     assert max_in_flight(timeline) == 2   # the limit binds, so the run really used it
     print('PROJECTED_WAVE_S=%.0f (%.1f min)' % (makespan, makespan/60))
-    assert makespan <= 12*TOTAL   # ten rounds of two tasks plus status-poll intervals (measured 1648 s against 1400 s ideal)
+    # The simulation is deterministic. Two tasks in flight run twenty scenes as ten rounds of one task span; the second slot
+    # starts one gap after the first and a task is seen ending at the next status poll, so each round can add up to one poll
+    # interval. Lower bound: no gate (or a broken limit) finishes in far fewer spans. Upper bound: a missing gap or an
+    # extra serialisation would exceed ten spans plus the gap plus ten polls by a wide margin. (Measured 1431 s.)
+    poll = config.heartbeat_interval_s
+    assert 10*TOTAL <= makespan <= 10*(TOTAL+poll)+30.
 
 
 def test_in_flight_cap_alone_and_gap_alone(tmp_path_factory, config):
