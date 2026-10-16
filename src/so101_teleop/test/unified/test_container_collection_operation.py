@@ -282,6 +282,23 @@ def test_phase_limits_that_exceed_the_batch_total_are_refused_before_admission(t
         store.close()
 
 
+def test_qualification_retry_is_refused_without_allocating_any_resources(tmp_path,monkeypatch):
+    import so101_demo.runtime.act_fixed_collection_composition as module
+    paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
+    args = arguments(spec)
+    document = json.loads(args.campaign_config.read_bytes())
+    args.campaign_config.write_text(json.dumps(document | dict(retry_invalid_max_rounds=1)))
+    try:
+        with pytest.raises(ValueError,match='COLLECTION_RETRY_QUALIFICATION_FORBIDDEN'):
+            prepared = prepare(module,args,workload,spec)
+            workload.start(prepared,allow_existing=False)
+        assert store.execution_generation(Domain.VALIDATION) == 0
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is None
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()
+
+
 def _prepared_with_total(tmp_path,monkeypatch,total):
     tmp_path.mkdir(exist_ok=True)
     """The fixture's start arguments under a campaign config that carries `batch_hard_timeout_s=total` (absent when None)."""

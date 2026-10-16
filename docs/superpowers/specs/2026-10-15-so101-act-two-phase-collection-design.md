@@ -87,6 +87,8 @@ Recording needs low latency. Processing needs throughput. Because they share one
   | rc 2 (refused configuration) | Fault, not retried |
   | Infrastructure failure: rc 4, a crash, a timeout, an output write error, a container that died | Retried in a new attempt directory `-proc-<n+1>` |
 
+  The confirmed 2026-10-16 delivery-fix and retry design amends the INVALID row: a formal campaign may record an INVALID scene again when its Teacher passed and `retry_invalid_max_rounds` permits another round. The recorded data is not reprocessed to obtain a different verdict. Qualification runs still use first-attempt results.
+
   - Up to `processing_max_attempts`, default 3.
   - Every attempt and its reason are journaled in `host/processing-journal.jsonl`. Failed attempt directories are kept.
   - Task ids gain the `-proc-<n>` suffix.

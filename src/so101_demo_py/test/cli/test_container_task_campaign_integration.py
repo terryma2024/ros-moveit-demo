@@ -734,6 +734,26 @@ def test_a_campaign_completed_with_task_faults_settles_and_exits_non_zero_with_a
     assert len(spies.finishes) == 1 and spies.finishes[0][1] is True, 'the run still settled: a fault is not a cleanup failure'
 
 
+@pytest.mark.parametrize('retry_status,expected_rc', [('COMPLETE', 0), ('ABORTED', 1)])
+def test_retry_summary_reports_recovery_and_aborted_infrastructure_is_nonzero(tmp_path, shared, monkeypatch, capsys,
+                                                                           retry_status, expected_rc):
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1')
+    Spies(monkeypatch)
+    controlled_verifier(monkeypatch)
+    real_run = composition.ContainerCampaignOwner.run
+
+    async def finished(self, manifest):
+        return dict(await real_run(self, manifest), retry=dict(rounds_run=1, recovered=2, status=retry_status,
+                                                               reason='RETRY_INFRA' if retry_status == 'ABORTED' else None))
+
+    monkeypatch.setattr(composition.ContainerCampaignOwner, 'run', finished)
+    code, out, err = run(world, capsys)
+    assert code == expected_rc
+    assert json.loads(out)['retry_rounds'] == 1 and json.loads(out)['recovered'] == 2
+    if retry_status == 'ABORTED':
+        assert 'CAMPAIGN_RETRY_ABORTED' in err
+
+
 def test_disk_floor_comes_from_frozen_inputs(tmp_path, shared, monkeypatch, capsys):
     """The owner's disk floor is the frozen runtime policy's, whatever that is; the command line has no such option."""
     world = make_world(tmp_path, shared, monkeypatch, plane='W1')

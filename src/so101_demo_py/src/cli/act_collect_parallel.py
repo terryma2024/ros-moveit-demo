@@ -274,10 +274,15 @@ def main(argv=None, *, edges=None) -> int:
         return _fail('CAMPAIGN_RUN_FAILED: ' + _describe(failure), 1)
     summary = dict(campaign_id=result['campaign_id'], run=str(run), plane=plane,
                    scene_count=result['scene_count'], waves=len(result['waves']))
+    retry = result.get('retry')
+    if retry is not None:
+        summary.update(retry_rounds=retry['rounds_run'], recovered=retry['recovered'])
     task_faults = result.get('task_faults')
     if task_faults:
         summary['task_faults'] = task_faults
     print(json.dumps(summary, sort_keys=True))
+    if retry is not None and retry['status'] == 'ABORTED':
+        return _fail('CAMPAIGN_RETRY_ABORTED: ' + str(retry.get('reason')) + '; see host/campaign-result.json', 1)
     if task_faults:
         # The run root holds complete results; the exit code only tells scripts that some scenes faulted.
         return _fail('CAMPAIGN_COMPLETED_WITH_FAULTS: ' + str(len(task_faults)) + ' scene(s) faulted; see host/campaign-result.json', 1)

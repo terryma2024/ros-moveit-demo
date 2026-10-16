@@ -449,6 +449,8 @@ class UnifiedWorkloadService:
             )):
                 raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_MISMATCH")
         if container_collection and payload['qualification_mode']:
+            if campaign_config.get('retry_invalid_max_rounds',0):
+                raise ValueError('COLLECTION_RETRY_QUALIFICATION_FORBIDDEN')
             from so101_demo.act.parallel_collection_contracts import (
                 validate_run_contract)
             from so101_demo.runtime.parallel_ipc.frames import _pairs
