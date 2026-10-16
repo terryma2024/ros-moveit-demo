@@ -91,3 +91,70 @@ def timed(log: SlowLineLog, kind: str, operation, *, threshold_ns: int = IO_THRE
         took = monotonic_ns() - began
         if took >= threshold_ns:
             log.emit(kind, mono_ns=began, real_ns=realtime_ns() - took, duration_ms=round(took / 1e6, 3), **fields)
+
+
+STALL_GAP_NS = 100_000_000
+STALL_CLUSTER_NS = 350_000_000
+STALL_MAX_LINES = 10
+STALL_MAX_MESSAGES = 50_000
+STALL_MAX_SECONDS = 10.0
+STALL_MAX_TRACE_BYTES = 64 * 1024 * 1024
+STALL_TOPICS = ("/head_camera/color", "/head_camera/camera_info", "/wrist_camera/color", "/wrist_camera/camera_info")
+
+
+def recorder_only_stalls(bag_dir, trace_path, *, stream=None, topics=STALL_TOPICS, read_messages=None, header_stamp_ns=None,
+                         gap_ns: int = STALL_GAP_NS, max_lines: int = STALL_MAX_LINES, max_messages: int = STALL_MAX_MESSAGES,
+                         max_seconds: float = STALL_MAX_SECONDS, monotonic=time.monotonic) -> dict:
+    """Post-hoc, at task seal: messages the bag recorder received more than `gap_ns` after the probe received the same one.
+
+    The recorder is a C++ process, so its receipt is the bag's per-message timestamp (CLOCK_REALTIME at receipt); the probe's is
+    `real_ns` in `<bag>-probe-trace.jsonl`; messages are matched on (topic, header stamp). Late messages whose stamps lie within
+    STALL_CLUSTER_NS of each other form one event, logged as `RECORDER_ONLY_STALL {json}` (at most `max_lines`). Diagnostic only:
+    bounded in messages, time and trace size, never raises, no verdict. Returns a small summary."""
+    summary = {"events": 0, "late_messages": 0, "matched": 0, "logged": 0, "truncated": False, "error": None}
+    try:
+        if read_messages is None:
+            from .bag_io import read_messages
+        if header_stamp_ns is None:
+            from .probe_trace import header_stamp_ns
+        probe, size = {}, 0
+        with open(trace_path, encoding="utf-8") as trace:
+            for line in trace:
+                size += len(line)
+                if size > STALL_MAX_TRACE_BYTES:
+                    summary["truncated"] = True
+                    break
+                row = json.loads(line)
+                if isinstance(row, list) and len(row) == 4 and row[0] in topics and row[3] is not None:
+                    probe.setdefault((row[0], row[3]), row[1])
+        deadline, late, seen = monotonic() + max_seconds, [], 0
+        for topic, _type, bag_ns, data in read_messages(bag_dir, topics=list(topics)):
+            seen += 1
+            if seen > max_messages or monotonic() > deadline:
+                summary["truncated"] = True
+                break
+            stamp = header_stamp_ns(data)
+            real = probe.get((topic, stamp))
+            if real is None:
+                continue
+            summary["matched"] += 1
+            if bag_ns - real > gap_ns:
+                late.append((stamp, topic, bag_ns - real))
+        late.sort()
+        events = []
+        for item in late:
+            if events and item[0] - events[-1][-1][0] <= STALL_CLUSTER_NS:
+                events[-1].append(item)
+            else:
+                events.append([item])
+        summary["late_messages"], summary["events"] = len(late), len(events)
+        out = stream if stream is not None else sys.stderr
+        for event in events[:max_lines]:
+            record = {"topic_count": len({topic for _, topic, _ in event}), "topics": sorted({topic for _, topic, _ in event}),
+                      "message_count": len(event), "gap_ms": round(max(gap for _, _, gap in event) / 1e6, 3),
+                      "first_stamp": event[0][0], "last_stamp": event[-1][0]}
+            print("RECORDER_ONLY_STALL " + json.dumps(record, sort_keys=True), file=out, flush=True)
+            summary["logged"] += 1
+    except BaseException as error:   # noqa: BLE001 - diagnostics never fail the recorder
+        summary["error"] = repr(error)[:200]
+    return summary

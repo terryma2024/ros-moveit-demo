@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from so101_demo.runtime.act_instance.identity import instance_output, instance_root
 from .bag_root import bag_root_decision
-from .delivery_diag import DeliveryGapMonitor
+from .delivery_diag import DeliveryGapMonitor, recorder_only_stalls
 from .probe_trace import ProbeTrace
 from .scene_read_writer import CLOSE_TIMEOUT_S, SceneReadWriter, SceneReadWriterError
 
@@ -478,6 +478,9 @@ class RawRecorder:
                 self._trace.close()   # after the last receipt; diagnostics only
                 stats["probe_trace"] = {"count": self._trace.count, "dropped": self._trace.dropped,
                                          "failure": self._trace.failure}
+                # diagnostics only, bounded, never raises: recorder receipt later than the probe's for the same message
+                stats["recorder_only_stall"] = recorder_only_stalls(
+                    self.bag_dir, self.bag_dir.parent / (self.bag_dir.name + "-probe-trace.jsonl"))
         except BaseException as error:   # noqa: BLE001
             stats["stop_error"] = repr(error)
         stats.update(self.verify_closed())
