@@ -102,7 +102,12 @@ def test_fixed_image_private_namespaces_and_mounts(tmp_path, role):
         assert env.count("ROS_DOMAIN_ID=181") == 1 and not [item for item in env if item.startswith("ROS_NAMESPACE")]
         assert "SO101_MUJOCO_SESSION_ID=campaign-wave00-w00-g1" in env
         assert "ROS_LOCALHOST_ONLY=1" in env and "ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST" in env and "MUJOCO_GL=egl" in env
+        # the Fast DDS collection profile at its in-image install path; QoS-from-XML is never switched on
+        assert env.count("FASTRTPS_DEFAULT_PROFILES_FILE=/act/install/share/so101_demo_py/config/dds/fastdds-collection.xml") == 1
+        assert not [item for item in env if item.startswith("RMW_FASTRTPS_USE_QOS_FROM_XML")]
     else:
+        # the Teacher (head) and the processor join no ROS graph and get no DDS profile
+        assert not [item for item in environment if item.startswith(("FASTRTPS", "RMW_"))]
         assert len([mount for mount in mounts if "dst=/act/ipc" in mount]) == 1
         assert not any("wave-00" in mount or "dst=/act/control" in mount for mount in mounts)
 

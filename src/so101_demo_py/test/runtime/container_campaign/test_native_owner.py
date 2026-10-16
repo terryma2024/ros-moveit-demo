@@ -66,6 +66,10 @@ def test_the_environment_is_the_hosts_with_the_fixed_identity_on_top(tmp_path):
     assert environment['ROS_AUTOMATIC_DISCOVERY_RANGE'] == 'LOCALHOST' and environment['MUJOCO_GL'] == 'egl'
     assert environment['SO101_MUJOCO_SESSION_ID'] == 's1' and environment['CUDA_VISIBLE_DEVICES'] == 'GPU-x'
     assert environment['SO101_ACT_INSTANCE_ROOT'] == str(tmp_path)
+    assert environment['FASTRTPS_DEFAULT_PROFILES_FILE'] == '/act/install/share/so101_demo_py/config/dds/fastdds-collection.xml'
+    assert 'RMW_FASTRTPS_USE_QOS_FROM_XML' not in environment
+    prefixed = native_instance_environment(base, owned_root=tmp_path, session_id='s1', gpu_uuid='GPU-x', install_prefix='/opt/p')
+    assert prefixed['FASTRTPS_DEFAULT_PROFILES_FILE'] == '/opt/p/share/so101_demo_py/config/dds/fastdds-collection.xml'
     assert environment['SO101_ACT_INSTANCE_OUTPUT'] == str(tmp_path/'output')
     # the same private locations a container gets
     assert environment['TMPDIR'] == str(tmp_path/'tmp') and environment['ROS_LOG_DIR'] == str(tmp_path/'ros-logs')

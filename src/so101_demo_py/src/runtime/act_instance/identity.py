@@ -40,6 +40,16 @@ def instance_environment(*, mujoco_session_id):
         SIMULATION_SESSION_ENV + "=" + mujoco_session_id]
 
 
+FASTDDS_PROFILE_RELATIVE = "share/so101_demo_py/config/dds/fastdds-collection.xml"
+
+
+def fastdds_profile_environment(install_prefix):
+    """The Fast DDS default-profile entry for every ROS process of an instance. Only the shard runs ROS (the Teacher and the
+    processor join no graph). It is deliberately outside `instance_environment` and the fixed identity. Only
+    FASTRTPS_DEFAULT_PROFILES_FILE is set: RMW_FASTRTPS_USE_QOS_FROM_XML stays unset, so QoS comes from the ROS API."""
+    return ["FASTRTPS_DEFAULT_PROFILES_FILE=" + str(Path(install_prefix) / FASTDDS_PROFILE_RELATIVE)]
+
+
 def verify_instance_environment(environment, *, session_id=None):
     """Refuse a process environment that is not the fixed identity (drift in domain, a namespace, or the renderer)."""
     if not isinstance(environment, Mapping):

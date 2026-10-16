@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Fast DDS default profile of an ACT collection instance. Only the publisher <times> are set: the reliable writer's
+  heartbeat period and the delay before it answers a NACK. Referenced by FASTRTPS_DEFAULT_PROFILES_FILE
+  (so101_demo.runtime.act_instance.identity.fastdds_profile_environment); RMW_FASTRTPS_USE_QOS_FROM_XML stays unset.
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <publisher profile_name="hb_pub" is_default_profile="true">
+    <times>
+      <heartbeatPeriod><sec>0</sec><nanosec>20000000</nanosec></heartbeatPeriod>
+      <nackResponseDelay><sec>0</sec><nanosec>1000000</nanosec></nackResponseDelay>
+    </times>
+  </publisher>
+</profiles>

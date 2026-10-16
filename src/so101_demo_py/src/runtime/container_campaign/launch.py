@@ -12,8 +12,8 @@ import math
 from pathlib import Path
 import re
 
-from so101_demo.runtime.act_instance.identity import instance_environment
-from so101_demo.runtime.container_campaign.paths import _path, build_role_mounts
+from so101_demo.runtime.act_instance.identity import fastdds_profile_environment, instance_environment
+from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX, _path, build_role_mounts
 from so101_demo.runtime.inference.config import _image, _open_regular, calibration_runtime_hash
 
 
@@ -149,6 +149,7 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
             _require(entry.spec in host_paths["config_paths"])
             command = ["campaign_shard", "--spec", str(entry.spec)]
             environment.extend(instance_environment(mujoco_session_id=entry.mujoco_session_id))
+            environment.extend(fastdds_profile_environment(CONTAINER_INSTALL_PREFIX))
         else:
             _require(type(entry) is InferenceLaunchArgs and entry.config in host_paths["config_paths"])
             _require((entry.head_descriptor is not None) == (role == "head"))

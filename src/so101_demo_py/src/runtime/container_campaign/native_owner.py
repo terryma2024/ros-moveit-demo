@@ -28,10 +28,11 @@ import time
 
 from so101_demo.act.parallel_collection_contracts import read_document
 from so101_demo.runtime.act_instance.identity import (
-    INSTANCE_OUTPUT_ENV, INSTANCE_ROOT_ENV, instance_environment)
+    INSTANCE_OUTPUT_ENV, INSTANCE_ROOT_ENV, fastdds_profile_environment, instance_environment)
 from so101_demo.runtime.container_campaign.instance_owner_common import (
     check_runtime_ready, load_instance_spec, read_instance_exit)
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs, instance_private_environment
+from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX
 from so101_demo.runtime.container_campaign.native_stop import leader_state, observe_native_exit, stop_descendants
 from so101_demo.runtime.container_campaign.process_identity import (
     NATIVE_LEADER_GONE, NativeOwnerKey, pid_namespace_inode, read_process_owner)
@@ -48,14 +49,15 @@ _NOT_INHERITED = frozenset({"ROS_NAMESPACE", "ROS_DOMAIN_ID", INSTANCE_ROOT_ENV,
                             "SO101_MUJOCO_SESSION_ID", "GZ_PARTITION", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"})
 
 
-def native_instance_environment(base, *, owned_root, session_id, gpu_uuid):
+def native_instance_environment(base, *, owned_root, session_id, gpu_uuid, install_prefix=CONTAINER_INSTALL_PREFIX):
     """The environment of a native instance: the Host's, with the fixed instance identity and private locations on top.
 
     It mirrors the container launch: the same private temp, cache and log locations, the fixed ROS identity, and the instance
     marker the container shell sets only after it starts (here set from the start, so that the instance process itself and
     every descendant carry it). The selected GPU is the only CUDA device the instance sees."""
     environment = {name: value for name, value in base.items() if name not in _NOT_INHERITED}
-    for entry in (*instance_private_environment(Path(owned_root)), *instance_environment(mujoco_session_id=session_id)):
+    for entry in (*instance_private_environment(Path(owned_root)), *instance_environment(mujoco_session_id=session_id),
+                  *fastdds_profile_environment(install_prefix)):
         name, _, value = entry.partition("=")
         environment[name] = value
     environment[INSTANCE_ROOT_ENV] = str(owned_root)
@@ -98,7 +100,8 @@ class NativeInstanceOwner:
         self.argv = [*command, '--spec', str(entry.spec), '--install-prefix', str(self.install_prefix),
                      '--ros2', str(self.ros2_executable)]
         self.environment = native_instance_environment(base_environment, owned_root=self.root,
-            session_id=launch.session_id, gpu_uuid=admitted_context.physical_gpu_uuid)
+            session_id=launch.session_id, gpu_uuid=admitted_context.physical_gpu_uuid,
+            install_prefix=self.install_prefix)
         self.token, self.startup_budget, self.status_budget, self.stop_budget = (
             service_token, startup_timeout_s, status_timeout_s, stop_timeout_s)
         self.max_bytes, self.graph_probe, self.popen, self.clock = max_frame_bytes, graph_probe, popen, monotonic_ns
