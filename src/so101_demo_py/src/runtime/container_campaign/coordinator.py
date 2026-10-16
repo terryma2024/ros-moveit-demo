@@ -99,6 +99,8 @@ class InstanceFault(RuntimeError):
 
 
 PHASE1_EXPIRED = 'CONTAINER_PHASE1_DEADLINE_EXPIRED'
+#: the stop reason the campaign owner gives when phase 1 ends at its deadline (`owner.PHASE1_DEADLINE_REASON`, the same string)
+PHASE1_DEADLINE_STOP_REASON = 'CAMPAIGN_PHASE1_DEADLINE_EXPIRED'
 #: Faults of one task on one instance. When such a fault ends a claimed task whose failure was journaled, the scene is a FAULT entry
 #: and the rest of the wave goes on; any other fault (a store or journal inconsistency, a fault outside a task) stops the campaign.
 SCENE_FAULT_PREFIXES = ('CONTAINER_INSTANCE_REPORTED_FAULT', 'CONTAINER_TASK_FAILED', 'CONTAINER_INSTANCE_UNREACHABLE',
@@ -437,6 +439,15 @@ class ConcurrentCollectionCoordinator:
             raise ValueError('CONTAINER_DISPATCH_STOP_REASON_INVALID')
         if self.stop_reason is None:
             self.stop_reason = reason
+
+    def reopen_dispatch(self, previous_reason):
+        """Reopen the phase-1 dispatch fence for one retry round. Only a stop caused by the phase-1 deadline may be reopened;
+        any other stop (total deadline, fault, operator) stays final."""
+        if previous_reason != PHASE1_DEADLINE_STOP_REASON or self.stop_reason != previous_reason:
+            raise ValueError('CONTAINER_DISPATCH_REOPEN_REFUSED')
+        if self.active is not None:
+            raise ValueError('CONTAINER_DISPATCH_REOPEN_REFUSED')
+        self.stop_reason = None
 
     def set_phase1_deadline(self, deadline_monotonic_s):
         """The instant after which no scene is claimed (the owner computes it from the campaign's time limits)."""

@@ -77,17 +77,29 @@ def wave_assignment_for(scene_ids: tuple, worker_ids: tuple) -> dict:
     return reserve_functional_scenes(scene_ids, worker_ids)
 
 
-def plan_campaign_waves(scene_ids, worker_ids, *, plane, max_wave_size: int = 20) -> list:
+def plan_campaign_waves(scene_ids, worker_ids, *, plane, max_wave_size: int = 20, first_wave_index: int = 0,
+                        recording_round: int = 0) -> list:
     """The wave plans of a campaign. `plane` is 'gate' (W8 qualification), 'functional' (debug) or None (formal).
 
-    Only eight workers on the gate or functional plane carry reservations; every other run claims scenes dynamically."""
+    Only eight workers on the gate or functional plane carry reservations; every other run claims scenes dynamically.
+
+    A retry round (`recording_round` >= 1) continues the wave numbering from `first_wave_index` and is formal (`plane=None`); its
+    plans carry the key `recording_round`. Round-0 plans carry no such key, so they stay byte-identical."""
+    if (type(first_wave_index) is not int or first_wave_index < 0 or type(recording_round) is not int or recording_round < 0
+            or (recording_round > 0 and plane is not None)):
+        raise ValueError('CAMPAIGN_ROUND_INVALID')
     if plane not in ('gate', 'functional', None):
         raise ValueError('CAMPAIGN_PLANE_INVALID')
     worker_ids = tuple(worker_ids)
     reserve = plane is not None and len(worker_ids) == 8
     reserver = reserve_qualification_scenes if plane == 'gate' else reserve_functional_scenes
-    return [dict(wave_index=index, scene_ids=list(wave), assignment=reserver(wave, worker_ids) if reserve else None)
-            for index, wave in enumerate(partition_waves(scene_ids, max_wave_size=max_wave_size))]
+    plans = [dict(wave_index=first_wave_index + index, scene_ids=list(wave),
+                  assignment=reserver(wave, worker_ids) if reserve else None)
+             for index, wave in enumerate(partition_waves(scene_ids, max_wave_size=max_wave_size))]
+    if recording_round:
+        for plan in plans:
+            plan['recording_round'] = recording_round
+    return plans
 
 
 def write_campaign_index(path, *, waves, qualification: bool) -> str:

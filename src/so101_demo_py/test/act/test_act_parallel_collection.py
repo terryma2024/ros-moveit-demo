@@ -253,3 +253,33 @@ def test_worker_accepts_fixed_collection_workload_only_in_execute_mode():
         ports["workload"] = workload
         with pytest.raises(WorkerError, match="WORKLOAD_PORT_INVALID"):
             ParallelWorker(ports)
+
+
+WORKERS = tuple(f"w{index:02d}" for index in range(8))
+
+
+def test_round_zero_plans_are_unchanged_and_carry_no_round_key():
+    from so101_demo.act.parallel_collection import plan_campaign_waves
+    scenes = tuple(f"scene-{index:03d}" for index in range(45))
+    plans = plan_campaign_waves(scenes, WORKERS, plane=None)
+    assert [plan["wave_index"] for plan in plans] == [0, 1, 2]
+    assert all(set(plan) == {"wave_index", "scene_ids", "assignment"} and plan["assignment"] is None for plan in plans)
+    assert plans == plan_campaign_waves(scenes, WORKERS, plane=None, first_wave_index=0, recording_round=0)
+    gate = plan_campaign_waves(scenes[:20], WORKERS, plane="gate")
+    assert set(gate[0]) == {"wave_index", "scene_ids", "assignment"} and gate[0]["assignment"] is not None
+
+
+def test_a_retry_round_continues_the_wave_index_and_names_its_round():
+    from so101_demo.act.parallel_collection import plan_campaign_waves
+    scenes = tuple(f"scene-{index:03d}" for index in range(25))
+    plans = plan_campaign_waves(scenes, WORKERS, plane=None, first_wave_index=4, recording_round=2)
+    assert [(plan["wave_index"], plan["recording_round"], plan["assignment"]) for plan in plans] == [(4, 2, None), (5, 2, None)]
+    assert [len(plan["scene_ids"]) for plan in plans] == [20, 5]
+
+
+@pytest.mark.parametrize("arguments", [dict(first_wave_index=-1), dict(first_wave_index=True), dict(recording_round=-1),
+                                       dict(recording_round=1, plane="gate")])
+def test_a_bad_round_or_a_reserved_retry_is_refused(arguments):
+    from so101_demo.act.parallel_collection import plan_campaign_waves
+    with pytest.raises(ValueError, match="CAMPAIGN_ROUND_INVALID"):
+        plan_campaign_waves(tuple(f"scene-{i}" for i in range(8)), WORKERS, **({"plane": None} | arguments))
