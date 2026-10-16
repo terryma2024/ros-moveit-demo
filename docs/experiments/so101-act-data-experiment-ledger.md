@@ -69,11 +69,50 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3699
-next_experiment: EXP-613 (PLANNED): 16-scene eight-shard debug at recording cap 8.
+latest_checkpoint: CP-3700
+next_experiment: EXP-614 (PLANNED): 40-scene eight-shard requalification at recording cap 8 on commit 76069e0cb; then the formal 70-scene collection.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3700 — EXP-613 at cap 8: 16 of 16 VALID; cap 8 chosen; EXP-614 requalification planned; endpoint-initial margin measured
+
+- EXP-613 (VALID): REG/act-w8d-inputs-20261016T084900Z, run act-w8d-20261016T084900Z, 08:50:59Z to 09:12:29Z, CLI exit 0, every stop proven, logs saved. Teacher 16 of 16 PASS; phase 2 16 of 16 VALID, 0 FAULT, 0 retries. RECORDER_DELIVERY_SLOW 0 to 4 per shard.
+- Durations, phase 1 including preflight / phase 2 / total: EXP-610 (cap 4) 760 / 540 / 1421 s; EXP-612 (cap 6) 625 / 531 / 1275 s; EXP-613 (cap 8) 630 / 538 / 1290 s.
+- Inferred: caps 6 and 8 give the same phase 1; with the 30 s assignment gap the number of recordings rarely reaches six, so the cap above 6 seldom binds. No load failure mode at cap 8.
+- Decision (the rule stated before the runs: 8 if 16 of 16, else 6, else 4): max_concurrent_recordings 8 for the requalification and the formal collection.
+- Endpoint-initial margin (capture sim minus the selected world source, per VALID scene): EXP-610 max 84 ms; EXP-611 max 96 ms; EXP-612 max 100.0 ms; EXP-613 max 100.0 ms; spread roughly evenly over 0 to 100 ms. With EXP-612 dbg-04 at 102 ms, 1 of 88 scenes failed the 100 ms rule. Inferred: the capture lags the source by up to one 100 ms native chunk, so the rule has no margin and about 1 to 2 percent of scenes fail independent of load; expected 1 to 2 of 70 formal scenes. The rule is not changed (thresholds are not lowered); a fix at the chunk mechanism would require requalification and is recorded for the human.
+- The eight exited EXP-613 processor containers were removed after their logs had been saved (R/docker-cleanup-20261016-exp613-processors.jsonl).
+- EXP-614 inputs REG/act-w8-inputs-20261016T091304Z: w8q-qualification with --max-concurrent-recordings 8, commit 76069e0cb, images inference sha256:8c6fcef1… and shard sha256:1d559fbe…, total from the YAML (9000 s); validation 80 items PASS.
+
+```yaml
+experiment_id: EXP-614
+status: PLANNED
+prior_experiment: EXP-611 (QUALIFIED at cap 4 on commit e8bf34d75); EXP-613 (VALID, cap 8)
+hypothesis: The eight-shard two-phase collection at recording cap 8 on commit 76069e0cb qualifies under the unchanged rule files (Teacher at least 38 of 40, QC at least 34 of 40).
+prediction:
+  - Teacher 39 to 40 of 40; QC-valid 37 to 40 of 40 (0 to 2 endpoint-initial failures).
+  - Phase 1 about 1500 s, phase 2 about 1260 s, about 48 minutes in total.
+  - build-report QUALIFIED; verify-report PASS.
+single_variable: max_concurrent_recordings 8 and the rebuilt images (commit 76069e0cb, total 9000 s) relative to EXP-611.
+lifecycle: ISOLATED_STACK
+success_criteria:
+  - Both phases complete; report QUALIFIED and independently verified; every stop proven; store IDLE afterwards.
+failure_criteria:
+  - NOT_QUALIFIED with named reasons, a campaign-stopping failure, an unproven stop or a deadline stop.
+invalid_criteria:
+  - As EXP-607, for commit 76069e0cb.
+provenance:
+  source_commit: 76069e0cb0d217fdc4fd077d9f59f1263268f288 (images and Host gate install)
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261016T091304Z/run-w8q.zsh, then build-report.zsh and verify-report.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+decision: PENDING
+next_experiment: formal collection
+```
 
 ## CP-3699 — EXP-612 at cap 6: 15 of 16 VALID, one endpoint-initial phase failure; EXP-613 at cap 8 planned
 
