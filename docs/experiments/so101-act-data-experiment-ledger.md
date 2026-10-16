@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3687
-next_experiment: EXP-607 (PLANNED): two-phase debug run at recording cap 4 on the code after plan task 11.
+latest_checkpoint: CP-3688
+next_experiment: NONE until the Teacher-lag analysis of EXP-607 is in.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3688 — EXP-607 VALID: two-phase at recording cap 4, 11 of 16 VALID; the remaining INVALID are all Teacher-lag INPUT_STALE
+
+- The pipeline after task 11 is complete and clean (23 minutes, 0 retries).
+- Late camera frames are gone at cap 4; 5 of 16 are still INPUT_STALE with the source-age window failure.
+- A read-only analysis of TEACHER_SOURCE_TRACE follows.
 
 ## CP-3687 — Plan task 11 done (inline mode removed); gate PASS; EXP-607 planned
 
@@ -94,7 +100,7 @@ next_experiment: EXP-607 (PLANNED): two-phase debug run at recording cap 4 on th
 
 ```yaml
 experiment_id: EXP-607
-status: PLANNED
+status: VALID
 prior_experiment: EXP-606 (INVALID; source changed during the run) and EXP-605 (VALID; 7 of 16 at eight concurrent recordings)
 hypothesis: At most four concurrent recordings in phase 1, with no processing overlap, give VALID of at least 14 of 16; the code after task 11 runs the two-phase pipeline unchanged.
 prediction: VALID 13 to 16 of 16; phase 1 about 1.5 to 2 times EXP-605's 626 s; phase 2 about 540 s; exit 0 unless a scene faults.
@@ -119,15 +125,25 @@ commands:
   - command: /usr/bin/python3 -I <registered root>/act-w8d-inputs-20261016T001617Z/author.py (commit, gate and image arguments), then validate-inputs.zsh after the coordinator check fix
     exit_code: 1 (stale cpu-shares check), then 0
   - command: zsh <registered root>/act-w8d-inputs-20261016T001617Z/run-w8d.zsh
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - Run 00:19:15Z to 00:41:56Z, 23 minutes, CLI exit 0.
+  - Phase 1 at recording cap 4: 693 s; 16 of 16 recorded, Teacher 16 of 16 PASS.
+  - syncfs 0.006 s.
+  - Phase 2: 543 s; 8 processors, 16 of 16 processed, 0 retries, 0 faults.
+  - Data 11 of 16 VALID with QC PASS. INVALID 5, every one INPUT_STALE with RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW; no NO_NEW_ACQUISITION.
+  - No source change during the run; store IDLE afterwards.
 inferred:
-  - NONE
-conclusion: PENDING
+  - Plan task 11 left the two-phase pipeline intact.
+  - Halving the concurrent recordings removed the late camera frames and raised VALID from 7 to 11 of 16.
+  - The remaining cause is the Teacher's lag at its scene-association requests (source older than 100 ms), even with no offline processing running.
+  - 11 of 16 (69 percent) is below the 85 percent qualification rate (34 of 40).
+conclusion: VALID. Two-phase pipeline sound; INPUT_STALE from Teacher lag is the remaining data-quality limit.
 evidence:
-  - PENDING
-decision: PENDING
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-20261016T001617Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8d-inputs-20261016T001617Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/container-campaign-20261012T003700Z-2130aaf1/run-logs/exp607 (shard logs with TEACHER_SOURCE_TRACE, samplers) and exp607-console.log
+decision: KEEP
 next_experiment: NONE
 ```
 
