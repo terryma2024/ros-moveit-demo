@@ -69,11 +69,45 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3715
-next_experiment: NONE planned. Formal collection EXP-620 committed 69 of 70; open items listed in CP-3715 for the human.
+latest_checkpoint: CP-3716
+next_experiment: supplement scene generation (34 new formal scenes), then EXP-621 qualification on the supplement contract, then EXP-622 supplementary formal collection.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3716 — Seal of the 69 episodes; cleanup c; frm-007 explained; reset and stop-proof fixes gated; images rebuilt; supplement planned
+
+- Human (2026-10-17): "1. frm-007 原因是什么？ 3. 修复 复位和停止证明的缺陷 2. 清理历史证据。 4. 我想总共做100条训练数据。所以需要再补31条，不和之前成功的69条重复（之前成功的69条封存，避免在清理证据是被误清理）".
+- Seal (REG/handoffs/claude-tools-20261016/seal_roots.py): per-file sha256 manifest (<root>.seal-manifest.jsonl), SEALED.json in the root, files and directories read-only, registry REG/SEALED-ROOTS.json (read-only). Sealed roots:
+  - act-w8f-20261017T021838Z (EXP-620, 141,724 files, 55.2 GB, manifest 82e06969…);
+  - act-w8f-inputs-20261017T021838Z;
+  - act-w8-20261017T003906Z (EXP-618) and act-w8-inputs-20261017T003906Z;
+  - R/gates/8f8123dcba86;
+  - R/image-build-20261016T144704Z and R/image-build-20261016T144841Z.
+  A write test inside EXP-620 returned Permission denied.
+- Cleanup c (R/evidence-deletion-20261017c, script REG/handoffs/claude-tools-20261016/cleanup_20261017c.py, which refuses any entry inside, above or equal to a sealed root): 70 entries, 189.4 GiB.
+  - Superseded run roots reduced to host/ (EXP-614 to 617, 619 and older).
+  - Unused inputs; diagnosis repro bags and extracts (notes and scripts kept).
+  - Superseded gates (reduced keep) and the cancelled d1c5926f325b; superseded image builds; scratch trees.
+  - Docker: 52 exited EXP-620 containers after their logs had been saved; images so101-campaign-*:dispatch-2130aaf1-76069e0cb0d2 removed (docker.jsonl). The 8f8123dcba86 images of the sealed data are kept.
+- frm-007 (read-only diagnosis, REG/diag-delivery-20261016/frm007/): not scene-specific (mid-pack position, passed the five-pose reachability filter, recorded fine in EXP-615) and not position-specific (in EXP-620 it was w04's first task).
+  - EXP-619: the reset-evidence replay race.
+  - EXP-620: POINT_INITIAL_GATE_SCENE_UNAVAILABLE after a 5.0 s stall of the gate's evidence read, the longest of 76 resets; the two raise sites in observations.py were indistinguishable.
+- Fixes (Sonnet writer; Opus review):
+  - 04764e11f: bounded re-read of the reset evidence for a strictly older epoch of the same session (3.0 s); the physics hold recorded before the reset and released without a receipt; the controller goal check allowed once a reset started; the native stop probe observer with rebaseline_stale_join.
+  - a1d3b7b0b: the two initial-gate scene failures named (WAIT_FOR_SERVICE_TIMEOUT, FUTURE_NO_RESULT) with a diagnostic line, and the planning-scene read retried once within the existing budget.
+  - No data rule or threshold changed. RED/GREEN evidence in R/scratch/fix-reset-stop-20261017T052856Z{,-b}.
+- Host gate R/gates/a1d3b7b0bbb5, three runs:
+  - run 1 (kept as .run1-flaky): demo 2 failures, test_native_timeout_is_bounded and test_ready_instance_is_polled_during_barrier. They pass 5 of 5 alone. Diagnosed as test-only races under -n 8: a detached bounded state write, and a fake clock passing the task backstop during an fsync stall. Test fixes are proposed in REG/diag-delivery-20261016/flakes/ and not applied yet.
+  - run 2 (kept as .run2-crosstalk): demo 13378 passed; colcon 2 failures in HeadNeckTrajectoryController ConfigureLeavesNoSpeedScalingSubscriptionAndNoQueryService (an unexpected subscriber on /neck_controller/speed_scaling_input). A Codex session was running so101_teleop pytest -n 8 in the teleop-archive-viewer worktree on the default ROS domain at the same time. The host was not quiet.
+  - run 3, quiet host: build_rc 0, demo_rc 0 (13378 passed), colcon_rc 0 (2208 tests, 0 failures), head a1d3b7b0b, dirty 0.
+- Images at a1d3b7b0b: inference sha256:00f65e9fd224c6228403a481617670395b5f885355c6e2b177ff60c19d056292 (R/image-build-20261017T070424Z); shard sha256:53c7e12670aa4caf4a3bc982b562df1646891e9e8785a31ecd47b02505c9dd0c (R/image-build-20261017T070552Z). A first attempt (R/image-build-20261017T070342Z) failed because the prepare step ran `git ls-files` from a subdirectory (132 files); kept as a deletion candidate.
+- Supplement plan (recommended options, recorded for the human):
+  - 34 new scenes frm-070 to frm-103, seeds 270 to 303, all train, sampler seed 576004, separation 0.004 m, five-pose Teacher reachability filter in a reach container on the new shard image; generator in REG/act-w8-scenes-20261017T053147Z.
+  - A new contract naming the supplement list; qualification EXP-621 at cap 4 reusing qualification-40 and functional-8; formal EXP-622 with retry 2 (templates w8q-qualification-sup and w8f-formal-sup).
+  - Merge: the first 31 committed supplement episodes by scene id plus the 69 into one index (REG/handoffs/claude-tools-20261016/merge_indexes.py); train 80, validation 10, offline_test 10.
+  - Risk: only 45 geometric candidates remain at 0.004 m, and about 34 are expected to pass the reach filter.
+- Teleop sealed archive viewer: requirements and design written for Codex (docs/superpowers/specs/2026-10-17-so101-teleop-sealed-archive-viewer-{requirements,design}.md); its implementation runs on branch codex/teleop-archive-viewer in its own worktree.
 
 ## CP-3715 — EXP-620 formal collection: 69 of 70 committed (train 49, validation 10, offline_test 10); retry round 1 recovered 5 of 5
 
