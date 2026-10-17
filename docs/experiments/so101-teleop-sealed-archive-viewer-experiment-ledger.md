@@ -8,7 +8,7 @@ worktree: /data/work/ws_moveit/.worktrees/teleop-archive-viewer
 source_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
 branch: codex/teleop-archive-viewer
 base_commit: 007cb1e3c1830f9348052fa2cc4f39e4bd0396a7
-current_commit: 0eec8606f945c951294bb6eed4505a0c7774933b (latest implementation; handoff docs committed separately)
+current_commit: 39e20806dcd94e5c05446b639ecfda43903da981 (latest implementation; final audit docs committed separately)
 evidence_root: /data/work/so101-evidence/teleop-archive-viewer/20261017T062429Z-007cb1e3
 confirmed_conclusions:
   - OBSERVED: remote tip matched ls-remote when the isolated worktree was created
@@ -21,8 +21,8 @@ disproven_routes:
   - existing page routing uses paths, not page query parameters
 open_hypotheses:
   - real discovery and cold package latency require measurement during approved implementation
-latest_checkpoint: CP-005-USER-REQUESTED-SUCCESSOR-HANDOFF
-next_experiment: Task-3-episode-and-file-RED on antzb
+latest_checkpoint: CP-007-ANTZB-GATES-PASSED-REAL-ACCEPTANCE-PENDING
+next_experiment: Genuine-registry-availability-and-real-acceptance (not available on antzb)
 ```
 
 ## CP-001-PLAN-ONLY
@@ -164,3 +164,15 @@ next_experiment: Task-3-episode-and-file-RED on antzb
 - Fresh package screenshot `captures/packages/20261017T165403-f4abbce1e30e/window.png` showed SHA text overflowing its table cell. Applied only `whitespace-normal` to archive package/file SHA cells, preserving shared TableCell defaults.
 - Final `browser-packages-fixed.png` and native `captures/final-row4/20261017T165846-c28e62960ff0/window.png` were opened and visually inspected. Package SHA now wraps without entering Registered; episode image labels both show 000004, row=4, sim_time=36.6, both SVG cursors at right endpoint, action legend=6 and state legend=8. Images explicitly state SYNTHETIC UI ACCEPTANCE ONLY. The unrelated desktop disk notification is stale: `df -h /data` showed 230 GiB free; no unrelated window/notification was altered.
 - `install-visual-fix-ee72e0fb`: task-local build/install including tsc/Vite rc=0, 5.25 s. Final complete `full-web-visual-final-38bf1487`: 64 files / 335 passed, rc=0, 5.06 s; standalone `standalone-types-final-4ab0196d`: rc=0, 2.26 s. Low-impact display-only fix verified visually, no implementation-mirroring test added.
+
+
+## CP-007-ANTZB-GATES-PASSED-REAL-ACCEPTANCE-PENDING
+
+- Tasks 3–6 and corrective reviews committed individually. Final audit record: `docs/experiments/so101-teleop-sealed-archive-viewer-antzb-acceptance.md`; latest implementation 39e20806dcd94e5c05446b639ecfda43903da981. Current dirty paths for this checkpoint are only this ledger and the new acceptance record.
+- Final complete ordinary Teleop pytest xdist8: 1482 passed / 43 skipped, rc=0 (`full-final-pytest8-0873ee2c`). Final complete package CTest: 134/134, rc=0, 258.17 s (`ctest-final-full-a1c11ca6`); readback `ctest-final-results-5b3d0de7`: 1659 reported tests, zero errors/failures, 43 skipped. 24 CPUs; 9 full-run and 1206 CTest interpreter/tempfile/worker proofs verified.
+- Final complete frontend: 335 passed / 64 files (`full-web-visual-final-38bf1487`), tsc rc=0 (`standalone-types-final-4ab0196d`), task-local installed tsc/Vite build rc=0 (`install-visual-fix-ee72e0fb`). Three schemas byte-identical and three generated type files unchanged after regeneration (`schema-drift-4f57118e`, `generated-type-drift-cfd8e792`).
+- Installed synthetic browser: 17 successful steps / zero page script errors; API all 24 fixture frames and UTF-8 paging passed, verify cancel reached cancelled and restart complete 38/38. Both synthetic 61-path snapshots unchanged (modes/size/mtime/hash, including registry/seal/sibling manifest). Fresh inspected screenshots and exact module/bundle provenance are linked in the acceptance record. Tool-only CDP timeout and slow optional-slider snapshot attempt are retained separately, never counted as success/product regression.
+- Genuine registry existence remains False. No seven-root, 905-real-row, EXP-620 statistics, real latency or genuine-content hash acceptance claimed. No SSH or sealed-script/SQLite access. Next experiment is genuine registry availability followed by the original frozen before/after real acceptance contract.
+- Owned processes: NONE after verified shutdown of only task browser/server launchers. Port 8014 free, no task tmux server. Existing Codex/Herdr/RustDesk/CUA and all unrelated processes preserved; no ROS/Gazebo stack started.
+- Retained: entire registered root including all source exports, runs, install, profiles, screenshots, both fixture batches and CTest initial snapshot. Archived: NONE. Read-back scratch directories listed in `final-retention-inventory.json` are deletion candidates only; none deleted.
+- Pre-push target fetch read origin feature branch at abcc17ff7a, zero remote-only commits, normal fast-forward possible; Git LFS status lists no LFS objects to upload. Only authorized push remains `git push origin codex/teleop-archive-viewer`, no force/main/other branch operations.
