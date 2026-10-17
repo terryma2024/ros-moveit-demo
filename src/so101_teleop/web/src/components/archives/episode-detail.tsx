@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { ArchivesApiClient, EpisodeDetailDto } from '@/api/archives-client';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { useArchiveRequest } from './use-archive-request';
 import { FramePlayer } from './frame-player';
 import { SignalChart } from './signal-chart';
@@ -34,23 +35,21 @@ function Summary({title,values,fields=Object.keys(values)}:{title:string;values:
   </section>;
 }
 function ManifestFiles({api,packageId,sceneId,files,onView}:{api:ArchivesApiClient;packageId:string;sceneId:string;files:EpisodeDetailDto['files'];onView:(file:EpisodeDetailDto['files'][number])=>void}) {
-  const [page,setPage]=useState(0);
-  const pageSize=50;
-  const lastPage=Math.max(0,Math.ceil(files.length/pageSize)-1);
-  const visibleFiles=files.slice(page*pageSize,(page+1)*pageSize);
+  const columns=useMemo<ColumnDef<EpisodeDetailDto['files'][number]>[]>(()=>[
+    {
+      accessorKey:'name',header:'File',size:600,
+      cell:({row:{original:entry}})=>/\.jsonl?$/.test(entry.name)
+        ?<Button variant="link" className="h-auto max-w-full whitespace-normal text-left break-all" onClick={()=>onView(entry)}>{entry.name}</Button>
+        :entry.name.endsWith('.png')
+          ?<a className={buttonVariants({variant:'link',className:'h-auto max-w-full whitespace-normal text-left break-all'})} href={api.downloadUrl(packageId,sceneId,entry.file_id)} download={entry.name.split('/').at(-1)} title="Download PNG">{entry.name}</a>
+          :entry.name,
+    },
+    {accessorKey:'bytes',header:'Bytes',size:120,cell:({row})=><ByteSize value={row.original.bytes}/>},
+    {accessorKey:'sha256',header:'SHA256',size:280,cell:({row})=><span className="text-xs">{row.original.sha256}</span>},
+  ],[api,packageId,sceneId,onView]);
   return <section aria-label="Manifest files" className="space-y-3">
     <h3 className="font-semibold">Manifest files</h3>
-    <div className="flex flex-wrap items-center gap-2">
-      <p aria-live="polite" className="mr-auto text-sm text-muted-foreground">{files.length?page*pageSize+1:0}–{Math.min((page+1)*pageSize,files.length)} of {files.length} files · Page {page+1} of {lastPage+1}</p>
-      <nav aria-label="Manifest pagination" className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" disabled={page===0} onClick={()=>setPage(0)}>First page</Button>
-        <Button variant="outline" size="sm" disabled={page===0} onClick={()=>setPage(value=>Math.max(0,value-1))}>Previous page</Button>
-        <Button variant="outline" size="sm" disabled={page===lastPage} onClick={()=>setPage(value=>Math.min(lastPage,value+1))}>Next page</Button>
-        <Button variant="outline" size="sm" disabled={page===lastPage} onClick={()=>setPage(lastPage)}>Last page</Button>
-      </nav>
-    </div>
-    <div className="overflow-x-auto rounded border"><Table><TableHeader><TableRow><TableHead>File</TableHead><TableHead>Bytes</TableHead><TableHead>SHA256</TableHead></TableRow></TableHeader><TableBody>{visibleFiles.map(entry=><TableRow key={entry.file_id}><TableCell>{/\.jsonl?$/.test(entry.name)?<Button variant="link" className="h-auto whitespace-normal text-left break-all" onClick={()=>onView(entry)}>{entry.name}</Button>:entry.name.endsWith('.png')?<a className={buttonVariants({variant:"link",className:"h-auto whitespace-normal text-left break-all"})} href={api.downloadUrl(packageId,sceneId,entry.file_id)} download={entry.name.split('/').at(-1)} title="Download PNG">{entry.name}</a>:entry.name}</TableCell><TableCell><ByteSize value={entry.bytes}/></TableCell><TableCell className="max-w-64 whitespace-normal break-all text-xs">{entry.sha256}</TableCell></TableRow>)}</TableBody></Table></div>
-    {!files.length&&<p className="text-sm text-muted-foreground">No manifest files.</p>}
+    <DataTable columns={columns} data={files} getRowId={entry=>entry.file_id} label="Manifest files"/>
   </section>;
 }
 export function EpisodeDetail({api,packageId,sceneId,onBack}:{api:ArchivesApiClient;packageId:string;sceneId:string;onBack:()=>void}) {

@@ -56,6 +56,7 @@ test('manifest pages bound visible files and keep the final JSON and PNG accessi
     :episodeFetcher(path,init));
   render(<ArchiveBrowser api={api} />);
   const manifest=within(await screen.findByRole('region',{name:'Manifest files'}));
+  expect(manifest.getByRole('combobox',{name:'Rows per page'}).textContent).toBe('50');
   expect(manifest.getAllByRole('row')).toHaveLength(51);
   expect(manifest.getByText('1–50 of 101 files · Page 1 of 3')).toBeTruthy();
   expect((manifest.getByRole('button',{name:'Previous page'}) as HTMLButtonElement).disabled).toBe(true);

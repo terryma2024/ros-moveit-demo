@@ -8,7 +8,7 @@ worktree: /data/work/ws_moveit/.worktrees/teleop-archive-viewer
 source_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
 branch: codex/teleop-archive-viewer
 base_commit: 007cb1e3c1830f9348052fa2cc4f39e4bd0396a7
-current_commit: 96da6b18bf92fdf5e83d3a07313cba65d06d72c0 (prior size/table checkpoint; manifest pagination follows)
+current_commit: d7328da3dfc7095fff91de3d84e4d8780564ba1b (prior manifest pagination checkpoint; shadcn conversion follows)
 evidence_root: /data/work/so101-evidence/teleop-archive-viewer/20261017T062429Z-007cb1e3
 confirmed_conclusions:
   - OBSERVED: remote tip matched ls-remote when the isolated worktree was created
@@ -21,7 +21,7 @@ disproven_routes:
   - existing page routing uses paths, not page query parameters
 open_hypotheses:
   - real discovery and cold package latency require measurement during approved implementation
-latest_checkpoint: CP-012-MANIFEST-PAGINATION-GATES-PASSED
+latest_checkpoint: CP-013-SHADCN-DATA-TABLE-GATES-PASSED
 next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived sample10 available
 ```
 
@@ -244,3 +244,14 @@ next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived
 - OBSERVED installed Chrome: baseline1829 rows rendered at once; after50 per page, all1829 names/raw bytes/SHA256 match API across37 pages, last page29 files. JSON dialog opens, downloaded000000-head.png SHA256 matches sealed source, 430px navigation controls wrap within viewport, zero pageerrors. Desktop first/last, mobile first/last and native before/after images opened and inspected; pagination range and controls visible. Explicit reload used after deployment. Original table remains horizontally scrollable on narrow screens.
 - All current build assets byte-match install and served index. Entire source parent/package18607 entries match retained registration modes/sizes/mtimes/hashes; no sealed data changed. Inline review checked page bounds, original order/handlers, scene-key reset, empty-list behavior and control wrapping. Only owned browser3700556 stopped; manual service3589065 remains healthy on Tailscale8000. This remains derived sample acceptance, not genuine seven-root/full EXP-620 acceptance.
 - Retained entire evidence root and pagination batch, user baseline, all test/build/provenance/read-only proofs, profiles/screenshots/download. Archived none; read-back scratch listed in batch retention.json are deletion candidates only, nothing deleted. Ready for one pagination commit and authorized normal origin feature-branch push.
+
+
+## shadcn Manifest Data Table
+
+- PLANNED: user requests shadcn Data Table for manifest pagination. Same registered root, batch `shadcn-datatable-20261017T162209Z-9aa01d`, direct AI-STATION-001, clean feature HEADd7328da3df; manual service3589065 preserved. Use official Tailwind3/v3 Data Table pattern with TanStack8, existing shadcn Table/Select/Button, typed columns, built-in row pagination, default50 and page-size selection. Preserve filenames/JSON/PNG/bytes/SHA256 and input order; scoped manifest conversion only. Synthetic RED/GREEN, full Bun, production build/install, desktop/mobile browser readback and inline review. User authorizes inline implementation without dst/subagents/reconfirmation. No backend/schema/sealed fixture or ROS changes. Retain all evidence, archived none.
+- RED `shadcn-datatable-red-6b2b7457`: intended missing Rows per page combobox failure, 1 failed / 4 passed, rc1. Dependency `shadcn-datatable-dependency-dd2238c2`: Bun installed exact @tanstack/react-table8.21.3 + table-core8.21.3, rc0; package/lockfile contain only these additions. Chosen official v3 pattern matches this project's Tailwind3/React18; no shared shadcn component overwritten.
+- GREEN `shadcn-datatable-green-c9f44b99`: 5 passed, rc0. Full Bun `shadcn-datatable-full-web-155e88f3`: 64 files /339 passed, rc0,4.27s. Installed production `shadcn-datatable-install-92436723`: tsc/Vite/colcon rc0,32.25s; new TSX source caused expected GLOB reconfigure, existing underlay/bundle/Sheet warnings retained. Frontend/dependency-only change; backend/schema/Python unchanged, Python/CTest gates not rerun.
+- OBSERVED installed Chrome verified all1829 names/raw byte titles/SHA256 over37 default50 pages; JSON viewer and PNG download preserve contents/hash. Rows per page100 gives19 pages and29 final files; switching last100-page to10 preserves first-visible1801 and gives183 pages, final9. Selecting50 restores37 pages. Real frm-007 empty manifest shows0–0/Page1of1 and all navigation disabled; scene navigation resets default50. Desktop/mobile430px controls fit, zero pageerrors. First/last/empty/mobile/browser/native screenshots opened and inspected: shadcn Select + accessible chevron buttons below a bounded scrolling table, sticky header, wrapped long names.
+- Initial browser attempt completed default-page traversal, JSON and PNG checks, then its script redundantly clicked disabled First page while already on page1. Preserved timeout/log/profile/screenshots; no product regression inferred. Corrected script in verified/ completed all acceptance steps. Original probe exited and left no Chrome process; only final owned browser3710855 stopped after capture. Manual Tailscale service3589065 preserved and healthy; installed/current/served assets byte-match.
+- Source parent/package18607 entries unchanged by mode/size/mtime/hash; download SHA256 matches sealed source. Inline self review checked typed columns, stable file identity/handlers/order, library pagination/page-size anchoring, scene remount reset, empty boundaries, focusable labelled Select/buttons, mobile wrapping and no unrelated component changes. Acceptance remains derived sample only; full genuine seven-root/EXP-620 unavailable.
+- Retained entire registered root/batch, all failed/successful tests/probes/builds, dependency evidence, profiles/screenshots/download/read-only proofs. Archived none; read-back scratch in retention.json are deletion candidates only, nothing deleted. Ready for one shadcn table commit and normal authorized origin feature push.
