@@ -46,6 +46,41 @@ test('manifest PNG names download the selected file without opening the JSON vie
   expect(screen.getByRole('button',{name:'episode/seal.json'})).toBeTruthy();
 });
 
+test('manifest pages bound visible files and keep the final JSON and PNG accessible',async()=>{
+  history.replaceState({},'','/archives?root=r&pkg=p&scene=frm-000');
+  const files=Array.from({length:99},(_,i)=>({file_id:`file-${i}`,name:`file-${i}.bin`,bytes:i,sha256:`hash-${i}`}));
+  files.push({file_id:'seal',name:'episode/seal.json',bytes:123,sha256:'seal-hash'},
+    {file_id:'last image',name:'frames/last.png',bytes:60898,sha256:'last-hash'});
+  const api=new ArchivesApiClient((path,init)=>String(path).endsWith('/episodes/frm-000')
+    ?Promise.resolve(new Response(JSON.stringify({...detailData,files})))
+    :episodeFetcher(path,init));
+  render(<ArchiveBrowser api={api} />);
+  const manifest=within(await screen.findByRole('region',{name:'Manifest files'}));
+  expect(manifest.getAllByRole('row')).toHaveLength(51);
+  expect(manifest.getByText('1–50 of 101 files · Page 1 of 3')).toBeTruthy();
+  expect((manifest.getByRole('button',{name:'Previous page'}) as HTMLButtonElement).disabled).toBe(true);
+  expect(manifest.queryByText('file-50.bin')).toBeNull();
+  fireEvent.click(manifest.getByRole('button',{name:'Next page'}));
+  expect(manifest.getByText('file-50.bin')).toBeTruthy();
+  expect(manifest.queryByText('file-0.bin')).toBeNull();
+  fireEvent.click(manifest.getByRole('button',{name:'episode/seal.json'}));
+  expect(await screen.findByRole('dialog')).toBeTruthy();
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'Close'}));
+  fireEvent.click(manifest.getByRole('button',{name:'Last page'}));
+  expect(manifest.getAllByRole('row')).toHaveLength(2);
+  expect(manifest.getByText('101–101 of 101 files · Page 3 of 3')).toBeTruthy();
+  const link=manifest.getByRole('link',{name:'frames/last.png'});
+  expect(link.getAttribute('href')).toContain('/files/last%20image/download');
+  expect(link.getAttribute('download')).toBe('last.png');
+  expect(manifest.getByTitle('60898 bytes').textContent).toBe('59.47 KiB');
+  expect(manifest.getByText('last-hash')).toBeTruthy();
+  expect((manifest.getByRole('button',{name:'Next page'}) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(manifest.getByRole('button',{name:'Previous page'}));
+  expect(manifest.getByText('file-50.bin')).toBeTruthy();
+  fireEvent.click(manifest.getByRole('button',{name:'First page'}));
+  expect(manifest.getByText('file-0.bin')).toBeTruthy();
+});
+
 test('large seal and QC metadata stay out of the overview and remain accessible through paged nested tables',async()=>{
   history.replaceState({},'','/archives?root=r&pkg=p&scene=frm-000');
   const files=Object.fromEntries(Array.from({length:1000},(_,row)=>[`frames/${row}-head.png`,{sha256:`hash-${row}`,size:60000}]));

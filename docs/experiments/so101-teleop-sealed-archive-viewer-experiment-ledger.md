@@ -8,7 +8,7 @@ worktree: /data/work/ws_moveit/.worktrees/teleop-archive-viewer
 source_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
 branch: codex/teleop-archive-viewer
 base_commit: 007cb1e3c1830f9348052fa2cc4f39e4bd0396a7
-current_commit: e4f2897657803b59584b60055afe9ffb6057de98 (compact metadata checkpoint; size/table presentation follows)
+current_commit: 96da6b18bf92fdf5e83d3a07313cba65d06d72c0 (prior size/table checkpoint; manifest pagination follows)
 evidence_root: /data/work/so101-evidence/teleop-archive-viewer/20261017T062429Z-007cb1e3
 confirmed_conclusions:
   - OBSERVED: remote tip matched ls-remote when the isolated worktree was created
@@ -21,7 +21,7 @@ disproven_routes:
   - existing page routing uses paths, not page query parameters
 open_hypotheses:
   - real discovery and cold package latency require measurement during approved implementation
-latest_checkpoint: CP-011-READABLE-SIZES-TABLES-GATES-PASSED
+latest_checkpoint: CP-012-MANIFEST-PAGINATION-GATES-PASSED
 next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived sample10 available
 ```
 
@@ -234,3 +234,13 @@ next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived
 - Full final Bun `tables-bytes-verified-web-77be4c77`: 64 files / 338 passed, rc=0, 5.06s. Final tsc/Vite/installed colcon `tables-bytes-verified-install-01374f7f`: rc=0, 6.61s. All earlier full runs/install outputs retained; first install reconfigured CMake after expected TSX source GLOB mismatch. Existing bundle/underlay/Sheet warnings retained. Pure frontend change, no schema/backend/Python changes; Python/CTest not rerun.
 - OBSERVED Chrome: byte card3.73GiB/424.29MiB and exact title values; full seal1811 entries traversed over37 pages with every filename/raw byte title/SHA256 equal to unchanged API data; QC records905 accessible in nested table; focus restores, zero pageerrors, 430px mobile dialog fits. Initial navigation-only probe reused a cached older document; preserved failed tool output and repeated with explicit browser reload (same action the user needs). First successful screenshot exposed a wasted parent field column; expanded groups now use full width, verified at >90% of scroll-region width on desktop/mobile. Final layout-only capture verifies the KiB unit occupies one unbroken text rectangle. All browser/native images opened and inspected.
 - Installed index and current build assets byte-match, service PID3589065 unchanged and healthy; both search roots/archived source data untouched. Inline review checked numeric units/raw values, nullable medians, unchanged numeric sorting, complete nested fields including nonstandard file shapes, bounded pages and close/focus/layout. Retained full root/batch, user screenshots, every failed and successful tool/test/build run, profiles and screenshots. Archived: none. Read-back scratch listed in batch retention.json are deletion candidates only; nothing deleted. Stopped only owned GUI probes; manual service remains running. Ready for one archive presentation commit and normal authorized origin feature push.
+
+
+## Manifest file pagination
+
+- PLANNED: user requests pagination for the Episode Manifest files table. Batch `manifest-pagination-20261017T161301Z-96afc8`, same registered root; direct AI-STATION-001, clean feature HEAD96da6b18bf, manual service3589065 preserved. Bounded frontend change: 50 files per page with accessible range, first/previous/next/last navigation, preserving JSON viewers, PNG downloads and exact byte/hash metadata. Synthetic RED/GREEN, full Bun and installed production build, real desktop/mobile browser readback; inline self review, no dst/delegation or backend/schema/fixture edits. No ROS operation. Retain all evidence; archived none, read-back test scratch deletion candidates only.
+- RED `manifest-pagination-red-ed096f48`: intended missing manifest region/navigation failure, 1 failed / 4 passed, rc1. GREEN `manifest-pagination-green-41e22984`: 5 passed, rc0; 101 synthetic files prove bounded first/middle/partial-last pages, previous/first navigation and disabled end controls, JSON viewer and final PNG URL/raw bytes/hash retained.
+- Full Bun `manifest-pagination-full-web-58283620`: 64 files / 339 tests passed, rc0, 4.37s. Installed production build `manifest-pagination-install-c146d242`: tsc/Vite/colcon rc0, 4.60s; existing underlay/bundle/Sheet warnings retained. Frontend-only change; no backend/schema/Python changes, Python/CTest gates not rerun.
+- OBSERVED installed Chrome: baseline1829 rows rendered at once; after50 per page, all1829 names/raw bytes/SHA256 match API across37 pages, last page29 files. JSON dialog opens, downloaded000000-head.png SHA256 matches sealed source, 430px navigation controls wrap within viewport, zero pageerrors. Desktop first/last, mobile first/last and native before/after images opened and inspected; pagination range and controls visible. Explicit reload used after deployment. Original table remains horizontally scrollable on narrow screens.
+- All current build assets byte-match install and served index. Entire source parent/package18607 entries match retained registration modes/sizes/mtimes/hashes; no sealed data changed. Inline review checked page bounds, original order/handlers, scene-key reset, empty-list behavior and control wrapping. Only owned browser3700556 stopped; manual service3589065 remains healthy on Tailscale8000. This remains derived sample acceptance, not genuine seven-root/full EXP-620 acceptance.
+- Retained entire evidence root and pagination batch, user baseline, all test/build/provenance/read-only proofs, profiles/screenshots/download. Archived none; read-back scratch listed in batch retention.json are deletion candidates only, nothing deleted. Ready for one pagination commit and authorized normal origin feature-branch push.
