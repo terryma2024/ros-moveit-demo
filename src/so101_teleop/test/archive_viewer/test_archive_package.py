@@ -1,4 +1,5 @@
 import json
+import pytest
 from archive_fixture import write_json
 from test_archive_scan import client_for
 
@@ -161,3 +162,52 @@ def test_metadata_projection_does_not_open_records_frames_or_audit(archive,monke
     monkeypatch.setattr(Path,'open',guarded)
     client,url=package_request(archive)
     assert client.get(url).status_code==200
+
+
+def test_derived_package_maps_declared_source_prefix_without_changing_seal_root(archive):
+    from archive_fixture import PNG
+    source='/recorded/original-collection'
+    for name in ['collection-index.json','host/campaign-result.json']:
+        path=archive.package/name
+        path.write_text(path.read_text().replace(str(archive.package),source))
+    archive.seal()
+    seal_path=archive.package/'SEALED.json'
+    seal=json.loads(seal_path.read_text());seal['source_root_prefix']=source
+    write_json(seal_path,seal)
+    client,url=package_request(archive)
+    response=client.get(url)
+    assert response.status_code==200
+    assert response.json()['package']['registered'] is True
+    detail=client.get(url+'/episodes/frm-000').json()
+    assert detail['frame_count']==5
+    assert client.get(url+'/episodes/frm-000/frames/0/head').content==PNG
+    package=client.app.state.archives.package(url.rsplit('/',1)[-1])
+    assert package.resolve(str(archive.package/'collection-index.json'))==archive.package/'collection-index.json'
+    for value in [source+'-other/secret',source+'/../secret','/etc/passwd']:
+        with pytest.raises(Exception) as exc:package.resolve(value)
+        assert getattr(exc.value,'status_code',None)==409
+
+
+def test_derived_sample_scene_scope_overrides_full_source_manifests(archive):
+    archive.index['committed_episodes']=archive.index['committed_episodes'][:1]
+    archive.index['derived_sample']={'scenes':['frm-000','frm-002']}
+    archive.index['scene_count']=2
+    write_json(archive.package/'collection-index.json',archive.index)
+    write_json(archive.package/'campaign-index.json',dict(waves=[dict(scene_ids=['frm-000','frm-001','frm-002','frm-003'])]))
+    archive.seal()
+    client,url=package_request(archive)
+    data=client.get(url).json()
+    assert data['statistics']['planned']==2
+    assert data['statistics']['committed']==1
+    assert data['statistics']['non_committed_by_outcome']==dict(FAULT=1,MISSING=0,INVALID=0)
+    assert any('Derived sample' in warning for warning in data['warnings'])
+    assert [r['scene_id'] for r in client.get(url+'/episodes').json()['episodes']]==['frm-000','frm-002']
+    assert client.get(url+'/episodes/frm-001').status_code==404
+
+
+@pytest.mark.parametrize('scope',[None,[],['frm-000','frm-000'],['frm-000'],['frm-000','frm-001',None]])
+def test_invalid_or_incomplete_derived_scene_scope_is_refused(archive,scope):
+    archive.index['derived_sample']={'scenes':scope}
+    write_json(archive.package/'collection-index.json',archive.index);archive.seal()
+    client,url=package_request(archive)
+    assert client.get(url).status_code==422

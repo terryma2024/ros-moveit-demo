@@ -39,7 +39,11 @@ class PackageSnapshot:
         return self._manifest
 
     def resolve(self, value: str, *, base: Path | None = None) -> Path:
-        return resolve_package_path(self.ref.path, self.ref.recorded_root, value, base=base)
+        recorded = self.ref.recorded_root
+        prefix = self.ref.source_root_prefix
+        if prefix is not None and Path(value).is_relative_to(prefix):
+            recorded = prefix
+        return resolve_package_path(self.ref.path, recorded, value, base=base)
 
     def document(self, name: str, *, optional: bool = False) -> dict:
         path = self.resolve(name)
@@ -95,6 +99,18 @@ class PackageSnapshot:
             all_ids.add(item['scene_id'])
             if item.get('final', True) and item['scene_id'] not in self.scenes:
                 self.scenes[item['scene_id']] = item
+        if 'derived_sample' in index:
+            sample = index['derived_sample']
+            scope = sample.get('scenes') if isinstance(sample, dict) else None
+            if (not isinstance(scope, list) or not scope
+                    or any(not isinstance(scene, str) or not scene for scene in scope)
+                    or len(set(scope)) != len(scope)
+                    or type(index.get('scene_count')) is not int
+                    or len(scope) != index['scene_count']
+                    or not self.committed.issubset(scope)):
+                invalid('collection-index.json', 'invalid derived sample scene scope')
+            all_ids = set(scope)
+            self.warnings.append(f'Derived sample ({len(scope)} scenes); campaign-level retry metadata may cover the full source campaign.')
         for scene_id in sorted(all_ids):
             row = self.scenes.get(scene_id, {})
             self.validate_attempts(row)

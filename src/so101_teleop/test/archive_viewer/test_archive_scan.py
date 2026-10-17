@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 from so101_teleop.unified.app import create_unified_app,schema_services
 from archive_fixture import write_json
+import json
+import pytest
 
 
 def client_for(archive):
@@ -42,4 +44,13 @@ def test_missing_registry_and_invalid_marker_are_safe(archive):
     client=client_for(archive);rid=client.get('/api/archives/config').json()['roots'][0]['root_id']
     data=client.get('/api/archives/packages',params=dict(root_id=rid)).json()
     assert [r['name'] for r in data['packages']]==['collection']
+    assert data['warnings']
+
+
+@pytest.mark.parametrize('prefix',['relative/root','/old/../root',None,42])
+def test_invalid_source_root_prefix_is_not_registered(archive,prefix):
+    path=archive.package/'SEALED.json';seal=json.loads(path.read_text());seal['source_root_prefix']=prefix;write_json(path,seal)
+    client=client_for(archive);rid=client.get('/api/archives/config').json()['roots'][0]['root_id']
+    data=client.get('/api/archives/packages',params=dict(root_id=rid)).json()
+    assert [row['name'] for row in data['packages']]==['supporting']
     assert data['warnings']

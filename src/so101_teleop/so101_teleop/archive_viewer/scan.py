@@ -22,6 +22,7 @@ class PackageRef:
     recorded_root: Path
     seal: dict
     info: PackageInfo
+    source_root_prefix: Path | None = None
 
 
 class ArchiveStore:
@@ -69,9 +70,16 @@ class ArchiveStore:
                         if seal.get('kind')!='SEALED_EVIDENCE_ROOT': raise ValueError('unsupported seal kind')
                         recorded=Path(seal.get('root',str(directory)))
                         if not recorded.is_absolute(): raise ValueError('invalid recorded root')
+                        source_prefix = None
+                        if 'source_root_prefix' in seal:
+                            value = seal['source_root_prefix']
+                            if not isinstance(value, str): raise ValueError('invalid source root prefix')
+                            source_prefix = Path(value)
+                            if not source_prefix.is_absolute() or '..' in source_prefix.parts:
+                                raise ValueError('invalid source root prefix')
                         pid=opaque_id(directory)
                         info=PackageInfo(package_id=pid,name=directory.name,kind='collection' if any(e.name=='collection-index.json' for e in entries) else 'supporting',sealed_at=seal.get('sealed_at'),reason=seal.get('reason'),files=seal.get('files',0),bytes=seal.get('bytes',0),manifest_sha256=seal.get('manifest_sha256'),registered=directory in registered or recorded in registered)
-                        found[pid]=PackageRef(directory,recorded,seal,info)
+                        found[pid]=PackageRef(directory,recorded,seal,info,source_prefix)
                     except (HTTPException,ValueError,TypeError): warnings.append(f'{directory.relative_to(root)}/SEALED.json: invalid seal')
                     continue
                 for entry in entries:
