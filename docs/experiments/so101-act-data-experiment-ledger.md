@@ -69,11 +69,27 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3714
-next_experiment: EXP-620 (RUNNING): the formal 70 again on the EXP-619 settings, after EXP-619 stopped on an unproven shard stop.
+latest_checkpoint: CP-3715
+next_experiment: NONE planned. Formal collection EXP-620 committed 69 of 70; open items listed in CP-3715 for the human.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3715 — EXP-620 formal collection: 69 of 70 committed (train 49, validation 10, offline_test 10); retry round 1 recovered 5 of 5
+
+- EXP-620 (VALID): REG/act-w8f-20261017T021838Z, inputs REG/act-w8f-inputs-20261017T021838Z; commit 8f8123dcba86 images; cap 4, gap 30 s, six processors, retry_invalid_max_rounds 2, total 12000 s; admitted with the EXP-618 report 7832e59c….
+- Run 02:25:10Z to 04:31:00Z (126 minutes). CLI exit 1 by design: CAMPAIGN_COMPLETED_WITH_FAULTS, one scene faulted. Every stop proven; logs saved (40 shard, 11 processor, 1 Teacher containers).
+- Round 0:
+  - Phase 1: four waves, 69 of 70 recorded, finished 03:19:33Z. Task frm-007 (w04, its second task) faulted: CONTAINER_INSTANCE_REPORTED_FAULT: POINT_INITIAL_GATE_SCENE_UNAVAILABLE. The fault was isolated and the shard stopped with proof. frm-007 was also the faulting task in EXP-619 (w00, second task, RESET_WATERMARK_IDENTITY).
+  - Phase 2: six processors, 69 results, 64 VALID and 5 INVALID, no processor loss.
+- Retry round 1 (first live use): retry-round-1.json status RUN with 5 candidates; wave-4 (generation 5) re-recorded the five; host/retry-1 phase 2 with five processors gave 5 of 5 VALID. Round 2 had no candidates.
+- collection-index.json schema 3: 74 collected tasks (69 round 0, 5 round 1; final True 69, False 5); 69 committed episodes, unique scene ids, the final attempt each. By split: train 49 of 50, validation 10 of 10, offline_test 10 of 10. Missing: frm-007 (FAULT; faults are not retried by design).
+- formal-result.zsh: rc 1. Its data checks pass: committed 69 equals export eligible 69, and no scene is without evidence. The two failed items are the template's clean-finish assumptions ("cli-rc.txt says cli_rc=0", "no failed.json record anywhere under the run root"), which predate per-scene fault isolation. Template fix pending: accept CAMPAIGN_COMPLETED_WITH_FAULTS when every fault is listed in campaign-result.json.
+- Open items for the human:
+  - The reset and stop-proof defects found from EXP-619 (diagnosis in this session; fixes not applied): a bounded re-read of the reset evidence; recording the physics hold before the reset; the goal-absent proof without a reset receipt; and the stop probe tolerating replay across epochs. They need a gate, images and a requalification.
+  - frm-007 faulted in both EXP-619 and EXP-620 at the start of its task. Whether the scene is special is not yet checked.
+  - Class B recorder stalls (a 3 s lattice inside the recorder participant); end-of-window Teacher staleness at cap 8; the endpoint-initial 100 ms margin.
+- Retained: EXP-614 to EXP-620 and their inputs; diagnostics. Deletion candidates (need authorisation): EXP-615 raw bags (superseded formal data, 49 GB), EXP-616 and EXP-617 raw bags, EXP-619 (no data result), repro and extract trees under REG/diag-delivery-20261016, writer scratch trees.
 
 ## CP-3714 — EXP-619 stopped in wave 0 on an unproven shard stop after a reset fault; manual lease release; EXP-620 re-run
 
