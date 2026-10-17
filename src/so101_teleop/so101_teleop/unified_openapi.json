@@ -1,6 +1,57 @@
 {
   "components": {
     "schemas": {
+      "ArchiveConfigView": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "roots": {
+            "items": {
+              "$ref": "#/components/schemas/RootView"
+            },
+            "title": "Roots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "roots"
+        ],
+        "title": "ArchiveConfigView",
+        "type": "object"
+      },
+      "ArchiveFile": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "name",
+          "bytes",
+          "sha256"
+        ],
+        "title": "ArchiveFile",
+        "type": "object"
+      },
       "ArtifactProjectionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -170,6 +221,90 @@
           "status"
         ],
         "title": "AttemptProjectionResponse",
+        "type": "object"
+      },
+      "AttemptView": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "recording",
+              "processing"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "proc_attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proc Attempt"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "round": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Round"
+          },
+          "shard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shard"
+          },
+          "wave": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wave"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AttemptView",
         "type": "object"
       },
       "BackendCapabilitiesResponse": {
@@ -1629,6 +1764,247 @@
         "title": "CollisionPair",
         "type": "object"
       },
+      "EpisodeDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptView"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "collection_committed": {
+            "title": "Collection Committed",
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ArchiveFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "frame_count": {
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "processed_result": {
+            "additionalProperties": true,
+            "title": "Processed Result",
+            "type": "object"
+          },
+          "qc_summary": {
+            "additionalProperties": true,
+            "title": "Qc Summary",
+            "type": "object"
+          },
+          "scene": {
+            "additionalProperties": true,
+            "title": "Scene",
+            "type": "object"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "seal": {
+            "additionalProperties": true,
+            "title": "Seal",
+            "type": "object"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scene_id",
+          "scene",
+          "collection_committed",
+          "seal",
+          "processed_result",
+          "qc_summary",
+          "attempts",
+          "files",
+          "frame_count",
+          "warnings"
+        ],
+        "title": "EpisodeDetail",
+        "type": "object"
+      },
+      "EpisodePage": {
+        "additionalProperties": false,
+        "properties": {
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeRow"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "episodes",
+          "total"
+        ],
+        "title": "EpisodePage",
+        "type": "object"
+      },
+      "EpisodeRow": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes"
+          },
+          "collection_committed": {
+            "title": "Collection Committed",
+            "type": "boolean"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "final_recording_round": {
+            "title": "Final Recording Round",
+            "type": "integer"
+          },
+          "outcome": {
+            "enum": [
+              "VALID",
+              "INVALID",
+              "FAULT",
+              "MISSING"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "qc_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qc Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "record_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Count"
+          },
+          "recording_attempt_count": {
+            "title": "Recording Attempt Count",
+            "type": "integer"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split"
+          },
+          "teacher_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Result"
+          }
+        },
+        "required": [
+          "scene_id",
+          "collection_committed",
+          "outcome",
+          "recording_attempt_count",
+          "final_recording_round"
+        ],
+        "title": "EpisodeRow",
+        "type": "object"
+      },
+      "EpisodeSeries": {
+        "additionalProperties": false,
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SignalPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "row_times_s": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Row Times S",
+            "type": "array"
+          },
+          "stride": {
+            "title": "Stride",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points",
+          "stride",
+          "row_times_s"
+        ],
+        "title": "EpisodeSeries",
+        "type": "object"
+      },
       "ExecutionProfileResponse": {
         "additionalProperties": false,
         "description": "One row of the platform-bound support matrix, as the server would execute it.\n\nThe row names the exact routing key a request must claim and carries no budget profile and\nno qualification hash: macOS supports W1 and W2, and that is the whole statement.",
@@ -1731,6 +2107,50 @@
         "title": "ExecutionProfileResponse",
         "type": "object"
       },
+      "FileView": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "title": "Content"
+          },
+          "eof": {
+            "default": true,
+            "title": "Eof",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "json",
+              "jsonl"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "FileView",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1742,6 +2162,44 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IdentityValue": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "title": "IdentityValue",
         "type": "object"
       },
       "InstanceProofResponse": {
@@ -2520,6 +2978,238 @@
         "title": "MapProjectionResponse",
         "type": "object"
       },
+      "Metric": {
+        "additionalProperties": false,
+        "properties": {
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total"
+        ],
+        "title": "Metric",
+        "type": "object"
+      },
+      "PackageInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "default": 0,
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "files": {
+            "default": 0,
+            "title": "Files",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "collection",
+              "supporting"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Sha256"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "package_id": {
+            "title": "Package Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "registered": {
+            "default": false,
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "sealed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sealed At"
+          }
+        },
+        "required": [
+          "package_id",
+          "name",
+          "kind"
+        ],
+        "title": "PackageInfo",
+        "type": "object"
+      },
+      "PackageList": {
+        "additionalProperties": false,
+        "properties": {
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/PackageInfo"
+            },
+            "title": "Packages",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "packages"
+        ],
+        "title": "PackageList",
+        "type": "object"
+      },
+      "PackageStatistics": {
+        "additionalProperties": false,
+        "properties": {
+          "committed": {
+            "title": "Committed",
+            "type": "integer"
+          },
+          "committed_by_split": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Committed By Split",
+            "type": "object"
+          },
+          "duration_rows": {
+            "$ref": "#/components/schemas/Metric"
+          },
+          "duration_seconds": {
+            "$ref": "#/components/schemas/Metric"
+          },
+          "episode_bytes": {
+            "$ref": "#/components/schemas/Metric"
+          },
+          "non_committed_by_outcome": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Non Committed By Outcome",
+            "type": "object"
+          },
+          "planned": {
+            "title": "Planned",
+            "type": "integer"
+          },
+          "recovered": {
+            "title": "Recovered",
+            "type": "integer"
+          },
+          "recovered_by_round": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Recovered By Round",
+            "type": "object"
+          },
+          "retry_rounds_run": {
+            "title": "Retry Rounds Run",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "planned",
+          "committed",
+          "non_committed_by_outcome",
+          "committed_by_split",
+          "retry_rounds_run",
+          "recovered",
+          "recovered_by_round",
+          "duration_rows",
+          "duration_seconds",
+          "episode_bytes"
+        ],
+        "title": "PackageStatistics",
+        "type": "object"
+      },
+      "PackageView": {
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/IdentityValue"
+            },
+            "title": "Identity",
+            "type": "object"
+          },
+          "package": {
+            "$ref": "#/components/schemas/PackageInfo"
+          },
+          "seal": {
+            "$ref": "#/components/schemas/SealView"
+          },
+          "statistics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageStatistics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "package",
+          "seal",
+          "identity"
+        ],
+        "title": "PackageView",
+        "type": "object"
+      },
       "PhysicalOutcomeEvidence": {
         "properties": {
           "duration_s": {
@@ -3275,6 +3965,82 @@
         "title": "RetryRequest",
         "type": "object"
       },
+      "RootView": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "root_id": {
+            "title": "Root Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root_id",
+          "label"
+        ],
+        "title": "RootView",
+        "type": "object"
+      },
+      "SealView": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "default": 0,
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "files": {
+            "default": 0,
+            "title": "Files",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Sha256"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sealed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sealed At"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "SealView",
+        "type": "object"
+      },
       "ServerMode": {
         "enum": [
           "STARTING",
@@ -3285,6 +4051,41 @@
         ],
         "title": "ServerMode",
         "type": "string"
+      },
+      "SignalPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Action",
+            "type": "array"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          },
+          "state": {
+            "items": {
+              "type": "number"
+            },
+            "title": "State",
+            "type": "array"
+          },
+          "t": {
+            "title": "T",
+            "type": "number"
+          }
+        },
+        "required": [
+          "row",
+          "t",
+          "action",
+          "state"
+        ],
+        "title": "SignalPoint",
+        "type": "object"
       },
       "StartGuardCheck": {
         "additionalProperties": false,
@@ -3971,13 +4772,6 @@
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -4007,6 +4801,82 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerifyIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "message"
+        ],
+        "title": "VerifyIssue",
+        "type": "object"
+      },
+      "VerifyProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "checked": {
+            "default": 0,
+            "title": "Checked",
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/VerifyIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "mismatch_count": {
+            "default": 0,
+            "title": "Mismatch Count",
+            "type": "integer"
+          },
+          "missing_count": {
+            "default": 0,
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "state": {
+            "default": "idle",
+            "enum": [
+              "idle",
+              "running",
+              "cancelling",
+              "cancelled",
+              "complete",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "title": "VerifyProgress",
         "type": "object"
       },
       "WorkerCountAvailability": {
@@ -4357,6 +5227,624 @@
         "summary": "Act Status",
         "tags": [
           "act"
+        ]
+      }
+    },
+    "/api/archives/config": {
+      "get": {
+        "operationId": "config_api_archives_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveConfigView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Config",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages": {
+      "get": {
+        "operationId": "packages_api_archives_packages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "root_id",
+            "required": true,
+            "schema": {
+              "title": "Root Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Packages",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages/{package_id}": {
+      "get": {
+        "operationId": "package_api_archives_packages__package_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Package",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages/{package_id}/episodes": {
+      "get": {
+        "operationId": "episodes_api_archives_packages__package_id__episodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "split",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "train",
+                    "validation",
+                    "offline_test"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Split"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "VALID",
+                    "INVALID",
+                    "FAULT",
+                    "MISSING"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 128,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "scene_id",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Episodes",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages/{package_id}/episodes/{scene_id}": {
+      "get": {
+        "operationId": "detail_api_archives_packages__package_id__episodes__scene_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scene_id",
+            "required": true,
+            "schema": {
+              "title": "Scene Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages/{package_id}/episodes/{scene_id}/files/{file_id}": {
+      "get": {
+        "operationId": "file_api_archives_packages__package_id__episodes__scene_id__files__file_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scene_id",
+            "required": true,
+            "schema": {
+              "title": "Scene Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "File",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages/{package_id}/episodes/{scene_id}/frames/{row}/{camera}": {
+      "get": {
+        "operationId": "frame_api_archives_packages__package_id__episodes__scene_id__frames__row___camera__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scene_id",
+            "required": true,
+            "schema": {
+              "title": "Scene Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "camera",
+            "required": true,
+            "schema": {
+              "enum": [
+                "head",
+                "wrist"
+              ],
+              "title": "Camera",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Row",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Frame",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages/{package_id}/episodes/{scene_id}/series": {
+      "get": {
+        "operationId": "series_api_archives_packages__package_id__episodes__scene_id__series_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scene_id",
+            "required": true,
+            "schema": {
+              "title": "Scene Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeSeries"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Series",
+        "tags": [
+          "archives"
+        ]
+      }
+    },
+    "/api/archives/packages/{package_id}/verify": {
+      "delete": {
+        "operationId": "cancel_verify_api_archives_packages__package_id__verify_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyProgress"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Verify",
+        "tags": [
+          "archives"
+        ]
+      },
+      "get": {
+        "operationId": "verify_api_archives_packages__package_id__verify_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyProgress"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify",
+        "tags": [
+          "archives"
+        ]
+      },
+      "post": {
+        "operationId": "start_verify_api_archives_packages__package_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyProgress"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Verify",
+        "tags": [
+          "archives"
         ]
       }
     },

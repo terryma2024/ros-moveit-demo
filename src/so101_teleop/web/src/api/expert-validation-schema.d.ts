@@ -419,6 +419,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArchiveConfigView */
+        ArchiveConfigView: {
+            /** Enabled */
+            enabled: boolean;
+            /** Roots */
+            roots: components["schemas"]["RootView"][];
+        };
+        /** ArchiveFile */
+        ArchiveFile: {
+            /** Bytes */
+            bytes: number;
+            /** File Id */
+            file_id: string;
+            /** Name */
+            name: string;
+            /** Sha256 */
+            sha256: string;
+        };
         /** ArtifactProjectionResponse */
         ArtifactProjectionResponse: {
             /** Artifact Id */
@@ -466,6 +484,26 @@ export interface components {
             worker_generation?: number | null;
             /** Worker Id */
             worker_id?: string | null;
+        };
+        /** AttemptView */
+        AttemptView: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "recording" | "processing";
+            /** Outcome */
+            outcome?: string | null;
+            /** Proc Attempt */
+            proc_attempt?: number | null;
+            /** Reason */
+            reason?: string | null;
+            /** Round */
+            round?: number | null;
+            /** Shard */
+            shard?: string | null;
+            /** Wave */
+            wave?: number | null;
         };
         /** BackendCapabilitiesResponse */
         BackendCapabilitiesResponse: {
@@ -1007,6 +1045,83 @@ export interface components {
             /** Waypoint Index */
             waypoint_index?: number | null;
         };
+        /** EpisodeDetail */
+        EpisodeDetail: {
+            /** Attempts */
+            attempts: components["schemas"]["AttemptView"][];
+            /** Collection Committed */
+            collection_committed: boolean;
+            /** Files */
+            files: components["schemas"]["ArchiveFile"][];
+            /** Frame Count */
+            frame_count: number;
+            /** Processed Result */
+            processed_result: {
+                [key: string]: unknown;
+            };
+            /** Qc Summary */
+            qc_summary: {
+                [key: string]: unknown;
+            };
+            /** Scene */
+            scene: {
+                [key: string]: unknown;
+            };
+            /** Scene Id */
+            scene_id: string;
+            /** Seal */
+            seal: {
+                [key: string]: unknown;
+            };
+            /** Warnings */
+            warnings: string[];
+        };
+        /** EpisodePage */
+        EpisodePage: {
+            /** Episodes */
+            episodes: components["schemas"]["EpisodeRow"][];
+            /** Total */
+            total: number;
+        };
+        /** EpisodeRow */
+        EpisodeRow: {
+            /** Bytes */
+            bytes?: number | null;
+            /** Collection Committed */
+            collection_committed: boolean;
+            /** Duration S */
+            duration_s?: number | null;
+            /** Final Recording Round */
+            final_recording_round: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "VALID" | "INVALID" | "FAULT" | "MISSING";
+            /** Qc Status */
+            qc_status?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Record Count */
+            record_count?: number | null;
+            /** Recording Attempt Count */
+            recording_attempt_count: number;
+            /** Scene Id */
+            scene_id: string;
+            /** Split */
+            split?: string | null;
+            /** Teacher Result */
+            teacher_result?: string | null;
+        };
+        /** EpisodeSeries */
+        EpisodeSeries: {
+            /** Points */
+            points: components["schemas"]["SignalPoint"][];
+            /** Row Times S */
+            row_times_s: number[];
+            /** Stride */
+            stride: number;
+        };
         /**
          * ExecutionProfileResponse
          * @description One row of the platform-bound support matrix, as the server would execute it.
@@ -1066,10 +1181,36 @@ export interface components {
             /** Worker Count */
             worker_count: number;
         };
+        /** FileView */
+        FileView: {
+            /** Content */
+            content?: unknown;
+            /**
+             * Eof
+             * @default true
+             */
+            eof: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "json" | "jsonl";
+            /** Lines */
+            lines?: string[];
+            /** Next Offset */
+            next_offset?: number | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IdentityValue */
+        IdentityValue: {
+            /** Source */
+            source?: string | null;
+            /** Value */
+            value?: string | number | boolean | null;
         };
         /**
          * InstanceProofResponse
@@ -1336,6 +1477,91 @@ export interface components {
             /** Width Px */
             width_px: number;
         };
+        /** Metric */
+        Metric: {
+            /** Median */
+            median?: number | null;
+            /** Total */
+            total: number;
+        };
+        /** PackageInfo */
+        PackageInfo: {
+            /**
+             * Bytes
+             * @default 0
+             */
+            bytes: number;
+            /**
+             * Files
+             * @default 0
+             */
+            files: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "collection" | "supporting";
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /** Name */
+            name: string;
+            /** Package Id */
+            package_id: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Registered
+             * @default false
+             */
+            registered: boolean;
+            /** Sealed At */
+            sealed_at?: string | null;
+        };
+        /** PackageList */
+        PackageList: {
+            /** Packages */
+            packages: components["schemas"]["PackageInfo"][];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** PackageStatistics */
+        PackageStatistics: {
+            /** Committed */
+            committed: number;
+            /** Committed By Split */
+            committed_by_split: {
+                [key: string]: number;
+            };
+            duration_rows: components["schemas"]["Metric"];
+            duration_seconds: components["schemas"]["Metric"];
+            episode_bytes: components["schemas"]["Metric"];
+            /** Non Committed By Outcome */
+            non_committed_by_outcome: {
+                [key: string]: number;
+            };
+            /** Planned */
+            planned: number;
+            /** Recovered */
+            recovered: number;
+            /** Recovered By Round */
+            recovered_by_round: {
+                [key: string]: number;
+            };
+            /** Retry Rounds Run */
+            retry_rounds_run: number;
+        };
+        /** PackageView */
+        PackageView: {
+            /** Identity */
+            identity: {
+                [key: string]: components["schemas"]["IdentityValue"];
+            };
+            package: components["schemas"]["PackageInfo"];
+            seal: components["schemas"]["SealView"];
+            statistics?: components["schemas"]["PackageStatistics"] | null;
+            /** Warnings */
+            warnings?: string[];
+        };
         /** PhysicalOutcomeEvidence */
         PhysicalOutcomeEvidence: {
             /**
@@ -1590,11 +1816,50 @@ export interface components {
             /** Service Session Id */
             service_session_id: string;
         };
+        /** RootView */
+        RootView: {
+            /** Label */
+            label: string;
+            /** Root Id */
+            root_id: string;
+        };
+        /** SealView */
+        SealView: {
+            /**
+             * Bytes
+             * @default 0
+             */
+            bytes: number;
+            /**
+             * Files
+             * @default 0
+             */
+            files: number;
+            /** Kind */
+            kind: string;
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Sealed At */
+            sealed_at?: string | null;
+        };
         /**
          * ServerMode
          * @enum {string}
          */
         ServerMode: "STARTING" | "READ_ONLY" | "READY" | "BUSY" | "DEGRADED";
+        /** SignalPoint */
+        SignalPoint: {
+            /** Action */
+            action: number[];
+            /** Row */
+            row: number;
+            /** State */
+            state: number[];
+            /** T */
+            t: number;
+        };
         /**
          * StartGuardCheck
          * @description One check of the shared startup guard, in the units the decision used.
@@ -1848,16 +2113,57 @@ export interface components {
         };
         /** ValidationError */
         ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VerifyIssue */
+        VerifyIssue: {
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Name */
+            name: string;
+        };
+        /** VerifyProgress */
+        VerifyProgress: {
+            /**
+             * Checked
+             * @default 0
+             */
+            checked: number;
+            /** Issues */
+            issues?: components["schemas"]["VerifyIssue"][];
+            /**
+             * Mismatch Count
+             * @default 0
+             */
+            mismatch_count: number;
+            /**
+             * Missing Count
+             * @default 0
+             */
+            missing_count: number;
+            /**
+             * State
+             * @default idle
+             * @enum {string}
+             */
+            state: "idle" | "running" | "cancelling" | "cancelled" | "complete" | "failed";
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /** WorkerCountAvailability */
         WorkerCountAvailability: {

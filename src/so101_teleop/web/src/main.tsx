@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 
+import { ArchiveBrowser } from "@/components/archives/archive-browser";
 import { App } from "./app";
 import { TaskApp } from "./task-app";
 import { ExpertValidationApp } from "./expert-validation-app";
@@ -22,7 +23,7 @@ function UnifiedRoot() {
   // the root providers (and with them the instance channels and subscriptions) stay mounted.
   return (
     <AppShell page={page} onNavigate={navigate}>
-      {page === "validation" ? <ExpertValidationApp /> : page === "tasks" ? <TaskApp /> : <App />}
+      {page === "archives" ? <ArchiveBrowser /> : page === "validation" ? <ExpertValidationApp /> : page === "tasks" ? <TaskApp /> : <App />}
     </AppShell>
   );
 }

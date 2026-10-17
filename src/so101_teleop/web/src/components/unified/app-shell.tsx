@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import "@/styles/unified-layout.css";
 
-export type ShellPage = "teleop" | "validation" | "tasks";
+export type ShellPage = "teleop" | "validation" | "tasks" | "archives";
 
 export type DomainHealth = {
   teleop: "ready" | "unavailable" | "blocked";
@@ -22,6 +22,7 @@ export type DomainHealth = {
 };
 
 const PAGES: { page: ShellPage; path: string; label: string }[] = [
+  { page: "archives", path: "/archives", label: "Archives" },
   { page: "teleop", path: "/", label: "Teleop" },
   { page: "validation", path: "/expert-validation", label: "Expert Validation" },
 ];
