@@ -12,3 +12,13 @@ export function fixtureFetcher(path: RequestInfo | URL, _init?: RequestInit): Pr
   else data=packageData;
   return Promise.resolve(new Response(JSON.stringify(data),{status:200}));
 }
+export const detailData={scene_id:'frm-000',scene:{seed:200,split:'train',cup_position_world_m:[0.1,0.2,0.3]},collection_committed:true,seal:{status:'PASSED',committed:false},processed_result:{act_data_status:'VALID',proc_attempt:1},qc_summary:{status:'PASS'},attempts:[{kind:'recording',round:0,wave:0,shard:'w00',outcome:'VALID',reason:null}],files:[{file_id:'seal',name:'episode/seal.json',bytes:123,sha256:'abc'},{file_id:'audit',name:'episode/audit/events.jsonl',bytes:222,sha256:'def'}],frame_count:5,warnings:[]};
+export const seriesData={points:[0,4].map(row=>({row,t:36.2+row/10,action:[row,row,row,row,row,row],state:Array(8).fill(row) as number[]})),row_times_s:[36.2,36.3,36.4,36.5,36.6],stride:4};
+export function episodeFetcher(path: RequestInfo | URL, init?:RequestInit): Promise<Response> {
+  const url=String(path);
+  if(url.endsWith('/series')) return Promise.resolve(new Response(JSON.stringify(seriesData)));
+  if(url.endsWith('/episodes/frm-000')) return Promise.resolve(new Response(JSON.stringify(detailData)));
+  if(url.includes('/files/seal')) return Promise.resolve(new Response(JSON.stringify({kind:'json',content:detailData.seal,eof:true})));
+  if(url.includes('/files/audit')) return Promise.resolve(new Response(JSON.stringify({kind:'jsonl',lines:[url.includes('offset=37')?'second page':'first page'],next_offset:url.includes('offset=37')?null:37,eof:url.includes('offset=37')})));
+  return fixtureFetcher(path,init);
+}

@@ -97,8 +97,9 @@ describe("the darwin branch", () => {
 
 describe("the ai-station branch", () => {
   test("refuses every root outside the one registered tree", () => {
-    const taskRoot = privateDir();
-    const run = privateDir(taskRoot, "web-live");
+    // This must remain outside the registered prefix even when TMPDIR is on the NVMe evidence tree.
+    const taskRoot = "/unregistered-evidence/task";
+    const run = join(taskRoot, "web-live");
     expect(durableRootFailure(run, { SO101_TASK_ROOT: taskRoot }, { platform: "linux" }))
       .toBe("REQUIRED");
     expect(durableRootFailure("/tmp/so101-evidence", {}, { platform: "linux" })).toBe("REQUIRED");
