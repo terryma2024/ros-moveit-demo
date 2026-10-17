@@ -69,11 +69,55 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3711
-next_experiment: NONE — EXP-617 NOT_QUALIFIED triggers the approved stop condition; EXP-618 not started.
+latest_checkpoint: CP-3712
+next_experiment: EXP-618 (PLANNED): 40-scene qualification at recording cap 4 and six processors on the 8f8123dcba86 images; then EXP-619 formal 70 with retry.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3712 — EXP-617 failures diagnosed; recording cap back to 4 and six processors; EXP-618 requalification planned
+
+- Human (2026-10-17), after the Codex stop report: "你接着做". Claude resumes coordination.
+- Diagnosis of EXP-617 (read-only, scratch REG/diag-delivery-20261016/exp617/, scripts in exp617/s/):
+  - Delivery classes over all 40 recordings: A 0, B 6, C 3 (qual-32 is really B). Every large "Messages lost on transport" cluster in bag-record.log coincides with one of these events.
+  - Class B caused only qual-34 (the stall lost 28 /joint_states and 29 scene_state messages, exactly the refusal's counts, just before the window start).
+  - The other seven are Teacher/sim-side at the episode end: alignment SOURCE_OUTSIDE_TIMING_WINDOW at the final detach (qual-06, 27, 30, 32; the source must be at most 100 ms older than the detach request, and the 75 valid detach records show a median 63.6 ms and a maximum 158.6 ms); CAMERA_RENDER_SLOW at the window end (qual-12, qual-27, wrist truth_ms 150 and 282); a sim-side /clock hold seen by both recorder and probe (qual-14); CAPTURE_LABEL_REVOKED at the stop (qual-20). The Teacher main thread ran at about 100 percent of one core in the second before each alignment refusal.
+  - Class B: rejected with numbers: host-wide stall, memory reclaim, writeback throttling (dirty at most 756 MB against dirty_ratio 20), CPU starvation, D state, debug logging, Python GC, mcap flush timing. Observed: recorder-only, 341 to 359 ms, 24 of 43 loss clusters on a 3.000 s lattice from recorder start; sim-side SIM_STEP_SLOW of 330 to 339 ms on the same 3 s lattice. Inferred, not proven: a block inside the Fast DDS participant on a 3 s timer. Not reproduced in the harness.
+  - Phase-2 processor loss: all eight generation-1 processors were lost within 2.2 s at 16:12:58Z during a host memory collapse (processors 21 to 22 GB of cgroup memory, MemFree 0.38 GB, memory PSI full 56 percent, about 42,000 pages swapped out).
+- Recording cap against VALID across runs: cap 4: EXP-610 16/16, EXP-611 40/40 (56/56); cap 8: EXP-613 16/16, EXP-614 36/40, EXP-615 56/70, EXP-616 14/16, EXP-617 32/40 (154/182, 84.6 percent). All 28 INVALID are at cap 8; one-sided Fisher p about 3e-4. This supersedes the CP-3701 inference that cap 8 was not implicated, which looked at one mechanism only.
+- Decision (recommended option, recorded for the human; no code or threshold change): max_concurrent_recordings 4 and processor_count 6 (campaign-config launch parameters). Requalify as EXP-618 on the gated 8f8123dcba86 images; then the formal 70 as EXP-619 with retry_invalid_max_rounds 2. Class B and the end-of-window Teacher staleness stay open.
+- Removed the 42 exited EXP-616 and EXP-617 containers after their logs had been saved (R/docker-cleanup-20261017-exp616-617-containers.jsonl). Images kept.
+- EXP-618 inputs REG/act-w8-inputs-20261017T003906Z: w8q-qualification, commit 8f8123dcba86, cap 4, gap 30 s, processor_count 6, retry absent; validation 80 items PASS.
+
+```yaml
+experiment_id: EXP-618
+status: PLANNED
+prior_experiment: EXP-617 (NOT_QUALIFIED at cap 8), EXP-611 (QUALIFIED at cap 4 on an older commit)
+hypothesis: At recording cap 4 the delivery-fix images qualify (Teacher at least 38 of 40, QC at least 34 of 40) under the unchanged rule files.
+prediction:
+  - Teacher 39 to 40 of 40; QC-valid 37 to 40 of 40.
+  - Phase 1 about 1800 s, phase 2 about 1700 s with six processors, about 60 minutes in total; no processor loss.
+single_variable: max_concurrent_recordings 4 and processor_count 6 relative to EXP-617 (same commit, images and rules).
+lifecycle: ISOLATED_STACK
+success_criteria:
+  - Both phases complete; report QUALIFIED and independently verified; every stop proven; store IDLE afterwards.
+failure_criteria:
+  - NOT_QUALIFIED with named reasons, a campaign-stopping failure, an unproven stop or a deadline stop.
+invalid_criteria:
+  - Source edits during collection, wrong provenance, competing workload or an unproven stop.
+provenance:
+  source_commit: 8f8123dcba8620134f5eea4ae48bd4d8cc139720
+  shard_image: sha256:1fca232a10b14f06575a440b42bb186aadd4fff0cdafd320936a8c0012792c39
+  inference_image: sha256:4f2786e4ed2dce5d34c284fb21eaad3c3c713ce324b0ec1a8db29a4bf3348932
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261017T003906Z/run-w8q.zsh, then build-report.zsh and verify-report.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+decision: PENDING
+next_experiment: EXP-619
+```
 
 ## CP-3711 — EXP-617 NOT_QUALIFIED; stop before formal collection
 
