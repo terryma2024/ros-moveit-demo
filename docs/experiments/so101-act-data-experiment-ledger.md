@@ -69,11 +69,33 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3719
-next_experiment: training readiness dry run on the merged 100-episode index, then the first ACT training run (act_train, default PROVISIONAL hyperparameters, local GPU).
+latest_checkpoint: CP-3720
+next_experiment: first ACT training run TRAIN-001 (running), then offline evaluation on offline_test.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3720 — Readiness dry run; frm-044 export-excluded and replaced by frm-101; verify-once + parallel readback (f6a32dbe3); first training run TRAIN-001 started; open items
+
+- Readiness dry run (Sonnet; REG/act-dataset-100-20261017/readiness/, old code):
+  - frm-044 (EXP-620, train) is refused at export with EXPORT_EPISODE_ORACLE_EXCLUDED: INCOMPLETE WORLD_SEQUENCE_GAP (bundle.py _teacher_oracle_exclusion). Its Teacher manifest has complete:false with one WORLD_SEQUENCE_GAP. The 99 others pass.
+  - 99-episode export rc 0 (12 GB, export sha256 11aa1114…). Total 9442 s, because every episode was regraded three times, serially.
+  - Training view under train-venv: train 79 / 71,573 rows, validation 10 / 8,902, offline_test 10 / 9,062; state 8, action 6, frames 480×640×3; neck sin/cos at the std floor 0.01.
+  - Training test files: 198 passed, 2 skipped.
+  - act_train needs train-venv with /opt/ros/jazzy and the gate install sourced, plus an overlay (pydantic, pydantic_core, annotated_types, typing_inspection, mujoco).
+- Replacement: merged-v2 (101 committed entries: 69 + the first 32 of EXP-622) and manifest-100.json without frm-044 (make_manifest_100.py): train 80, validation 10, offline_test 10, with frm-101 in place of frm-044.
+- Human: "1. 先尝试跑通一次训练 2. 如果期间数据有问题还需要做采集或QC，优化QC本身，并加到处验证并行回读。3. 如果训练一次跑通。无需在采集数据，最后也同样做上述优化。", then "立刻做A&B".
+  - f6a32dbe3 (Sonnet writer, Opus review): a process-local memo of _verified_collection, filled only by the verification itself or its pool worker and checked against file and tree signatures; ProcessPoolExecutor (spawn) priming for resolve, attach and export; frame hashing in the pool. Order and the first error stay those of the serial path. SO101_ACT_EXPORT_WORKERS and act_train --workers.
+  - Tests: test_act_bundle_parallel.py, 23 cases. Ordinary test dir 13374 passed, 13 failed (test_act_head_run_audit_report and test_cli_head_search_audit, failing identically with HEAD files in that harness: the shim symlink defect seen before). Training files under train-venv: 221 passed.
+- TRAIN-001: REG/act-dataset-100-20261017/run_train.zsh. The first attempt (stamp 20261017T1400Z, 8 workers) was interrupted by the host reboot for the memory upgrade (32 to 64 GB) after resolve and attach had finished in under 9 minutes; kept as train-run-20261017T1400Z.interrupted-reboot.
+  - Restart: train-run-20261017T1515Z, 16 workers; resolve, attach and export finished in about 8 minutes (export-manifest 23:20:20 local), against 2.6 hours with the old code. Training on the RTX 5060 Ti since 23:20 local with the PROVISIONAL training.yaml and the ResNet18 ImageNet backbone.
+- Open items (recorded at the human's request "进度，指标，先记为待办", plus earlier ones):
+  1. Training progress and metrics: act_train / train_act_bundle print nothing until the end. Add periodic step, loss and learning-rate logging (stdout and a metrics jsonl in the run directory), throughput and an ETA; record validation loss on the validation split at intervals.
+  2. QC optimisation (human decision 2/3): profile grade_episode (about 28 s per episode) and speed it up with byte-identical verdicts.
+  3. Collection versus export rule mismatch: frm-044 was VALID and committed at collection but export-excluded by the Teacher oracle completeness rule. Apply the same rule at collection (or in the formal post-run), so a committed episode is always exportable.
+  4. Offline evaluation needs the six-digest freeze file with a sibling freeze-paths.json before act_offline_evaluate can run on offline_test.
+  5. Phase-2 processors: with 64 GB, raise processor_count from 6 (to about 12) after profiling the 4 GiB per-processor peak.
+  6. Earlier ones still open: class B recorder stalls; the endpoint-initial 100 ms margin; the two test-only flakes (fix proposals in REG/diag-delivery-20261016/flakes/); the 13 harness-only failures of the head audit tests in shimmed harnesses.
 
 ## CP-3719 — EXP-622 committed 33 of 33; 100-episode index merged (train 80, validation 10, offline_test 10); training prerequisites
 
