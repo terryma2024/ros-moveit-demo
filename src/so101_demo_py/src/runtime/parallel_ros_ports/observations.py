@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
+import sys
 import time
 from typing import Mapping
 
@@ -505,6 +506,19 @@ def _z_extent_m(localized) -> float | None:
     return float(z.max() - z.min()) if z.size else None
 
 
+def _scene_unavailable(reason, started_s, client, rclpy):
+    """One diagnostic line, then the fault: the two sites share the prefix and differ in the reason."""
+    ready = getattr(client, "service_is_ready", None)
+    try:
+        ready = None if ready is None else bool(ready())
+    except Exception:
+        ready = None
+    print(f"POINT_INITIAL_GATE_SCENE_UNAVAILABLE_DIAGNOSTIC reason={reason} "
+          f"elapsed_s={time.monotonic() - started_s:.3f} service_is_ready={ready} rclpy_ok={rclpy.ok()}",
+          file=sys.stderr, flush=True)
+    return RuntimeError(f"POINT_INITIAL_GATE_SCENE_UNAVAILABLE: {reason}")
+
+
 def observe_parallel_initial_gate(
     boundary: ResetBoundaryReceipt,
     *,
@@ -566,8 +580,10 @@ def observe_parallel_initial_gate(
     }
     scene_client = service_node.create_client(GetPlanningScene, "/get_planning_scene")
     try:
-        if not scene_client.wait_for_service(timeout_sec=timeout_s):
-            raise RuntimeError("POINT_INITIAL_GATE_SCENE_UNAVAILABLE")
+        # two half-length waits: one retry inside the same total wait the single attempt had
+        scene_started_s = time.monotonic()
+        if not any(scene_client.wait_for_service(timeout_sec=timeout_s / 2.0) for _attempt in range(2)):
+            raise _scene_unavailable("WAIT_FOR_SERVICE_TIMEOUT", scene_started_s, scene_client, rclpy)
         if any(
             not client.wait_for_service(timeout_sec=timeout_s)
             for client in cancel_clients.values()
@@ -578,6 +594,7 @@ def observe_parallel_initial_gate(
             PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
         )
         scene_future = scene_client.call_async(scene_request)
+        scene_retried = False
         cancel_futures = {
             name: client.call_async(CancelGoal.Request())
             for name, client in cancel_clients.items()
@@ -588,6 +605,10 @@ def observe_parallel_initial_gate(
         while time.monotonic() < deadline:
             rclpy.spin_once(service_node, timeout_sec=0.01)
             rclpy.spin_once(graph_node, timeout_sec=0.01)
+            if scene_future.done() and scene_future.result() is None and not scene_retried:
+                scene_retried = True   # one more read inside the same observation deadline
+                scene_future = scene_client.call_async(scene_request)
+                continue
             graph = tuple(
                 sorted(
                     f"{namespace.rstrip('/')}/{name}"
@@ -633,7 +654,7 @@ def observe_parallel_initial_gate(
                 goal_ids.add(bytes(goal.goal_id.uuid).hex())
         scene_response = scene_future.result()
         if scene_response is None:
-            raise RuntimeError("POINT_INITIAL_GATE_SCENE_UNAVAILABLE")
+            raise _scene_unavailable("FUTURE_NO_RESULT", scene_started_s, scene_client, rclpy)
         attached = tuple(
             sorted(
                 item.object.id

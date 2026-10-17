@@ -407,3 +407,89 @@ def test_a_rejected_worker_inventory_without_a_task_directory_keeps_the_original
     assert message.startswith("POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes;worker_nodes=")
     assert ";observation=" not in message
     assert list(tmp_path.iterdir()) == []
+
+
+def _gate_with_scene(monkeypatch, *, scene_results, service_ready, capsys=None):
+    """The production gate over fake nodes; `scene_results` are the successive scene call outcomes (None: no result)."""
+    import rclpy
+
+    from so101_demo.backends.mujoco import teleop_runtime
+    from so101_demo.runtime.parallel_ros_ports import observations
+
+    class Future:
+        def __init__(self, value):
+            self.value = value
+
+        def done(self):
+            return True
+
+        def result(self):
+            return self.value
+
+    scene_calls, waits = [], []
+    scene = SimpleNamespace(scene=SimpleNamespace(robot_state=SimpleNamespace(attached_collision_objects=[])))
+
+    class SceneClient:
+        def wait_for_service(self, *, timeout_sec):
+            waits.append(timeout_sec)
+            return service_ready
+
+        def service_is_ready(self):
+            return service_ready
+
+        def call_async(self, _request):
+            scene_calls.append(1)
+            value = scene_results[min(len(scene_calls) - 1, len(scene_results) - 1)]
+            return Future(scene if value == "scene" else None)
+
+    class CancelClient:
+        def wait_for_service(self, *, timeout_sec):
+            return True
+
+        def call_async(self, _request):
+            return Future(SimpleNamespace(goals_canceling=[]))
+
+    class Node:
+        def create_client(self, _service, name):
+            return CancelClient() if name.endswith("/cancel_goal") else SceneClient()
+
+        def create_subscription(self, *_args):
+            return object()
+
+        def get_node_names_and_namespaces(self):
+            return [(node.rsplit("/", 1)[1], node.rsplit("/", 1)[0] or "/") for node in _valid_worker_nodes()]
+
+        def destroy_node(self):
+            return None
+
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", lambda name: Node())
+    monkeypatch.setattr(rclpy, "spin_once", lambda node, *, timeout_sec: None)
+    monkeypatch.setattr(teleop_runtime, "current_evidence", lambda *_a, **_k: SimpleNamespace(
+        reset_epoch=2, left_fingertip_contacts=(), right_fingertip_contacts=()))
+    call = lambda: observations.observe_parallel_initial_gate(
+        observations.ResetBoundaryReceipt("reset-2", "session-1", 1.0, 2.0, 2, (0.0,) * 6), timeout_s=0.25)
+    return call, scene_calls, waits
+
+
+def test_gate_retries_one_scene_read_that_returned_no_result(monkeypatch):
+    call, scene_calls, _waits = _gate_with_scene(monkeypatch, scene_results=[None, "scene"], service_ready=True)
+    assert call().moveit_attached_object_ids == () and len(scene_calls) == 2
+
+
+def test_gate_names_a_scene_read_that_returned_no_result_twice(monkeypatch, capsys):
+    call, scene_calls, _waits = _gate_with_scene(monkeypatch, scene_results=[None], service_ready=True)
+    with pytest.raises(RuntimeError, match=r"^POINT_INITIAL_GATE_SCENE_UNAVAILABLE: FUTURE_NO_RESULT$"):
+        call()
+    assert len(scene_calls) == 2
+    err = capsys.readouterr().err
+    assert "POINT_INITIAL_GATE_SCENE_UNAVAILABLE_DIAGNOSTIC reason=FUTURE_NO_RESULT" in err
+    assert "service_is_ready=True rclpy_ok=True" in err and "elapsed_s=" in err
+
+
+def test_gate_names_a_scene_service_that_never_appears_after_one_retry(monkeypatch, capsys):
+    call, scene_calls, waits = _gate_with_scene(monkeypatch, scene_results=["scene"], service_ready=False)
+    with pytest.raises(RuntimeError, match=r"^POINT_INITIAL_GATE_SCENE_UNAVAILABLE: WAIT_FOR_SERVICE_TIMEOUT$"):
+        call()
+    assert waits == [0.125, 0.125] and scene_calls == []   # the same total wait as one attempt
+    assert "reason=WAIT_FOR_SERVICE_TIMEOUT" in capsys.readouterr().err
