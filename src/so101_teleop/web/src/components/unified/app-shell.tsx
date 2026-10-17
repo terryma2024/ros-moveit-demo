@@ -91,7 +91,7 @@ export function AppShell({
                     <li key={entry.page}>
                       <Button
                         type="button"
-                        variant={page === entry.page ? "secondary" : "outline"}
+                        variant={page === entry.page ? "default" : "outline"}
                         className="w-full justify-start"
                         aria-current={page === entry.page ? "page" : undefined}
                         onClick={() => navigate(entry.path)}
@@ -115,7 +115,7 @@ export function AppShell({
             <li key={entry.page}>
               <Button
                 type="button"
-                variant={page === entry.page ? "secondary" : "outline"}
+                variant={page === entry.page ? "default" : "outline"}
                 className="w-full justify-start"
                 aria-current={page === entry.page ? "page" : undefined}
                 onClick={() => navigate(entry.path)}
