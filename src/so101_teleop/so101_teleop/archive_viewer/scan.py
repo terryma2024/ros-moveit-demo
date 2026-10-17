@@ -2,6 +2,7 @@
 import hashlib
 import os
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from fastapi import HTTPException
@@ -28,6 +29,7 @@ class ArchiveStore:
         self.config=config
         self.roots={opaque_id(root):root for root in config.roots}
         self._scans={}
+        self._packages=OrderedDict()
         self.refs={}
         self._lock=threading.RLock()
 
@@ -74,6 +76,7 @@ class ArchiveStore:
             old=self._scans.get(root_id)
             if old:
                 for row in old.packages: self.refs.pop(row.package_id,None)
+            if refresh: self._packages.clear()
             self.refs.update(found);self._scans[root_id]=result
             return result
 
@@ -84,3 +87,15 @@ class ArchiveStore:
             ref=self.refs.get(package_id)
             if ref is None: refuse('ARCHIVE_PACKAGE_NOT_FOUND','unknown package id')
             return ref
+
+    def package(self, package_id: str):
+        from .package import PackageSnapshot
+        with self._lock:
+            ref = self.reference(package_id)
+            cached = self._packages.pop(package_id, None)
+            if cached is None or cached.ref is not ref:
+                cached = PackageSnapshot(ref)
+            self._packages[package_id] = cached
+            while len(self._packages) > 2:
+                self._packages.popitem(last=False)
+            return cached

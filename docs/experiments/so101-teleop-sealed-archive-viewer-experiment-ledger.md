@@ -7,7 +7,7 @@ success_contract: ordinary Teleop pytest, Vitest, types; seven sealed roots; EXP
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
 branch: codex/teleop-archive-viewer
 base_commit: 007cb1e3c1830f9348052fa2cc4f39e4bd0396a7
-current_commit: 250141cd91634214e368e1bc1787cc76a9f1906c
+current_commit: 1c611eb09 (before the handoff checkpoint commit)
 evidence_root: /data/work/so101-evidence/teleop-archive-viewer/20261017T062429Z-007cb1e3
 confirmed_conclusions:
   - OBSERVED: remote tip matched ls-remote when the isolated worktree was created
@@ -20,8 +20,8 @@ disproven_routes:
   - existing page routing uses paths, not page query parameters
 open_hypotheses:
   - real discovery and cold package latency require measurement during approved implementation
-latest_checkpoint: CP-002-IMPLEMENTATION-AUTHORIZED
-next_experiment: BASELINE-001
+latest_checkpoint: CP-003-ANTZB-HANDOFF
+next_experiment: Task-2-malformed-scene-GREEN on antzb
 ```
 
 ## CP-001-PLAN-ONLY
@@ -64,3 +64,17 @@ next_experiment: BASELINE-001
 - Whole-scope environment checks remain recorded separately; missing assets/launch resources in test-only prefix now corrected. The initial diagnostic retry used the long IPC path before the short alias fix; final complete scope will run with the corrected runner. No failures suppressed or product gate claimed.
 - Task 2 tests written after task 1 targeted gate: red-2-bd2ed410, 5 intended HTTP assertion failures. They are not included in the Task 1 commit.
 - Retain all evidence; each scratch result.json labels its tree a deletion candidate after readback. No deletion authorized.
+
+## CP-003-ANTZB-HANDOFF
+
+- User redirected work: push the current task, pull on antzb, launch a Codex successor inside antzb Herdr. Source-side implementation is frozen now. This is a WIP transfer, not a completion claim.
+- Task 1 committed: 1c611eb09. Targeted gate green-1-review-bbb3ddfc: 23 passed. Full task-1-full-8fffec4e: 1430 passed, 44 skipped, 3 failed, 9 setup errors, rc=1, 93.37 s; all details retained.
+- Task 2 initial RED red-2-bd2ed410: five real HTTP assertion failures; initial implementation GREEN green-2-99d969c4: archive scope plus CTest registration 18 passed, rc=0, 3.48 s.
+- Task 2 review tests then RED red-2-review-1b1f42c8: 7 passed, 1 failed (test_malformed_scene_object_returns_document_error); PackageSnapshot._load_collection indexes None in campaign scenes, leaking TypeError instead of 422. This is intentionally preserved for the successor to fix before Task 2 completion. No Task 2 completion claimed.
+- Task 1 integration test test_web_entry_point_has_no_helper_or_driver_flags now allows the new archive_root option; this uncommitted-at-interruption correction is included in the handoff WIP commit.
+- Remaining environment issues: resource-only prefix initially lacked assets/launch; those symlinks are now present but not yet revalidated. Two fixed-helper tests failed CONTROL_SOCKET_OUTSIDE_BATCH_ROOT because the IPC alias resolves outside their batch root check; investigate the test-owned path contract rather than suppressing the tests. The previous full run started before the assets fix.
+- Tasks 3–6, verification manager, readonly proof, generated schema/types, frontend archive UI, installed service, real acceptance and final push are NOT implemented/completed.
+- Owned long-running tests/services: NONE; interrupted test poll was resumed and read back, completed rc=1. Existing unrelated Claude/ROS/Herdr processes must be preserved.
+- New destination discovered: SSH alias antzb, actual hostname AI-STATION-001, user lenovo, repo /data/work/ws_moveit. Existing main and unrelated worktrees must not be modified. Use a fresh teleop-archive-viewer worktree on the same named branch.
+- Destination Herdr 0.9.3 is running in default session. Codex 0.163.0 exists at /home/lenovo/.local/bin/codex; gpt-6.1-sol/high is in its model cache. Start a distinct named pane/agent, no dst and no model-default edits.
+- Source evidence retained at the registered root. Exported logs/JUnit/metadata will be copied to the corresponding destination root, without moving or deleting source evidence. Archive: NONE. All read-back scratch trees are deletion candidates only.
