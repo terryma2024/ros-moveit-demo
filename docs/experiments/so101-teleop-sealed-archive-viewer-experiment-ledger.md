@@ -4,10 +4,11 @@
 task_id: so101-teleop-sealed-archive-viewer-20261017
 goal: Implement a strictly read-only archive browser after plan approval
 success_contract: ordinary Teleop pytest, Vitest, types; seven sealed roots; EXP-620 acceptance; unchanged sealed bytes
-worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
+worktree: /data/work/ws_moveit/.worktrees/teleop-archive-viewer
+source_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
 branch: codex/teleop-archive-viewer
 base_commit: 007cb1e3c1830f9348052fa2cc4f39e4bd0396a7
-current_commit: 1c611eb09 (before the handoff checkpoint commit)
+current_commit: 0eec8606f945c951294bb6eed4505a0c7774933b (latest implementation; handoff docs committed separately)
 evidence_root: /data/work/so101-evidence/teleop-archive-viewer/20261017T062429Z-007cb1e3
 confirmed_conclusions:
   - OBSERVED: remote tip matched ls-remote when the isolated worktree was created
@@ -20,8 +21,8 @@ disproven_routes:
   - existing page routing uses paths, not page query parameters
 open_hypotheses:
   - real discovery and cold package latency require measurement during approved implementation
-latest_checkpoint: CP-003-ANTZB-HANDOFF
-next_experiment: Task-2-malformed-scene-GREEN on antzb
+latest_checkpoint: CP-005-USER-REQUESTED-SUCCESSOR-HANDOFF
+next_experiment: Task-3-episode-and-file-RED on antzb
 ```
 
 ## CP-001-PLAN-ONLY
@@ -96,3 +97,12 @@ next_experiment: Task-2-malformed-scene-GREEN on antzb
 - Minimal malformed-scene fix green-2-resume-6bd866cc: 8 passed. Additional contracts red-2-contracts-43a991f5: 3 failed/9 passed (bound scene SHA, schema-2 campaign-index fallback, nested attempts structure). Fixed at document projection boundary; duplicate campaign scenes also refused rather than overwritten.
 - green-2-contracts-f6c44aef: all archive tests and CTest registration, 25 passed, rc=0, 2.80 s. Deprecation warning belongs to Starlette/AnyIO, retained in log. Inline review checked frozen binding and duplicate handling, membership semantics, fallback union, independent retry counters, null-last sort, two-package LRU/refresh and no records/frame/audit opens during metadata projection.
 - Task 2 existing initial implementation was in the WIP handoff commit; this task completion commit contains its reviewed corrections and new regression tests. Next Task 3. Retained: all source and antzb runs; archived: none; read-back scratch trees are deletion candidates only, none deleted.
+
+## CP-005-USER-REQUESTED-SUCCESSOR-HANDOFF
+
+- User requested a handoff document and prompt before starting another Codex; no Task 3 implementation begun. Latest implementation commit 0eec8606f945c951294bb6eed4505a0c7774933b, clean before this documentation update.
+- Resume document: `docs/experiments/so101-teleop-sealed-archive-viewer-antzb-successor-handoff.md`. It supersedes the earlier incoming handoff's Task 2 RED resume point, while preserving that historical record.
+- Fresh direct host probe: AI-STATION-001, same authorized worktree/branch. No task runner/pytest/unified server/uvicorn remains. Previously hung scratch red-2-resume-831ad004 now has final rc=-15, elapsed 1701.14 s; retained without deletion.
+- Real registry existence on antzb rechecked False. No service/browser, real-data acceptance, final full pytest, CTest install gate, or push performed in this continuation. Next implementation action is Task 3 RED, after the successor reads full approved plan/specs and current state.
+- Permissions were changed by the session owner to danger-full-access / approval never immediately before this handoff request; no global defaults changed by the agent. Ruling: stop feature edits for this user-requested handoff; do not launch a successor or parallel worker.
+- Retained: full root, source export, all antzb evidence and new handoff state snapshot; archived: none; read-back scratch trees remain deletion candidates only. No evidence deleted.
