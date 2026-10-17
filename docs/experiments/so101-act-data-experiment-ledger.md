@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3712
-next_experiment: EXP-618 (PLANNED): 40-scene qualification at recording cap 4 and six processors on the 8f8123dcba86 images; then EXP-619 formal 70 with retry.
+latest_checkpoint: CP-3713
+next_experiment: EXP-619 (RUNNING): formal 70 at cap 4, six processors, retry_invalid_max_rounds 2, total 12000 s, admitted with the EXP-618 report.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3713 — EXP-618 QUALIFIED at cap 4 (38 of 40); EXP-619 formal collection with retry started
+
+- EXP-618: Teacher 40/40, 38 VALID, report 7832e59c… QUALIFIED, verify PASS. 23 exited EXP-618 containers removed after their logs had been saved (R/docker-cleanup-20261017-containers.jsonl).
+- EXP-619 inputs REG/act-w8f-inputs-20261017T015144Z: w8f-formal, commit 8f8123dcba86, cap 4, gap 30 s, processor_count 6, retry_invalid_max_rounds 2, batch_hard_timeout_s 12000, admitted with the EXP-618 report; validation 78 items PASS, no projection warning.
+- EXP-619: hypothesis: the formal 70 at cap 4 commits at least 66 of 70 after up to two retry rounds, within 12000 s, every stop proven. First live use of recording-round retry.
 
 ## CP-3712 — EXP-617 failures diagnosed; recording cap back to 4 and six processors; EXP-618 requalification planned
 
@@ -91,7 +97,7 @@ next_experiment: EXP-618 (PLANNED): 40-scene qualification at recording cap 4 an
 
 ```yaml
 experiment_id: EXP-618
-status: PLANNED
+status: VALID
 prior_experiment: EXP-617 (NOT_QUALIFIED at cap 8), EXP-611 (QUALIFIED at cap 4 on an older commit)
 hypothesis: At recording cap 4 the delivery-fix images qualify (Teacher at least 38 of 40, QC at least 34 of 40) under the unchanged rule files.
 prediction:
@@ -110,12 +116,22 @@ provenance:
   shard_image: sha256:1fca232a10b14f06575a440b42bb186aadd4fff0cdafd320936a8c0012792c39
   inference_image: sha256:4f2786e4ed2dce5d34c284fb21eaad3c3c713ce324b0ec1a8db29a4bf3348932
 commands:
-  - command: zsh <registered root>/act-w8-inputs-20261017T003906Z/run-w8q.zsh, then build-report.zsh and verify-report.zsh
-    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261017T003906Z/run-w8q.zsh
+    exit_code: 0
+  - command: build-report.zsh, then verify-report.zsh
+    exit_code: 0, 0
 observed:
-  - PENDING
-conclusion: PENDING
-decision: PENDING
+  - Run 00:40:19Z to 01:40:41Z, 60 minutes, CLI exit 0; every stop proven; logs saved; no processor loss and no processing retry.
+  - Teacher 40 of 40 PASS; phase 2 38 VALID, 2 INVALID (qual-21 and qual-34, NO_NEW_ACQUISITION), 0 FAULT.
+  - Report host/qualification-report.json sha256 7832e59c3a605c015cd0b29544fe279e1f14dc7fdd01367cc91253aaebb9b729, QUALIFIED, no reasons; verify-report PASS (contract d928fe3a…).
+inferred:
+  - Cap 4 restores first-attempt quality on the delivery-fix images (38/40 against 32/40 at cap 8 on the same images).
+conclusion: VALID and QUALIFIED.
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261017T003906Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261017T003906Z
+  - R/run-logs/exp618 and exp618-console.log
+decision: KEEP
 next_experiment: EXP-619
 ```
 
