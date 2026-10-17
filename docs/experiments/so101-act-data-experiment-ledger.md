@@ -69,11 +69,21 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3713
-next_experiment: EXP-619 (RUNNING): formal 70 at cap 4, six processors, retry_invalid_max_rounds 2, total 12000 s, admitted with the EXP-618 report.
+latest_checkpoint: CP-3714
+next_experiment: EXP-620 (RUNNING): the formal 70 again on the EXP-619 settings, after EXP-619 stopped on an unproven shard stop.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3714 — EXP-619 stopped in wave 0 on an unproven shard stop after a reset fault; manual lease release; EXP-620 re-run
+
+- EXP-619 (INVALID as a formal collection, no data result): run 01:57:50Z to 02:16:05Z, CLI exit 1, CAMPAIGN_RUN_FAILED: CAMPAIGN_SHARD_STOP_UNCONFIRMED, CAMPAIGN_CLEANUP_UNCONFIRMED.
+  - Shard w00 (container so101-act-b4f1ec4ad87dc9a8-w00-g1): task frm-000 collected; task frm-007 failed at its reset: CONTAINER_INSTANCE_REPORTED_FAULT: RESET_WATERMARK_IDENTITY (point_gate.py:64; current_evidence returned an epoch or session other than the reset's new epoch, a single-shot read just after the reset, whose log shows success at 02:07:24).
+  - The shard then exited (exit code 1, not OOM, 02:07:36Z) with shard-stop.json controllers_stopped false, goals_stopped false, ros_children_exited false; instance-exit.json cleanup_errors "unconfirmed proofs: controller_proven"; host-cleanup LAUNCH_STOP_UNCONFIRMED. The other seven shards and the Teacher stopped with proofs.
+  - First RESET_WATERMARK_IDENTITY in the ledger. Two defects to diagnose (read-only during the next run): the single-shot reset-evidence read, and the stop proof after a task fault.
+- Human-authorised manual release (standing authorisation "本次及后续同类均可", 2026-10-13; an override, not a proof): store held VALIDATION_ACTIVE by operation b829eff9911b4adfae83bd35d6c2266a, one GPU lease, slots w00 to w07 of w8f-20261017T015144Z, no children, no lease operations; all eight shard containers proven exited, no container running; byte backup first; parent CANCELLED, store IDLE. Record R/manual-lease-release-20261017-exp619/ (script R/manual-lease-release-20261017-exp619.py).
+- The nine exited EXP-619 containers were removed after their logs had been saved (R/docker-cleanup-20261017-containers.jsonl).
+- Decision (recommended option): re-run the formal 70 unchanged as EXP-620 (the fault is rare; a code fix needs a new gate, images and a requalification); fix the two defects only if EXP-620 also stops this way. Inputs REG/act-w8f-inputs-20261017T021838Z, same settings as EXP-619, validation 78 items PASS.
 
 ## CP-3713 — EXP-618 QUALIFIED at cap 4 (38 of 40); EXP-619 formal collection with retry started
 
