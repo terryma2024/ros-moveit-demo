@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from .errors import refuse
 from .manifest import ManifestIndex
 from .models import VerifyIssue, VerifyProgress
-from .paths import read_json
+from .paths import read_json, open_readonly
 
 
 class VerificationManager:
@@ -68,19 +68,8 @@ class VerificationManager:
 
     def _hash_file(self, path, cancel):
         digest = hashlib.sha256();size = 0
-        # Pin directory descriptors while walking; reject replacement links at every level.
         root = getattr(self, '_active_root', path.parent)
-        parts = path.relative_to(root).parts
-        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            for part in parts[:-1]:
-                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
-                os.close(directory)
-                directory = child
-            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
-        finally:
-            os.close(directory)
-        with os.fdopen(fd, 'rb') as stream:
+        with open_readonly(root, path) as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise OSError('not a regular file')
             while not cancel.is_set():
@@ -93,7 +82,7 @@ class VerificationManager:
     def _run(self, snapshot, cancel):
         try:
             # Do not trust a cached manifest after start/refresh or a changed seal.
-            if read_json(snapshot.resolve('SEALED.json'), 'SEALED.json') != snapshot.ref.seal:
+            if read_json(snapshot.resolve('SEALED.json'), 'SEALED.json', root=snapshot.ref.path) != snapshot.ref.seal:
                 raise ValueError('seal metadata changed after discovery')
             manifest = ManifestIndex(snapshot.ref)
             with self._lock: self._progress.total = len(manifest.entries)
@@ -118,8 +107,8 @@ class VerificationManager:
                             self._issue(name, 'mismatch', 'size or SHA256 differs')
                 except FileNotFoundError:
                     self._issue(name, 'missing', 'file is missing')
-                except HTTPException:
-                    self._issue(name, 'refused', 'path refused')
+                except HTTPException as error:
+                    self._issue(name, 'missing' if error.status_code == 404 else 'refused', 'file missing' if error.status_code == 404 else 'path refused')
                 except OSError:
                     self._issue(name, 'unreadable', 'file cannot be read safely')
                 with self._lock: self._progress.checked += 1

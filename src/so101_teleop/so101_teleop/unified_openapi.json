@@ -5656,6 +5656,14 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "422": {

@@ -5,7 +5,7 @@ import math
 from .errors import invalid, refuse
 from .files import read_file
 from .models import ArchiveFile, AttemptView, EpisodeDetail, EpisodeSeries, SignalPoint
-from .paths import read_json
+from .paths import read_json, open_readonly
 
 
 class EpisodeSnapshot:
@@ -31,7 +31,7 @@ class EpisodeSnapshot:
             for name, target in [('episode/seal.json', seal), ('processed-result.json', processed)]:
                 path = self.package.resolve(name, base=self.output)
                 if path.exists():
-                    target.update(read_json(path, name))
+                    target.update(read_json(path, name, root=self.package.ref.path))
                 else:
                     warnings.append(name+': unavailable')
             qc_path = processed.get('qc_report_path') or 'qc-report.json'
@@ -39,7 +39,7 @@ class EpisodeSnapshot:
                 invalid('processed-result.json', 'invalid qc_report_path')
             path = self.package.resolve(qc_path, base=self.output)
             if path.exists():
-                qc = read_json(path, 'qc-report.json')
+                qc = read_json(path, 'qc-report.json', root=self.package.ref.path)
             else:
                 warnings.append('qc-report.json: unavailable')
         attempts = []
@@ -72,7 +72,7 @@ class EpisodeSnapshot:
             return []
         rows = []
         try:
-            with path.open('rb') as stream:
+            with open_readonly(self.package.ref.path, path) as stream:
                 while raw := stream.readline(2*1024*1024+1):
                     if len(raw) > 2*1024*1024:
                         invalid('records.jsonl', 'record exceeds 2 MiB')
@@ -120,4 +120,4 @@ class EpisodeSnapshot:
         entry = next((entry for entry in self.files() if entry.file_id == file_id), None)
         if entry is None:
             refuse('ARCHIVE_FILE_NOT_FOUND', 'unknown file id')
-        return read_file(self.package.resolve(entry.name), offset=offset, limit=limit)
+        return read_file(self.package.resolve(entry.name), root=self.package.ref.path, offset=offset, limit=limit)

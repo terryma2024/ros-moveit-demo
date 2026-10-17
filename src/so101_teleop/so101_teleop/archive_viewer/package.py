@@ -8,7 +8,7 @@ from .errors import invalid, refuse
 from .manifest import ManifestIndex
 from .models import (EpisodePage, EpisodeQuery, EpisodeRow, IdentityValue, Metric,
                      PackageStatistics, PackageView, SealView)
-from .paths import read_json, resolve_package_path
+from .paths import read_json, resolve_package_path, open_readonly
 
 
 class PackageSnapshot:
@@ -46,7 +46,7 @@ class PackageSnapshot:
         if optional and not path.exists():
             self.warnings.append(f'{name}: unavailable')
             return {}
-        return read_json(path, name)
+        return read_json(path, name, root=self.ref.path)
 
     def _load_collection(self):
         index = self.document('collection-index.json')
@@ -60,11 +60,11 @@ class PackageSnapshot:
                 invalid('inputs-manifest.json', 'invalid scene manifest binding')
             path = self.resolve(binding['path'], base=self.ref.path/'inputs/frozen')
             if 'sha256' in binding:
-                with path.open('rb') as stream:
+                with open_readonly(self.ref.path, path) as stream:
                     digest = hashlib.file_digest(stream, 'sha256').hexdigest()
                 if digest != binding['sha256']:
                     invalid('scene manifest', 'bound SHA256 mismatch')
-            scenes = read_json(path, str(path.relative_to(self.ref.path))).get('scenarios', [])
+            scenes = read_json(path, str(path.relative_to(self.ref.path)), root=self.ref.path).get('scenarios', [])
             if not isinstance(scenes, list):
                 invalid('scene manifest', 'expected scenarios list')
             self.scene_metadata = self.scene_map(scenes, 'scene manifest')

@@ -3146,7 +3146,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "image/png": string;
+                };
             };
             /** @description Validation Error */
             422: {

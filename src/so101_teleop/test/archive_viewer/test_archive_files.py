@@ -60,3 +60,17 @@ def test_qc_path_outside_package_is_refused(archive):
     path.write_text(json.dumps(doc));archive.seal()
     client, url = package_request(archive)
     assert client.get(url+'/episodes/frm-000').status_code == 409
+
+
+def test_file_leaf_replaced_after_resolve_is_not_followed(archive,monkeypatch):
+    client,url=file_url(archive,'seal.json')
+    package=client.app.state.archives.package(url.split('/packages/')[1].split('/')[0])
+    original=package.resolve
+    outside=archive.root/'outside.json';outside.write_text('{"outside":true}')
+    def replace_after_resolve(name,**kwargs):
+        path=original(name,**kwargs)
+        if name.endswith('episode/seal.json'):
+            path.unlink();path.symlink_to(outside)
+        return path
+    monkeypatch.setattr(package,'resolve',replace_after_resolve)
+    assert client.get(url).status_code==409

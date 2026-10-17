@@ -2,15 +2,17 @@
 import json
 from .errors import invalid, refuse
 from .models import FileView
+from .paths import open_readonly
+from fastapi.responses import StreamingResponse
 
 MAX_BYTES = 2 * 1024 * 1024
 
 
-def read_file(path, *, offset=0, limit=100):
+def read_file(path, *, root, offset=0, limit=100):
     if offset < 0 or not 1 <= limit <= 500:
         invalid('file page', 'invalid offset or limit')
     try:
-        with path.open('rb') as stream:
+        with open_readonly(root, path) as stream:
             if path.suffix == '.json':
                 raw = stream.read(MAX_BYTES + 1)
                 if len(raw) > MAX_BYTES:
@@ -46,3 +48,22 @@ def read_file(path, *, offset=0, limit=100):
         invalid(path.name, 'invalid JSON or UTF-8')
     except OSError:
         refuse('ARCHIVE_FILE_NOT_FOUND', 'file is not readable')
+
+
+class FrameResponse(StreamingResponse):
+    """Serve original bytes from an already validated descriptor, including on disconnect."""
+    def __init__(self, root, path):
+        import os
+        self.stream = open_readonly(root, path)
+        def chunks():
+            while raw := self.stream.read(65536):
+                yield raw
+        super().__init__(chunks(), media_type='image/png', headers={
+            'Cache-Control': 'private, max-age=3600',
+            'Content-Length': str(os.fstat(self.stream.fileno()).st_size)})
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.stream.close()

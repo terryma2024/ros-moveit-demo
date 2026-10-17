@@ -1,7 +1,8 @@
 """Read-only archive endpoints, independent of the control and instance domains."""
 from typing import Literal
 from fastapi import APIRouter, Depends, Path, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
+from .files import FrameResponse
 from .models import ArchiveConfigView, PackageList, PackageView, EpisodePage, EpisodeQuery, EpisodeDetail, EpisodeSeries, FileView, VerifyProgress
 from .scan import ArchiveStore
 
@@ -33,10 +34,11 @@ def archive_router(store: ArchiveStore) -> APIRouter:
     def series(package_id: str, scene_id: str):
         return store.package(package_id).episode(scene_id).series()
 
-    @router.get('/packages/{package_id}/episodes/{scene_id}/frames/{row}/{camera}', response_class=FileResponse)
+    @router.get('/packages/{package_id}/episodes/{scene_id}/frames/{row}/{camera}', response_class=StreamingResponse, responses={200: {'content': {'image/png': {'schema': {'type': 'string', 'format': 'binary'}}}}})
     def frame(package_id: str, scene_id: str, camera: Literal['head', 'wrist'], row: int = Path(ge=0)):
-        path = store.package(package_id).episode(scene_id).frame(row, camera)
-        return FileResponse(path, media_type='image/png', headers={'Cache-Control': 'private, max-age=3600'})
+        snapshot = store.package(package_id)
+        path = snapshot.episode(scene_id).frame(row, camera)
+        return FrameResponse(snapshot.ref.path, path)
 
     @router.get('/packages/{package_id}/episodes/{scene_id}/files/{file_id}', response_model=FileView)
     def file(package_id: str, scene_id: str, file_id: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):

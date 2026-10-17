@@ -112,3 +112,16 @@ def test_frame_directory_cannot_redirect_to_another_episode(archive):
     frames.symlink_to(archive.outputs['frm-001']/'episode/frames',target_is_directory=True)
     client, url = package_request(archive)
     assert client.get(url+'/episodes/frm-000/frames/0/head').status_code == 409
+
+
+def test_frame_leaf_replaced_after_lookup_is_not_followed(archive,monkeypatch):
+    from so101_teleop.archive_viewer.episode import EpisodeSnapshot
+    original=EpisodeSnapshot.frame
+    outside=archive.root/'outside.png';outside.write_bytes(b'outside-package')
+    def replace_after_lookup(snapshot,row,camera):
+        path=original(snapshot,row,camera)
+        path.unlink();path.symlink_to(outside)
+        return path
+    monkeypatch.setattr(EpisodeSnapshot,'frame',replace_after_lookup)
+    client,url=package_request(archive)
+    assert client.get(url+'/episodes/frm-000/frames/0/head').status_code==409

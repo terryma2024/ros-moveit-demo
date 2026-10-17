@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 from .errors import invalid, refuse
+from .paths import open_readonly
 
 
 class ManifestIndex:
@@ -16,7 +17,7 @@ class ManifestIndex:
         self.entries = {}
         digest = hashlib.sha256()
         try:
-            with self.path.open('rb') as stream:
+            with open_readonly(ref.path.parent, self.path) as stream:
                 while raw := stream.readline(65537):
                     if len(raw) > 65536:
                         invalid('seal-manifest.jsonl', 'manifest line exceeds limit')

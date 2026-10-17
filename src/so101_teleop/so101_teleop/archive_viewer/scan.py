@@ -49,7 +49,7 @@ class ArchiveStore:
             registry=root/'SEALED-ROOTS.json'
             if registry.is_file() and not registry.is_symlink():
                 try:
-                    document=read_json(registry,'SEALED-ROOTS.json')
+                    document=read_json(registry,'SEALED-ROOTS.json',root=root)
                     for row in document.get('roots',[]):
                         value=Path(row.get('root',''))
                         if value.is_absolute(): registered.add(value)
@@ -65,7 +65,7 @@ class ArchiveStore:
                 if marker is not None:
                     try:
                         if marker.is_symlink(): raise ValueError('symlinked seal')
-                        seal=read_json(directory/'SEALED.json','SEALED.json')
+                        seal=read_json(directory/'SEALED.json','SEALED.json',root=directory)
                         if seal.get('kind')!='SEALED_EVIDENCE_ROOT': raise ValueError('unsupported seal kind')
                         recorded=Path(seal.get('root',str(directory)))
                         if not recorded.is_absolute(): raise ValueError('invalid recorded root')
