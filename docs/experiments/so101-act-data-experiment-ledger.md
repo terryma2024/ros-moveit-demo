@@ -69,11 +69,35 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3718
-next_experiment: EXP-622 (RUNNING): supplementary formal collection of the 33 supplement scenes, retry 2, admitted with the EXP-621 report.
+latest_checkpoint: CP-3719
+next_experiment: training readiness dry run on the merged 100-episode index, then the first ACT training run (act_train, default PROVISIONAL hyperparameters, local GPU).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3719 — EXP-622 committed 33 of 33; 100-episode index merged (train 80, validation 10, offline_test 10); training prerequisites
+
+- EXP-622 (VALID): REG/act-w8f-20261017T084146Z, inputs REG/act-w8f-inputs-20261017T084146Z.
+  - Run 08:48:10Z to 09:53:33Z (65 minutes), CLI exit 0, three waves (two recording waves and one retry wave).
+  - 33 PROCESSED, 33 VALID; retry round 1 recovered 2.
+  - collection-index.json schema 3: 35 collected tasks, 33 committed. formal-result.zsh (w8f-formal-sup) rc 0.
+- Sealed (seal_roots.py, REG/SEALED-ROOTS.json):
+  - act-w8f-20261017T084146Z (67,489 files, 26.0 GB, manifest a5468b93…);
+  - act-w8f-inputs-20261017T084146Z;
+  - act-w8-20261017T072837Z (EXP-621) and act-w8-inputs-20261017T072837Z;
+  - act-w8-scenes-20261017T053147Z;
+  - R/gates/a1d3b7b0bbb5;
+  - R/image-build-20261017T070424Z and R/image-build-20261017T070552Z.
+  Fifteen sealed roots in total.
+- Merged index REG/act-dataset-100-20261017/merged (merge_indexes.py, campaign_id merged-20261017T100000Z):
+  - EXP-620 index (sha256 72a6dc3c…): 69 kept.
+  - EXP-622 index (sha256 3757d26d…): the first 31 by scene id kept; frm-101 and frm-102 dropped from the merge, but retained in the sealed run.
+  - 100 committed episodes, manifest splits train 80, validation 10, offline_test 10. The real bundle._index from the worktree accepted it.
+- Human decisions on training: "联网下载 ResNet18 权重", "超参数先用默认占位值跑通", "在本机跑训练".
+  - Weights REG/weights/resnet18-f37072fd.pth (download.pytorch.org), sha256 f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec, equal to training.yaml pretrained_backbone.sha256; read-only; provenance json beside it.
+  - Hyperparameters stay at the PROVISIONAL training.yaml values (steps 20000, learning rate 1e-5, batch 8, chunk 10).
+  - Training on the local RTX 5060 Ti with REG/train-venv (torch 2.11.0+cu128, lerobot 0.6.1, CUDA available).
+- Next: readiness dry run (resolve, attach, export to REG/act-dataset-100-20261017/readiness, training view and normalisation statistics under train-venv, the training test suite), then act_train.
 
 ## CP-3718 — EXP-621 QUALIFIED (38 of 40) on the supplement contract; EXP-622 supplementary formal collection started
 
