@@ -24,7 +24,7 @@ class RecoveryPorts:
         call = self.dependencies.get("confirm_no_controller_goal")
         if call is not None:
             return call(lease)
-        if lease.attempt_id not in self._reset_receipts:
+        if lease.attempt_id not in self._reset_started and lease.attempt_id not in self._reset_receipts:
             return False
         return observe_no_parallel_goals(timeout_s=5.0)
 
@@ -32,7 +32,8 @@ class RecoveryPorts:
         call = self.dependencies.get("resume_physics")
         if call is not None:
             return call(lease, reset_receipt)
-        if (
+        # no receipt: the reset faulted before producing one; the pause it left is still released
+        if reset_receipt is not None and (
             reset_receipt.simulation_session_id != self.resources.session_id
             or reset_receipt.reset_epoch_value is None
         ):

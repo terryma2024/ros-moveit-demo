@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+import pytest
+
 from so101_demo.cli.act_stack_ready import evaluate_act_stack_readiness
 
 
@@ -215,3 +217,25 @@ def test_eight_recent_100hz_samples_prove_a_stable_stop():
     moving = deepcopy(value)
     moving["joints"][3]["velocity"] = (0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0)
     assert evaluate_act_stack_readiness(**moving).failure_code == "ACT_STACK_NOT_PHYSICALLY_STOPPED"
+
+
+def test_the_native_stop_probe_observer_rebaselines_a_stale_join(monkeypatch):
+    """The probe joins a long-lived stack behind the transient-local replay, as current_evidence does."""
+    import rclpy
+    from so101_demo.backends.mujoco import observer
+    from so101_demo.cli import act_stack_ready
+
+    built = {}
+    class Stop(Exception):
+        pass
+    class Recorder:
+        def __init__(self, *args, **kwargs):
+            built.update(kwargs)
+            raise Stop
+    monkeypatch.setenv("ROS_DOMAIN_ID", "230")
+    monkeypatch.setattr(rclpy, "init", lambda *args, **kwargs: None)
+    monkeypatch.setattr(rclpy, "create_node", lambda *args, **kwargs: object())
+    monkeypatch.setattr(observer, "MujocoWorldObserver", Recorder)
+    with pytest.raises(Stop):
+        act_stack_ready.main(["--session-id", "session-283", "--ros-domain-id", "230"])
+    assert built == {"max_age_s": 0.25, "rebaseline_stale_join": True}

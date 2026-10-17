@@ -121,6 +121,7 @@ class RuntimeBinding:
             source.close()
         self._rgbd.clear()
         self._reset_receipts.clear()
+        self._reset_started.clear()
         self._localized.clear()
         self._admitted.clear()
         self._admission_candidates.clear()

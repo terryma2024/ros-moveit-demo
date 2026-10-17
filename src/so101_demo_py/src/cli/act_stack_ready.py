@@ -211,7 +211,8 @@ def main(arguments: list[str] | None = None) -> int:
 
     rclpy.init()
     node = rclpy.create_node(f"act_stack_ready_{os.getpid()}")
-    world = MujocoWorldObserver(node, options.session_id, max_age_s=0.25)
+    world = MujocoWorldObserver(node, options.session_id, max_age_s=0.25,
+                                rebaseline_stale_join=True)
     worlds: deque[dict] = deque(maxlen=2)
     joints: deque[dict] = deque(maxlen=8)
     rgb: dict[str, dict] = {}

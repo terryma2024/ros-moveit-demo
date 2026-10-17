@@ -28,8 +28,13 @@ from so101_demo.runtime.parallel_worker_parts.process_tree import SourceStampedC
 from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
 
+RESET_EVIDENCE_WAIT_S = 3.0
+RESET_EVIDENCE_RETRY_S = 0.05
+
+
 class PointGate:
     def reset_point(self, lease):
+        self._reset_started.add(lease.attempt_id)   # from here a fault may have left motion state behind
         call = self.dependencies.get("reset_point")
         point = self.catalog[lease.point_id]
         act_kwargs = {"act_profile": True} if self.dependencies.get("act_profile") is True else {}
@@ -56,12 +61,19 @@ class PointGate:
             from so101_demo.backends.mujoco.teleop_runtime import current_evidence
 
             observe = current_evidence
-        evidence = observe(value.simulation_session_id)
-        if (
-            evidence.simulation_session_id != value.simulation_session_id
-            or evidence.reset_epoch != value.new_epoch
-        ):
-            raise RuntimeError("RESET_WATERMARK_IDENTITY")
+        # The evidence topic replays up to 256 old frames to a new observer, so the first paused frame can still
+        # belong to the previous epoch. Only a strictly older epoch of the same session is waited out, for a bounded
+        # time; another session, a newer epoch or an expired wait is an identity failure.
+        deadline = time.monotonic() + RESET_EVIDENCE_WAIT_S
+        while True:
+            evidence = observe(value.simulation_session_id)
+            if evidence.simulation_session_id != value.simulation_session_id:
+                raise RuntimeError("RESET_WATERMARK_IDENTITY")
+            if evidence.reset_epoch == value.new_epoch:
+                break
+            if evidence.reset_epoch > value.new_epoch or time.monotonic() >= deadline:
+                raise RuntimeError("RESET_WATERMARK_IDENTITY")
+            time.sleep(RESET_EVIDENCE_RETRY_S)
         joint_positions = getattr(value, "joint_positions", None)
         receipt = ResetBoundaryReceipt(
             f"reset-{value.new_epoch}",

@@ -53,6 +53,7 @@ class ParallelRosRuntimePorts(RuntimeBinding, PointGate, PerceptionPorts, Execut
         self.broker_generation = broker_generation
         self.dependencies = dict(dependencies or {})
         self._reset_receipts = {}
+        self._reset_started = set()
         self._rgbd = {}
         self._localized = {}
         self._admitted = {}

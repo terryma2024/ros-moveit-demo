@@ -203,6 +203,72 @@ def test_next_reset_releases_previous_act_rgbd_and_local_candidate_memory(tmp_pa
     assert not h.ports._rgbd and not h.ports._localized and not h.ports._admitted
 
 
+def _reset_with_evidence(tmp_path, monkeypatch, epochs, session="session"):
+    """A reset to epoch 5 whose evidence reads return `epochs` in order (the last one repeats)."""
+    from so101_demo.runtime.parallel_ros_ports import point_gate
+    h = build_case(tmp_path)
+    clock, sleeps, reads = [0.], [], []
+    monkeypatch.setattr(point_gate.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(point_gate.time, "sleep", lambda s: (sleeps.append(s), clock.__setitem__(0, clock[0] + s)))
+    def evidence(_session):
+        reads.append(clock[0])
+        epoch = epochs[min(len(reads) - 1, len(epochs) - 1)]
+        return NS(simulation_session_id=session, reset_epoch=epoch, simulation_time_s=13.)
+    h.ports.catalog["point"] = {}
+    h.ports.dependencies["reset_point"] = lambda *_args: NS(simulation_session_id="session", new_epoch=5)
+    h.ports.dependencies["current_evidence"] = evidence
+    return h, sleeps, reads
+
+
+def test_reset_rereads_evidence_replayed_from_an_older_epoch(tmp_path, monkeypatch):
+    h, sleeps, reads = _reset_with_evidence(tmp_path, monkeypatch, [3, 4, 5])
+    receipt = h.ports.reset_point(h.lease)
+    assert receipt.reset_epoch_value == 5 and len(reads) == 3 and sleeps == [0.05, 0.05]
+
+
+def test_reset_gives_up_on_an_older_epoch_at_the_deadline(tmp_path, monkeypatch):
+    h, sleeps, reads = _reset_with_evidence(tmp_path, monkeypatch, [4])
+    h.ports._reset_receipts.clear()
+    with pytest.raises(RuntimeError, match="RESET_WATERMARK_IDENTITY"):
+        h.ports.reset_point(h.lease)
+    assert 3.0 <= reads[-1] <= 3.1 and len(reads) > 10 and h.lease.attempt_id not in h.ports._reset_receipts
+
+
+@pytest.mark.parametrize("epochs, session", [([6], "session"), ([4], "other"), ([5], "other")])
+def test_reset_refuses_a_newer_epoch_or_another_session_at_once(tmp_path, monkeypatch, epochs, session):
+    h, sleeps, reads = _reset_with_evidence(tmp_path, monkeypatch, epochs, session)
+    with pytest.raises(RuntimeError, match="RESET_WATERMARK_IDENTITY"):
+        h.ports.reset_point(h.lease)
+    assert len(reads) == 1 and sleeps == []
+
+
+def test_a_reset_that_faulted_still_lets_the_goal_check_run(tmp_path, monkeypatch):
+    from so101_demo.runtime.parallel_ros_ports import recovery
+    h = build_case(tmp_path)
+    h.ports.catalog["point"] = {}
+    asked = []
+    monkeypatch.setattr(recovery, "observe_no_parallel_goals", lambda timeout_s: asked.append(timeout_s) or True)
+    other = replace(h.lease, attempt_id="never-reset")
+    assert h.ports.confirm_no_controller_goal(other) is False and asked == []   # no reset was ever started
+    h.ports._reset_receipts.clear()
+    def fault(*_args):
+        raise RuntimeError("RESET_PLANNING_SCENE_RESTORE")
+    h.ports.dependencies["reset_point"] = fault
+    with pytest.raises(RuntimeError, match="RESET_PLANNING_SCENE_RESTORE"):
+        h.ports.reset_point(h.lease)
+    assert h.lease.attempt_id not in h.ports._reset_receipts
+    assert h.ports.confirm_no_controller_goal(h.lease) is True and asked == [5.0]
+
+
+def test_resume_physics_accepts_no_receipt_but_still_checks_a_receipt(tmp_path):
+    h = build_case(tmp_path)
+    calls = []
+    h.ports._pause_control = NS(set_paused=lambda paused: calls.append(paused) or True)
+    assert h.ports.resume_physics(h.lease, None) is True and calls == [False]
+    foreign = NS(simulation_session_id="other", reset_epoch_value=2)
+    assert h.ports.resume_physics(h.lease, foreign) is False and calls == [False]
+
+
 @pytest.mark.parametrize("field, value", [("frame_sequence", 2), ("image_shape", (2, 3, 3)),
     ("source_frame_id", "other"), ("simulation_session_id", "other")])
 def test_act_ports_refuse_request_for_another_memory_capture(tmp_path, field, value):

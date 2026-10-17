@@ -29,8 +29,8 @@ class PointProtocol:
         if key in self._reset_boundaries:
             raise RuntimeError("point reset evidence already exists")
         self._active_lease = lease
+        self._physics_held.add(key)   # the reset leaves physics paused until the point gate resumes it, even if it faults
         receipt = self._reset_point(lease)
-        self._physics_held.add(key)   # the reset leaves physics paused until the point gate resumes it
         boundary = getattr(receipt, "reset_completed_monotonic_s", None)
         try:
             boundary = _finite_timestamp("reset boundary", boundary)
@@ -158,8 +158,8 @@ class PointProtocol:
         key = self._lease_key(lease)
         if key not in self._physics_held:
             return True
-        receipt = self._reset_receipts.get(key)
-        if receipt is None or self._resume_physics(lease, receipt) is not True:
+        receipt = self._reset_receipts.get(key)   # None when the reset faulted before it produced one
+        if self._resume_physics(lease, receipt) is not True:
             return False
         self._physics_held.discard(key)
         self._paused_for_inference.discard(key)

@@ -225,6 +225,23 @@ def test_retire_case_resumes_a_simulation_the_task_left_paused(tmp_path,monkeypa
     assert len(resumed)==1   # the hold is released once
 
 
+def test_retire_case_resumes_a_simulation_whose_reset_faulted_before_a_receipt(tmp_path,monkeypatch):
+    """A fault inside the reset leaves physics paused with no receipt: the hold is still recorded and released, and the
+    controller goal check still decides the proof."""
+    resumed,asked=[],[]
+    def faulting_reset(lease):
+        raise RuntimeError('RESET_WATERMARK_IDENTITY')
+    runtime,lease,tree,stack,data=_retire_rig(tmp_path,monkeypatch,reset_point=faulting_reset,
+        resume_physics=lambda lease,reset:resumed.append((lease,reset)) or True,
+        confirm_no_controller_goal=lambda lease:asked.append(lease) or True)
+    with pytest.raises(RuntimeError,match='RESET_WATERMARK_IDENTITY'):runtime.reset_point(lease)
+    proofs=runtime.retire_case(lease,cancelled=True,absent=False)
+    assert resumed==[(lease,None)] and proofs['physics_resumed'] is True
+    assert asked==[lease] and proofs['controller_proven'] is True
+    runtime.retire_case(lease,cancelled=True,absent=False)
+    assert len(resumed)==1
+
+
 def test_retire_case_reports_a_simulation_it_could_not_resume(tmp_path,monkeypatch):
     runtime,lease,tree,stack,data=_retire_rig(tmp_path,monkeypatch,reset_point=lambda lease:_reset_receipt(),
         resume_physics=lambda lease,reset:False)
