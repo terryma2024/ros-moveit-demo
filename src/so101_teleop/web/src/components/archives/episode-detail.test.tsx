@@ -46,7 +46,7 @@ test('manifest PNG names download the selected file without opening the JSON vie
   expect(screen.getByRole('button',{name:'episode/seal.json'})).toBeTruthy();
 });
 
-test('large seal and QC metadata stay out of the overview and remain complete in dialogs',async()=>{
+test('large seal and QC metadata stay out of the overview and remain accessible through paged nested tables',async()=>{
   history.replaceState({},'','/archives?root=r&pkg=p&scene=frm-000');
   const files=Object.fromEntries(Array.from({length:1000},(_,row)=>[`frames/${row}-head.png`,{sha256:`hash-${row}`,size:60000}]));
   const seal={...detailData.seal,record_count:1000,files};
@@ -61,10 +61,23 @@ test('large seal and QC metadata stay out of the overview and remain complete in
   expect(screen.getByText('record_count')).toBeTruthy();
   fireEvent.click(sealButton);
   let dialog=screen.getByRole('dialog',{name:'Episode seal: full metadata'});
-  expect(JSON.parse(dialog.querySelector('pre')!.textContent!)).toEqual(seal);
+  expect(within(dialog).getByRole('table',{name:'Metadata fields'})).toBeTruthy();
+  expect(dialog.querySelector('pre')).toBeNull();
+  expect(within(dialog).getByText('false')).toBeTruthy();
+  fireEvent.click(within(dialog).getByRole('button',{name:/^Expand files/}));
+  expect(await within(dialog).findByText('frames/0-head.png')).toBeTruthy();
+  expect(within(dialog).queryByText('frames/999-head.png')).toBeNull();
+  fireEvent.click(within(dialog).getByRole('button',{name:'Last page'}));
+  expect(within(dialog).getByText('frames/999-head.png')).toBeTruthy();
+  expect(within(dialog).getByText('hash-999')).toBeTruthy();
+  expect(within(dialog).getAllByTitle('60000 bytes')[0].textContent).toBe('58.59 KiB');
   fireEvent.click(within(dialog).getByRole('button',{name:'Close'}));
   expect(screen.queryByRole('dialog')).toBeNull();
   fireEvent.click(screen.getByRole('button',{name:'View full QC summary'}));
   dialog=screen.getByRole('dialog',{name:'QC summary: full metadata'});
-  expect(JSON.parse(dialog.querySelector('pre')!.textContent!)).toEqual(qc);
+  for(const name of ['checks','reference','details']) {
+    fireEvent.click(await within(dialog).findByRole('button',{name:new RegExp(`^Expand ${name}`)}));
+  }
+  expect(within(dialog).getByText('preserved-first')).toBeTruthy();
+  expect(within(dialog).getByText('preserved-last')).toBeTruthy();
 });
