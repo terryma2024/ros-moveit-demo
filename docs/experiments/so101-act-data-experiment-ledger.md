@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3720
-next_experiment: first ACT training run TRAIN-001 (running), then offline evaluation on offline_test.
+latest_checkpoint: CP-3721
+next_experiment: offline evaluation of TRAIN-001 on offline_test (needs the six-digest freeze file), then a closed-loop rollout in simulation.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3721 — TRAIN-001 completed: the first ACT policy on the 100-episode dataset
+
+- REG/act-dataset-100-20261017/train-run-20261017T1515Z (run_train.zsh; act_train at f6a32dbe3; train-venv; RTX 5060 Ti; 16 export workers): rc 0, elapsed 4785 s; output {"status": "COMPLETED", "episode_count": 100}.
+- Pre-training readback, attach and export: about 8 minutes (old code 2.6 hours). Training: 20000 steps in 4303 s (4.65 steps/s), batch 8, learning rate 1e-5, 72,534 train samples (about 2.2 epochs), ResNet18 ImageNet backbone.
+- Bundle: bundle/policy.safetensors (206 MB), bundle.json, training-log.json (per-step loss, l1, kld). Dataset bundle.dataset (12 GB), training view bundle.training-view.
+- Loss (mean over the window, loss / l1 / kld): steps 0-100: 10.08 / 0.462 / 0.962; 900-1100: 1.78 / 0.121 / 0.166; 4900-5100: 0.289 / 0.073 / 0.022; 9900-10100: 0.097 / 0.053 / 0.0045; 14900-15100: 0.051 / 0.046 / 0.0005; 19800-20000: 0.041 / 0.040 / 0.0001. Training loss only; no validation loss is computed yet (open item 1).
+- Human decisions applied: default PROVISIONAL hyperparameters, local GPU, downloaded backbone. Training ran once end to end with no data problem, so per decision 3 the QC optimisation and the remaining open items (CP-3720) come next, with no further collection.
 
 ## CP-3720 — Readiness dry run; frm-044 export-excluded and replaced by frm-101; verify-once + parallel readback (f6a32dbe3); first training run TRAIN-001 started; open items
 
