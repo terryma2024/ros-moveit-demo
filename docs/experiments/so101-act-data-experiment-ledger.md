@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3717
-next_experiment: EXP-621 (RUNNING): 40-scene qualification on the supplement contract (formal list formal-supplement-33), cap 4, six processors, a1d3b7b0b images.
+latest_checkpoint: CP-3718
+next_experiment: EXP-622 (RUNNING): supplementary formal collection of the 33 supplement scenes, retry 2, admitted with the EXP-621 report.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3718 — EXP-621 QUALIFIED (38 of 40) on the supplement contract; EXP-622 supplementary formal collection started
+
+- 23 exited EXP-621 containers removed after their logs had been saved (R/docker-cleanup-20261017-containers.jsonl).
+- Human remark on phase-2 concurrency ("cpu 和 内容都还有很大冗余"): CPU has headroom; memory peaks (20.3 GiB processor sum, 9.3 GB minimum available at six) are the binding limit, and eight collapsed in EXP-617. EXP-622 keeps six (processor_count is outside the identity). Profiling the 4 GiB per-processor peak (page cache or anonymous memory) is proposed before raising it.
+- EXP-622 inputs REG/act-w8f-inputs-20261017T084146Z: w8f-formal-sup, commit a1d3b7b0bbb5, the 33-scene list (sha256 3b908bc4…), cap 4, gap 30 s, six processors, retry_invalid_max_rounds 2, total 9000 s, admitted with the EXP-621 report 1b863028…; validation 78 items PASS.
+- EXP-622 hypothesis: commits at least 31 of 33 after up to two retry rounds, every stop proven; then the first 31 committed by scene id are merged with the sealed 69 into one 100-episode index.
 
 ## CP-3717 — Supplement scenes generated (33, not 34); EXP-621 qualification on the supplement contract started
 
@@ -87,17 +94,26 @@ next_experiment: EXP-621 (RUNNING): 40-scene qualification on the supplement con
 
 ```yaml
 experiment_id: EXP-621
-status: PLANNED
+status: VALID
 prior_experiment: EXP-618 (QUALIFIED at cap 4 on 8f8123dcba86)
 hypothesis: The a1d3b7b0b images (reset and stop-proof fixes) qualify at cap 4 under the unchanged rule files; the contract names the 33-scene supplement list.
 prediction: Teacher 39 to 40 of 40; QC-valid 37 to 40 of 40; about 60 minutes; QUALIFIED and verified.
 single_variable: the a1d3b7b0b images and the supplement formal list relative to EXP-618.
 commands:
-  - command: zsh <registered root>/act-w8-inputs-20261017T072837Z/run-w8q.zsh, then build-report.zsh and verify-report.zsh
-    exit_code: PENDING
+  - command: zsh <registered root>/act-w8-inputs-20261017T072837Z/run-w8q.zsh
+    exit_code: 0
+  - command: build-report.zsh, then verify-report.zsh
+    exit_code: 0, 0
 observed:
-  - PENDING
-conclusion: PENDING
+  - Run 07:29:40Z to 08:30:35Z, 61 minutes, CLI exit 0; every stop proven; logs saved; no task fault, no processor loss, no processing retry.
+  - Teacher 40 of 40 PASS; phase 2 38 VALID, 2 INVALID (qual-16 alignment/INPUT_STALE, qual-20 NO_NEW_ACQUISITION).
+  - Phase-2 memory with six processors: per-processor memory.peak 3.8 to 4.4 GiB; peak sum of processor memory.current 20.3 GiB; minimum host MemAvailable 9.3 GB. CPU about one core per processor, host load about 8 of 32.
+  - Report host/qualification-report.json sha256 1b863028b659ebd49c52fb8930ed1e1f3214121d30eb0839970175ea06b3d0b2, QUALIFIED, no reasons; verify-report PASS.
+conclusion: VALID and QUALIFIED on the a1d3b7b0b images with the supplement contract.
+evidence:
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-20261017T072837Z
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w8-inputs-20261017T072837Z
+decision: KEEP
 next_experiment: EXP-622 (supplementary formal 33)
 ```
 
