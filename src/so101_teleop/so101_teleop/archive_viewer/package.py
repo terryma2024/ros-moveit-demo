@@ -1,4 +1,5 @@
 """Collection projections keep recording, processing and commit facts distinct."""
+import hashlib
 import statistics
 from pathlib import Path
 from .errors import invalid, refuse
@@ -21,7 +22,10 @@ class PackageSnapshot:
         self.identity = {}
         self.stats = None
         if ref.info.kind == 'collection':
-            self._load_collection()
+            try:
+                self._load_collection()
+            except (TypeError, KeyError, AttributeError, ValueError) as error:
+                invalid('collection documents', f'malformed structure: {type(error).__name__}')
 
     @property
     def manifest(self) -> ManifestIndex:
@@ -50,15 +54,19 @@ class PackageSnapshot:
             if not isinstance(binding, dict) or not isinstance(binding.get('path'), str):
                 invalid('inputs-manifest.json', 'invalid scene manifest binding')
             path = self.resolve(binding['path'], base=self.ref.path/'inputs/frozen')
+            if 'sha256' in binding:
+                with path.open('rb') as stream:
+                    digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+                if digest != binding['sha256']:
+                    invalid('scene manifest', 'bound SHA256 mismatch')
             scenes = read_json(path, str(path.relative_to(self.ref.path))).get('scenarios', [])
             if not isinstance(scenes, list):
                 invalid('scene manifest', 'expected scenarios list')
-            for scene in scenes:
-                self.scene_metadata[scene['scene_id']] = scene
+            self.scene_metadata = self.scene_map(scenes, 'scene manifest')
         final_scenes = campaign.get('scenes', [])
         if not isinstance(final_scenes, list):
             invalid('campaign-result.json', 'expected scenes list')
-        self.scenes = {row['scene_id']: row for row in final_scenes}
+        self.scenes = self.scene_map(final_scenes, 'host/campaign-result.json')
         committed = index.get('committed_episodes', [])
         if not isinstance(committed, list):
             invalid('collection-index.json', 'expected committed_episodes list')
@@ -72,12 +80,19 @@ class PackageSnapshot:
                 invalid('collection-index.json', 'processing_output missing')
             self.outputs[scene_id] = self.resolve(output)
         all_ids = set(self.scenes) | set(self.scene_metadata) | self.committed
+        campaign_index = self.document('campaign-index.json', optional=True)
+        for wave in campaign_index.get('waves', []):
+            ids = wave.get('scene_ids', [])
+            if not isinstance(ids, list) or any(not isinstance(value, str) or not value for value in ids):
+                invalid('campaign-index.json', 'invalid scene ids')
+            all_ids.update(ids)
         for item in index.get('collected_tasks', []):
             all_ids.add(item['scene_id'])
             if item.get('final', True) and item['scene_id'] not in self.scenes:
                 self.scenes[item['scene_id']] = item
         for scene_id in sorted(all_ids):
             row = self.scenes.get(scene_id, {})
+            self.validate_attempts(row)
             attempts = self.recordings(row)
             output = self.outputs.get(scene_id)
             if output is None:
@@ -117,7 +132,7 @@ class PackageSnapshot:
         retry = campaign.get('retry') or {}
         rounds_run = sum(d.get('status') == 'RUN' for d in retry.get('decisions', []))
         if not retry.get('decisions'):
-            rounds_run = len({r.final_recording_round for r in self.rows if r.final_recording_round > 0})
+            rounds_run = retry.get('rounds_run', len({r.final_recording_round for r in self.rows if r.final_recording_round > 0}))
         self.stats = PackageStatistics(planned=len(all_ids), committed=len(self.committed),
             committed_by_split=splits, non_committed_by_outcome=outcomes,
             retry_rounds_run=rounds_run, recovered=sum(recovered.values()), recovered_by_round=recovered,
@@ -135,6 +150,24 @@ class PackageSnapshot:
             self.identity['image_digest'] = IdentityValue(value=provenance.get('image_digest'), source='host/teacher-provenance.json')
             self.identity['image_commit'] = IdentityValue(value=provenance.get('provenance', {}).get('git_commit'), source='host/teacher-provenance.json')
             self.identity['started_at'] = IdentityValue(value=provenance.get('docker_started_at'), source='host/teacher-provenance.json (teacher start)')
+
+    @staticmethod
+    def validate_attempts(row):
+        for key in ('attempts', 'recording_attempts'):
+            values = row.get(key, [])
+            if not isinstance(values, list) or any(not isinstance(value, dict) for value in values):
+                invalid('host/campaign-result.json', f'invalid {key}')
+        for recording in row.get('recording_attempts', []):
+            PackageSnapshot.validate_attempts(recording)
+
+    @staticmethod
+    def scene_map(rows, document):
+        result = {}
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get('scene_id'), str) or not row['scene_id'] or row['scene_id'] in result:
+                invalid(document, 'invalid or duplicate scene')
+            result[row['scene_id']] = row
+        return result
 
     @staticmethod
     def metric(values):

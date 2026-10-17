@@ -78,3 +78,21 @@ next_experiment: Task-2-malformed-scene-GREEN on antzb
 - New destination discovered: SSH alias antzb, actual hostname AI-STATION-001, user lenovo, repo /data/work/ws_moveit. Existing main and unrelated worktrees must not be modified. Use a fresh teleop-archive-viewer worktree on the same named branch.
 - Destination Herdr 0.9.3 is running in default session. Codex 0.163.0 exists at /home/lenovo/.local/bin/codex; gpt-6.1-sol/high is in its model cache. Start a distinct named pane/agent, no dst and no model-default edits.
 - Source evidence retained at the registered root. Exported logs/JUnit/metadata will be copied to the corresponding destination root, without moving or deleting source evidence. Archive: NONE. All read-back scratch trees are deletion candidates only.
+
+## CP-004-ANTZB-SUCCESSOR
+
+- Dispatch 049f4a0e-1580-4d81-baf2-7bfcf97aa349 receipt written before task probes. `successor-first-probe.json` records hostname AI-STATION-001, worktree `/data/work/ws_moveit/.worktrees/teleop-archive-viewer`, branch codex/teleop-archive-viewer, HEAD abcc17ff7, clean status. Source host ai-station is distinct; no self-SSH.
+- Same registered evidence root retained on antzb. Source run records remain under `source-ai-station-evidence`; new antzb runs use `run-antzb.py`, `venv-antzb`, and new unique `scratch` directories. Source Python environment was not copied.
+- User explicitly authorized current Codex implementation, no dst, no subagents, inline review, without reconfirming the approved plan. Ruling: preserve existing plan/spec wording and record authorization here; prior plan's draft status is historical.
+- Host process/port inventory read with approved host access after sandbox tmux denial; no existing ROS/Gazebo/pytest stack observed, no default tmux server, unrelated Codex/Herdr/RustDesk listeners retained. No robot or collection operation is part of this task.
+- Initial uv venv creation hit the global `/data/uv-cache` read-only boundary; repeated with task-owned cache, without modifying global configuration. This is environment setup, not product RED.
+- Next: re-run retained malformed-scene regression before Task 2 fix. Real registry and installed/browser acceptance remain unconfirmed on this host.
+
+## Task 2 antzb continuation
+
+- Local CPU count is 24 (source was 32); full gate remains min(8,24)=8 workers. Test-only resource prefix points only at this worktree config/assets/launch; this is not runtime provenance.
+- Environment-only attempts red-2-resume-90a8ee4b / 75241430 inherited ROS launch pytest plugins; bbb7cac3 lacked so101_demo mapping. No code RED claimed. Isolated python-path now exposes only this worktree's so101_demo plus underlay ament_index_python. All failed environment scratch retained.
+- Sandbox TestClient run red-2-resume-831ad004 stalled with empty output; process state inspected on host. SIGINT did not release it, owned pytest 3342752 terminated with SIGTERM. Host runner red-2-host-f738b6dc completed in 1.68 s: 7 passed/1 failed at the retained None-scene boundary. Host execution used thereafter; no product timeout workaround.
+- Minimal malformed-scene fix green-2-resume-6bd866cc: 8 passed. Additional contracts red-2-contracts-43a991f5: 3 failed/9 passed (bound scene SHA, schema-2 campaign-index fallback, nested attempts structure). Fixed at document projection boundary; duplicate campaign scenes also refused rather than overwritten.
+- green-2-contracts-f6c44aef: all archive tests and CTest registration, 25 passed, rc=0, 2.80 s. Deprecation warning belongs to Starlette/AnyIO, retained in log. Inline review checked frozen binding and duplicate handling, membership semantics, fallback union, independent retry counters, null-last sort, two-package LRU/refresh and no records/frame/audit opens during metadata projection.
+- Task 2 existing initial implementation was in the WIP handoff commit; this task completion commit contains its reviewed corrections and new regression tests. Next Task 3. Retained: all source and antzb runs; archived: none; read-back scratch trees are deletion candidates only, none deleted.

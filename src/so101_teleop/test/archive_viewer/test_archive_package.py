@@ -113,3 +113,51 @@ def test_package_cache_evicts_but_retained_snapshot_stays_readable(archive):
     assert first.view().statistics.committed==2
     store.packages(root,True)
     assert store.package(ids['collection']) is not first
+
+
+def test_bound_scene_sha_and_duplicate_rows_are_validated(archive):
+    import hashlib
+    frozen_path=archive.package/'inputs/frozen/inputs-manifest.json'
+    frozen=json.loads(frozen_path.read_text())
+    scene_path=archive.package/'inputs/frozen/scene_manifest/scenes.json'
+    frozen['scene_manifest']['sha256']='0'*64
+    write_json(frozen_path,frozen);archive.seal()
+    client,url=package_request(archive)
+    assert client.get(url).status_code==422
+    frozen['scene_manifest']['sha256']=hashlib.sha256(scene_path.read_bytes()).hexdigest()
+    write_json(frozen_path,frozen)
+    archive.campaign['scenes'].append(archive.campaign['scenes'][0])
+    write_json(archive.package/'host/campaign-result.json',archive.campaign);archive.seal()
+    client,url=package_request(archive)
+    assert client.get(url).status_code==422
+
+
+def test_schema_two_fallback_uses_campaign_index_scene_ids(archive):
+    (archive.package/'inputs/frozen/inputs-manifest.json').unlink()
+    (archive.package/'host/campaign-result.json').unlink()
+    archive.index['schema_version']=2
+    write_json(archive.package/'collection-index.json',archive.index)
+    write_json(archive.package/'campaign-index.json',dict(waves=[dict(scene_ids=['frm-000','frm-001','frm-002','frm-003'])]))
+    archive.seal()
+    client,url=package_request(archive)
+    rows=client.get(url+'/episodes').json()['episodes']
+    assert len(rows)==4
+    assert rows[2]['outcome']=='MISSING'
+
+
+def test_corrupt_nested_attempts_return_document_error(archive):
+    archive.campaign['scenes'][0]['recording_attempts']=[None]
+    write_json(archive.package/'host/campaign-result.json',archive.campaign);archive.seal()
+    client,url=package_request(archive)
+    assert client.get(url).status_code==422
+
+
+def test_metadata_projection_does_not_open_records_frames_or_audit(archive,monkeypatch):
+    from pathlib import Path
+    original=Path.open
+    def guarded(path,*args,**kwargs):
+        assert path.name!='records.jsonl' and path.suffix!='.png' and 'audit' not in path.parts
+        return original(path,*args,**kwargs)
+    monkeypatch.setattr(Path,'open',guarded)
+    client,url=package_request(archive)
+    assert client.get(url).status_code==200
