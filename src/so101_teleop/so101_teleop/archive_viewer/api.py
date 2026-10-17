@@ -44,6 +44,12 @@ def archive_router(store: ArchiveStore) -> APIRouter:
     def file(package_id: str, scene_id: str, file_id: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):
         return store.package(package_id).episode(scene_id).file(file_id, offset, limit)
 
+    @router.get('/packages/{package_id}/episodes/{scene_id}/files/{file_id}/download', response_class=StreamingResponse, responses={200: {'content': {'image/png': {'schema': {'type': 'string', 'format': 'binary'}}}}})
+    def download(package_id: str, scene_id: str, file_id: str):
+        snapshot = store.package(package_id)
+        path = snapshot.episode(scene_id).png(file_id)
+        return FrameResponse(snapshot.ref.path, path, download=True)
+
     @router.post('/packages/{package_id}/verify', response_model=VerifyProgress)
     def start_verify(package_id: str):
         return store.verifier.start(store.package(package_id))

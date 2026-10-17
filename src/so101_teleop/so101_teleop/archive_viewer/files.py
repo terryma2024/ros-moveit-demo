@@ -1,5 +1,6 @@
 """Bounded, read-only JSON and byte-offset UTF-8 JSONL views."""
 import json
+from urllib.parse import quote
 from .errors import invalid, refuse
 from .models import FileView
 from .paths import open_readonly
@@ -52,15 +53,18 @@ def read_file(path, *, root, offset=0, limit=100):
 
 class FrameResponse(StreamingResponse):
     """Serve original bytes from an already validated descriptor, including on disconnect."""
-    def __init__(self, root, path):
+    def __init__(self, root, path, *, download=False):
         import os
         self.stream = open_readonly(root, path)
         def chunks():
             while raw := self.stream.read(65536):
                 yield raw
-        super().__init__(chunks(), media_type='image/png', headers={
+        headers = {
             'Cache-Control': 'private, max-age=3600',
-            'Content-Length': str(os.fstat(self.stream.fileno()).st_size)})
+            'Content-Length': str(os.fstat(self.stream.fileno()).st_size)}
+        if download:
+            headers['Content-Disposition'] = "attachment; filename*=UTF-8''" + quote(path.name, safe='')
+        super().__init__(chunks(), media_type='image/png', headers=headers)
 
     async def __call__(self, scope, receive, send):
         try:

@@ -30,3 +30,18 @@ test('rapid scene switch ignores late detail response even when fetch ignores ab
   await act(async()=>resolveOld(new Response(JSON.stringify({...detailData,scene_id:'old'}))));
   expect(screen.queryByRole('heading',{name:'Episode old'})).toBeNull();
 });
+
+test('manifest PNG names download the selected file without opening the JSON viewer',async()=>{
+  history.replaceState({},'','/archives?root=r&pkg=p&scene=frm-000');
+  const name='episode/frames/000000-head.png';
+  const api=new ArchivesApiClient((path,init)=>String(path).endsWith('/episodes/frm-000')
+    ?Promise.resolve(new Response(JSON.stringify({...detailData,files:[...detailData.files,{file_id:'head image',name,bytes:42,sha256:'abc'}]})))
+    :episodeFetcher(path,init));
+  render(<ArchiveBrowser api={api} />);
+  const link=await screen.findByRole('link',{name});
+  expect(link.getAttribute('href')).toBe('/api/archives/packages/p/episodes/frm-000/files/head%20image/download');
+  expect(link.getAttribute('download')).toBe('000000-head.png');
+  expect(link.closest('button')).toBeNull();
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('button',{name:'episode/seal.json'})).toBeTruthy();
+});

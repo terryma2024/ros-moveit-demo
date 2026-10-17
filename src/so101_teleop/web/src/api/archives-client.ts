@@ -36,6 +36,7 @@ export class ArchivesApiClient {
   detail(pkg: string, scene: string, signal?: AbortSignal) { return this.json<EpisodeDetailDto>(this.episode(pkg, scene), signal); }
   series(pkg: string, scene: string, signal?: AbortSignal) { return this.json<EpisodeSeriesDto>(`${this.episode(pkg, scene)}/series`, signal); }
   frameUrl(pkg: string, scene: string, row: number, camera: 'head' | 'wrist') { return `${this.episode(pkg, scene)}/frames/${row}/${camera}`; }
+  downloadUrl(pkg: string, scene: string, file: string) { return `${this.episode(pkg, scene)}/files/${id(file)}/download`; }
   file(pkg: string, scene: string, file: string, offset = 0, limit = 100, signal?: AbortSignal) {
     return this.json<FileViewDto>(`${this.episode(pkg, scene)}/files/${id(file)}?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`, signal);
   }

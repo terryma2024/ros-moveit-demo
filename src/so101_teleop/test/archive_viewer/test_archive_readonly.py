@@ -53,6 +53,9 @@ def test_every_endpoint_is_readonly_as_nonroot(archive,monkeypatch):
             for camera in ('head','wrist'): assert client.get(ep+f'/frames/{row}/{camera}').status_code==200
         for entry in detail['files']:
             endpoint=ep+'/files/'+entry['file_id']
+            if entry['name'].endswith('.png'):
+                download=client.get(endpoint+'/download')
+                assert download.status_code==200 and download.headers['content-disposition'].startswith('attachment;')
             if entry['name'].endswith('.json'): assert client.get(endpoint).status_code==200
             if entry['name'].endswith('.jsonl'):
                 page=client.get(endpoint,params=dict(limit=1)).json()

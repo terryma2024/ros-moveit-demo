@@ -1,4 +1,6 @@
 import json
+from urllib.parse import unquote
+from archive_fixture import PNG
 from test_archive_package import package_request
 
 
@@ -74,3 +76,44 @@ def test_file_leaf_replaced_after_resolve_is_not_followed(archive,monkeypatch):
         return path
     monkeypatch.setattr(package,'resolve',replace_after_resolve)
     assert client.get(url).status_code==409
+
+
+def test_manifest_png_download_preserves_bytes_and_filename(archive):
+    client, url = file_url(archive, '000000-head.png')
+    response = client.get(url+'/download')
+    assert response.status_code == 200
+    assert response.content == PNG
+    assert response.headers['content-type'] == 'image/png'
+    assert int(response.headers['content-length']) == len(PNG)
+    assert response.headers['content-disposition'] == "attachment; filename*=UTF-8''000000-head.png"
+    assert client.get(url.rsplit('/', 1)[0]+'/unknown/download').status_code == 404
+    client, json_url = file_url(archive, 'seal.json')
+    assert client.get(json_url+'/download').status_code == 415
+    assert client.get(json_url).status_code == 200
+
+
+def test_png_download_is_scene_scoped_and_rejects_replacement(archive, monkeypatch):
+    client, url = file_url(archive, '000000-head.png')
+    assert client.get(url.replace('/frm-000/', '/frm-001/')+'/download').status_code == 404
+    package = client.app.state.archives.package(url.split('/packages/')[1].split('/')[0])
+    original = package.resolve
+    outside = archive.root/'outside.png'; outside.write_bytes(b'outside-package')
+    def replace_after_resolve(name, **kwargs):
+        path = original(name, **kwargs)
+        if name.endswith('000000-head.png'):
+            path.unlink(); path.symlink_to(outside)
+        return path
+    monkeypatch.setattr(package, 'resolve', replace_after_resolve)
+    assert client.get(url+'/download').status_code == 409
+
+
+def test_png_download_filename_is_header_safe(archive):
+    name = '相机 "frame"\r\nInjected.png'
+    (archive.outputs['frm-000']/'episode/frames'/name).write_bytes(PNG)
+    archive.seal()
+    client, url = file_url(archive, name)
+    response = client.get(url+'/download')
+    assert response.status_code == 200
+    disposition = response.headers['content-disposition']
+    assert '\r' not in disposition and '\n' not in disposition
+    assert unquote(disposition.split("UTF-8''", 1)[1]) == name

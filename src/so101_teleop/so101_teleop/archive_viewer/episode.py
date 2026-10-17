@@ -121,3 +121,14 @@ class EpisodeSnapshot:
         if entry is None:
             refuse('ARCHIVE_FILE_NOT_FOUND', 'unknown file id')
         return read_file(self.package.resolve(entry.name), root=self.package.ref.path, offset=offset, limit=limit)
+
+    def png(self, file_id):
+        entry = next((entry for entry in self.files() if entry.file_id == file_id), None)
+        if entry is None:
+            refuse('ARCHIVE_FILE_NOT_FOUND', 'unknown file id')
+        if not entry.name.endswith('.png'):
+            refuse('ARCHIVE_FILE_UNSUPPORTED', 'only PNG files can be downloaded', 415)
+        path = self.package.resolve(entry.name)
+        if path.relative_to(self.package.ref.path).as_posix() != entry.name:
+            refuse('ARCHIVE_PATH_OUTSIDE_PACKAGE', 'download path differs from manifest', 409)
+        return path
