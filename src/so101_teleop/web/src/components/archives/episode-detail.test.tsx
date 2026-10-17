@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { ArchivesApiClient } from '@/api/archives-client';
 import { ArchiveBrowser } from './archive-browser';
@@ -44,4 +44,27 @@ test('manifest PNG names download the selected file without opening the JSON vie
   expect(link.closest('button')).toBeNull();
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.getByRole('button',{name:'episode/seal.json'})).toBeTruthy();
+});
+
+test('large seal and QC metadata stay out of the overview and remain complete in dialogs',async()=>{
+  history.replaceState({},'','/archives?root=r&pkg=p&scene=frm-000');
+  const files=Object.fromEntries(Array.from({length:1000},(_,row)=>[`frames/${row}-head.png`,{sha256:`hash-${row}`,size:60000}]));
+  const seal={...detailData.seal,record_count:1000,files};
+  const qc={status:'PASS',counts:{records:1000},checks:{reference:{details:{first:'preserved-first',last:'preserved-last'}}}};
+  const api=new ArchivesApiClient((path,init)=>String(path).endsWith('/episodes/frm-000')
+    ?Promise.resolve(new Response(JSON.stringify({...detailData,seal,qc_summary:qc})))
+    :episodeFetcher(path,init));
+  render(<ArchiveBrowser api={api} />);
+  const sealButton=await screen.findByRole('button',{name:'View full Episode seal'});
+  expect(screen.queryByText(/frames\/999-head.png/)).toBeNull();
+  expect(screen.queryByText(/preserved-last/)).toBeNull();
+  expect(screen.getByText('record_count')).toBeTruthy();
+  fireEvent.click(sealButton);
+  let dialog=screen.getByRole('dialog',{name:'Episode seal: full metadata'});
+  expect(JSON.parse(dialog.querySelector('pre')!.textContent!)).toEqual(seal);
+  fireEvent.click(within(dialog).getByRole('button',{name:'Close'}));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'View full QC summary'}));
+  dialog=screen.getByRole('dialog',{name:'QC summary: full metadata'});
+  expect(JSON.parse(dialog.querySelector('pre')!.textContent!)).toEqual(qc);
 });

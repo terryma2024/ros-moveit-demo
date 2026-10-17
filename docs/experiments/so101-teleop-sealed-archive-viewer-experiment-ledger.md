@@ -8,7 +8,7 @@ worktree: /data/work/ws_moveit/.worktrees/teleop-archive-viewer
 source_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
 branch: codex/teleop-archive-viewer
 base_commit: 007cb1e3c1830f9348052fa2cc4f39e4bd0396a7
-current_commit: 494fa0e002c369dd59d70637222c4dfc83d9b716 (PNG download checkpoint; sample10 registration follows)
+current_commit: efad5bd7124525ffeb51a45b0fb927e69e5be843 (derived sample checkpoint; compact metadata follows)
 evidence_root: /data/work/so101-evidence/teleop-archive-viewer/20261017T062429Z-007cb1e3
 confirmed_conclusions:
   - OBSERVED: remote tip matched ls-remote when the isolated worktree was created
@@ -21,7 +21,7 @@ disproven_routes:
   - existing page routing uses paths, not page query parameters
 open_hypotheses:
   - real discovery and cold package latency require measurement during approved implementation
-latest_checkpoint: CP-009-SAMPLE10-REGISTERED-GATES-PASSED
+latest_checkpoint: CP-010-COMPACT-METADATA-GATES-PASSED
 next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived sample10 available
 ```
 
@@ -215,3 +215,12 @@ next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived
 - Installed API readback: all nine committed detail/series payloads preserve action6/state8 and expected frame counts, all 36 first/last dual-camera PNG SHA256 values match manifest; frm-007 FAULT remains accessible without frames. Chrome: package visible by default, ten scene buttons, FAULT detail, frm-000 row0 and row904 of905 with both cameras/cursors, real PNG download matching source SHA256, zero pageerrors. Browser and native before/after screenshots opened/inspected; new sample name, planned10/committed9 and genuine recorded camera frames visible. Complete parent/package before/after snapshots equal. Stopped only owned browser PID3586271; manual service kept. Source full registry/other six real roots remain absent; this derived sample is not full EXP-620 acceptance.
 - FINAL CTest `sample10-full-ctest-385dcee1`: 134/134 cases passed, rc=0, 257.78 s; 1206 interpreter/worker/NVMe tempfile proofs verified. colcon test-result reports zero errors/failures, 43 skips. Previous and final package results retained in this batch. Inline self review checked source prefix containment/component boundaries, seal/manifest identity, validated derived scope/count/committed inclusion, preserved ordinary collections and read-only pinned descriptors; no unresolved finding for this sample registration.
 - Retained: entire registered evidence root, sample10 registration batch, original read-only uploaded fixture, source before/after snapshots, real download, profiles, screenshots, all test and launch logs. Archived: none. Test scratch trees listed in batch retention.json are deletion candidates only; nothing deleted. Owned browser stopped; installed manual service PID3589065 remains running with both search roots. No ROS/control stack started. This is the uploaded ten-scene derived sample only, not the original seven-root/full EXP-620 acceptance. Ready for one compatibility commit and authorized origin feature-branch push.
+
+
+## Compact episode metadata cards
+
+- PLANNED: user reports Episode seal and QC summary expand into excessively long text on real frm-000. Same root; batch `compact-metadata-20261017T153220Z-1a390e`; direct AI-STATION-001, clean feature branch efad5bd712, owned service3589065 preserved. First bad boundary: generic Summary dumps every nested object inline, including 1810 file entries. Bounded frontend fix: show selected important fields, bound preview lengths, open complete unchanged metadata in an accessible scrollable dialog on demand. Apply same bounded layout to Processed result; Scene keeps its small fields. No backend/schema/fixture change; no ROS operation. RED/GREEN behavioral test, full Bun suite/build, real desktop/mobile dialog/playback/read-only acceptance; inline review, no delegation or reconfirmation.
+- RED `compact-metadata-red-58597743`: 1 intended missing-summary-dialog failure / 3 passed. GREEN `compact-metadata-green-6ae0afba`: 4 passed, including a 1000-file synthetic seal proving no bulk content in the overview, complete seal/QC JSON in dialogs and close behavior. Full Bun `compact-metadata-full-web-5b8adf8a`: 64 files / 337 passed, rc=0, 4.10 s. Installed build `compact-metadata-install-f2cac69b`: tsc/Vite/colcon rc=0, 4.69 s. Existing shared Sheet/bundle/underlay warnings retained. No backend/schema/Python changes; Python/CTest gates were not rerun for this frontend-only fix.
+- OBSERVED real Chrome frm-000: former seal height136374 px / camera y136887; after all four summary cards388 px / camera y901 at 1440x1000. Seal includes1811 file entries, all preserved in the full JSON dialog; seal and QC full dialog objects deep-equal unchanged API payloads. Dialog content scrolls within692 px, Escape restores trigger focus, 430px mobile dialog fits viewport, both camera images load, zero pageerrors. Browser/native before/after and desktop/mobile dialogs were opened and inspected: compact key fields are visible, long JSON is in a separately scrollable modal, cameras follow shortly below attempts.
+- Source package readback compared all18607 parent/package entries to the retained registration snapshot: mode/size/mtime/hash unchanged, including all4.17GB of payloads. No sealed file modified. Installed index and every current build asset byte-match served/installed paths; existing service PID3589065 and both search roots preserved without backend restart. Inline self review covered summary key selection, false/null values, complete lazy JSON, bounded scrolling, focus/close and scene unmount behavior. No unresolved finding.
+- Retained: complete evidence root, this batch, user baseline, all RED/GREEN/full logs, build/install provenance, browser profile/screenshots and read-only proof. Archived: none. Read-back scratch runs listed in batch retention.json are deletion candidates only; nothing deleted. Only owned browser PID3671329 stopped; manual service remains healthy. Ready for one UI fix commit and normal origin feature-branch push.
