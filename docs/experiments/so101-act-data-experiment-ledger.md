@@ -95,7 +95,8 @@ next_experiment: first ACT training run TRAIN-001 (running), then offline evalua
   3. Collection versus export rule mismatch: frm-044 was VALID and committed at collection but export-excluded by the Teacher oracle completeness rule. Apply the same rule at collection (or in the formal post-run), so a committed episode is always exportable.
   4. Offline evaluation needs the six-digest freeze file with a sibling freeze-paths.json before act_offline_evaluate can run on offline_test.
   5. Phase-2 processors: with 64 GB, raise processor_count from 6 (to about 12) after profiling the 4 GiB per-processor peak.
-  6. Earlier ones still open: class B recorder stalls; the endpoint-initial 100 ms margin; the two test-only flakes (fix proposals in REG/diag-delivery-20261016/flakes/); the 13 harness-only failures of the head audit tests in shimmed harnesses.
+  6. GPU efficiency observability (human: "如何查看SM Active多少，气泡比例" then "记为todo"). nvidia-smi at 100 ms for 60 s during TRAIN-001: mean utilisation 91.2 percent, median 98, 0.8 percent of samples below 50, 25 percent below 90; 131 W; SM clock 2758 MHz. That is the kernel-busy fraction, not SM Active. To do: (a) per-step timing in the training loop (DataLoader wait versus GPU compute, bubble = wait share of the step), joined to item 1's progress log; (b) install Nsight Systems (needs sudo and network; ask first) and sample one to two minutes with --gpu-metrics-devices for SM Active, SM issue and kernel gaps; (c) optionally torch.profiler in train-venv. DCGM profiling metrics are generally unavailable on GeForce.
+  7. Earlier ones still open: class B recorder stalls; the endpoint-initial 100 ms margin; the two test-only flakes (fix proposals in REG/diag-delivery-20261016/flakes/); the 13 harness-only failures of the head audit tests in shimmed harnesses.
 
 ## CP-3719 — EXP-622 committed 33 of 33; 100-episode index merged (train 80, validation 10, offline_test 10); training prerequisites
 
