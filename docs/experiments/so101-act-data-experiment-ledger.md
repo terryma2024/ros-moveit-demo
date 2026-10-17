@@ -69,11 +69,37 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3716
-next_experiment: supplement scene generation (34 new formal scenes), then EXP-621 qualification on the supplement contract, then EXP-622 supplementary formal collection.
+latest_checkpoint: CP-3717
+next_experiment: EXP-621 (RUNNING): 40-scene qualification on the supplement contract (formal list formal-supplement-33), cap 4, six processors, a1d3b7b0b images.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3717 — Supplement scenes generated (33, not 34); EXP-621 qualification on the supplement contract started
+
+- Scene generation in REG/act-w8-scenes-20261017T053147Z. Reach container on shard sha256:53c7e126… (a1d3b7b0b), stopped and removed afterwards.
+  - Run 1 (kept in run1-yaml-exponent/): aborted at 22 of 34 with REACH_CALL_UNKNOWN. The CLI refused a points file with TASK_POINT_INVALID: the offset coordinate 0.009994 − 0.01 was written by json as -6e-06, and the point loader (runtime/task_point_config.py load_task_point_list, yaml.safe_load, YAML 1.1) reads that as a string. Generator fixed: points files and scene lists are written in plain 6-decimal notation (fixed_json). The formal-70 generator had the same latent defect and never met such a value.
+  - Run 2 (kept in run2-missing-calls-dir/): failed at once, because the calls/ directory had been moved away.
+  - Run 3 (kept in run3-exhausted-34/): GENERATOR_EXHAUSTED: 33 of 34 after 5,000,000 draws (the triangle is full at 0.004 m).
+  - Run 4 with --count 33: formal-34.scenes.json (list formal-supplement-33, split_quota train 33, frm-070 to frm-102, seeds 270 to 302) sha256 3b908bc4a6e0ec43afb55bef1457ca4e026c9b56179455d9a97b9eff709e8079; byte copy formal-33.scenes.json. Nearest pair 0.004002 m; 6 CLI calls, 221 distinct poses. verify_supplement_readback.py ALL PASS (inside the triangle, 0.060 m from the place target, pairwise 0.004 m over 151 points, all 5 poses of all 33 rows REACHABLE, replay reproduces the 33 rows).
+- Decision (recommended): use 33 scenes (31 needed for 100; 2 spares).
+- EXP-621 inputs REG/act-w8-inputs-20261017T072837Z: w8q-qualification-sup, commit a1d3b7b0bbb5, images inference sha256:00f65e9f… and shard sha256:53c7e126…, cap 4, gap 30 s, six processors, the qualification-40 and functional-8 lists unchanged, the contract's formal_split_manifest = formal-33 (sha256 3b908bc4…); validation 80 items PASS.
+
+```yaml
+experiment_id: EXP-621
+status: PLANNED
+prior_experiment: EXP-618 (QUALIFIED at cap 4 on 8f8123dcba86)
+hypothesis: The a1d3b7b0b images (reset and stop-proof fixes) qualify at cap 4 under the unchanged rule files; the contract names the 33-scene supplement list.
+prediction: Teacher 39 to 40 of 40; QC-valid 37 to 40 of 40; about 60 minutes; QUALIFIED and verified.
+single_variable: the a1d3b7b0b images and the supplement formal list relative to EXP-618.
+commands:
+  - command: zsh <registered root>/act-w8-inputs-20261017T072837Z/run-w8q.zsh, then build-report.zsh and verify-report.zsh
+    exit_code: PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+next_experiment: EXP-622 (supplementary formal 33)
+```
 
 ## CP-3716 — Seal of the 69 episodes; cleanup c; frm-007 explained; reset and stop-proof fixes gated; images rebuilt; supplement planned
 
