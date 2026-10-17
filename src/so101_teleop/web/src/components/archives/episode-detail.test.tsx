@@ -10,7 +10,7 @@ test('scene deep link opens summary, timeline and slider synchronizes two frames
   render(<ArchiveBrowser api={new ArchivesApiClient(episodeFetcher)} />);
   expect(await screen.findByRole('heading',{name:'Episode frm-000'})).toBeTruthy();
   expect(screen.getByRole('heading',{name:'Recording and processing attempts'})).toBeTruthy();
-  fireEvent.change(screen.getByRole('slider',{name:'Episode row'}),{target:{value:'4'}});
+  fireEvent.keyDown(screen.getByRole('slider',{name:'Episode row'}),{key:'End'});
   expect(screen.getByAltText('head camera').getAttribute('src')).toContain('/frames/4/head');
   expect(screen.getByAltText('wrist camera').getAttribute('src')).toContain('/frames/4/wrist');
   expect(screen.getByText(/Row 4.*36.6/)).toBeTruthy();
@@ -31,18 +31,25 @@ test('rapid scene switch ignores late detail response even when fetch ignores ab
   expect(screen.queryByRole('heading',{name:'Episode old'})).toBeNull();
 });
 
-test('manifest PNG names download the selected file without opening the JSON viewer',async()=>{
+test('manifest PNG names open a preview with an explicit download action',async()=>{
   history.replaceState({},'','/archives?root=r&pkg=p&scene=frm-000');
   const name='episode/frames/000000-head.png';
   const api=new ArchivesApiClient((path,init)=>String(path).endsWith('/episodes/frm-000')
     ?Promise.resolve(new Response(JSON.stringify({...detailData,files:[...detailData.files,{file_id:'head image',name,bytes:42,sha256:'abc'}]})))
     :episodeFetcher(path,init));
   render(<ArchiveBrowser api={api} />);
-  const link=await screen.findByRole('link',{name});
-  expect(link.getAttribute('href')).toBe('/api/archives/packages/p/episodes/frm-000/files/head%20image/download');
-  expect(link.getAttribute('download')).toBe('000000-head.png');
-  expect(link.closest('button')).toBeNull();
+  const preview=await screen.findByRole('button',{name});
+  preview.focus();
+  fireEvent.click(preview);
+  const dialog=screen.getByRole('dialog');
+  const image=within(dialog).getByRole('img',{name});
+  expect(image.getAttribute('src')).toBe('/api/archives/packages/p/episodes/frm-000/files/head%20image/download');
+  const download=within(dialog).getByRole('link',{name:'Download PNG'});
+  expect(download.getAttribute('href')).toBe(image.getAttribute('src'));
+  expect(download.getAttribute('download')).toBe('000000-head.png');
+  fireEvent.click(within(dialog).getByRole('button',{name:'Close'}));
   expect(screen.queryByRole('dialog')).toBeNull();
+  await waitFor(()=>expect(document.activeElement).toBe(preview));
   expect(screen.getByRole('button',{name:'episode/seal.json'})).toBeTruthy();
 });
 
@@ -70,11 +77,13 @@ test('manifest pages bound visible files and keep the final JSON and PNG accessi
   fireEvent.click(manifest.getByRole('button',{name:'Last page'}));
   expect(manifest.getAllByRole('row')).toHaveLength(2);
   expect(manifest.getByText('101–101 of 101 files · Page 3 of 3')).toBeTruthy();
-  const link=manifest.getByRole('link',{name:'frames/last.png'});
+  fireEvent.click(manifest.getByRole('button',{name:'frames/last.png'}));
+  const link=within(screen.getByRole('dialog')).getByRole('link',{name:'Download PNG'});
   expect(link.getAttribute('href')).toContain('/files/last%20image/download');
   expect(link.getAttribute('download')).toBe('last.png');
   expect(manifest.getByTitle('60898 bytes').textContent).toBe('59.47 KiB');
   expect(manifest.getByText('last-hash')).toBeTruthy();
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'Close'}));
   expect((manifest.getByRole('button',{name:'Next page'}) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(manifest.getByRole('button',{name:'Previous page'}));
   expect(manifest.getByText('file-50.bin')).toBeTruthy();

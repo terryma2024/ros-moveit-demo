@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ByteSize } from './byte-size';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 type Fields = Record<string, unknown> | unknown[];
 type FileEntry = { size: number; sha256: string };
@@ -19,13 +20,13 @@ function Value({ name, value }: { name: string; value: unknown }) {
   }
   const count = Object.keys(value).length;
   if (!count) return <span>{name}: {Array.isArray(value) ? 'Empty array' : 'Empty object'}</span>;
-  return <div className="min-w-0 space-y-2">
-    <Button variant="outline" size="sm" className="h-auto max-w-full whitespace-normal break-all text-left py-1"
-      aria-expanded={expanded} onClick={()=>setExpanded(current=>!current)}>
+  return <Collapsible open={expanded} onOpenChange={setExpanded} className="min-w-0 space-y-2">
+    <CollapsibleTrigger asChild><Button variant="outline" size="sm" className="h-auto max-w-full whitespace-normal break-all text-left py-1"
+      aria-expanded={expanded}>
       {expanded ? 'Collapse' : 'Expand'} {name} ({count} {count === 1 ? 'entry' : 'entries'})
-    </Button>
-    {expanded&&<MetadataTable values={value} label={name}/>}
-  </div>;
+    </Button></CollapsibleTrigger>
+    <CollapsibleContent>{expanded&&<MetadataTable values={value} label={name}/>}</CollapsibleContent>
+  </Collapsible>;
 }
 
 export function MetadataTable({ values, label = 'Metadata' }: { values: Fields; label?: string }) {

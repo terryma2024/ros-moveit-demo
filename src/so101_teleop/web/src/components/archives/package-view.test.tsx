@@ -4,14 +4,19 @@ import { expect, test, vi } from 'vitest';
 import { ArchivesApiClient } from '@/api/archives-client';
 import { PackageView } from './package-view';
 import { fixtureFetcher, packageData } from './test-fixtures';
+import { chooseSelect } from './select-test-utils';
 
 test('statistics, all scene columns, filters, search and every sortable header',async()=>{
   const fetcher=vi.fn(fixtureFetcher);const onScene=vi.fn();
   render(<PackageView api={new ArchivesApiClient(fetcher)} packageId="p" onScene={onScene} />);
   expect(await screen.findByText('Scenes planned')).toBeTruthy();
   expect(await screen.findByRole('button',{name:'frm-000'})).toBeTruthy();
-  fireEvent.change(screen.getByLabelText('Split'),{target:{value:'train'}});
-  fireEvent.change(screen.getByLabelText('Outcome'),{target:{value:'VALID'}});
+  expect(screen.getByRole('progressbar',{name:'Integrity verification'}).getAttribute('aria-valuenow')).toBe('0');
+  const reason=screen.getByRole('button',{name:'Show reason for frm-000'});
+  fireEvent.click(reason);
+  expect(screen.getAllByText('Full preserved reason').length).toBeGreaterThan(0);
+  await chooseSelect('Split','train');
+  await chooseSelect('Outcome','VALID');
   fireEvent.change(screen.getByLabelText('Search scenes'),{target:{value:'frm-000'}});
   await waitFor(()=>expect(fetcher.mock.calls.some(([p])=>String(p).includes('q=frm-000')&&String(p).includes('split=train')&&String(p).includes('outcome=VALID'))).toBe(true));
   for(const header of screen.getAllByRole('button',{name:/^Sort /})) fireEvent.click(header);

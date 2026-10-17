@@ -12,7 +12,7 @@ test('play advances at 10Hz, pauses at final row and cleans up on unmount',()=>{
   vi.useFakeTimers();const {unmount}=render(<Player/>);
   fireEvent.click(screen.getByRole('button',{name:'Play'}));
   for(let i=0;i<4;i++) act(()=>vi.advanceTimersByTime(100));
-  expect((screen.getByRole('slider') as HTMLInputElement).value).toBe('4');
+  expect(screen.getByRole('slider').getAttribute('aria-valuenow')).toBe('4');
   expect(screen.getByRole('button',{name:'Play'})).toBeTruthy();
   unmount();expect(vi.getTimerCount()).toBe(0);
 });
@@ -34,4 +34,14 @@ test('empty fault data has no playback controls',()=>{
   render(<FramePlayer api={api} packageId="p" sceneId="fault" frameCount={0} row={0} onRowChange={()=>undefined} rowTimes={[]}/>);
   expect(screen.queryByRole('slider')).toBeNull();
   expect(screen.getByText(/No recorded frames/)).toBeTruthy();
+});
+
+test('a single recorded frame has a disabled slider with a finite thumb position',()=>{
+  const onRowChange=vi.fn();
+  render(<FramePlayer api={api} packageId="p" sceneId="one" frameCount={1} row={0} onRowChange={onRowChange} rowTimes={[1]}/>);
+  const slider=screen.getByRole('slider',{name:'Episode row'});
+  expect(slider.getAttribute('aria-valuemax')).toBe('0');
+  expect(slider.parentElement!.outerHTML).not.toContain('NaN');
+  fireEvent.keyDown(slider,{key:'End'});
+  expect(onRowChange).not.toHaveBeenCalled();
 });
