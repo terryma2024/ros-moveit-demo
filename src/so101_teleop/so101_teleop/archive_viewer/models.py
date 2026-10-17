@@ -152,3 +152,19 @@ class FileView(ArchiveModel):
     lines: list[str] = Field(default_factory=list)
     next_offset: int | None = None
     eof: bool = True
+
+
+class VerifyIssue(ArchiveModel):
+    name: str
+    kind: str
+    message: str
+
+
+class VerifyProgress(ArchiveModel):
+    state: Literal['idle', 'running', 'cancelling', 'cancelled', 'complete', 'failed'] = 'idle'
+    total: int = 0
+    checked: int = 0
+    mismatch_count: int = 0
+    missing_count: int = 0
+    issues: list[VerifyIssue] = Field(default_factory=list)
+    truncated: bool = False

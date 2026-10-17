@@ -1041,7 +1041,10 @@ def create_unified_app(
         try:
             yield
         finally:
-            await lifecycle.shutdown()
+            try:
+                await lifecycle.shutdown()
+            finally:
+                await asyncio.to_thread(archives.verifier.close)
 
     app = FastAPI(title="SO-101 Unified", version="1.0.0", lifespan=lifespan)
     app.state.services = services

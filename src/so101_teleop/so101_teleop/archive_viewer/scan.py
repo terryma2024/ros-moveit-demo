@@ -26,6 +26,8 @@ class PackageRef:
 
 class ArchiveStore:
     def __init__(self,config: ArchiveConfig):
+        from .verify import VerificationManager
+        self.verifier=VerificationManager()
         self.config=config
         self.roots={opaque_id(root):root for root in config.roots}
         self._scans={}

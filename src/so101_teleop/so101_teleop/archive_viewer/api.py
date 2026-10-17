@@ -2,7 +2,7 @@
 from typing import Literal
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import FileResponse
-from .models import ArchiveConfigView, PackageList, PackageView, EpisodePage, EpisodeQuery, EpisodeDetail, EpisodeSeries, FileView
+from .models import ArchiveConfigView, PackageList, PackageView, EpisodePage, EpisodeQuery, EpisodeDetail, EpisodeSeries, FileView, VerifyProgress
 from .scan import ArchiveStore
 
 
@@ -41,5 +41,17 @@ def archive_router(store: ArchiveStore) -> APIRouter:
     @router.get('/packages/{package_id}/episodes/{scene_id}/files/{file_id}', response_model=FileView)
     def file(package_id: str, scene_id: str, file_id: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):
         return store.package(package_id).episode(scene_id).file(file_id, offset, limit)
+
+    @router.post('/packages/{package_id}/verify', response_model=VerifyProgress)
+    def start_verify(package_id: str):
+        return store.verifier.start(store.package(package_id))
+
+    @router.get('/packages/{package_id}/verify', response_model=VerifyProgress)
+    def verify(package_id: str):
+        return store.verifier.status(package_id)
+
+    @router.delete('/packages/{package_id}/verify', response_model=VerifyProgress)
+    def cancel_verify(package_id: str):
+        return store.verifier.cancel(package_id)
 
     return router
