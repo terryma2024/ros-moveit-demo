@@ -15,7 +15,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from so101_demo.act.bundle import export_dataset, resolve_committed_episodes
+from so101_demo.act.bundle import default_cli_workers, export_dataset, resolve_committed_episodes, resolve_workers
 from so101_demo.act.training import attach_episode_content, train_act
 from so101_demo.act.training_config import load_training_config
 from so101_demo.act.training_requirements import require_resolved_requirements
@@ -129,7 +129,11 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     parser.add_argument("--device", required=True)
     parser.add_argument("--backbone-weights", type=Path, default=None,
                         help="local pretrained backbone file; its sha256 must equal training.pretrained_backbone.sha256")
+    parser.add_argument("--workers", type=int, default=None,
+                        help="processes for the pre-training evidence re-checks (default: SO101_ACT_EXPORT_WORKERS, else "
+                             "min(8, CPU count)); 1 is the serial path")
     args = parser.parse_args(argv)
+    workers = resolve_workers(args.workers, default=default_cli_workers())
 
     if args.device != "cuda":
         # the plan's training lease is CUDA-only; there is no CPU path to fall back to
@@ -140,14 +144,14 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     requirements = require_resolved_requirements(requirements_path or REQUIREMENTS_LOCK)
     manifest = json.loads(args.manifest.read_bytes())
     committed = attach_episode_content(
-        resolve_committed_episodes(manifest=manifest, campaign_index=args.campaign_index),
-        root=args.campaign_index.parent)
+        resolve_committed_episodes(manifest=manifest, campaign_index=args.campaign_index, workers=workers),
+        root=args.campaign_index.parent, workers=workers)
     dataset = args.output.with_name(args.output.name + ".dataset")
     if args.output.exists() or dataset.exists():
         raise ValueError("TRAINING_OUTPUT_EXISTS")
     export_dataset(committed, dataset,
                    source_manifest_sha256=hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
-                   campaign_index_sha256=hashlib.sha256(args.campaign_index.read_bytes()).hexdigest())
+                   campaign_index_sha256=hashlib.sha256(args.campaign_index.read_bytes()).hexdigest(), workers=workers)
     dataset_sha256 = hashlib.sha256((dataset / "export-manifest.json").read_bytes()).hexdigest()
     config_sha256 = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
     if owner_factory is None:

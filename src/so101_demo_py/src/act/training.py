@@ -158,17 +158,26 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
         temporary.replace(state_path)
 
 
-def attach_episode_content(committed, *, root) -> tuple:
+def attach_episode_content(committed, *, root, workers=None) -> tuple:
     """Read each committed episode's content, verifying what it claims. The content hash is always verified.
 
     The source is the sealed recorder rows of the committed episode (`bundle.sealed_episode_content`: the seal is the one the
     coordinator commit bound and `records.jsonl` hashes to the seal `files` map). An entry that names a ``content_path`` is read from
     inside the campaign root and must carry a ``content_sha256`` that its bytes match; an entry that carries inline ``content`` must
     carry a ``content_sha256`` equal to the canonical JSON digest of that content. Nothing is taken on trust or by path inference.
+
+    ``workers`` > 1 first verifies, across a process pool, the commits of the episodes that read sealed rows; the loop below is the
+    serial path in every case, so the digest checks run every time and the first refusal in order is the one raised.
     """
 
-    from .bundle import sealed_episode_content
+    from .bundle import _prime_verification_memo, resolve_workers, sealed_episode_content
 
+    workers = resolve_workers(workers)
+    if workers > 1:
+        _prime_verification_memo(
+            [episode for episode in committed if isinstance(episode, dict) and isinstance(episode.get("collection_evidence"), dict)
+             and not (isinstance(episode.get("content"), dict) and episode["content"])
+             and not (isinstance(episode.get("content_path"), str) and episode["content_path"])], workers)
     base = Path(root).resolve()
     resolved = []
     for episode in committed:

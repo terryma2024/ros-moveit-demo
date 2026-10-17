@@ -28,7 +28,121 @@ def _verify_collection_for_export(episode):
     return _verified_collection(episode)[0]
 
 
+_WORKERS_ENV = 'SO101_ACT_EXPORT_WORKERS'
+#: 'spawn' keeps the workers free of the parent's threads; the tests switch it to 'fork' so that their in-process seams reach the workers
+_POOL_START_METHOD = 'spawn'
+#: the episode fields `_verified_collection` reads; the memo key is their canonical JSON (never `content`, `split` or `status`).
+#: `collection_mode` is read too, but resolve adds it after the first verification: a hit compares it with the remembered mode instead.
+_MEMO_KEY_FIELDS = ('kind', 'schema_version', 'scene_id', 'journal_sha256', 'verifier_sha256', 'task_result_sha256',
+                    'processed_result_sha256', 'collection_evidence')
+_VERIFICATION_MEMO: dict = {}
+
+
+def resolve_workers(workers=None, *, default=1) -> int:
+    """The worker count: the argument, else `SO101_ACT_EXPORT_WORKERS`, else ``default``. 1 is the serial path."""
+    import os
+    value = workers
+    if value is None:
+        raw = os.environ.get(_WORKERS_ENV, '').strip()
+        if not raw:
+            return default
+        try:
+            value = int(raw)
+        except ValueError as error:
+            raise ValueError('EXPORT_WORKERS_INVALID') from error
+    if type(value) is not int or value < 1:
+        raise ValueError('EXPORT_WORKERS_INVALID')
+    return value
+
+
+def default_cli_workers() -> int:
+    import os
+    return max(1, min(8, os.cpu_count() or 1))
+
+
+def clear_verification_memo() -> None:
+    """Forget every remembered collection verification (the tests; a long-lived process after its evidence is rewritten)."""
+    _VERIFICATION_MEMO.clear()
+
+
+def _memo_enabled() -> bool:
+    # an open readback session shares one QC recomputation between its calls; its calls are decided afresh and never memoised here
+    from .qc_session import active
+    return active() is None
+
+
+def _memo_key(episode):
+    if not isinstance(episode, dict):
+        return None
+    try:
+        return json.dumps({name: episode[name] for name in _MEMO_KEY_FIELDS if name in episode}, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError):
+        return None
+
+
+def _evidence_signature(episode) -> tuple:
+    """Signatures (path, size, inode, mtime_ns) of the files and trees a verification of this episode reads: the scope, the inputs
+    manifest, the registration and its journal directory, the task output, the sealed result and the phase-2 output directory."""
+    from .qc_session import file_signature, tree_signature
+    evidence = episode.get('collection_evidence')
+    if not isinstance(evidence, dict):
+        return ()
+    files = [evidence.get(name) for name in ('scope_path', 'inputs_manifest', 'registration')]
+    trees = [evidence.get(name) for name in ('result_location', 'processing_output', 'coordinator_root')]
+    if isinstance(evidence.get('registration'), str):
+        trees.append(str(Path(evidence['registration']).parent))
+    if isinstance(evidence.get('owner_root'), str) and isinstance(evidence.get('task_id'), str):
+        try:
+            from so101_demo.runtime.container_campaign.paths import host_task_output
+            trees.append(str(host_task_output(evidence['owner_root'], evidence['task_id'])))
+        except Exception:                                  # noqa: BLE001 - the verification itself refuses a bad locator
+            pass
+    return (tuple(file_signature(path) for path in files if isinstance(path, str)),
+            tuple(tree_signature(path) for path in trees if isinstance(path, str)))
+
+
+def _memo_lookup(episode):
+    """A deep copy of the remembered (mode, proof), or None: a changed file or an unknown identity is a miss."""
+    import copy
+    key = _memo_key(episode)
+    if key is None or not _memo_enabled():
+        return None
+    held = _VERIFICATION_MEMO.get(key)
+    if held is None:
+        return None
+    if 'collection_mode' in episode and episode['collection_mode'] != held[0]:
+        return None                                    # the verification itself refuses it
+    if _evidence_signature(episode) != held[2]:
+        _VERIFICATION_MEMO.pop(key, None)
+        return None
+    return copy.deepcopy((held[0], held[1]))
+
+
+def _memo_store(key, mode, proof, signature) -> None:
+    import copy
+    if key is not None and _memo_enabled():
+        _VERIFICATION_MEMO[key] = (mode, copy.deepcopy(proof), signature)
+
+
 def _verified_collection(episode):
+    """(mode, commit proof) of a committed episode that may be exported; see `_verified_collection_uncached`.
+
+    The only thing remembered is the result of that function, computed in this process or by `_verify_in_worker` (our own code),
+    together with the signature of every file the verification reads: a hit re-checks the signature and any difference verifies
+    again. The memo is filled here and by the pool only; no argument, episode field or proof a caller holds can enter it. A
+    failure is never remembered."""
+    hit = _memo_lookup(episode)
+    if hit is not None:
+        return hit
+    key = _memo_key(episode) if _memo_enabled() else None
+    before = _evidence_signature(episode) if key is not None else None
+    mode, proof = _verified_collection_uncached(episode)
+    if key is not None and _evidence_signature(episode) == before:
+        _memo_store(key, mode, proof, before)
+    return mode, proof
+
+
+def _verified_collection_uncached(episode):
     """(mode, commit proof) of a committed episode that may be exported. Trace retained originals on every call; caller flags and cached proofs grant no eligibility.
 
     A readback entry point may hold a session that shares one QC *recomputation* between its calls (a computation, not a proof): the
@@ -183,6 +297,84 @@ def _teacher_oracle_exclusion(evidence):
     if hashlib.sha256(raw).hexdigest()!=bound:
         raise ValueError('EXPORT_EPISODE_TEACHER_MANIFEST_UNBOUND')
     return exclusion_of_manifest(raw)
+
+
+def _make_pool(workers: int):
+    import concurrent.futures
+    import multiprocessing
+    return concurrent.futures.ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context(_POOL_START_METHOD))
+
+
+def _map_in_pool(function, arguments, workers):
+    """``[function(a) for a in arguments]`` in a process pool, in argument order. ``function`` must not raise per item."""
+    with _make_pool(min(workers, len(arguments))) as pool:
+        futures = [pool.submit(function, argument) for argument in arguments]
+        return [future.result() for future in futures]
+
+
+def _verify_in_worker(episode):
+    """Worker body: (key, mode, proof, signature) of one verified episode, or None when it does not verify (or its files moved).
+
+    A failure is not reported from here: the parent verifies that episode again at its own position in manifest order, so the
+    exception type and message, and which of several failures is raised, are those of the serial path."""
+    from .qc_session import assert_export_path_allowed
+    assert_export_path_allowed()
+    key = _memo_key(episode)
+    if key is None:
+        return None
+    before = _evidence_signature(episode)
+    try:
+        mode, proof = _verified_collection_uncached(episode)
+    except Exception:                                     # noqa: BLE001
+        return None
+    return (key, mode, proof, before) if _evidence_signature(episode) == before else None
+
+
+def _prime_verification_memo(episodes, workers) -> None:
+    """Verify, across a process pool, the episodes that have no valid memo entry, and remember the passes in this process.
+
+    Never raises for an episode: the serial code that follows asks `_verified_collection` for each episode in manifest order,
+    hits the memo for a pass and verifies a failure itself, so the first failure in manifest order is raised unchanged."""
+    if workers <= 1 or not _memo_enabled():
+        return
+    pending, seen = [], set()
+    for episode in episodes:
+        key = _memo_key(episode)
+        if key is None or key in seen or _memo_lookup(episode) is not None:
+            continue
+        seen.add(key)
+        pending.append({name: episode[name] for name in _MEMO_KEY_FIELDS if name in episode})
+    if len(pending) < 2:
+        return
+    for outcome in _map_in_pool(_verify_in_worker, pending, workers):
+        if outcome is not None:
+            _memo_store(*outcome)
+
+
+def _frame_failure(task):
+    """Worker body: the refusal code for the first frame of (root, [(name, digest)]) that is missing or differs, else None."""
+    root, pairs = task
+    for name, digest in pairs:
+        try:
+            if _file_sha256(Path(root) / name, 'EXPORT_EPISODE_FRAME_MISSING') != digest:
+                return 'EXPORT_EPISODE_FRAME_DIGEST_MISMATCH'
+        except ValueError as error:
+            return str(error)
+    return None
+
+
+def _check_frames(jobs, workers) -> None:
+    """Raise the frame refusal of the first episode (in order) whose frames are missing or differ from the seal digests."""
+    if not jobs:
+        return
+    tasks = [(root, [(name, digest) for name, _, digest in plan]) for root, plan in jobs]
+    if workers > 1 and len(tasks) > 1:
+        failures = _map_in_pool(_frame_failure, tasks, workers)
+    else:
+        failures = (_frame_failure(task) for task in tasks)
+    for failure in failures:
+        if failure is not None:
+            raise ValueError(failure)
 
 
 _SCENE_ID=re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*')
@@ -389,33 +581,55 @@ def _index(path) -> dict:
     return entries
 
 
-def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
-    """Episodes the coordinator committed, with a verifier receipt that agrees with the journal."""
+def _committed_entry(episode, committed, campaign_index):
+    """The index entry whose commit a manifest episode is verified against, or None when the episode is skipped."""
+    if not isinstance(episode, dict) or not isinstance(episode.get("scene_id"), str):
+        raise ValueError("MANIFEST_INVALID")
+    entry = committed.get(episode["scene_id"])
+    if entry is None and type(episode.get('collection_evidence')) is dict:
+        from .result_store import _safe
+        evidence=episode['collection_evidence']
+        try:
+            actual_index=_safe(Path(evidence['coordinator_root']))/'aggregate_results.json'
+            if _safe(Path(campaign_index))==actual_index:
+                entry=episode  # The verifier replays this exact original index and journal below.
+        except (OSError,ValueError,TypeError,KeyError) as error:
+            raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID') from error
+    if entry is None:
+        return None                                    # a directory without a coordinator commit
+    if episode.get('status')!='PASSED' and entry.get('kind')!='ACT_COMMITTED_EPISODE':
+        return None                                    # archival business failures are retained
+    return entry
+
+
+def resolve_committed_episodes(*, manifest: dict, campaign_index, workers=None) -> tuple:
+    """Episodes the coordinator committed, with a verifier receipt that agrees with the journal.
+
+    ``workers`` > 1 verifies the episodes across a process pool first (`_prime_verification_memo`); the loop below is the serial
+    path in every case and decides the result, the order and the first refusal."""
 
     from .qc_session import assert_export_path_allowed
 
     assert_export_path_allowed()        # a cached proof grants no eligibility: only a readback entry point may hold a session here
+    workers = resolve_workers(workers)
     if not isinstance(manifest, dict) or not isinstance(manifest.get("episodes"), list):
         raise ValueError("MANIFEST_INVALID")
     committed = _index(campaign_index)
+    if workers > 1:
+        entries = []
+        for episode in manifest["episodes"]:
+            try:
+                entry = _committed_entry(episode, committed, campaign_index)
+            except Exception:                          # noqa: BLE001 - the loop below raises it at its own position
+                break
+            if entry is not None:
+                entries.append(entry)
+        _prime_verification_memo(entries, workers)
     resolved = []
     for episode in manifest["episodes"]:
-        if not isinstance(episode, dict) or not isinstance(episode.get("scene_id"), str):
-            raise ValueError("MANIFEST_INVALID")
-        entry = committed.get(episode["scene_id"])
-        if entry is None and type(episode.get('collection_evidence')) is dict:
-            from .result_store import _safe
-            evidence=episode['collection_evidence']
-            try:
-                actual_index=_safe(Path(evidence['coordinator_root']))/'aggregate_results.json'
-                if _safe(Path(campaign_index))==actual_index:
-                    entry=episode  # The verifier replays this exact original index and journal below.
-            except (OSError,ValueError,TypeError,KeyError) as error:
-                raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID') from error
+        entry = _committed_entry(episode, committed, campaign_index)
         if entry is None:
-            continue                                   # a directory without a coordinator commit
-        if episode.get('status')!='PASSED' and entry.get('kind')!='ACT_COMMITTED_EPISODE':
-            continue                                   # archival business failures are retained
+            continue
         mode=_verify_collection_for_export(entry)
         # carry the content locator through: a resolved episode that forgets where its content lives
         # forces the exporter to guess, and guessing is what this module exists to prevent
@@ -535,18 +749,23 @@ _NEWLINE = bytes((10,))
 
 
 def export_dataset(committed, output, *, source_manifest_sha256: str,
-                   campaign_index_sha256: str) -> dict:
+                   campaign_index_sha256: str, workers=None) -> dict:
     """Write the immutable export: one document per committed episode plus a digest manifest.
 
     The export is written once. An existing output directory is a refusal rather than a place to append,
     because a dataset that grows underneath a training run invalidates every metric computed from it. The
     episode order is the order the caller resolved -- the frozen manifest order -- and each episode's bytes
     are hashed into the manifest so a later edit is detectable.
+
+    ``workers`` > 1 verifies the commits and hashes the frames across a process pool. The loop stays the serial path: a commit
+    verification is a memo hit after the pool, and the frame digests are checked after the loop (or after the refusal that stops
+    it), episodes in order, so the first refusal in manifest order is the serial one.
     """
 
     from .qc_session import assert_export_path_allowed
 
     assert_export_path_allowed()
+    workers = resolve_workers(workers)
     _bundle_digest(source_manifest_sha256, "EXPORT_SOURCE_DIGEST_INVALID")
     _bundle_digest(campaign_index_sha256, "EXPORT_INDEX_DIGEST_INVALID")
     if not isinstance(committed, (list, tuple)):
@@ -559,7 +778,33 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     if target.exists() or target.is_symlink() or partial.exists() or partial.is_symlink():
         raise ValueError("EXPORT_OUTPUT_EXISTS")
 
-    records, seen = [], set()
+    if workers > 1:
+        _prime_verification_memo([episode for episode in episodes
+                                  if isinstance(episode, dict) and episode.get('kind') == 'ACT_COMMITTED_EPISODE'], workers)
+    records, seen, frame_jobs = [], set(), []
+    try:
+        records = _export_records(episodes, seen, frame_jobs)
+    except Exception:
+        # an earlier episode whose frames differ is the first refusal in manifest order
+        _check_frames(frame_jobs, workers)
+        raise
+    _check_frames(frame_jobs, workers)
+
+    try:
+        _write_export(partial, records, source_manifest_sha256, campaign_index_sha256)
+        partial.rename(target)
+    except BaseException:
+        shutil.rmtree(partial, ignore_errors=True)       # our own half-written export, never a finished one
+        raise
+    manifest_path = target / "export-manifest.json"
+    document = json.loads(manifest_path.read_bytes())
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    return {**document, "manifest_path": str(manifest_path), "export_sha256": digest}
+
+
+def _export_records(episodes, seen, frame_jobs):
+    """The export records of every episode, in order; the frame checks of each go to ``frame_jobs`` for `_check_frames`."""
+    records = []
     for episode in episodes:
         if not isinstance(episode, dict) or not isinstance(episode.get("scene_id"), str):
             raise ValueError("EXPORT_EPISODES_INVALID")
@@ -591,9 +836,7 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
         # the frames are bound by the seal the commit proof named, never by anything the caller passed in
         root, seal = sealed_episode(episode['collection_evidence'], proof)
         plan = _frame_plan(scene_id, content, seal['files'])
-        for name, _, digest in plan:
-            if _file_sha256(root / name, 'EXPORT_EPISODE_FRAME_MISSING') != digest:
-                raise ValueError("EXPORT_EPISODE_FRAME_DIGEST_MISMATCH")
+        frame_jobs.append((root, plan))
         relative = {name: destination for name, destination, _ in plan}
         content = _with_frame_paths(content, relative)
         payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE
@@ -601,17 +844,7 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
                         "content_sha256": hashlib.sha256(payload).hexdigest(),
                         "payload": payload, "root": root,
                         "frames": {destination: (name, digest) for name, destination, digest in plan}})
-
-    try:
-        _write_export(partial, records, source_manifest_sha256, campaign_index_sha256)
-        partial.rename(target)
-    except BaseException:
-        shutil.rmtree(partial, ignore_errors=True)       # our own half-written export, never a finished one
-        raise
-    manifest_path = target / "export-manifest.json"
-    document = json.loads(manifest_path.read_bytes())
-    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    return {**document, "manifest_path": str(manifest_path), "export_sha256": digest}
+    return records
 
 
 def _file_sha256(path, missing):

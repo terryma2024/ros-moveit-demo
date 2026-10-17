@@ -76,3 +76,18 @@ def _fresh_readback_state():
     qc_memo._TRUSTING_BUILT[0] = 0
     qc_memo._STRICT[0] = 0
     yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_export_verification_state(monkeypatch):
+    """The collection-verification memo is process state, and the export worker count is the serial path in tests:
+    their seams (monkeypatched readbacks) live in this process, so a spawned worker would not see them."""
+    monkeypatch.setenv("SO101_ACT_EXPORT_WORKERS", "1")
+    try:
+        from so101_demo.act.bundle import clear_verification_memo
+    except ImportError:
+        yield
+        return
+    clear_verification_memo()
+    yield
+    clear_verification_memo()
