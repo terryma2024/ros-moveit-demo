@@ -106,3 +106,16 @@ next_experiment: Task-3-episode-and-file-RED on antzb
 - Real registry existence on antzb rechecked False. No service/browser, real-data acceptance, final full pytest, CTest install gate, or push performed in this continuation. Next implementation action is Task 3 RED, after the successor reads full approved plan/specs and current state.
 - Permissions were changed by the session owner to danger-full-access / approval never immediately before this handoff request; no global defaults changed by the agent. Ruling: stop feature edits for this user-requested handoff; do not launch a successor or parallel worker.
 - Retained: full root, source export, all antzb evidence and new handoff state snapshot; archived: none; read-back scratch trees remain deletion candidates only. No evidence deleted.
+
+## CP-006-ANTZB-RESUME
+
+- Fresh probe `successor-probe-1f692586.json`: direct AI-STATION-001 / lenovo, HEAD f76a4a99386fe8a882b13ccf47f3b3ef70b677e9, authorized branch/worktree clean; submodule uninitialized and preserved. No pytest/runner/uvicorn/ROS stack or default tmux server. Existing Codex/Herdr/RustDesk processes/listeners preserved. ROS graph N/A: archive file-only work; no ROS operation.
+- Last trusted checkpoint CP-005 and Task 2 targeted 25 passes; no full gate inferred. Next experiment Task-3 RED adds episode/file contracts absent from Task 2. Same registered evidence root and exact `venv-antzb/bin/python`; 24 CPUs / full workers=8.
+- Ruling: current direct user authorization continues Codex implementation, no dst/subagents, inline review, no repeated approval. Keep durable ledger instead of skill scratch and preserve every evidence artifact. Real seven-root/EXP-620 acceptance remains unavailable pending real registry, never synthetic-labelled as real.
+
+## Task 3 complete
+
+- RED `red-3-64024eda`: 13 failed / 1 passed, rc=1, 1.98 s; intended missing HTTP detail/series/files/frame contracts. GREEN `green-3-5f5bd635`: 39 passed, rc=0. Inline review added actual state-dimension/bounded-read probe and redirected frame-directory test; `red-3-review-ff2b9813`: 1 failed / 11 passed at cross-episode frame redirect (200 instead of 409).
+- Fixed frame boundary against the original episode frames subtree, rather than trusting a redirected frames directory. Global records LRU holds at most two episodes across package evictions, unique snapshot tokens avoid object-id reuse. Only signal fields/frame names retained; PNG/audit never cached. All file opens validate package paths afresh; JSON/JSONL cap 2 MiB, UTF-8 byte cursor and line boundaries enforced.
+- Final targeted gate `green-3-review-a72c7473`: archive directory plus CTest registration, 41 passed, rc=0, 4.15 s; JUnit/tempfile proofs/output/result under registered `scratch/<run-id>`. Synthetic only; no real registry/robot access. Runtime/visual N/A for backend-only task. Full gate and installed acceptance still pending.
+- Inline self review: metadata/recording-processing timeline separation, fault details, manifest file ids, camera bounds, endpoint retention, paging EOF/no-final-newline and symlink replacements reviewed. Retained all runs, archived none, read-back scratch deletion candidates only. Next Task 4 RED.

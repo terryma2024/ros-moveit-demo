@@ -94,6 +94,8 @@ if(BUILD_TESTING)
       APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
   endfunction()
 
+  so101_add_pytest_test(test_archive_episode test/archive_viewer/test_archive_episode.py)
+  so101_add_pytest_test(test_archive_files test/archive_viewer/test_archive_files.py)
   so101_add_pytest_test(test_archive_package test/archive_viewer/test_archive_package.py)
   so101_add_pytest_test(test_archive_config test/archive_viewer/test_archive_config.py)
   so101_add_pytest_test(test_archive_scan test/archive_viewer/test_archive_scan.py)

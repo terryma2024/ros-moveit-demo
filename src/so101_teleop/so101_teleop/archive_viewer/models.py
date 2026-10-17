@@ -101,3 +101,54 @@ class EpisodeQuery(ArchiveModel):
 class EpisodePage(ArchiveModel):
     episodes: list[EpisodeRow]
     total: int
+
+
+class ArchiveFile(ArchiveModel):
+    file_id: str
+    name: str
+    bytes: int
+    sha256: str
+
+
+class AttemptView(ArchiveModel):
+    kind: Literal['recording', 'processing']
+    round: int | None = None
+    wave: int | None = None
+    shard: str | None = None
+    proc_attempt: int | None = None
+    outcome: str | None = None
+    reason: str | None = None
+
+
+class EpisodeDetail(ArchiveModel):
+    scene_id: str
+    scene: dict
+    collection_committed: bool
+    seal: dict
+    processed_result: dict
+    qc_summary: dict
+    attempts: list[AttemptView]
+    files: list[ArchiveFile]
+    frame_count: int
+    warnings: list[str]
+
+
+class SignalPoint(ArchiveModel):
+    row: int
+    t: float
+    action: list[float]
+    state: list[float]
+
+
+class EpisodeSeries(ArchiveModel):
+    points: list[SignalPoint]
+    stride: int
+    row_times_s: list[float]
+
+
+class FileView(ArchiveModel):
+    kind: Literal['json', 'jsonl']
+    content: object = None
+    lines: list[str] = Field(default_factory=list)
+    next_offset: int | None = None
+    eof: bool = True

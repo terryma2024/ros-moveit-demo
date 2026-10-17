@@ -1,6 +1,8 @@
 """Read-only archive endpoints, independent of the control and instance domains."""
-from fastapi import APIRouter, Depends
-from .models import ArchiveConfigView, PackageList, PackageView, EpisodePage, EpisodeQuery
+from typing import Literal
+from fastapi import APIRouter, Depends, Path, Query
+from fastapi.responses import FileResponse
+from .models import ArchiveConfigView, PackageList, PackageView, EpisodePage, EpisodeQuery, EpisodeDetail, EpisodeSeries, FileView
 from .scan import ArchiveStore
 
 
@@ -22,5 +24,22 @@ def archive_router(store: ArchiveStore) -> APIRouter:
     @router.get('/packages/{package_id}/episodes',response_model=EpisodePage)
     def episodes(package_id: str,query: EpisodeQuery = Depends()):
         return store.package(package_id).episodes(query)
+
+    @router.get('/packages/{package_id}/episodes/{scene_id}', response_model=EpisodeDetail)
+    def detail(package_id: str, scene_id: str):
+        return store.package(package_id).episode(scene_id).detail()
+
+    @router.get('/packages/{package_id}/episodes/{scene_id}/series', response_model=EpisodeSeries)
+    def series(package_id: str, scene_id: str):
+        return store.package(package_id).episode(scene_id).series()
+
+    @router.get('/packages/{package_id}/episodes/{scene_id}/frames/{row}/{camera}', response_class=FileResponse)
+    def frame(package_id: str, scene_id: str, camera: Literal['head', 'wrist'], row: int = Path(ge=0)):
+        path = store.package(package_id).episode(scene_id).frame(row, camera)
+        return FileResponse(path, media_type='image/png', headers={'Cache-Control': 'private, max-age=3600'})
+
+    @router.get('/packages/{package_id}/episodes/{scene_id}/files/{file_id}', response_model=FileView)
+    def file(package_id: str, scene_id: str, file_id: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):
+        return store.package(package_id).episode(scene_id).file(file_id, offset, limit)
 
     return router

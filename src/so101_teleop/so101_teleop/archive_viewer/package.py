@@ -1,4 +1,6 @@
 """Collection projections keep recording, processing and commit facts distinct."""
+from collections import OrderedDict
+import threading
 import hashlib
 import statistics
 from pathlib import Path
@@ -10,7 +12,10 @@ from .paths import read_json, resolve_package_path
 
 
 class PackageSnapshot:
-    def __init__(self, ref):
+    def __init__(self, ref, records=None, records_lock=None):
+        self._records = records if records is not None else OrderedDict()
+        self._records_lock = records_lock or threading.RLock()
+        self._cache_token = object()
         self.ref = ref
         self._manifest = None
         self.warnings = []
@@ -205,3 +210,7 @@ class PackageSnapshot:
         present.sort(key=lambda r: getattr(r, key), reverse=query.sort.startswith('-'))
         result = present + sorted(absent, key=lambda r: r.scene_id)
         return EpisodePage(episodes=result[query.offset:query.offset+query.limit], total=len(result))
+
+    def episode(self, scene_id):
+        from .episode import EpisodeSnapshot
+        return EpisodeSnapshot(self, scene_id)

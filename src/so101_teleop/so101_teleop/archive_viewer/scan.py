@@ -31,6 +31,8 @@ class ArchiveStore:
         self._scans={}
         self._packages=OrderedDict()
         self.refs={}
+        self._records=OrderedDict()
+        self._records_lock=threading.RLock()
         self._lock=threading.RLock()
 
     def config_view(self) -> ArchiveConfigView:
@@ -94,7 +96,7 @@ class ArchiveStore:
             ref = self.reference(package_id)
             cached = self._packages.pop(package_id, None)
             if cached is None or cached.ref is not ref:
-                cached = PackageSnapshot(ref)
+                cached = PackageSnapshot(ref, self._records, self._records_lock)
             self._packages[package_id] = cached
             while len(self._packages) > 2:
                 self._packages.popitem(last=False)
