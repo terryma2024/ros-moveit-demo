@@ -69,11 +69,37 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3721
-next_experiment: offline evaluation of TRAIN-001 on offline_test (needs the six-digest freeze file), then a closed-loop rollout in simulation.
+latest_checkpoint: CP-3722
+next_experiment: O2 (commit implies exportable), O6 (native rollout), Host gate, then TRAIN-002 (O7, leading idle trimmed).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3722 — Offline evaluation of TRAIN-001; QC profile; optimisation batch and rollout design confirmed; O5, O3 and O1 done
+
+- Offline evaluation (REG/act-dataset-100-20261017/eval-001, source snapshot f6a32dbe3):
+  - act_offline_evaluate rc 0 in 130 s on offline_test (frm-060 to frm-069, 9062 targets). It measures the first action of each chunk only, with no threshold.
+  - Mean MAE over the six joints: policy 0.0143 rad; baseline "repeat current state" 0.0019 rad; baseline "train mean action" 0.207 rad.
+  - Freeze (eval-001/freeze): calibration_sha256 is bound to the contact-policy activation receipt, because no QUALIFIED calibration report exists (collection ruling, ledger ~3467/3478). runtime_config_sha256 is bound to parallel_batch_act_offline.yaml. The other four digests are the real bundle, export manifest, merged index and split manifest.
+- QC regrade profile (REG/diag-delivery-20261016/qc-profile): 27.2 s per episode, single-threaded Python CPU, peak RSS 1.7 GiB; hot spots are decode_ros, verify_raw_chunk (twice), validate_world_source (twice) and source_model_data. Phase-2 processor per scene: replay 79 %, QC 13 %, scan 7 %.
+- Human (2026-10-18): nsys and ncu installed; rollout decisions ("rollout按你的建议", "标定门怎么处理：你的建议", "执行器方案：容器外执行，不并发"); then "都确认" for the optimisation batch (docs/superpowers/plans/2026-10-18-so101-act-optimisation-batch.md) and the rollout design (docs/superpowers/specs/2026-10-18-so101-act-native-rollout-design.md).
+  - ncu was installed at /opt/nvidia/nsight-compute/2026.3.0/ncu without a PATH link. The driver has RmProfilingAdminOnly 1, so GPU counters need sudo or NVreg_RestrictProfilingToAdminUsers=0.
+- Standard four points (config/mujoco/rgbd_task_points.yaml) against the dataset: none is in it.
+  - Nearest dataset scene: task_start 5.9 mm (frm-059, validation); forward_5cm 2.2 mm (frm-089, train); left_5cm 1.2 mm (frm-034, train); right_5cm 50.9 mm (outside the sampled triangle; dataset x is at most 0.0199).
+- Idle in the training data (exported episodes): the first motion row (|action − state| > 0.005 rad) is at rows 38 to 86, median 60 (3.8 to 8.6 s after reset). 66 percent of rows (58 to 69) are idle. Recommendation for TRAIN-002: trim the leading idle segment to one second before the first motion (training view only). Long mid-episode holds stay unless the human asks.
+- O4: no change needed. Without --processor-count the code default min(12, MemAvailable / 3 GiB) gives 12 on the 64 GB host; the earlier runs passed 6 explicitly.
+- O5 (caa85748a): the two test-only flakes fixed; 20 runs of the two tests, 8 concurrent, all passed.
+- O3 (442bda47e): training metrics.jsonl in the bundle directory and stdout every log_interval_steps (100):
+  - window losses, learning rate, samples/s and ETA;
+  - DataLoader wait versus compute per step and the wait share (the bubble ratio);
+  - validation loss every validation_interval_steps (2000) on validation_samples (512) evenly spaced validation chunks, with no effect on the training RNG (tested);
+  - num_workers as a training.yaml key (default 4).
+  Training gate under train-venv: 226 passed.
+- O1 (347b312a0, 9b1f3ce02, 5233437fe, e1a73f4cb, 2904fca37): world-source document checks once per source in a session; numpy pose and twist comparisons with isclose semantics and one reused MjData; vectorised PNG unfiltering; decode_ros once per message content in a session; standalone and continuity raw-chunk checks shared. Element-check vectorisation was skipped (not provably identical).
+  - Shared decoded ROS messages are not copied; the in-session readers were checked not to mutate them, with a test. Any new reader must keep that property.
+  - Proof: 33 equivalence tests against verbatim old copies. Real-data differential of _verified_collection_uncached over all 101 merged-v2 entries, old snapshot f6a32dbe3 against new snapshot 2904fca37, 16 workers: 101 of 101 byte-identical (sha256 da978fab…). frm-044 refuses identically, frm-101 ok.
+  - Speed: per episode 30.4 s to 21.1 s (about 31 percent); 16-way median 39.0 s to 28.5 s; total wall 262.9 s to 195.1 s. Evidence REG/diag-delivery-20261016/qc-profile/differential/20261018-o1/.
+  - Ordinary tests: test/act and test/ros 5995 passed; other dirs 5376 passed. Only the known shim-symlink failures (7 in test_act_head_run_audit_report, 6 in test_cli_head_search_audit) remain.
 
 ## CP-3721 — TRAIN-001 completed: the first ACT policy on the 100-episode dataset
 
