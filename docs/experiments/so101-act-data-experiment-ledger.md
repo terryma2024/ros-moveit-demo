@@ -69,11 +69,42 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3723
-next_experiment: camera rig v2 implementation (design 2026-10-18-so101-act-camera-rig-v2-design.md), then EXP-623 debug, EXP-624 qualification, EXP-625 formal 100, TRAIN-003.
+latest_checkpoint: CP-3724
+next_experiment: side-wrist contact calibration (offline + live spot checks) and activation under CP-3394, then EXP-623 debug, EXP-624 qualification, EXP-625 formal 103, TRAIN-003.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3724 — Camera rig v2 steps 1–5 implemented; side-wrist images built; contact calibration pending
+
+- Step 1, the rig profile (d93149ea6, f9a5fbeeb, b9d302a66):
+  - act/rig_profile.py with config/act/rig-v1.yaml (rig head-wrist) and rig-v2.yaml (rig side-wrist).
+  - The profile is part of the frozen inputs, the campaign config (rig_profile_sha256) and the collection identity.
+  - About 20 hard-coded head/wrist points now read the profile.
+  - The trainer writes normalization.observation {cameras, state_dim} into new bundles.
+  - Proof: real-data differential readback 101 of 101 identical; export of 3 episodes byte-identical; v2 gate green.
+- Steps 2–3 (47c52b50b, c5176d802, e6462f832):
+  - Model variants: so101_side_wrist.xml/.urdf and scene_side_wrist.xml, with the wrist camera on the jaw, a side tripod camera, and no head or neck. Plugins and controllers have side-wrist variants. The launch takes a rig argument.
+  - The model extent is pinned (0.9045), so the wrist camera's near plane matches the confirmed renders.
+  - Neck, head and readiness are profile-driven, with a composition test asserting that a side-wrist stack has no head or neck artefact.
+  - Proof: differential 101 of 101; serial gate green (13707 passed).
+  - Load-flaky under the concurrent gate: the C++ test ASlowSinkLosesNothingAtTheControllerRate.
+- Steps 4–5:
+  - 773336e46: anchors are profile-driven (no neck start without a neck).
+  - d63d95e3f: a side-wrist campaign composes the teacher role only.
+  - dff04f256: config/act/training-side-wrist.yaml (cameras side and wrist, state 6, num_workers 16, preprocessing 69903369…).
+  - Templates REG/act-templates/w8{d,q,f}-*-side-wrist pass the rig everywhere and require a contact proposal bound to the side-wrist scene.
+  - Load-flaky in the gate: test_owner_phase2.py, which has 1 s deadlines.
+- Contact policy: the activation binds the model and scene digests, so the side-wrist model needs the full chain (offline calibration, analysis, live Teacher spot checks, activation). Rebinding the old receipt would be a receipt without evidence and was not done.
+  - Human (2026-10-18, "按推荐的方案"): activate under the standing authorization CP-3394 only after the offline calibration and the live spot checks pass, and report afterwards.
+  - Same decision: one combined formal list of 103 scenes.
+  - bfbaf73b0: the contact collector and its CLI take the rig through a per-rig pin table; the head-wrist pins are unchanged.
+  - Combined list REG/act-w8-scenes-side-wrist-20261018T084320Z/formal-103.scenes.json, sha256 8198e4b1…:
+    - formal-70 followed by formal-33, unchanged; splits train 83, validation 10, offline_test 10;
+    - nearest pair 0.004004 m;
+    - accepted by the side-wrist qualification template (waves 20/20/20/20/20/3).
+- v2 gate on bfbaf73b0 (gates/bfbaf73b0ebd) green on the first run.
+- Images at bfbaf73b0: inference sha256:6f0416f7cb7063e3122948bb0c840d6dd199998aa9bbcb8b6a954159299fd7f6 (R/image-build-20261018T085137Z); shard sha256:016d6281f446c0800655665db44fa5133eca11e776af47a6d55b2fd62be1f210 (R/image-build-20261018T085333Z).
 
 ## CP-3723 — O2, trim, gate v2 (7 min), TRAIN-002 stopped, O6 committed, camera rig v2 confirmed
 
