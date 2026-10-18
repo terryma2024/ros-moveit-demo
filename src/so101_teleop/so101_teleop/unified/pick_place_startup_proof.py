@@ -34,6 +34,25 @@ def checks_for_camera_names(camera_names) -> frozenset:
     return _BASE_CHECKS | frozenset(f"{camera}_rgb" for camera in camera_names)
 
 
+def checks_for_rig(rig: str, rig_profile) -> frozenset:
+    """The exact check set of the rig a stack composes, from the rig name and its profile file.
+
+    The default rig (`head-wrist`, no profile file) is the fixed `_CHECKS` of the stacks that predate rigs; any other rig is
+    derived from the profile file the observer is given. A profile whose rig is not `rig` is refused. Raises `ValueError`."""
+    if rig == "head-wrist":
+        if rig_profile is not None:
+            raise ValueError("ACT_STACK_RIG_INVALID")
+        return _CHECKS
+    if rig_profile is None:
+        raise ValueError("ACT_STACK_RIG_INVALID")
+    from so101_demo.act.rig_profile import load_rig_profile
+
+    profile = load_rig_profile(rig_profile)
+    if profile.rig != rig:
+        raise ValueError("ACT_STACK_RIG_INVALID")
+    return checks_for_camera_names(profile.camera_names)
+
+
 _ARTIFACT_HASHES = (
     "source_sha256", "manifest_sha256", "runtime_config_sha256",
     "collection_config_sha256", "contact_policy_fingerprint",
@@ -77,12 +96,18 @@ class PickPlaceStartupProofConsumer:
     """Validate a fresh receipt from the fixed admitted path exactly once."""
 
     def __init__(self, context, child, *, stack_owner: OwnerKey,
-                 child_owner: OwnerKey, live_probe=None, clock_ns=time.monotonic_ns) -> None:
+                 child_owner: OwnerKey, checks: frozenset, live_probe=None,
+                 clock_ns=time.monotonic_ns) -> None:
+        # `checks` is the exact set of the rig the stack composes, passed explicitly: there is no default, so a consumer
+        # can never silently expect the check set of a rig other than the stack's.
         if (not isinstance(stack_owner, OwnerKey) or not isinstance(child_owner, OwnerKey)
+                or not isinstance(checks, frozenset) or not checks
+                or not all(isinstance(name, str) for name in checks)
                 or not callable(clock_ns) or live_probe is not None and not callable(live_probe)):
             raise ValueError("PICK_PLACE_VALIDATION_STARTUP_CONSUMER_CONFIG_INVALID")
         self.context, self.child = context, child
         self.stack_owner, self.child_owner = stack_owner, child_owner
+        self.checks = checks
         self.live_probe = live_probe or (lambda owner: _retirement_owner_state(owner) == "live")
         self.clock_ns = clock_ns
 
@@ -167,7 +192,7 @@ class PickPlaceStartupProofConsumer:
                     or readiness.get("ros_domain_id") != self.child.ros_domain_id
                     or type(readiness.get("ros_domain_id")) is not int
                     or type(readiness.get("checks")) is not dict
-                    or set(readiness["checks"]) != _CHECKS
+                    or set(readiness["checks"]) != self.checks
                     or any(value is not True for value in readiness["checks"].values())):
                 raise ValueError("identity, hash or readiness mismatch")
             captured = readiness["captured_monotonic_ns"]

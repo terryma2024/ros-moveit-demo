@@ -157,6 +157,7 @@ class PickPlaceCaseOwner:
                     raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_UNAVAILABLE")
                 self.startup_proof_issuer(
                     context, child, owner_key, self.child_owner_key,
+                    checks=probe.expected_checks,
                 ).issue(probe.readiness_bytes)
                 self.worker.bind_startup_owner(owner_key)
             self._ready = True

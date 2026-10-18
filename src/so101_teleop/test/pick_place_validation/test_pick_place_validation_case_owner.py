@@ -336,15 +336,15 @@ def test_case_owner_issues_bound_proof_before_returning_ready(tmp_path):
 
     owner.stack_factory = factory
     owner.require_startup_proof = True
-    owner.startup_proof_issuer = lambda *args: PickPlaceStartupProofIssuer(
-        *args, live_probe=lambda _owner: True,
+    owner.startup_proof_issuer = lambda *args, **kwargs: PickPlaceStartupProofIssuer(
+        *args, **kwargs, live_probe=lambda _owner: True,
     )
 
     async def run():
         await owner.start(spec)
         receipt = PickPlaceStartupProofConsumer(
             context, child, stack_owner=OWNER, child_owner=CHILD_OWNER,
-            live_probe=lambda _owner: True,
+            checks=frozenset(("mujoco_session", "advancing_physics", "controller_states", "moveit_graph", "physical_stop", "head_rgb", "wrist_rgb")), live_probe=lambda _owner: True,
         ).consume()
         assert receipt["operation_id"] == context.operation_id
         assert events == ["admit", "child.start", "stack.start", "startup.bind"]

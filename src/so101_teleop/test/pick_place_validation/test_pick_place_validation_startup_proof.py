@@ -58,7 +58,7 @@ def prepared(tmp_path):
     (root / "startup-receipt.json").write_text(json.dumps(receipt))
     consumer = PickPlaceStartupProofConsumer(
         context, child, stack_owner=stack, child_owner=child_owner,
-        live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
+        checks=frozenset(CHECKS), live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
     return consumer, root, receipt
 

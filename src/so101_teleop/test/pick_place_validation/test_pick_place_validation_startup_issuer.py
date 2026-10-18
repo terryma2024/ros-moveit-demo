@@ -81,7 +81,7 @@ def test_installed_probe_and_owner_issuer_are_consumed_once(tmp_path):
     assert kwargs["env"]["ROS_DOMAIN_ID"] == "179"
     assert kwargs["env"]["GZ_PARTITION"] == "act-data-exp289-179"
     issuer = PickPlaceStartupProofIssuer(
-        context, child, STACK_OWNER, CHILD_OWNER,
+        context, child, STACK_OWNER, CHILD_OWNER, checks=frozenset(CHECKS),
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
     receipt = issuer.issue(probe.readiness_bytes)
@@ -91,7 +91,7 @@ def test_installed_probe_and_owner_issuer_are_consumed_once(tmp_path):
     assert (root / "readiness.json").read_bytes() == probe.readiness_bytes
     consumer = PickPlaceStartupProofConsumer(
         context, child, stack_owner=STACK_OWNER, child_owner=CHILD_OWNER,
-        live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
+        checks=frozenset(CHECKS), live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
     assert consumer.consume() == receipt
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_CONSUMED"):
@@ -157,7 +157,7 @@ def test_failed_observer_and_retired_owner_cannot_issue(tmp_path):
         probe()
     raw = (json.dumps(artifact) + "\n").encode()
     issuer = PickPlaceStartupProofIssuer(
-        context, child, STACK_OWNER, CHILD_OWNER,
+        context, child, STACK_OWNER, CHILD_OWNER, checks=frozenset(CHECKS),
         live_probe=lambda owner: owner != STACK_OWNER, clock_ns=lambda: NOW_NS,
     )
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
@@ -170,7 +170,7 @@ def test_issuer_rejects_scope_mismatch_before_writing(tmp_path):
     child.mujoco_session_id = "other"
     raw = (json.dumps(artifact) + "\n").encode()
     issuer = PickPlaceStartupProofIssuer(
-        context, child, STACK_OWNER, CHILD_OWNER,
+        context, child, STACK_OWNER, CHILD_OWNER, checks=frozenset(CHECKS),
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
@@ -310,12 +310,59 @@ def test_a_profile_file_of_another_rig_than_the_launch_names_is_refused(tmp_path
         InstalledActStackReadinessProbe(launch, binary)
 
 
-def test_side_wrist_observation_is_not_a_pick_place_startup_proof(tmp_path):
-    """The pick-place validation proof is rig v1 only: its issuer keeps the exact v1 set and fails closed on others."""
+def issue_and_consume(tmp_path, rig, *, issue_checks=None, consume_checks=None):
+    """A proof of `rig`'s stack: probe the observation, issue it, write it, consume it as the child does."""
+    from so101_teleop.unified.pick_place_startup_issuer import expected_checks_for_launch
+
     context, child, _, root, _ = prepared(tmp_path)
-    raw = (json.dumps(observation(SIDE_WRIST_CHECKS)) + "\n").encode()
+    launch = rig_launch(tmp_path, rig)
+    expected = expected_checks_for_launch(launch)
+    probe, _ = observe(tmp_path, launch, observation(expected))
+    assert probe() is True
     issuer = PickPlaceStartupProofIssuer(
-        context, child, STACK_OWNER, CHILD_OWNER, live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS)
+        context, child, STACK_OWNER, CHILD_OWNER, checks=issue_checks or probe.expected_checks,
+        live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS)
+    receipt = issuer.issue(probe.readiness_bytes)
+    assert (root / "readiness.json").read_bytes() == probe.readiness_bytes
+    consumer = PickPlaceStartupProofConsumer(
+        context, child, stack_owner=STACK_OWNER, child_owner=CHILD_OWNER, checks=consume_checks or expected,
+        live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS)
+    return receipt, consumer
+
+
+@pytest.mark.parametrize("rig", ["head-wrist", "side-wrist"])
+def test_a_proof_is_issued_written_and_consumed_end_to_end_for_each_rig(tmp_path, rig):
+    receipt, consumer = issue_and_consume(tmp_path, rig)
+    assert consumer.consume() == receipt
+
+
+@pytest.mark.parametrize("rig, other", [("head-wrist", "side-wrist"), ("side-wrist", "head-wrist")])
+def test_a_consumer_of_another_rigs_check_set_refuses_the_proof(tmp_path, rig, other):
+    from so101_teleop.unified.pick_place_startup_issuer import expected_checks_for_launch
+
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    _, consumer = issue_and_consume(tmp_path, rig, consume_checks=expected_checks_for_launch(rig_launch(other_dir, other)))
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
-        issuer.issue(raw)
-    assert not (root / "readiness.json").exists()
+        consumer.consume()
+
+
+@pytest.mark.parametrize("rig, other", [("head-wrist", "side-wrist"), ("side-wrist", "head-wrist")])
+def test_an_issuer_of_another_rigs_check_set_refuses_the_observation_without_writing(tmp_path, rig, other):
+    from so101_teleop.unified.pick_place_startup_issuer import expected_checks_for_launch
+
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
+        issue_and_consume(tmp_path, rig, issue_checks=expected_checks_for_launch(rig_launch(other_dir, other)))
+    assert not (tmp_path / "pick-place-live" / "campaign-289" / "stack" / "readiness.json").exists()
+
+
+def test_issuer_and_consumer_have_no_default_check_set(tmp_path):
+    context, child, _, _, _ = prepared(tmp_path)
+    with pytest.raises(TypeError):
+        PickPlaceStartupProofIssuer(context, child, STACK_OWNER, CHILD_OWNER)
+    with pytest.raises(TypeError):
+        PickPlaceStartupProofConsumer(context, child, stack_owner=STACK_OWNER, child_owner=CHILD_OWNER)
+    with pytest.raises(ValueError, match="CONFIG_INVALID"):
+        PickPlaceStartupProofConsumer(context, child, stack_owner=STACK_OWNER, child_owner=CHILD_OWNER, checks=frozenset())

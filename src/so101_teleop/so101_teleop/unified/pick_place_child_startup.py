@@ -22,7 +22,7 @@ _OWNER_FIELDS = frozenset((
 
 
 def consume_child_pick_place_startup(request, child_owner: OwnerKey, environment,
-                                *, live_probe=None, clock_ns=None) -> dict:
+                                *, checks: frozenset, live_probe=None, clock_ns=None) -> dict:
     """Derive all scope from admitted child environment and closed IPC identity."""
     try:
         if not isinstance(child_owner, OwnerKey):
@@ -76,5 +76,5 @@ def consume_child_pick_place_startup(request, child_owner: OwnerKey, environment
     if clock_ns is not None:
         options["clock_ns"] = clock_ns
     return PickPlaceStartupProofConsumer(
-        context, child, stack_owner=owner, child_owner=child_owner, **options,
+        context, child, stack_owner=owner, child_owner=child_owner, checks=checks, **options,
     ).consume()

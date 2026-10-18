@@ -42,7 +42,7 @@ def prepared(tmp_path):
     }).encode()
     receipt = PickPlaceStartupProofIssuer(
         context, child, STACK, CHILD_OWNER,
-        live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
+        checks=frozenset(CHECKS), live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     ).issue(readiness)
     environment = {
         "SO101_ACT_EVIDENCE_ROOT": context.evidence_root,
@@ -71,7 +71,7 @@ def prepared(tmp_path):
 def test_child_consumes_exact_issued_proof_once(tmp_path):
     request, environment, receipt, root = prepared(tmp_path)
     consume = lambda: consume_child_pick_place_startup(
-        request, CHILD_OWNER, environment,
+        request, CHILD_OWNER, environment, checks=frozenset(CHECKS),
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
     assert consume() == receipt
@@ -86,7 +86,7 @@ def test_child_rejects_wrong_owner_and_scope_before_consumption(tmp_path):
     request.payload["stack_owner"] = wrong_owner
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consume_child_pick_place_startup(
-            request, CHILD_OWNER, environment,
+            request, CHILD_OWNER, environment, checks=frozenset(CHECKS),
             live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
         )
     assert (root / "startup-consumed.json").is_file()
@@ -97,7 +97,7 @@ def test_child_rejects_cross_worker_scope_without_claim(tmp_path):
     request.worker_id = "w01"
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_SCOPE_INVALID"):
         consume_child_pick_place_startup(
-            request, CHILD_OWNER, environment,
+            request, CHILD_OWNER, environment, checks=frozenset(CHECKS),
             live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
         )
     assert not (root / "startup-consumed.json").exists()

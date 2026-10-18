@@ -16,28 +16,19 @@ from .contracts import MutationError, OwnerKey
 from .pick_place_startup_proof import (
     _ARTIFACT_HASHES, _CHECKS, _MAX_AGE_NS, _MAX_BYTES,
     _MAX_ISSUE_LAG_NS, _READINESS_KEYS, PickPlaceStartupProofConsumer,
-    checks_for_camera_names,
+    checks_for_camera_names, checks_for_rig,
 )
 
 
 def expected_checks_for_launch(launch: ActStackLaunch) -> frozenset:
-    """The exact readiness check set of the rig this launch composes.
+    """The exact readiness check set of the rig this launch composes (see `checks_for_rig`).
 
-    The default rig (no profile file) is the fixed `_CHECKS` set of the stacks that predate rigs; any other rig is the
-    set its profile file derives, the same file the observer is given (`launch.readiness_arguments()`). Always an exact
-    set: the observer's `checks` must equal it, never a subset or a superset."""
-    if launch.rig_profile is None:
-        return _CHECKS
-    from so101_demo.act.rig_profile import load_rig_profile
-
-    profile = load_rig_profile(launch.rig_profile)
-    if profile.rig != launch.rig:
-        raise ValueError("ACT_STACK_RIG_INVALID")
-    return checks_for_camera_names(profile.camera_names)
+    Always an exact set: the observer's `checks` must equal it, never a subset or a superset."""
+    return checks_for_rig(launch.rig, launch.rig_profile)
 
 
 def _validated_observation(raw: bytes, *, session_id: str, ros_domain_id: int,
-                           now_ns: int, checks: frozenset = _CHECKS) -> dict:
+                           now_ns: int, checks: frozenset) -> dict:
     try:
         if not isinstance(raw, bytes) or not 0 < len(raw) <= _MAX_BYTES:
             raise ValueError("length")
@@ -143,21 +134,24 @@ class PickPlaceStartupProofIssuer:
     """Bind fresh observation bytes to admitted artifacts and live process owners."""
 
     def __init__(self, context, child, stack_owner: OwnerKey, child_owner: OwnerKey,
-                 *, live_probe=None, clock_ns=time.monotonic_ns) -> None:
+                 *, checks: frozenset, live_probe=None, clock_ns=time.monotonic_ns) -> None:
+        # `checks`: the exact set of the rig the stack composes, explicit like the consumer's (no default)
         if (not isinstance(stack_owner, OwnerKey) or not isinstance(child_owner, OwnerKey)
+                or not isinstance(checks, frozenset) or not checks
                 or not callable(clock_ns)
                 or live_probe is not None and not callable(live_probe)):
             raise ValueError("PICK_PLACE_VALIDATION_STARTUP_ISSUER_CONFIG_INVALID")
         self.context, self.child = context, child
         self.stack_owner, self.child_owner = stack_owner, child_owner
+        self.checks = checks
         self.live_probe = live_probe or (lambda owner: _retirement_owner_state(owner) == "live")
         self.clock_ns = clock_ns
 
     def issue(self, raw: bytes) -> dict:
         consumer = PickPlaceStartupProofConsumer(
             self.context, self.child, stack_owner=self.stack_owner,
-            child_owner=self.child_owner, live_probe=self.live_probe,
-            clock_ns=self.clock_ns,
+            child_owner=self.child_owner, checks=self.checks,
+            live_probe=self.live_probe, clock_ns=self.clock_ns,
         )
         root = consumer._root()
         if any((root / name).exists() or (root / name).is_symlink() for name in (
@@ -173,6 +167,7 @@ class PickPlaceStartupProofIssuer:
             observation = _validated_observation(
                 raw, session_id=self.child.mujoco_session_id,
                 ros_domain_id=self.child.ros_domain_id, now_ns=now_ns,
+                checks=self.checks,
             )
             if now_ns - observation["captured_monotonic_ns"] > _MAX_ISSUE_LAG_NS:
                 raise ValueError("issue lag")

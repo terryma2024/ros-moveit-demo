@@ -120,3 +120,51 @@ def test_a_stack_that_reports_the_other_rigs_cameras_is_never_ready(tmp_path):
         ready.clock_ns = lambda: NOW_NS
         with pytest.raises(ValueError, match="ACT_STACK_READINESS_OUTPUT_INVALID"):
             ready()
+
+
+@pytest.mark.parametrize("rig", [HEAD_WRIST_RIG, SIDE_WRIST_RIG])
+def test_the_startup_proof_is_issued_written_and_consumed_for_each_rig(tmp_path, rig):
+    """start probe -> issuer (writes readiness.json and the receipt) -> the child's consumer, with the rig's own check set."""
+    from types import SimpleNamespace
+
+    from so101_teleop.unified.contracts import MutationError, OwnerKey
+    from so101_teleop.unified.pick_place_startup_issuer import PickPlaceStartupProofIssuer, expected_checks_for_launch
+    from so101_teleop.unified.pick_place_startup_proof import PickPlaceStartupProofConsumer
+
+    observer = tmp_path / "act_stack_ready"
+    observer.write_text("#!/bin/sh\n")
+    observer.chmod(0o700)
+    stack_root = tmp_path / "stack"
+    stack_root.mkdir()
+    launch = instance_stack_launch({"simulation_session_id": SESSION}, ros2=Path(sys.executable), stack_root=stack_root,
+                                   environment=dict(os.environ), rig=rig, share=PACKAGE_ROOT)
+    ready, _check, _stack = compose_stack(launch, observer)
+    ready.run = lambda argv, **_kwargs: subprocess.CompletedProcess(argv, 0, observer_output(argv), b"")
+    ready.clock_ns = lambda: NOW_NS
+    assert ready() is True
+    proof_root = tmp_path / "pick-place-live" / "campaign-289" / "stack"
+    proof_root.mkdir(parents=True)
+    context = SimpleNamespace(evidence_root=str(tmp_path), campaign_id="campaign-289", operation_id="operation-289",
+                              source_sha256="1" * 64, manifest_sha256="2" * 64, runtime_config_sha256="3" * 64,
+                              collection_config_sha256="4" * 64, contact_policy_fingerprint="5" * 64)
+    child = SimpleNamespace(campaign_id="campaign-289", worker_id="w1", execution_generation=7,
+                            mujoco_session_id=SESSION, ros_domain_id=launch.ros_domain_id)
+    stack_owner, child_owner = OwnerKey(1234, 1234, 101, "a" * 64, "b" * 64), OwnerKey(2345, 2345, 202, "c" * 64, "d" * 64)
+    checks = expected_checks_for_launch(launch)
+    assert checks == ready.expected_checks
+    receipt = PickPlaceStartupProofIssuer(context, child, stack_owner, child_owner, checks=checks,
+                                          live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS).issue(ready.readiness_bytes)
+    assert (proof_root / "readiness.json").read_bytes() == ready.readiness_bytes
+    consumer = PickPlaceStartupProofConsumer(context, child, stack_owner=stack_owner, child_owner=child_owner, checks=checks,
+                                             live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS)
+    assert consumer.consume() == receipt
+    # a consumer of the other rig's check set never accepts the proof
+    other = SIDE_WRIST_RIG if rig is HEAD_WRIST_RIG else HEAD_WRIST_RIG
+    (proof_root / "startup-consumed.json").unlink()
+    wrong = PickPlaceStartupProofConsumer(
+        context, child, stack_owner=stack_owner, child_owner=child_owner,
+        checks=frozenset({"mujoco_session", "advancing_physics", "controller_states", "moveit_graph", "physical_stop",
+                          *(f"{camera}_rgb" for camera in other.camera_names)}),
+        live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS)
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
+        wrong.consume()
