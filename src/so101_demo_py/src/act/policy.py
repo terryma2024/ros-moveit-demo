@@ -134,6 +134,18 @@ class ActPolicyRunner:
         self.session_id, self.attempt_id = session_id, attempt_id
 
     def predict(self, observation: dict, sequence: int) -> dict:
+        return self._prediction(observation, sequence, None)
+
+    def predict_from_chunk(self, observation: dict, sequence: int, chunk) -> dict:
+        """The prediction for a chunk that was computed elsewhere (a worker thread or process) for exactly this observation.
+
+        The same checks as `predict` apply; the model is not called. The caller owns the claim that `chunk` answers
+        `observation` (the inference boundary matches replies to requests by sequence).
+        """
+
+        return self._prediction(observation, sequence, chunk)
+
+    def _prediction(self, observation: dict, sequence: int, chunk) -> dict:
         if self.session_id is None or self.attempt_id is None:
             # a chunk produced from a stale model state is not evidence for this attempt
             raise ValueError("POLICY_NOT_RESET")
@@ -148,7 +160,8 @@ class ActPolicyRunner:
             raise ValueError("POLICY_OBSERVATION_INVALID")
         if type(sequence) is not int or sequence < 0:
             raise ValueError("POLICY_SEQUENCE_INVALID")
-        chunk = self.infer.infer(observation)
+        if chunk is None:
+            chunk = self.infer.infer(observation)
         actions = _actions(chunk, self.execution_prefix)
         return {"sequence": sequence, "session_id": self.session_id, "attempt_id": self.attempt_id,
                 "observed_s": float(observed_s), "execution_prefix": self.execution_prefix,

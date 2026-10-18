@@ -69,6 +69,16 @@ class ActInferenceProcess:
         self.pending = None
         return {"sequence": reply["sequence"], "actions": reply["actions"], "age_s": age}
 
+    def abandon(self) -> None:
+        """Give up the in-flight request after `poll` refused its reply (timeout or stale), so the next one can be submitted.
+
+        The abandoned request is never applied. A transport that may still deliver its reply must drop it by sequence.
+        """
+
+        if self.closed:
+            raise ValueError("INFERENCE_PROCESS_CLOSED")
+        self.pending = None
+
     def close(self) -> None:
         """Close the worker; a boundary that cannot close reports it rather than leaving an orphan."""
 
