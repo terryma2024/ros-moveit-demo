@@ -243,6 +243,10 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
                                                  'collection_config_sha256', 'contact_policy_fingerprint')}
     identity.update(gpu_uuid=campaign_config['gpu_uuid'], image_source_install=dict(
         inference=campaign_config['teacher_service']['image'], shard=campaign_config['shard_image']))
+    if 'rig_profile_sha256' in campaign_config:
+        # the camera rig is part of the controlled identity when the campaign names one; a config written before rig profiles
+        # existed names none and its identity is the six keys it always had (rig v1)
+        identity['rig_profile_sha256'] = campaign_config['rig_profile_sha256']
     return identity
 
 

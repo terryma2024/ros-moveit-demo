@@ -50,21 +50,28 @@ def _sha(value, code):
 
 
 def freeze_campaign_inputs(run, *, candidates, scene_manifest, teacher_endpoint, teacher_execution_policy,
-                           episode_recorder_policy, runtime_policy):
+                           episode_recorder_policy, runtime_policy, rig_profile=None):
     """Freeze the campaign's one formal input set into `<run>/inputs/frozen`; returns the ref of its manifest.
 
     `candidates` is the approved-candidate registry (`act_diagnostic_episode inspect`), `scene_manifest` the scene list to
     bind, and the four policy files the endpoint/execution/recorder policies and the development runtime whose `hard_stops`
     carry the disk floor. The freeze runs with the execution snapshot, formal mode and the scene list; an existing frozen
     directory is refused, never merged.
+
+    `rig_profile` is the rig profile file (`config/act/rig-v*.yaml`) the campaign collects under; a campaign always freezes one.
+    None names the default rig (v1), written explicitly from `act.rig_profile.DEFAULT_RIG`, so the manifest never has to be read
+    as "no profile".
     """
+    from so101_demo.act.rig_profile import DEFAULT_RIG, dump_rig_profile
+
     run = _run_root(run)
     target = run / INPUTS_DIRECTORY / FROZEN_DIRECTORY
     manifest = freeze_inputs(Path(candidates), target, mode='formal', execution_inputs=True,
                              scene_manifest=Path(scene_manifest), runtime_policy=Path(runtime_policy),
                              teacher_endpoint=Path(teacher_endpoint),
                              teacher_execution_policy=Path(teacher_execution_policy),
-                             episode_recorder_policy=Path(episode_recorder_policy))
+                             episode_recorder_policy=Path(episode_recorder_policy),
+                             rig_profile=dump_rig_profile(DEFAULT_RIG) if rig_profile is None else Path(rig_profile))
     return _ref(manifest)
 
 
@@ -136,11 +143,17 @@ def campaign_binding(inputs_manifest, *, campaign_config, collection_config_sha2
     if (type(proposal.get('payload')) is not dict or fingerprint != policy_fingerprint(proposal['payload'])
             or activation.get('policy_fingerprint') != fingerprint):
         raise ValueError('CASE_INPUTS_CONTACT_POLICY_MISMATCH')
+    # the rig: the frozen set and the campaign config must name the same profile (a frozen set sealed before profiles existed, and a
+    # campaign config that names none, are both rig v1), so data of different rigs never share one qualification or one campaign
+    from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_frozen
+    rig = rig_from_frozen(frozen)
+    if rig.profile_sha256 != campaign_config.get('rig_profile_sha256', DEFAULT_RIG.profile_sha256):
+        raise ValueError('CASE_INPUTS_RIG_PROFILE_MISMATCH')
     policy = frozen.get('runtime_policy')
     if type(policy) is not dict:
         raise ValueError('CASE_INPUTS_RUNTIME_POLICY_MISSING')
     floor = policy['hard_stops']['disk_free_min_bytes']
     if type(floor) is not int or floor <= 0:
         raise ValueError('CASE_INPUTS_DISK_FLOOR_INVALID')
-    return dict(contact_policy_fingerprint=fingerprint, disk_floor_bytes=floor,
+    return dict(contact_policy_fingerprint=fingerprint, disk_floor_bytes=floor, rig_profile_sha256=rig.profile_sha256,
                 scene_manifest=_ref(root / SCENE_MANIFEST_PATH))

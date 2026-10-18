@@ -321,3 +321,78 @@ def test_disk_floor_comes_from_frozen_runtime_policy(world, tmp_path):
     # a set frozen without a runtime policy has no floor to read
     refused('CASE_INPUTS_RUNTIME_POLICY_MISSING', case_inputs.campaign_binding, forged_copy(
         world, tmp_path, lambda document, _: document.pop('runtime_policy')), **world['args'])
+
+
+# ---- the camera rig is part of the frozen inputs and of the controlled identity --------------------------------------------------
+
+def test_a_campaign_freeze_always_records_its_rig_profile_and_the_default_is_head_wrist_rig(world):
+    from so101_demo.act.rig_profile import DEFAULT_RIG, HEAD_WRIST_RIG, rig_from_frozen
+    frozen = world['frozen']
+    binding = frozen['rig_profile']
+    assert binding['path'] == 'policies/rig_profile.yaml' and binding['policy_sha256'] == HEAD_WRIST_RIG.profile_sha256
+    assert rig_from_frozen(frozen).document == DEFAULT_RIG.document
+    assert world['binding']['rig_profile_sha256'] == HEAD_WRIST_RIG.profile_sha256
+    assert (Path(world['manifest']['path']).parent / binding['path']).is_file()
+
+
+def test_the_rig_enters_the_inputs_hash_chain_so_every_case_scope_names_it(world, tmp_path):
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG, dump_rig_profile
+    from so101_demo.act.diagnostic_episode_inputs import rig_profile_binding
+
+    def to_v2(document, directory):
+        payload = dump_rig_profile(SIDE_WRIST_RIG)
+        (directory / 'policies' / 'rig_profile.yaml').write_bytes(payload)
+        document['rig_profile'] = rig_profile_binding(payload)
+
+    forged = forged_copy(world, tmp_path, to_v2)
+    assert verify_frozen_inputs(Path(forged['path']))['inputs_sha256'] != world['frozen']['inputs_sha256']
+
+
+def test_a_frozen_set_and_a_campaign_config_that_name_different_rigs_are_refused(world, tmp_path):
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG, dump_rig_profile
+    from so101_demo.act.diagnostic_episode_inputs import rig_profile_binding
+
+    # the campaign config names rig v2 (its hash), the frozen set is rig v1
+    v2_config = dict(world['args']['campaign_config'], rig_profile_sha256=SIDE_WRIST_RIG.profile_sha256)
+    refused('CASE_INPUTS_RIG_PROFILE_MISMATCH', case_inputs.campaign_binding, world['manifest'],
+            **dict(world['args'], campaign_config=v2_config))
+    # the campaign config names rig v1 explicitly: the same as naming none
+    v1_config = dict(world['args']['campaign_config'], rig_profile_sha256=HEAD_WRIST_RIG.profile_sha256)
+    assert case_inputs.campaign_binding(world['manifest'], **dict(world['args'], campaign_config=v1_config)) == world['binding']
+
+    def to_v2(document, directory):
+        payload = dump_rig_profile(SIDE_WRIST_RIG)
+        (directory / 'policies' / 'rig_profile.yaml').write_bytes(payload)
+        document['rig_profile'] = rig_profile_binding(payload)
+
+    forged = forged_copy(world, tmp_path, to_v2)
+    refused('CASE_INPUTS_RIG_PROFILE_MISMATCH', case_inputs.campaign_binding, forged, **world['args'])
+    assert case_inputs.campaign_binding(forged, **dict(world['args'], campaign_config=v2_config))[
+        'rig_profile_sha256'] == SIDE_WRIST_RIG.profile_sha256
+
+
+def test_a_frozen_set_sealed_before_rig_profiles_is_head_wrist_rig_and_still_binds_a_head_wrist_campaign(world, tmp_path):
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, rig_from_frozen
+
+    legacy = forged_copy(world, tmp_path, lambda document, _: document.pop('rig_profile'))
+    assert 'rig_profile' not in verify_frozen_inputs(Path(legacy['path']))
+    assert rig_from_frozen(verify_frozen_inputs(Path(legacy['path']))) is HEAD_WRIST_RIG
+    assert case_inputs.campaign_binding(legacy, **world['args'])['rig_profile_sha256'] == HEAD_WRIST_RIG.profile_sha256
+
+
+def test_an_altered_rig_profile_file_is_refused_with_its_binding_intact(world, tmp_path):
+    def tamper(document, directory):
+        path = directory / 'policies' / 'rig_profile.yaml'
+        path.write_bytes(path.read_bytes() + b'# edited\n')
+
+    refused('INPUTS_RIG_PROFILE_INVALID', verify_frozen_inputs,
+            Path(forged_copy(world, tmp_path, tamper)['path']))
+
+
+def test_the_campaign_config_may_name_a_rig_and_only_by_a_sha256(world, tmp_path):
+    campaign = dict(world['campaign'], rig_profile_sha256='f' * 64)
+    loaded = load_campaign_config(write_config(tmp_path, campaign))
+    assert loaded['rig_profile_sha256'] == 'f' * 64
+    for bad in ('F' * 64, 'f' * 63, 5):
+        with pytest.raises(ValueError, match='CAMPAIGN_CONFIG_INVALID'):
+            load_campaign_config(write_config(tmp_path, dict(world['campaign'], rig_profile_sha256=bad)))

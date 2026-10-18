@@ -58,6 +58,22 @@ def test_shard_and_inference_images_may_carry_different_package_source_hashes(tm
     assert module().validate_controlled_identity(document['controlled_identity']) == document['controlled_identity']
 
 
+def test_the_controlled_identity_names_its_camera_rig_only_when_it_has_one(tmp_path):
+    """Optional `rig_profile_sha256`: absent is rig v1 (every identity written before profiles), present must be a sha256."""
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG
+    document = fixture(tmp_path)
+    plain = document['controlled_identity']
+    assert module().validate_controlled_identity(plain) == plain
+    named = dict(plain, rig_profile_sha256=SIDE_WRIST_RIG.profile_sha256)
+    assert module().validate_controlled_identity(named) == named
+    for bad in ('G'*64, 'a'*63, 7):
+        with pytest.raises(ValueError):
+            module().validate_controlled_identity(dict(plain, rig_profile_sha256=bad))
+    with pytest.raises(ValueError):
+        module().validate_controlled_identity(dict(plain, other='1'*64))
+    assert module().validate_qualification_contract(dict(document, controlled_identity=named))['controlled_identity'] == named
+
+
 @pytest.mark.parametrize('workers',[1,2])
 def test_functional_contract_uses_same_full_eight_scene_list(tmp_path,workers):
     gate = fixture(tmp_path)

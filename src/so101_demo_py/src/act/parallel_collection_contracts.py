@@ -50,9 +50,14 @@ def read_document(path, *, limit=16*1024*1024):
     return value
 
 
+#: Present in the identity of a campaign that names its camera rig (sha256 of the rig profile, `act.rig_profile`); absent for every
+#: identity written before rig profiles existed, which is rig v1.
+RIG_IDENTITY_KEY = 'rig_profile_sha256'
+
+
 def validate_controlled_identity(identity):
-    _require(type(identity) is dict and set(identity) == IDENTITY_KEYS)
-    for name in IDENTITY_KEYS - {'image_source_install','gpu_uuid'}:
+    _require(type(identity) is dict and set(identity) - {RIG_IDENTITY_KEY} == IDENTITY_KEYS)
+    for name in (IDENTITY_KEYS | ({RIG_IDENTITY_KEY} & set(identity))) - {'image_source_install','gpu_uuid'}:
         _require(type(identity[name]) is str and re.fullmatch(r'[0-9a-f]{64}',identity[name]) is not None)
     images = identity['image_source_install']
     _require(type(images) is dict and set(images) == {'inference','shard'})

@@ -124,8 +124,13 @@ BATCH_HARD_TIMEOUT_MAX_S = 14400
 # Its low bound is 0, unlike every `_INT_LIMITS` entry.
 _RETRY_INVALID_MAX_ROUNDS = "retry_invalid_max_rounds"
 RETRY_INVALID_MAX_ROUNDS_LIMITS = (0, 3)
+# The rig the campaign collects under, as the sha256 of its rig profile (`act.rig_profile.RigProfile.profile_sha256`). Absent = rig v1,
+# the rig of every campaign config written before profiles existed. Unlike the keys above it IS part of the controlled identity
+# (`unified.admission._collection_identity`, present only when named here), and the frozen inputs of the campaign must bind the same
+# profile (`case_inputs.campaign_binding`), so data of different rigs cannot be mixed under one qualification.
+_RIG_PROFILE_SHA256 = "rig_profile_sha256"
 _OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
-                    *_INT_LIMITS)
+                    _RIG_PROFILE_SHA256, *_INT_LIMITS)
 
 
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
@@ -165,6 +170,8 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
         if _RETRY_INVALID_MAX_ROUNDS in document:
             low, high = RETRY_INVALID_MAX_ROUNDS_LIMITS
             _require(type(document[_RETRY_INVALID_MAX_ROUNDS]) is int and low <= document[_RETRY_INVALID_MAX_ROUNDS] <= high)
+        if _RIG_PROFILE_SHA256 in document:
+            _sha(document[_RIG_PROFILE_SHA256])
         for name, (low, high) in _INT_LIMITS.items():
             if name in document:
                 _require(type(document[name]) is int and low <= document[name] <= high)

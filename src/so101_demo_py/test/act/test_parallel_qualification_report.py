@@ -406,6 +406,27 @@ def test_frozen_identity_is_read_from_the_fields_a_real_frozen_set_carries(tmp_p
     assert recompute.frozen_identity_problems(dict(frozen, scene_manifest=None), manifest, contract) == ['frozen_inputs']
 
 
+def test_the_frozen_rig_must_be_the_rig_the_contract_identity_names(tmp_path):
+    """Neither naming a rig is rig v1; a v2 frozen set against a rig-less identity (or the reverse) is an identity problem."""
+    from so101_demo.act.diagnostic_episode_inputs import rig_profile_binding
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG, dump_rig_profile
+    contract = dict(controlled_identity=dict(runtime_config_sha256='1'*64, collection_config_sha256='2'*64,
+        contact_policy_fingerprint='3'*64), scene_manifest=dict(sha256='4'*64))
+    proposal = tmp_path/'contact-proposal.json'
+    proposal.write_text(json.dumps(dict(policy_fingerprint='3'*64)))
+    frozen = dict(roles=dict(runtime_config=dict(sha256='1'*64), collection_config=dict(sha256='2'*64),
+        contact_proposal=dict(path='contact-proposal.json')), scene_manifest=dict(sha256='4'*64))
+    manifest = tmp_path/'inputs-manifest.json'
+    v1_bound = dict(frozen, rig_profile=rig_profile_binding(dump_rig_profile(HEAD_WRIST_RIG)))
+    v2_bound = dict(frozen, rig_profile=rig_profile_binding(dump_rig_profile(SIDE_WRIST_RIG)))
+    assert recompute.frozen_identity_problems(v1_bound, manifest, contract) == []
+    assert recompute.frozen_identity_problems(v2_bound, manifest, contract) == ['rig_profile_sha256']
+    v2_contract = dict(contract, controlled_identity=dict(contract['controlled_identity'], rig_profile_sha256=SIDE_WRIST_RIG.profile_sha256))
+    assert recompute.frozen_identity_problems(v2_bound, manifest, v2_contract) == []
+    assert recompute.frozen_identity_problems(frozen, manifest, v2_contract) == ['rig_profile_sha256']
+    assert recompute.frozen_identity_problems(dict(frozen, rig_profile={'values': {}}), manifest, contract) == ['frozen_inputs']
+
+
 def build_for(world, contract_path):
     path = build_collection_qualification_report(world.run, contract=contract_path)
     return path, json.loads(path.read_bytes())

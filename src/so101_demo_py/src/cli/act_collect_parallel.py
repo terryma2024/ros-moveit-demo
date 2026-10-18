@@ -109,6 +109,9 @@ def _parser():
     parser.add_argument('--episode-recorder-policy', type=Path, required=True)
     parser.add_argument('--runtime-policy', type=Path, required=True,
                         help='development runtime policy; its hard_stops carry the disk floor')
+    parser.add_argument('--rig-profile', type=Path, default=None,
+                        help='rig profile (config/act/rig-v*.yaml) the campaign collects under; frozen into the inputs. Default: '
+                             'rig v1, recorded explicitly. The campaign config\'s rig_profile_sha256 (absent = rig v1) must match')
     return parser
 
 
@@ -219,7 +222,8 @@ def main(argv=None, *, edges=None) -> int:
             inputs_manifest = freeze_campaign_inputs(run, candidates=resolved['input_candidates'], scene_manifest=scenes,
                 teacher_endpoint=resolved['teacher_endpoint'],
                 teacher_execution_policy=resolved['teacher_execution_policy'],
-                episode_recorder_policy=resolved['episode_recorder_policy'], runtime_policy=resolved['runtime_policy'])
+                episode_recorder_policy=resolved['episode_recorder_policy'], runtime_policy=resolved['runtime_policy'],
+                rig_profile=None if getattr(args, 'rig_profile', None) is None else _regular(args.rig_profile))
         except (OSError, ValueError, KeyError, TypeError) as error:
             raise ValueError('CASE_INPUTS_FREEZE_REFUSED: ' + str(error)) from error
         case_inputs = write_case_scopes(run, inputs_manifest=inputs_manifest)

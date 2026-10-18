@@ -138,6 +138,14 @@ def frozen_identity_problems(frozen, manifest_path, contract):
     problems.extend(key for key, value in found.items() if value != identity[key])
     if bound != contract['scene_manifest']['sha256']:
         problems.append('scene_manifest')
+    # the rig: the frozen set and the contract's identity name the same profile (neither naming one is rig v1)
+    from .rig_profile import DEFAULT_RIG, rig_from_frozen
+    try:
+        frozen_rig = rig_from_frozen(frozen).profile_sha256
+    except _RUN_ERRORS:
+        return ['frozen_inputs']
+    if frozen_rig != identity.get('rig_profile_sha256', DEFAULT_RIG.profile_sha256):
+        problems.append('rig_profile_sha256')
     return problems
 
 

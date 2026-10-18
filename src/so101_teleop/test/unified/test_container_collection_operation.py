@@ -372,3 +372,15 @@ def test_the_controlled_identity_ignores_the_campaign_config_total(tmp_path,monk
         finally:
             store.close()
     assert identities[0] == identities[1] == identities[2] and len(set(hashes)) == 3
+
+
+def test_the_controlled_identity_carries_the_rig_only_when_the_campaign_config_names_one():
+    from so101_teleop.unified.admission import _collection_identity
+    payload = {name: str(index) * 64 for index, name in enumerate(
+        ('source_sha256', 'runtime_config_sha256', 'collection_config_sha256', 'contact_policy_fingerprint'))}
+    image = {'digest': 'sha256:' + 'a' * 64, 'package_source_sha256': 'b' * 64, 'install_sha256': 'c' * 64}
+    config = {'gpu_uuid': 'GPU-28221cec-9d21-7753-fd5a-da645740df19', 'teacher_service': {'image': image}, 'shard_image': image}
+    assert 'rig_profile_sha256' not in _collection_identity(payload, config)
+    named = _collection_identity(payload, dict(config, rig_profile_sha256='9' * 64))
+    assert named['rig_profile_sha256'] == '9' * 64
+    assert {key: value for key, value in named.items() if key != 'rig_profile_sha256'} == _collection_identity(payload, config)

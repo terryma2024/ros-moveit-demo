@@ -386,6 +386,10 @@
       "minimum": 0,
       "maximum": 3
     },
+    "rig_profile_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "qualification_contract": {
       "oneOf": [
         {
