@@ -23,6 +23,17 @@ _CHECKS = frozenset((
     "mujoco_session", "advancing_physics", "controller_states",
     "moveit_graph", "physical_stop", "head_rgb", "wrist_rgb",
 ))
+_BASE_CHECKS = frozenset(("mujoco_session", "advancing_physics", "controller_states",
+                          "moveit_graph", "physical_stop"))
+
+
+def checks_for_camera_names(camera_names) -> frozenset:
+    """The exact check set of a stack whose rig has these cameras: the five stack checks and one `<camera>_rgb` each.
+
+    The names are the observer's (`so101_demo.cli.act_stack_ready.check_order_for`); a test pins the two together."""
+    return _BASE_CHECKS | frozenset(f"{camera}_rgb" for camera in camera_names)
+
+
 _ARTIFACT_HASHES = (
     "source_sha256", "manifest_sha256", "runtime_config_sha256",
     "collection_config_sha256", "contact_policy_fingerprint",

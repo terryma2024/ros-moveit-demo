@@ -217,3 +217,105 @@ def test_repeatable_ready_probe_refuses_a_bad_scope_when_built_and_reports_each_
     with pytest.raises(ValueError, match="ACT_STACK_READINESS_COMMAND_FAILED"):
         probe()
     assert probe() is True
+
+
+# --- the expected readiness check set follows the rig profile the stack composes (EXP-7001: SHARD_START_FAILED) ---
+
+BASE_CHECKS = ("mujoco_session", "advancing_physics", "controller_states", "moveit_graph", "physical_stop")
+SIDE_WRIST_CHECKS = (*BASE_CHECKS, "side_rgb", "wrist_rgb")
+
+
+def rig_launch(tmp_path, rig):
+    """A launch of a named rig: the default rig carries no profile file, another one carries its profile document."""
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG, dump_rig_profile
+
+    root = tmp_path / "stack"
+    root.mkdir(exist_ok=True)
+    arguments = {}
+    if rig == "side-wrist":
+        profile = tmp_path / "rig-v2.yaml"
+        profile.write_bytes(dump_rig_profile(SIDE_WRIST_RIG))
+        arguments = dict(rig=rig, rig_profile=profile)
+    return ActStackLaunch(
+        ros2_executable=Path("/usr/bin/python3"), session_id="session-289", evidence_root=root,
+        ros_domain_id=179, environment={"GZ_PARTITION": "act-data-exp289-179"}, **arguments,
+    )
+
+
+def observation(checks):
+    return {
+        "schema_version": 1, "session_id": "session-289", "ros_domain_id": 179,
+        "captured_monotonic_ns": NOW_NS - 1_000_000_000, "checks": {name: True for name in checks},
+    }
+
+
+def test_side_wrist_probe_accepts_exactly_the_side_wrist_check_set(tmp_path):
+    probe, calls = observe(tmp_path, rig_launch(tmp_path, "side-wrist"), observation(SIDE_WRIST_CHECKS))
+    assert probe() is True
+    assert set(json.loads(probe.readiness_bytes)["checks"]) == set(SIDE_WRIST_CHECKS)
+    assert calls[0][0][-2:] == ["--rig-profile", str(tmp_path / "rig-v2.yaml")]
+
+
+@pytest.mark.parametrize("checks", [
+    (*BASE_CHECKS, "head_rgb", "wrist_rgb"),               # the other rig's set
+    (*BASE_CHECKS, "side_rgb"),                            # a camera missing
+    (*SIDE_WRIST_CHECKS, "head_rgb"),                      # a superset
+    SIDE_WRIST_CHECKS[:-1],                                # a subset
+    (*SIDE_WRIST_CHECKS, "task_rgb"),                      # an unknown extra camera
+])
+def test_side_wrist_probe_refuses_any_other_check_set(tmp_path, checks):
+    probe, _ = observe(tmp_path, rig_launch(tmp_path, "side-wrist"), observation(checks))
+    with pytest.raises(ValueError, match="ACT_STACK_READINESS_OUTPUT_INVALID"):
+        probe()
+    assert probe.readiness_bytes is None
+
+
+@pytest.mark.parametrize("checks", [
+    SIDE_WRIST_CHECKS,
+    (*BASE_CHECKS, "head_rgb"),
+    (*BASE_CHECKS, "head_rgb", "wrist_rgb", "side_rgb"),
+])
+def test_head_wrist_probe_still_refuses_everything_but_head_and_wrist(tmp_path, checks):
+    probe, _ = observe(tmp_path, rig_launch(tmp_path, "head-wrist"), observation(checks))
+    with pytest.raises(ValueError, match="ACT_STACK_READINESS_OUTPUT_INVALID"):
+        probe()
+
+
+def test_head_wrist_probe_accepts_exactly_the_head_wrist_check_set(tmp_path):
+    probe, _ = observe(tmp_path, rig_launch(tmp_path, "head-wrist"), observation(CHECKS))
+    assert probe() is True
+
+
+def test_the_expected_check_sets_are_the_observers_own_check_names(tmp_path):
+    """The validator's set is the observer's `check_order_for` of the same rig (one source for the names)."""
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG
+    from so101_demo.cli import act_stack_ready
+    from so101_teleop.unified.pick_place_startup_issuer import expected_checks_for_launch
+
+    for name, rig in (("head-wrist", HEAD_WRIST_RIG), ("side-wrist", SIDE_WRIST_RIG)):
+        assert expected_checks_for_launch(rig_launch(tmp_path, name)) == frozenset(
+            check for check, _code in act_stack_ready.check_order_for(rig))
+    assert expected_checks_for_launch(rig_launch(tmp_path, "head-wrist")) == frozenset(CHECKS)
+
+
+def test_a_profile_file_of_another_rig_than_the_launch_names_is_refused(tmp_path):
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, dump_rig_profile
+
+    launch = rig_launch(tmp_path, "side-wrist")
+    launch.rig_profile.write_bytes(dump_rig_profile(HEAD_WRIST_RIG))
+    binary = tmp_path / "act_stack_ready"
+    binary.write_text("#!/usr/bin/env python3\n")
+    binary.chmod(0o700)
+    with pytest.raises(ValueError, match="ACT_STACK_READINESS_PROBE_CONFIG_INVALID"):
+        InstalledActStackReadinessProbe(launch, binary)
+
+
+def test_side_wrist_observation_is_not_a_pick_place_startup_proof(tmp_path):
+    """The pick-place validation proof is rig v1 only: its issuer keeps the exact v1 set and fails closed on others."""
+    context, child, _, root, _ = prepared(tmp_path)
+    raw = (json.dumps(observation(SIDE_WRIST_CHECKS)) + "\n").encode()
+    issuer = PickPlaceStartupProofIssuer(
+        context, child, STACK_OWNER, CHILD_OWNER, live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS)
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
+        issuer.issue(raw)
+    assert not (root / "readiness.json").exists()

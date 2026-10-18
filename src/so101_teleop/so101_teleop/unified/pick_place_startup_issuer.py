@@ -16,11 +16,28 @@ from .contracts import MutationError, OwnerKey
 from .pick_place_startup_proof import (
     _ARTIFACT_HASHES, _CHECKS, _MAX_AGE_NS, _MAX_BYTES,
     _MAX_ISSUE_LAG_NS, _READINESS_KEYS, PickPlaceStartupProofConsumer,
+    checks_for_camera_names,
 )
 
 
+def expected_checks_for_launch(launch: ActStackLaunch) -> frozenset:
+    """The exact readiness check set of the rig this launch composes.
+
+    The default rig (no profile file) is the fixed `_CHECKS` set of the stacks that predate rigs; any other rig is the
+    set its profile file derives, the same file the observer is given (`launch.readiness_arguments()`). Always an exact
+    set: the observer's `checks` must equal it, never a subset or a superset."""
+    if launch.rig_profile is None:
+        return _CHECKS
+    from so101_demo.act.rig_profile import load_rig_profile
+
+    profile = load_rig_profile(launch.rig_profile)
+    if profile.rig != launch.rig:
+        raise ValueError("ACT_STACK_RIG_INVALID")
+    return checks_for_camera_names(profile.camera_names)
+
+
 def _validated_observation(raw: bytes, *, session_id: str, ros_domain_id: int,
-                           now_ns: int) -> dict:
+                           now_ns: int, checks: frozenset = _CHECKS) -> dict:
     try:
         if not isinstance(raw, bytes) or not 0 < len(raw) <= _MAX_BYTES:
             raise ValueError("length")
@@ -33,7 +50,7 @@ def _validated_observation(raw: bytes, *, session_id: str, ros_domain_id: int,
                 or value["ros_domain_id"] != ros_domain_id
                 or type(value["captured_monotonic_ns"]) is not int
                 or type(value["checks"]) is not dict
-                or set(value["checks"]) != _CHECKS
+                or set(value["checks"]) != checks
                 or any(check is not True for check in value["checks"].values())
                 or not 0 < value["captured_monotonic_ns"] <= now_ns
                 or now_ns - value["captured_monotonic_ns"] > _MAX_AGE_NS):
@@ -68,6 +85,10 @@ class InstalledActStackReadinessProbe:
                 or not timeout_s < process_timeout_s <= 75
                 or not launch.environment.get("GZ_PARTITION")):
             raise ValueError("ACT_STACK_READINESS_PROBE_CONFIG_INVALID")
+        try:
+            self.expected_checks = expected_checks_for_launch(launch)
+        except (OSError, ValueError) as error:
+            raise ValueError("ACT_STACK_READINESS_PROBE_CONFIG_INVALID") from error
         self.launch = launch
         self.executable = binary
         self.run = run
@@ -98,7 +119,7 @@ class InstalledActStackReadinessProbe:
         raw = result.stdout
         _validated_observation(raw, session_id=self.launch.session_id,
                                ros_domain_id=self.launch.ros_domain_id,
-                               now_ns=self.clock_ns())
+                               now_ns=self.clock_ns(), checks=self.expected_checks)
         self.readiness_bytes = raw
         return True
 
