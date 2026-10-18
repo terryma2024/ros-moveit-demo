@@ -105,12 +105,50 @@ def test_manifest_without_scene_manifest_hashes_as_before(tmp_path):
     assert "scene_manifest" not in verify_frozen_inputs(manifest_path)
 
 
-@pytest.mark.parametrize("mode", [DIAGNOSTIC, None])
-def test_scene_manifest_refused_outside_formal_mode(tmp_path, mode):
+def test_scene_manifest_refused_without_a_mode(tmp_path):
     source = scene_file(tmp_path)
     with pytest.raises(ValueError, match="INPUT_SCENE_MANIFEST_REQUIRES_FORMAL"):
-        freeze_inputs(candidates(tmp_path), tmp_path / "inputs", mode=mode, scene_manifest=source)
+        freeze_inputs(candidates(tmp_path), tmp_path / "inputs", mode=None, scene_manifest=source)
     assert not (tmp_path / "inputs").exists()
+
+
+def test_a_diagnostic_set_binds_one_row_only(tmp_path):
+    # a diagnostic (spot-check) set may bind a scene list of exactly one row; a longer list is not a spot check
+    with pytest.raises(ValueError, match="INPUT_SCENE_MANIFEST_INVALID"):
+        freeze_inputs(candidates(tmp_path), tmp_path / "inputs", mode=DIAGNOSTIC, scene_manifest=scene_file(tmp_path))
+    assert not (tmp_path / "inputs").exists()
+
+
+def test_a_diagnostic_set_with_one_row_scopes_in_its_own_mode(tmp_path):
+    from so101_demo.act.diagnostic_episode_inputs import frozen_scene_rows, require_scope_for_inputs
+
+    source = scene_file(tmp_path, ROWS[:1])
+    manifest_path = freeze_inputs(candidates(tmp_path), tmp_path / "inputs", mode=DIAGNOSTIC, scene_manifest=source)
+    document = json.loads(manifest_path.read_bytes())
+    assert document["mode"] == DIAGNOSTIC and document["scene_manifest"]["scene_count"] == 1
+    # the hash chain is the one every bound set uses
+    extra = {key: document[key] for key in ("mode", "scene_manifest")}
+    assert document["inputs_sha256"] == hashlib.sha256(_canonical({**document["roles"], **extra})).hexdigest()
+    frozen = verify_frozen_inputs(manifest_path)
+    assert [row["scene_id"] for row in frozen_scene_rows(frozen, manifest_path)] == ["scene-a"]
+    scope = build_collection_scope(DIAGNOSTIC, scene_id="scene-a", seed=11, inputs_sha256=frozen["inputs_sha256"])
+    require_scope_for_inputs(scope, frozen, manifest_path)
+    # a formal-mode scope of the same row, another row, and another seed are all refused
+    for other in (build_collection_scope(FORMAL, scene_id="scene-a", seed=11, inputs_sha256=frozen["inputs_sha256"]),
+                  build_collection_scope(DIAGNOSTIC, scene_id="scene-b", seed=12, inputs_sha256=frozen["inputs_sha256"]),
+                  build_collection_scope(DIAGNOSTIC, scene_id="scene-a", seed=12, inputs_sha256=frozen["inputs_sha256"])):
+        with pytest.raises(ValueError, match="EPISODE_SCOPE_INPUTS_MISMATCH"):
+            require_scope_for_inputs(other, frozen, manifest_path)
+
+
+def test_a_formal_set_still_refuses_a_diagnostic_scope(tmp_path):
+    from so101_demo.act.diagnostic_episode_inputs import require_scope_for_inputs
+
+    manifest_path, _ = freeze_bound(tmp_path)
+    frozen = verify_frozen_inputs(manifest_path)
+    scope = build_collection_scope(DIAGNOSTIC, scene_id="scene-a", seed=11, inputs_sha256=frozen["inputs_sha256"])
+    with pytest.raises(ValueError, match="EPISODE_SCOPE_INPUTS_MISMATCH"):
+        require_scope_for_inputs(scope, frozen, manifest_path)
 
 
 def test_a_forged_diagnostic_set_carrying_a_scene_manifest_is_refused_at_verify(tmp_path):

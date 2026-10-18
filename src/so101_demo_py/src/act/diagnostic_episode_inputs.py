@@ -68,6 +68,8 @@ _MANIFEST_OPTIONAL = frozenset({"mode", "runtime_policy", "execution_snapshot",
 RIG_PROFILE_BINDING = "rig_profile"
 RIG_PROFILE_FILE = "rig_profile.yaml"
 SCENE_MANIFEST_PATH = "scene_manifest/scenes.json"
+#: the modes that may bind a scene list: a formal campaign (many rows) and a container spot check (one row, diagnostic mode)
+_SCENE_BINDING_MODES = ("formal", "preselected_target_diagnostic")
 _SCENE_MANIFEST_FIELDS = frozenset({"path", "sha256", "bytes", "scene_count"})
 #: The policy bindings (Phase A4c): binding name -> the file
 #: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
@@ -481,15 +483,18 @@ def _scene_rows(payload: bytes, code: str) -> tuple[dict, ...]:
 def _bound_scene_rows(document: dict, root: Path) -> tuple[dict, ...]:
     """Re-read the bound scene manifest under `root` and return its rows; every fault is `INPUTS_SCENE_MANIFEST_INVALID`.
 
-    The key is legal only on a `formal` set. The binding is closed, the file is the one fixed path (no symlink, inside `root`)
+    The key is legal on a `formal` set and on a `preselected_target_diagnostic` set of exactly one row (a container spot check).
+    The binding is closed, the file is the one fixed path (no symlink, inside `root`)
     and its size, hash and row count are the bound ones, so a replaced list cannot reach a scope check unnoticed.
     """
     code = "INPUTS_SCENE_MANIFEST_INVALID"
     binding = document.get("scene_manifest")
-    if (document.get("mode") != "formal" or not isinstance(binding, dict) or set(binding) != _SCENE_MANIFEST_FIELDS
+    if (document.get("mode") not in _SCENE_BINDING_MODES or not isinstance(binding, dict)
+            or set(binding) != _SCENE_MANIFEST_FIELDS
             or binding["path"] != SCENE_MANIFEST_PATH or not isinstance(binding["sha256"], str)
             or not _HEX64.fullmatch(binding["sha256"]) or type(binding["bytes"]) is not int or binding["bytes"] < 0
-            or type(binding["scene_count"]) is not int or binding["scene_count"] < 1):
+            or type(binding["scene_count"]) is not int or binding["scene_count"] < 1
+            or (document["mode"] != "formal" and binding["scene_count"] != 1)):
         raise ValueError(code)
     path = Path(root) / binding["path"]
     try:
@@ -516,9 +521,10 @@ def frozen_scene_rows(frozen: dict, manifest_path: Path) -> tuple[dict, ...]:
 def require_scope_for_inputs(document: dict, frozen: dict, manifest_path: Path) -> None:
     """Refuse a collection scope that is not valid for the frozen input set; the one rule every site shares.
 
-    A set that binds no scene manifest (every diagnostic set, and a formal set that predates the binding) expects exactly the
-    anchor scope. A set that binds one (formal only) expects the scope of one of its rows: `formal`, that row's `scene_id` and
-    `seed`, and this set's `inputs_sha256`. The anchor scope is then valid only if `default` is itself a row.
+    A set that binds no scene manifest (every other diagnostic set, and a formal set that predates the binding) expects exactly
+    the anchor scope. A set that binds one expects the scope of one of its rows: the set's own mode (`formal`, or
+    `preselected_target_diagnostic` for the one-row spot-check set), that row's `scene_id` and `seed`, and this set's
+    `inputs_sha256`. The anchor scope is then valid only if `default` is itself a row.
     Raises `EPISODE_SCOPE_INPUTS_MISMATCH`, or `INPUTS_SCENE_MANIFEST_INVALID` when the bound file no longer verifies.
     """
     from .collection_scope import build_collection_scope
@@ -528,7 +534,7 @@ def require_scope_for_inputs(document: dict, frozen: dict, manifest_path: Path) 
         expected = [build_collection_scope(frozen["mode"], scene_id=anchor["scene_id"], seed=anchor["seed"],
                                            inputs_sha256=frozen["inputs_sha256"])]
     else:
-        expected = [build_collection_scope("formal", scene_id=row["scene_id"], seed=row["seed"],
+        expected = [build_collection_scope(frozen["mode"], scene_id=row["scene_id"], seed=row["seed"],
                                            inputs_sha256=frozen["inputs_sha256"])
                     for row in frozen_scene_rows(frozen, manifest_path)]
     if document not in expected:
@@ -741,7 +747,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
     The output directory must not exist: a freeze is a new immutable input set, never a merge into
     a previous one.
 
-    `scene_manifest` (formal mode only) binds a campaign's scene list: its bytes are copied to `scene_manifest/scenes.json`
+    `scene_manifest` (formal mode, or diagnostic mode with exactly one row) binds a campaign's scene list: its bytes are copied to `scene_manifest/scenes.json`
     and `{path, sha256, bytes, scene_count}` enters the inputs hash chain, so a collection scope may name any row of it. A
     call without it writes the same manifest and digest it always did.
 
@@ -758,7 +764,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
         raise ValueError("INPUT_OUTPUT_EXISTS")
     scene_payload = None
     if scene_manifest is not None:
-        if mode != "formal":
+        if mode not in _SCENE_BINDING_MODES:
             raise ValueError("INPUT_SCENE_MANIFEST_REQUIRES_FORMAL")
         source = Path(scene_manifest)
         try:
@@ -768,6 +774,8 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
         except OSError as error:
             raise ValueError("INPUT_SCENE_MANIFEST_INVALID") from error
         scene_count = len(_scene_rows(scene_payload, "INPUT_SCENE_MANIFEST_INVALID"))
+        if mode != "formal" and scene_count != 1:
+            raise ValueError("INPUT_SCENE_MANIFEST_INVALID")
     rig_payload = None
     if rig_profile is not None:
         if isinstance(rig_profile, bytes):
