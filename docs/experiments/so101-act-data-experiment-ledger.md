@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3725
+latest_checkpoint: CP-3726
 next_experiment: side-wrist contact calibration (offline + live spot checks) and activation under CP-3394, then EXP-623 debug, EXP-624 qualification, EXP-625 formal 103, TRAIN-003.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3726 — Spot-check images and candidate receipt done; authoring stopped by three refusals
+
+- Images built from b13874eaa exactly (worktree checked out detached at b13874eaa for the build, then back on the branch; the docs-only CP-3725 commit c5beb0d0c sits on top, src/scripts/third_party identical):
+  - inference sha256:29231388b9cfa07c8dad6b42c06affb5d0c1d610a29ecab25173a4cc709d5dcd (R/image-build-20261018T124941Z);
+  - shard sha256:259250d910ceb82dda73e99d66ee657acedf85a5a81a1e351af3b37e91aabf63 (R/image-build-20261018T125109Z);
+  - in-image dpkg-query --network none: rclpy 7.1.11-1noble.20260615.133206 and rcl-yaml-param-parser 9.2.11-1noble.20260612.050432 in both, controller-manager 4.48.1-1noble.20261006.035021 in the shard (the inference image has none). Equal to the versions of CP-3725.
+- Candidate receipt calibration/rig-side-wrist-contact-20261018T090000Z/candidate-receipt.json, sha256 3517034218e6aafca1b64fe1597245ca31647f52ec7cb96d05a53c547e4da5f6, kind spot_check_candidate, approved_by plan:docs/superpowers/specs/2026-10-18-so101-act-container-spot-check-design.md, fingerprint 55ee6981...
+- new-inputs.py --exp 7001 (nominal; 7001/7002 chosen so that 623 to 625 stay reserved for the camera rig v2 sequence) wrote REG/act-w1s-inputs-20261018T125609Z; author.py check-only, images, inspect (12 roles READY, contact_activation approval spot_check_candidate) passed, validate-inputs.zsh refused (AUTHOR_INCOMPLETE):
+  - the Host gate check requires colcon_rc=0 in gates-result.txt; b13874eaabd5 has demo_rc=0 colcon_rc=1 (the exception of CP-3725 is not honoured by the tooling and was not worked around);
+  - preconditions: 33 exited containers of earlier campaigns (so101-act-50b24e478fbee0f1-*, so101-act-w8f-20261017T084146Z-teacher-g1) are not removed, since they are not this run's; a ROS test process of another session (tp-ros2control-fix-20261018/run1.zsh, controller_manager test_spawner_unspawner) is live; and rustdesk holds a GPU compute context.
+- No container started, no run root created. The inputs directory above is an incomplete authoring result and a deletion candidate.
 
 ## CP-3725 — Gate exception recorded for the spot-check commits; container spot check of the side-wrist contact policy starts
 
