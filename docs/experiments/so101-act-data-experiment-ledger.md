@@ -69,11 +69,47 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3722
-next_experiment: O2 (commit implies exportable), O6 (native rollout), Host gate, then TRAIN-002 (O7, leading idle trimmed).
+latest_checkpoint: CP-3723
+next_experiment: camera rig v2 implementation (design 2026-10-18-so101-act-camera-rig-v2-design.md), then EXP-623 debug, EXP-624 qualification, EXP-625 formal 100, TRAIN-003.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3723 — O2, trim, gate v2 (7 min), TRAIN-002 stopped, O6 committed, camera rig v2 confirmed
+
+- O2 (b14833df0): a shared Teacher-oracle exclusion rule (teacher_process.bound_teacher_oracle_exclusion) used by export and by phase-2 grading. An incomplete oracle grades INVALID (TEACHER_ORACLE_EXCLUDED: <flag> <phase>), so it is a retry candidate. Real-data differential: 100 of 101 identical. frm-044 is still refused, now as EPISODE_COLLECTION_IDENTITY_INVALID (the processed readback refuses before the export gate). w8f formal_postrun templates check that every committed episode passes the export gates.
+- O7 trim (4c9f6f5b5): training.sample_selection (trim_leading_idle, idle_threshold_rad 0.005, lead_in_rows 10) and learning_rate_backbone; training-002.yaml. On the real export, train 72,534 to 68,605 samples.
+- Gate tooling:
+  - The pytest worker-temp plugin lived in /tmp and was lost in the reboot; it moved to fast-gate/pytest-plugin (CHANGELOG-pytest-plugin.txt), and gate_demo_py.zsh was repointed too.
+  - Gate v2 (fast-gate/*-v2.zsh, README-v2.md; human "先做 1、2、3"):
+    - concurrent demo and colcon with per-stage ROS domains (demo 203, teleop 204, JTC 229, the main colcon part unset so its launch tests keep private domains), all localhost-only;
+    - 16 demo workers;
+    - ccache in fast-gate/ccache (ccache 4.9.1 installed by the human);
+    - colcon summary counting both teleop phases.
+  - On 4c9f6f5b5, the same 17 failures as v1. Total time: v1 1070 s, v2 cold 654 s, v2 warm 448 s.
+  - One real-rate replay test flaked once at 16 workers (CAPTURE_LABEL_REVOKED) and passed on the repeat.
+- 564af0cb6: the 17 failures fixed (qualification fixtures bind the Teacher manifest hash; allowlist row for training-002.yaml). v2 gate: build 0, demo 0 (13454 passed), colcon 0 (2208 tests), 430 s.
+- TRAIN-002 (564af0cb6 snapshot, training-002.yaml, 60000 steps, batch 16):
+  - At step 2100: loss 0.125, about 30 samples/s, DataLoader wait 15–23 percent, ETA about 8 h.
+  - Stopped by the human ("先停止现在的训练。开始做上面的修改。下次跑的时候DataLoader 的 num_workers 从 8 加到 16。直接进行TRAIN-003"); rc 143; kept as train-run-20261018T0900Z.stopped-by-human.
+- O6 (537846ca9, 5a1b8ef29, 5a1c7794e, bc8019a23, 932a5cb34, 00473a462, 78d531844): design tasks 1–7 of the native rollout. Camera names and state width come from the bundle; config/act/rollout.yaml maps cameras to topics. Ordinary tests: 10015 passed, with only the known shim failures plus one load flake.
+  - Open before a real rollout:
+    - catch-all fault handling in run_episode;
+    - wait for the first joint state and cup pose;
+    - a load_inputs test;
+    - the train-venv training tests after the lerobot.py edits;
+    - the v2 gate;
+    - confirm the side topic name.
+- Camera research (REG/diag-delivery-20261016/camera-compare, camera-rig-v2):
+  - LeRobot SO-101 prescribes only fixed cameras with the object in view; the typical setup is a jaw-mounted wrist UVC camera plus a fixed external top, front or side camera at 30 fps.
+  - Our wrist camera on the wrist body sees mostly the gripper (cup 75 degrees off axis at task_start, visible 0.42 over an episode).
+  - Our head camera on the base chain looks along the arm.
+- Human: "把我们的腕部相机也改成和LeRobot一样的方案。头部相机先禁用，上脚架side相机。head search的功能先关掉 …", then the answers on naming (side), neck, zero-cost disable, 10 Hz and the head mast (0.8 m above the pedestal, which simulates the AGV), and "确认" for the poses and the design.
+- Design docs/superpowers/specs/2026-10-18-so101-act-camera-rig-v2-design.md (CONFIRMED):
+  - wrist on the jaw (wA_jaw_top90) and side tripod (sB_right);
+  - head, neck and head search absent with zero cost (state 6);
+  - a rig profile replacing the hard-coded head/wrist points; rig v1 kept byte-identical for the sealed data;
+  - the future AGV head spec (right-rear mast, 0.8 m above the pedestal, pan-tilt 5 to 75 degrees, manipulation pitch 67 and fovy 60).
 
 ## CP-3722 — Offline evaluation of TRAIN-001; QC profile; optimisation batch and rollout design confirmed; O5, O3 and O1 done
 
