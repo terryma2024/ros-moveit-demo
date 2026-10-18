@@ -69,11 +69,25 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3727
+latest_checkpoint: CP-3728
 next_experiment: side-wrist contact calibration (offline + live spot checks) and activation under CP-3394, then EXP-623 debug, EXP-624 qualification, EXP-625 formal 103, TRAIN-003.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3728 — Evidence root on its own partition (plan steps 3–5); scratch batch g; sealed readback 0 problems
+
+- Batch g (rm under /data/work pre-authorized; deletion candidates of CP-3727): R/scratch entries and R/authoring-validation-scratch/selftest-*, 7 entries, 28.2 GiB. Record: R/evidence-deletion-20261018g/record.jsonl. The evidence tree was 241G before the copy.
+- Machine setup (ai-station only; AGENTS.md stays mount-agnostic, per the human): /dev/nvme0n1p6 is ext4, UUID 247781db-7669-48d0-8284-3a718743e559. It was shrunk from Windows and was empty (lost+found only). The root reserve was set to 1 % (tune2fs -m 1). The human ran the sudo steps.
+  - Copy: rsync -aHAX --numeric-ids, rc 0, 250.85 GB, 2,541,781 entries, 8 min 35 s.
+  - Verify: rsync -aHAXc --dry-run --itemize-changes printed nothing and nothing on stderr. The printed rc is head's, because pipefail was not set.
+  - Switch: the old tree became /data/work/so101-evidence.pre-mount and is KEPT until the human authorises its deletion. fstab gained `UUID=247781db-… /data/work/so101-evidence ext4 defaults,noatime 0 2`. findmnt shows /dev/nvme0n1p6 rw,noatime, owner matianyi.
+- Readback on the mounted partition: W/so101-tools/claude-tools/verify_sealed_roots.py ran with 16 workers, rc 0, log /tmp/so101-debug-ev-migration/sealed-readback.log.
+  - It checks all 15 sealed roots: the manifest sha256, then per-file bytes, sha256 and symlink targets, plus extra and missing files.
+  - Result: 1,228,567 entries, 0 problems.
+- TMPDIR proof: scratch R/scratch/mount-check-20261018/tmp. tempfile.gettempdir() resolved inside it, and a 1 MiB fsync write succeeded. This is a deletion candidate.
+- Plan docs/superpowers/plans/2026-10-18-so101-evidence-partition-migration.md is complete. Free space: the partition has about 235G available, and the root disk now holds only W/{venvs,models,so101-*} and the .pre-mount copy.
+- Next: rebuild images and run a v4 gate at the current HEAD (src identical to b13874eaa), then the spot checks (CP-3726 refusals: the gate is now green; quiet host; 33 old exited containers are removed after their logs are saved).
 
 ## CP-3727 — Partition migration steps 1 and 2: tooling, venvs, models, policy and build trees moved out of the evidence root; v4 gate green
 
