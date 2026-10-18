@@ -3,13 +3,11 @@
 import copy
 from dataclasses import asdict
 import json
-import io
 import math
-import pickle
 from pathlib import Path
 
 from .contracts import fields, integer, vector, finite
-from .qc_session import Identity, session_memo
+from .qc_session import Identity, content_bytes, session_memo
 from .scene_association import _world, _raw_source_matches, source_model_data
 
 WORLD_KIND = "ACT_NATIVE_WORLD_SOURCE"
@@ -23,17 +21,6 @@ def world_source_record(received, scene, *, execution_root):
         "scene_state": copy.deepcopy(scene[0]), "scene_received_monotonic_ns": round(scene[1] * 1e9),
         "native_reference": {"kind": "native_physics_step", "session_id": world.simulation_session_id,
             "reset_epoch": world.reset_epoch, "simulation_step": world.simulation_step}}, allow_nan=False))
-
-
-def _content_bytes(document):
-    """The type-exact serialisation of a document: pickle keeps types (1, 1.0 and True, or int and str dictionary keys, never give
-    the same bytes), and with the memo switched off it does not depend on which parse shared which string objects. Equal bytes mean
-    an equal value; a different dictionary order only costs a miss."""
-    buffer = io.BytesIO()
-    pickler = pickle.Pickler(buffer, protocol=5)
-    pickler.fast = True
-    pickler.dump(document)
-    return buffer.getvalue()
 
 
 def _scope_key(identity):
@@ -50,7 +37,7 @@ def _content_key(document, *, identity):
     recursive) is keyed by identity, as before."""
     scope = _scope_key(identity)
     try:
-        return (_content_bytes(document), scope)
+        return (content_bytes(document), scope)
     except Exception:
         from .qc_session import Identity
         return (Identity(document), scope)

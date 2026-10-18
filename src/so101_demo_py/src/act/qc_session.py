@@ -16,7 +16,9 @@ from __future__ import annotations
 import contextlib
 import copy
 import functools
+import io
 import os
+import pickle
 from pathlib import Path
 
 _STACK: list = []
@@ -114,6 +116,18 @@ class Identity:
 
     def __eq__(self, other) -> bool:
         return isinstance(other, Identity) and other.value is self.value
+
+
+def content_bytes(value) -> bytes:
+    """The type-exact serialisation of a plain document, for a content key. Pickle keeps types (1, 1.0 and True, or int and str
+    dictionary keys, never give the same bytes), and with its memo switched off the bytes do not depend on which parse shared which
+    string objects. Equal bytes mean an equal value; a different dictionary order only costs a miss. Raises for a value pickle
+    cannot serialise (and for a recursive one): the caller then keys by identity or does not memoise."""
+    buffer = io.BytesIO()
+    pickler = pickle.Pickler(buffer, protocol=5)
+    pickler.fast = True
+    pickler.dump(value)
+    return buffer.getvalue()
 
 
 def session_memo(key_function, *, copy_result: bool = True):

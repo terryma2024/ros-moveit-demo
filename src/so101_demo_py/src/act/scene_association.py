@@ -11,7 +11,7 @@ from pathlib import Path
 import uuid
 
 from .contracts import fields, identifier, integer, sha256
-from .qc_session import Identity, load_model, session_memo
+from .qc_session import Identity, active, content_bytes, load_model, session_memo
 
 KIND = "ACT_SOURCE_ALIGNMENT_SCENE_ASSOCIATION"
 RULE = "frozen_geometry_from_native_step"
@@ -56,6 +56,31 @@ def _ros_value(value):
 
 
 def decode_ros(message_type, value):
+    """The ROS message `value` spells, or `SOURCE_ALIGNMENT_ROS_*` when it does not spell exactly one.
+
+    Inside a QC session one message content is decoded and compared once, and every later call with an equal `value` gets that
+    same message back (the way `_world` shares its frozen result). The session's readers only read what they decode (they take
+    attributes, build the normalised geometry or serialise it); none of them changes it. A value that raises is never remembered,
+    and one that cannot be serialised for the key is decoded each time, as outside a session."""
+    session = active()
+    if session is None:
+        return _decode_ros(message_type, value)
+    try:
+        key = ("decode_ros", message_type, content_bytes(value))
+    except Exception:
+        return _decode_ros(message_type, value)
+    result = session.cache.get(key)
+    if result is not None:
+        session.hits += 1
+        return result
+    result = _decode_ros(message_type, value)
+    session.misses += 1
+    session.note("decode_ros")
+    session.cache[key] = result
+    return result
+
+
+def _decode_ros(message_type, value):
     from rosidl_runtime_py.convert import message_to_ordereddict
     from rosidl_runtime_py.set_message import set_message_fields
 

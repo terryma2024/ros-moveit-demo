@@ -556,3 +556,175 @@ def test_decoded_pixel_digest_is_the_digest_of_the_original_array(tmp_path):
     path = tmp_path / "frame.png"
     path.write_bytes(_rgb_png(frame))
     assert _decoded_pixel_sha256(path) == hashlib.sha256(frame.tobytes()).hexdigest() == reference_decoded_pixel_sha256(path)
+
+
+# ---- (1) decode_ros: one decode and comparison per message content inside a session ------------------------------------------
+
+def reference_decode_ros(message_type, value):
+    from rosidl_runtime_py.convert import message_to_ordereddict
+    from rosidl_runtime_py.set_message import set_message_fields
+
+    from so101_demo.act.nonfinite import json_safe, restore_non_finite
+
+    from so101_demo.act.scene_association import _ros_value, canonical
+    result = message_type()
+    try:
+        # a retained record keeps NaN / inf as explicit tags (canonical JSON refuses them): restore the originals first
+        set_message_fields(result, _ros_value(restore_non_finite(value)))
+    except (AssertionError, AttributeError, TypeError, ValueError) as error:
+        raise ValueError("SOURCE_ALIGNMENT_ROS_CONTENT_INVALID") from error
+    if canonical(json_safe(message_to_ordereddict(result))) != canonical(json_safe(value)):
+        raise ValueError("SOURCE_ALIGNMENT_ROS_REPRESENTATION_INVALID")
+    return result
+
+
+def _ros_values(frozen_scene):
+    """Real message contents: the association's apply and query records, a JointState with NaN efforts and a controller state."""
+    from control_msgs.msg import JointTrajectoryControllerState
+    from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
+    from rosidl_runtime_py.convert import message_to_ordereddict
+    from sensor_msgs.msg import JointState
+    from so101_demo.act.nonfinite import json_safe
+    from so101_demo.act.scene_association import _json
+    from test_act_scene_association import association
+    document, _raw = association(frozen_scene)
+    apply, query = document["apply"]["record"], document["query"]["record"]
+    joint = JointState(name=["a", "b"], position=[.1, .2], velocity=[], effort=[float("nan"), float("inf")])
+    joint.header.stamp.sec, joint.header.stamp.nanosec = 3, 4
+    state = JointTrajectoryControllerState(joint_names=["a"])
+    state.reference.positions, state.reference.velocities = [.5], [.25]
+    state.header.stamp.sec = 7
+    return {
+        "apply_request": (ApplyPlanningScene.Request, apply["request"]),
+        "apply_response": (ApplyPlanningScene.Response, apply["response"]),
+        "query_request": (GetPlanningScene.Request, query["request"]),
+        "query_response": (GetPlanningScene.Response, query["response"]),
+        "joint_state_non_finite": (JointState, json_safe(_json(json_safe(dict(message_to_ordereddict(joint)))))),
+        "controller_state": (JointTrajectoryControllerState, _json(message_to_ordereddict(state))),
+    }
+
+
+def _decode_cases(frozen_scene):
+    from so101_demo.act.scene_association import _json
+    cases = dict(_ros_values(frozen_scene))
+    kind, value = cases["query_response"]
+    request_type, request = cases["query_request"]
+    first_object = lambda v: v["scene"]["world"]["collision_objects"][0]  # noqa: E731
+
+    def changed(source, mutate):
+        copy_ = copy.deepcopy(source)
+        mutate(copy_)
+        return copy_
+
+    cases.update({
+        "unknown_field": (kind, changed(value, lambda v: v.__setitem__("surprise", 1))),
+        "missing_field": (kind, changed(value, lambda v: v.pop("scene"))),
+        "wrong_type": (kind, changed(value, lambda v: v["scene"].__setitem__("name", 5))),
+        "bad_nested_type": (kind, changed(value, lambda v: first_object(v)["pose"]["position"].__setitem__("x", "text"))),
+        "float_shift": (kind, changed(value, lambda v: first_object(v)["pose"]["position"].__setitem__("x", first_object(v)["pose"]["position"]["x"] + 1e-12))),
+        "operation_long": (kind, changed(value, lambda v: first_object(v).__setitem__("operation", "ab"))),
+        "operation_range": (kind, changed(value, lambda v: first_object(v).__setitem__("operation", "\u0100"))),
+        "operation_int": (kind, changed(value, lambda v: first_object(v).__setitem__("operation", 1))),
+        "operation_other": (kind, changed(value, lambda v: first_object(v).__setitem__("operation", "\x01"))),
+        "extra_object": (kind, changed(value, lambda v: v["scene"]["world"]["collision_objects"].append(copy.deepcopy(first_object(v))))),
+        "request_components_text": (request_type, changed(request, lambda v: v["components"].__setitem__("components", "x"))),
+        "request_unknown": (request_type, changed(request, lambda v: v.__setitem__("zzz", []))),
+        "tag_in_finite_field": (request_type, changed(request, lambda v: v["components"].__setitem__("components", {"__non_finite_float__": "nan"}))),
+        "not_a_dict": (kind, None), "list_value": (kind, []), "string_value": (kind, "text"),
+        "joint_tag_bad": (cases["joint_state_non_finite"][0], changed(cases["joint_state_non_finite"][1],
+                          lambda v: v["effort"].__setitem__(0, {"__non_finite_float__": "bogus"}))),
+        "joint_name_number": (cases["joint_state_non_finite"][0], changed(cases["joint_state_non_finite"][1],
+                              lambda v: v.__setitem__("name", [1, 2]))),
+    })
+    return cases
+
+
+def _message_outcome(function, message_type, value):
+    from rosidl_runtime_py.convert import message_to_ordereddict
+    from so101_demo.act.nonfinite import json_safe
+    from so101_demo.act.scene_association import canonical
+    try:
+        message = function(message_type, value)
+    except Exception as error:  # noqa: BLE001
+        return ("raised", type(error).__name__, str(error), type(error.__cause__).__name__)
+    return ("value", canonical(json_safe(message_to_ordereddict(message))), message)
+
+
+@pytest.mark.parametrize("session", [False, True])
+def test_decode_ros_agrees_with_the_reference(frozen_scene, session):
+    from so101_demo.act.scene_association import decode_ros
+    cases = _decode_cases(frozen_scene)
+    raised = {}
+    with _scope(session):
+        for _ in range(3):  # later rounds are answered from the session
+            for name, (message_type, value) in cases.items():
+                expected = _message_outcome(reference_decode_ros, message_type, copy.deepcopy(value))
+                actual = _message_outcome(decode_ros, message_type, copy.deepcopy(value))
+                assert actual[0] == expected[0], name
+                if expected[0] == "raised":
+                    assert actual == expected, name
+                    raised[name] = expected[2]
+                else:
+                    assert actual[1] == expected[1], name
+                    if not name.startswith("joint_"):  # their efforts hold NaN, which never equals NaN
+                        assert actual[2] == expected[2], name  # message equality, not only its dictionary form
+    assert raised["unknown_field"] == "SOURCE_ALIGNMENT_ROS_CONTENT_INVALID"
+    assert {"unknown_field", "wrong_type", "bad_nested_type", "operation_long", "not_a_dict", "joint_tag_bad"} <= set(raised)
+    assert "SOURCE_ALIGNMENT_ROS_REPRESENTATION_INVALID" in raised.values()
+    assert not {"apply_request", "apply_response", "query_request", "query_response", "joint_state_non_finite",
+                "controller_state"} & set(raised)
+
+
+def test_decode_ros_is_decoded_once_per_content_inside_a_session(frozen_scene):
+    import json
+    from so101_demo.act.scene_association import decode_ros
+    message_type, value = _decode_cases(frozen_scene)["query_response"]
+    with _scope(True) as session:
+        first = decode_ros(message_type, value)
+        second = decode_ros(message_type, json.loads(json.dumps(value)))  # equal content, another parse
+        third = decode_ros(message_type, copy.deepcopy(value))
+        assert session.computations.get("decode_ros") == 1
+        assert first is second is third
+        # a different content is its own entry
+        other = copy.deepcopy(value)
+        other["scene"]["name"] = "elsewhere"
+        assert decode_ros(message_type, other).scene.name == "elsewhere"
+        assert decode_ros(message_type, value).scene.name == first.scene.name != "elsewhere"
+        assert session.computations.get("decode_ros") == 2
+    # outside a session every call decodes afresh
+    assert decode_ros(message_type, value) is not decode_ros(message_type, value)
+
+
+def test_session_readers_do_not_change_the_messages_they_decode(frozen_scene):
+    """The shared message is only sound while its readers leave it alone: run the readers that take it and compare it afterwards."""
+    from rosidl_runtime_py.convert import message_to_ordereddict
+    from so101_demo.act.scene_association import canonical, decode_ros, verify_scene_association
+    from so101_demo.act.nonfinite import json_safe
+    from test_act_scene_association import association
+    document, raw = association(frozen_scene)
+    with _scope(True):
+        from moveit_msgs.srv import GetPlanningScene
+        response = decode_ros(GetPlanningScene.Response, document["query"]["record"]["response"])
+        before = canonical(json_safe(message_to_ordereddict(response)))
+        assert verify_scene_association(document, inputs=frozen_scene[1],
+            identity={"session_id": "alignment-session", "reset_epoch": 1}, raw_steps=raw).success
+        assert canonical(json_safe(message_to_ordereddict(response))) == before
+        assert decode_ros(GetPlanningScene.Response, document["query"]["record"]["response"]) is response
+
+
+def test_decode_ros_does_not_remember_a_refusal_or_mix_int_and_float(frozen_scene):
+    from so101_demo.act.scene_association import decode_ros
+    cases = _decode_cases(frozen_scene)
+    message_type, value = cases["query_response"]
+    bad = copy.deepcopy(value)
+    bad["surprise"] = 1
+    with _scope(True) as session:
+        for _ in range(2):
+            assert outcome(decode_ros, message_type, bad)[1] == "ValueError"
+        assert "decode_ros" not in session.computations
+        stamp_type, stamp = cases["controller_state"]
+        as_int, as_float = copy.deepcopy(stamp), copy.deepcopy(stamp)
+        as_int["header"]["stamp"]["sec"] = 7
+        as_float["header"]["stamp"]["sec"] = 7.0
+        assert decode_ros(stamp_type, as_int).header.stamp.sec == 7
+        assert outcome(decode_ros, stamp_type, as_float) == outcome(reference_decode_ros, stamp_type, as_float)
