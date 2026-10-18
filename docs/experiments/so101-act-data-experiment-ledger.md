@@ -69,11 +69,25 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3724
+latest_checkpoint: CP-3725
 next_experiment: side-wrist contact calibration (offline + live spot checks) and activation under CP-3394, then EXP-623 debug, EXP-624 qualification, EXP-625 formal 103, TRAIN-003.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3725 — Gate exception recorded for the spot-check commits; container spot check of the side-wrist contact policy starts
+
+- Design: docs/superpowers/specs/2026-10-18-so101-act-container-spot-check-design.md (CONFIRMED), item 11, executed by a Sonnet 5.5 subagent for the coordinator (Opus).
+- Gate decision (coordinator, recorded before any run): accept the gate of b13874eaa for the spot-check commits with this exception.
+  - R/gates/b13874eaabd5.serial: build rc 0, demo only the 2 known load-flaky test_owner_phase2 failures, colcon rc 1 only in the upstream third_party ros2_control suites (controller_manager test_spawner_unspawner and test_advanced_spawner wildcard and --param-file cases, hardware_interface_testing, JTC).
+  - R/gates/b13874eaabd5 (concurrent): demo rc 0 (13840 passed), colcon rc 1 with the same third_party suites.
+  - Evidence that this is host environment drift, not this diff: `git diff e796d4574 b13874eaa -- third_party` is empty, and ros2-control-decision.json shows head_tree equal to the baseline 8f8123dcba86 tree 238934e0...
+  - The suites ran only because the host installed ros-jazzy set changed (dpkg.log 2026-10-13 14:14: 374 ros-jazzy upgrades incl. rclpy 7.1.12 20260912, rcl-yaml-param-parser 20260911, controller-manager 4.48.1).
+  - The shard images do not share the host apt set. Both the EXP-620 image 1fca232a10b1 (8f8123dcba86, produced the sealed 69 VALID) and the current 016d6281f446 report controller-manager 4.48.1-1noble.20261006, rclpy 7.1.11-1noble.20260615, rcl-yaml-param-parser 9.2.11-1noble.20260612, the same in-image environment that produced valid data.
+  - The in-image proof is the nominal spot-check run itself (controllers must spawn and the Teacher must complete). Package versions are re-verified for each new image (dpkg-query -W inside, --network none); a difference stops the work.
+  - No threshold or data rule is changed.
+- Contact proposal named for input discovery (relative to evidence_root): calibration/rig-side-wrist-contact-20261018T090000Z/proposal.json (fingerprint 55ee6981decb6aeb7441d03e2a8159621a4427df609e47f51884745018303f6a, file sha256 4fc54f672ca4e57f8b98da3c6fd654902d885fa24409d7cb1c4c5828c0e9dbde, validation mode offline_fit_teacher_spot_check, spot check pending).
+- Plan: (1) build the inference and shard images from b13874eaa; (2) issue the spot_check_candidate receipt (approved_by plan: this design); (3) nominal run, template w1s-spotcheck-side-wrist; (4) over-squeeze run on a source copy with gripper_close_target_rad -0.049; (5) if both verdicts PASS, issue the user_activation receipt under CP-3394 with both verdict files and the human decision of 2026-10-18 ("按推荐的方案") in approval_reference. Not pushed.
 
 ## CP-3724 — Camera rig v2 steps 1–5 implemented; side-wrist images built; contact calibration pending
 
