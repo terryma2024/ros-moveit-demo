@@ -728,3 +728,362 @@ def test_decode_ros_does_not_remember_a_refusal_or_mix_int_and_float(frozen_scen
         as_float["header"]["stamp"]["sec"] = 7.0
         assert decode_ros(stamp_type, as_int).header.stamp.sec == 7
         assert outcome(decode_ros, stamp_type, as_float) == outcome(reference_decode_ros, stamp_type, as_float)
+
+
+# ---- (2) verify_raw_chunk: the record's own checks run once, the argument checks every time ---------------------------------
+
+def reference_verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None,
+                     nq=None, nv=None, max_samples=None, max_contacts=None, previous_verified=False):
+    """Recompute source type, scope, loss, clocks and .002 s continuity from raw values.
+
+    The first retained chunk may start after reset. Complete episode coverage must
+    separately bind its actual first/last steps to reset/command/stop boundaries.
+
+    `previous` is verified first, as a record on its own, unless the caller states `previous_verified`: a loop that has just
+    verified `previous` with these very arguments as the current record of its previous pass (and so would have stopped on a
+    defect) says so, and the chunk is not checked a second time.
+    """
+    from so101_demo.act.raw_physics_chunks import (_CHUNK, _CONTACT, _CONTACT_LISTS, _ENVELOPE, _FORCES, _STEP, _exact, _integer,
+                                                   _number, _numbers, _vector, _xyz)
+    import math
+    _exact(record, _ENVELOPE)
+    if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+        raise ValueError("PHYSICS_RAW_VERSION_INVALID")
+    receipt = _integer(record["received_monotonic_ns"], 1, 2**63-1)
+    for dimension in (nq, nv):
+        if dimension is not None:
+            _integer(dimension, 1)
+    if max_samples is not None:
+        _integer(max_samples, 1)
+    if max_contacts is not None:
+        _integer(max_contacts)
+    chunk = record["chunk"]
+    _exact(chunk, _CHUNK)
+    if (not isinstance(chunk["simulation_session_id"], str) or not chunk["simulation_session_id"]
+            or session_id is not None and chunk["simulation_session_id"] != session_id
+            or reset_epoch is not None and chunk["reset_epoch"] != reset_epoch):
+        raise ValueError("PHYSICS_RAW_SCOPE_INVALID")
+    _integer(chunk["reset_epoch"])
+    _integer(chunk["chunk_sequence"])
+    for name in ("handoff_monotonic_ns", "publish_monotonic_ns", "publish_deferrals_total"):
+        _integer(chunk[name])     # publish-path instrumentation: telemetry, never a rule
+    if chunk["evidence_loss"] is not False or _integer(chunk["failed_publish_attempts"]) != 0:
+        raise ValueError("PHYSICS_RAW_SOURCE_LOSS")
+    samples = chunk["samples"]
+    if not isinstance(samples, list) or not samples:
+        raise ValueError("PHYSICS_RAW_SAMPLES_INVALID")
+    if max_samples is not None and len(samples) > max_samples:
+        raise ValueError("PHYSICS_RAW_PRODUCER_BOUNDS_INVALID")
+    prior = None
+    if previous is not None:
+        if not previous_verified:
+            reference_verify_raw_chunk(previous, session_id=session_id, reset_epoch=reset_epoch, nq=nq, nv=nv,
+                             max_samples=max_samples, max_contacts=max_contacts)
+        prior_chunk = previous["chunk"]
+        if (chunk["chunk_sequence"] != prior_chunk["chunk_sequence"] + 1
+                or (chunk["simulation_session_id"], chunk["reset_epoch"]) !=
+                   (prior_chunk["simulation_session_id"], prior_chunk["reset_epoch"])
+                or receipt < previous["received_monotonic_ns"]):
+            raise ValueError("PHYSICS_RAW_CONTINUITY_INVALID")
+        prior = prior_chunk["samples"][-1]
+    for sample in samples:
+        _exact(sample, _STEP)
+        if (sample["simulation_session_id"], sample["reset_epoch"]) != (
+                chunk["simulation_session_id"], chunk["reset_epoch"]):
+            raise ValueError("PHYSICS_RAW_SCOPE_INVALID")
+        _integer(sample["reset_epoch"])
+        _integer(sample["physics_step"], 1)
+        sim = round(_number(sample["simulation_time_s"], nonnegative=True) * 1e9)
+        begin = _integer(sample["clock_interval_begin_monotonic_ns"], 1, 2**63-1)
+        end = _integer(sample["clock_interval_end_monotonic_ns"], 1, 2**63-1)
+        if not 0 < begin <= end <= receipt:
+            raise ValueError("PHYSICS_RAW_CLOCK_INVALID")
+        if prior is not None and (sample["physics_step"] != prior["physics_step"] + 1
+                or sim - round(prior["simulation_time_s"] * 1e9) != 2_000_000
+                or begin < prior["clock_interval_end_monotonic_ns"]):
+            raise ValueError("PHYSICS_RAW_CONTINUITY_INVALID")
+        _vector(sample["model_qpos"], nq)
+        _vector(sample["model_qvel"], nv)
+        pose = sample["object_pose_world"]
+        _exact(pose, {"position", "orientation"})
+        _xyz(pose["position"])
+        _exact(pose["orientation"], {"x", "y", "z", "w"})
+        quat = list(pose["orientation"].values())
+        _numbers(quat)
+        if abs(math.sqrt(sum(item * item for item in quat)) - 1.) > 1e-3:
+            raise ValueError("PHYSICS_RAW_QUATERNION_INVALID")
+        twist = sample["object_twist_world"]
+        _exact(twist, {"linear", "angular"})
+        _xyz(twist["linear"])
+        _xyz(twist["angular"])
+        _xyz(sample["net_contact_force_world_n"])
+        if sample["truncated"] is not False or sample["diagnostic_hazard_breached"] is not False:
+            raise ValueError("PHYSICS_RAW_SOURCE_HAZARD")
+        if type(sample["has_contact"]) is not bool or type(sample["static_shadow_crossed"]) is not bool:
+            raise ValueError("PHYSICS_RAW_FLAG_INVALID")
+        _numbers((sample[name] for name in _FORCES), nonnegative=True)
+        for name in _CONTACT_LISTS:
+            if not isinstance(sample[name], list):
+                raise ValueError("PHYSICS_RAW_CONTACT_INVALID")
+        if max_contacts is not None and sum(len(sample[name]) for name in _CONTACT_LISTS) > max_contacts:
+            raise ValueError("PHYSICS_RAW_PRODUCER_BOUNDS_INVALID")
+        for name in _CONTACT_LISTS:
+            for contact in sample[name]:
+                _exact(contact, _CONTACT)
+                for name in ("body1_id", "geom1_id", "body2_id", "geom2_id"):
+                    _integer(contact[name], maximum=2**31-1)
+                for name in ("body1", "geom1", "body2", "geom2"):
+                    if not isinstance(contact[name], str) or not contact[name]:
+                        raise ValueError("PHYSICS_RAW_CONTACT_INVALID")
+                _xyz(contact["position_world"])
+                _xyz(contact["normal_world"])
+                _number(contact["signed_distance_m"])
+                _number(contact["normal_force_n"], nonnegative=True)
+        prior = sample
+    # User-authorized contract: there is no per-chunk delivery-age rule. How long a chunk took from its newest
+    # sample to the receiver is recorded as telemetry; a late chunk is as valid as any other. Continuity, scope and every
+    # content check above and below are unchanged; backlog and receiver lag are bounded by the adapter's frozen policy.
+    if (_integer(chunk["first_physics_step"], 1) != samples[0]["physics_step"]
+            or _integer(chunk["last_physics_step"], 1) != samples[-1]["physics_step"]
+            or round(_number(chunk["first_simulation_time_s"], nonnegative=True) * 1e9) !=
+               round(samples[0]["simulation_time_s"] * 1e9)
+            or round(_number(chunk["last_simulation_time_s"], nonnegative=True) * 1e9) !=
+               round(samples[-1]["simulation_time_s"] * 1e9)):
+        raise ValueError("PHYSICS_RAW_ENVELOPE_INVALID")
+    return record
+
+
+SESSION = "alignment-session"
+
+
+def _chunk_pair(frozen_scene, per_chunk=3):
+    from test_act_scene_association import association
+    _document, raw = association(frozen_scene)
+    template = raw[0]
+    contact = {"body1_id": 1, "geom1_id": 2, "body1": "a", "geom1": "b", "body2_id": 3, "geom2_id": 4, "body2": "c", "geom2": "d",
+               "position_world": {"x": 0., "y": 0., "z": 0.}, "normal_world": {"x": 0., "y": 0., "z": 1.},
+               "signed_distance_m": -.001, "normal_force_n": 1.5}
+    step, chunks = 1, []
+    for sequence in (1, 2):
+        samples = []
+        for _ in range(per_chunk):
+            sample = copy.deepcopy(template)
+            sample["physics_step"] = step
+            sample["simulation_time_s"] = step * .002
+            sample["clock_interval_begin_monotonic_ns"] = 1000 + step * 10
+            sample["clock_interval_end_monotonic_ns"] = 1000 + step * 10 + 5
+            sample["other_object_contacts"] = [copy.deepcopy(contact)]
+            samples.append(sample)
+            step += 1
+        chunks.append({"schema_version": 1, "received_monotonic_ns": 10 ** 6 * sequence, "chunk": {
+            "chunk_sequence": sequence, "simulation_session_id": SESSION, "reset_epoch": 1,
+            "first_physics_step": samples[0]["physics_step"], "last_physics_step": samples[-1]["physics_step"],
+            "first_simulation_time_s": samples[0]["simulation_time_s"], "last_simulation_time_s": samples[-1]["simulation_time_s"],
+            "failed_publish_attempts": 0, "handoff_monotonic_ns": 0, "publish_monotonic_ns": 0, "publish_deferrals_total": 0,
+            "evidence_loss": False, "samples": samples}})
+    return chunks
+
+
+def _sample_edit(index, mutate):
+    def edit(chunk):
+        mutate(chunk["chunk"]["samples"][index])
+    return edit
+
+
+def _chunk_edit(mutate):
+    return lambda chunk: mutate(chunk["chunk"])
+
+
+def _record_edit(mutate):
+    return lambda chunk: mutate(chunk)
+
+
+def _put(key, value):
+    return lambda target: target.__setitem__(key, value)
+
+
+def _drop(key):
+    return lambda target: target.pop(key)
+
+
+def _put_in(outer, key, value):
+    return lambda target: target[outer].__setitem__(key, value)
+
+
+RAW_MUTATIONS = {
+    "none": lambda chunk: None,
+    "envelope_extra": _record_edit(_put("surprise", 1)), "version": _record_edit(_put("schema_version", 2)),
+    "version_bool": _record_edit(_put("schema_version", True)), "receipt_zero": _record_edit(_put("received_monotonic_ns", 0)),
+    "receipt_early": _record_edit(_put("received_monotonic_ns", 1500)), "receipt_float": _record_edit(_put("received_monotonic_ns", 2e6)),
+    "chunk_missing": _chunk_edit(_drop("handoff_monotonic_ns")), "session_empty": _chunk_edit(_put("simulation_session_id", "")),
+    "session_int": _chunk_edit(_put("simulation_session_id", 5)), "epoch_bool": _chunk_edit(_put("reset_epoch", True)),
+    "sequence_negative": _chunk_edit(_put("chunk_sequence", -1)), "telemetry_str": _chunk_edit(_put("publish_deferrals_total", "x")),
+    "loss": _chunk_edit(_put("evidence_loss", True)), "failed_publish": _chunk_edit(_put("failed_publish_attempts", 1)),
+    "samples_empty": _chunk_edit(_put("samples", [])), "samples_tuple": _chunk_edit(lambda c: c.__setitem__("samples", tuple(c["samples"]))),
+    "first_step": _chunk_edit(_put("first_physics_step", 99)), "last_step": _chunk_edit(_put("last_physics_step", 99)),
+    "first_time": _chunk_edit(_put("first_simulation_time_s", 9.)), "last_time_nan": _chunk_edit(_put("last_simulation_time_s", float("nan"))),
+    "sample_extra": _sample_edit(1, _put("surprise", 1)), "sample_missing": _sample_edit(0, _drop("has_contact")),
+    "sample_scope": _sample_edit(1, _put("simulation_session_id", "other")), "sample_epoch": _sample_edit(2, _put("reset_epoch", 2)),
+    "step_zero": _sample_edit(0, _put("physics_step", 0)), "step_gap": _sample_edit(1, lambda s: s.__setitem__("physics_step", s["physics_step"] + 1)),
+    "time_negative": _sample_edit(0, _put("simulation_time_s", -1.)), "time_gap": _sample_edit(2, lambda s: s.__setitem__("simulation_time_s", s["simulation_time_s"] + .001)),
+    "time_inf": _sample_edit(1, _put("simulation_time_s", float("inf"))),
+    "begin_zero": _sample_edit(0, _put("clock_interval_begin_monotonic_ns", 0)), "begin_after_end": _sample_edit(1, lambda s: s.__setitem__("clock_interval_begin_monotonic_ns", s["clock_interval_end_monotonic_ns"] + 1)),
+    "end_after_receipt": _sample_edit(2, _put("clock_interval_end_monotonic_ns", 10 ** 9)), "clock_overlap": _sample_edit(1, lambda s: s.__setitem__("clock_interval_begin_monotonic_ns", 1)),
+    "qpos_empty": _sample_edit(0, _put("model_qpos", [])), "qpos_short": _sample_edit(1, lambda s: s["model_qpos"].pop()),
+    "qpos_nan": _sample_edit(0, lambda s: s["model_qpos"].__setitem__(0, float("nan"))), "qpos_bool": _sample_edit(2, lambda s: s["model_qpos"].__setitem__(1, True)),
+    "qvel_long": _sample_edit(0, lambda s: s["model_qvel"].append(0.)), "qvel_str": _sample_edit(1, lambda s: s["model_qvel"].__setitem__(0, "x")),
+    "pose_extra": _sample_edit(0, lambda s: s["object_pose_world"].__setitem__("extra", 1)), "position_inf": _sample_edit(1, lambda s: s["object_pose_world"]["position"].__setitem__("x", float("inf"))),
+    "quaternion": _sample_edit(0, lambda s: s["object_pose_world"]["orientation"].__setitem__("w", 2.)), "quaternion_nan": _sample_edit(2, lambda s: s["object_pose_world"]["orientation"].__setitem__("x", float("nan"))),
+    "twist_missing": _sample_edit(1, lambda s: s["object_twist_world"].pop("linear")), "twist_str": _sample_edit(0, lambda s: s["object_twist_world"]["angular"].__setitem__("z", "x")),
+    "net_force_nan": _sample_edit(2, lambda s: s["net_contact_force_world_n"].__setitem__("y", float("nan"))),
+    "truncated": _sample_edit(0, _put("truncated", True)), "hazard": _sample_edit(1, _put("diagnostic_hazard_breached", True)),
+    "flag_int": _sample_edit(0, _put("has_contact", 1)), "shadow_flag": _sample_edit(2, _put("static_shadow_crossed", None)),
+    "force_negative": _sample_edit(0, _put("total_normal_force_n", -1.)), "force_bool": _sample_edit(1, _put("maximum_normal_force_n", True)),
+    "contacts_tuple": _sample_edit(0, lambda s: s.__setitem__("left_fingertip_contacts", ())),
+    "contact_extra": _sample_edit(1, lambda s: s["other_object_contacts"][0].__setitem__("extra", 1)),
+    "contact_id": _sample_edit(0, lambda s: s["other_object_contacts"][0].__setitem__("body1_id", 2 ** 31)),
+    "contact_name": _sample_edit(2, lambda s: s["other_object_contacts"][0].__setitem__("geom2", "")),
+    "contact_position": _sample_edit(1, lambda s: s["other_object_contacts"][0]["position_world"].__setitem__("x", float("nan"))),
+    "contact_distance_nan": _sample_edit(0, lambda s: s["other_object_contacts"][0].__setitem__("signed_distance_m", float("nan"))),
+    "contact_force_negative": _sample_edit(2, lambda s: s["other_object_contacts"][0].__setitem__("normal_force_n", -.5)),
+    "many_contacts": _sample_edit(1, lambda s: s["other_object_contacts"].extend(copy.deepcopy(s["other_object_contacts"][0]) for _ in range(5))),
+    "not_a_dict": lambda chunk: None,
+}
+
+RAW_ARGUMENTS = {
+    "standalone": lambda first, second: dict(),
+    "full": lambda first, second: dict(previous=first, previous_verified=True, session_id=SESSION, reset_epoch=1, nq=14, nv=13,
+                                       max_samples=50, max_contacts=128),
+    "full_unverified_previous": lambda first, second: dict(previous=first, session_id=SESSION, reset_epoch=1, nq=14, nv=13,
+                                                           max_samples=50, max_contacts=128),
+    "first_chunk_scope": lambda first, second: dict(session_id=SESSION, reset_epoch=1, nq=14, nv=13, max_samples=50, max_contacts=128),
+    "scope_session": lambda first, second: dict(session_id="other", reset_epoch=1),
+    "scope_epoch": lambda first, second: dict(session_id=SESSION, reset_epoch=2),
+    "nq_wrong": lambda first, second: dict(nq=15), "nv_wrong": lambda first, second: dict(nv=12), "nq_zero": lambda first, second: dict(nq=0),
+    "nq_bool": lambda first, second: dict(nq=True), "dims_both_wrong": lambda first, second: dict(nq=15, nv=12),
+    "max_samples_small": lambda first, second: dict(max_samples=2), "max_samples_zero": lambda first, second: dict(max_samples=0),
+    "max_contacts_small": lambda first, second: dict(max_contacts=1), "max_contacts_negative": lambda first, second: dict(max_contacts=-1),
+    "previous_only": lambda first, second: dict(previous=first, previous_verified=True),
+    "previous_unverified": lambda first, second: dict(previous=first),
+    "previous_wrong_dims": lambda first, second: dict(previous=first, previous_verified=True, nq=15),
+    "previous_itself": lambda first, second: dict(previous=second, previous_verified=True),
+    "previous_malformed": lambda first, second: dict(previous={"chunk": {}}, previous_verified=True),
+    "previous_no_chunk": lambda first, second: dict(previous={}, previous_verified=True),
+}
+
+
+def _previous_variants(first):
+    variants = {"plain": first}
+    gap = copy.deepcopy(first)
+    gap["chunk"]["samples"][-1]["physics_step"] += 1
+    variants["step_gap"] = gap
+    late = copy.deepcopy(first)
+    late["chunk"]["samples"][-1]["simulation_time_s"] += .001
+    variants["time_gap"] = late
+    sequence = copy.deepcopy(first)
+    sequence["chunk"]["chunk_sequence"] = 5
+    variants["sequence"] = sequence
+    receipt = copy.deepcopy(first)
+    receipt["received_monotonic_ns"] = 10 ** 9
+    variants["receipt"] = receipt
+    clock = copy.deepcopy(first)
+    clock["chunk"]["samples"][-1]["clock_interval_end_monotonic_ns"] = 10 ** 5
+    variants["clock"] = clock
+    other = copy.deepcopy(first)
+    other["chunk"]["simulation_session_id"] = "other"
+    variants["scope"] = other
+    return variants
+
+
+def _raw_outcome(function, record, **kwargs):
+    return outcome(function, record, **kwargs)
+
+
+def test_raw_chunk_checks_agree_with_the_reference_in_every_order(frozen_scene):
+    import itertools
+    from so101_demo.act.raw_physics_chunks import verify_raw_chunk
+    first, second = _chunk_pair(frozen_scene)
+    refused_somewhere = set()
+    names = [name for name in RAW_ARGUMENTS if name not in ("previous_itself",)]
+    for mutation_name, mutate in RAW_MUTATIONS.items():
+        for target_index in (0, 1):
+            base = [copy.deepcopy(first), copy.deepcopy(second)]
+            if mutation_name == "not_a_dict":
+                base[target_index] = ["not", "a", "dict"]
+            else:
+                mutate(base[target_index])
+            for previous_name, previous in _previous_variants(base[0]).items() if target_index == 1 else (("plain", base[0]),):
+                if mutation_name != "none" and previous_name != "plain" and target_index == 1 and mutation_name not in ("sample_extra", "qpos_short", "step_gap"):
+                    continue
+                record = base[target_index]
+                for argument_names in itertools.permutations(("standalone", "full", "scope_session", "nq_wrong", "max_contacts_small"), 3):
+                    with _scope(True):
+                        for argument_name in argument_names:
+                            kwargs = RAW_ARGUMENTS[argument_name](previous, record)
+                            if "previous" in kwargs and target_index == 0:
+                                kwargs = {key: value for key, value in kwargs.items() if key not in ("previous", "previous_verified")}
+                            expected = _raw_outcome(reference_verify_raw_chunk, copy.deepcopy(record), **copy.deepcopy(kwargs))
+                            actual = _raw_outcome(verify_raw_chunk, record, **kwargs)
+                            assert actual[0] == expected[0] and actual[1:2] == expected[1:2], (mutation_name, target_index, previous_name, argument_names, argument_name)
+                            if expected[0] == "raised":
+                                assert actual == expected, (mutation_name, target_index, previous_name, argument_names, argument_name)
+                                refused_somewhere.add((mutation_name, expected[2]))
+                            else:
+                                assert actual[1] is record
+    reasons = {reason for _name, reason in refused_somewhere}
+    assert {"PHYSICS_RAW_SCHEMA_INVALID", "PHYSICS_RAW_VERSION_INVALID", "PHYSICS_RAW_INTEGER_INVALID", "PHYSICS_RAW_SCOPE_INVALID",
+            "PHYSICS_RAW_SOURCE_LOSS", "PHYSICS_RAW_SAMPLES_INVALID", "PHYSICS_RAW_CLOCK_INVALID", "PHYSICS_RAW_CONTINUITY_INVALID",
+            "PHYSICS_RAW_VECTOR_INVALID", "PHYSICS_RAW_NUMBER_INVALID", "PHYSICS_RAW_QUATERNION_INVALID",
+            "PHYSICS_RAW_SOURCE_HAZARD", "PHYSICS_RAW_FLAG_INVALID", "PHYSICS_RAW_CONTACT_INVALID",
+            "PHYSICS_RAW_PRODUCER_BOUNDS_INVALID", "PHYSICS_RAW_ENVELOPE_INVALID"} <= reasons, reasons
+
+
+def test_raw_chunk_argument_checks_agree_after_the_record_has_passed(frozen_scene):
+    """The path the speed-up opens: a record that has passed once, then asked again with every other set of arguments."""
+    from so101_demo.act.raw_physics_chunks import verify_raw_chunk
+    first, second = _chunk_pair(frozen_scene)
+    ran = 0
+    for previous_name, previous in _previous_variants(first).items():
+        for name, build in RAW_ARGUMENTS.items():
+            for order in ("standalone", "full"):
+                with _scope(True) as session:
+                    record = copy.deepcopy(second)
+                    warm = {} if order == "standalone" else RAW_ARGUMENTS["full"](first, record)
+                    warm_expected = _raw_outcome(reference_verify_raw_chunk, copy.deepcopy(record), **copy.deepcopy(warm))
+                    warm_actual = _raw_outcome(verify_raw_chunk, record, **warm)
+                    assert warm_actual[:2] == warm_expected[:2] or warm_expected[0] == "raised", (order, name)
+                    kwargs = build(previous, record)
+                    expected = _raw_outcome(reference_verify_raw_chunk, copy.deepcopy(record), **copy.deepcopy(kwargs))
+                    actual = _raw_outcome(verify_raw_chunk, record, **kwargs)
+                    assert actual[0] == expected[0], (previous_name, name, order)
+                    if expected[0] == "raised":
+                        assert actual == expected, (previous_name, name, order)
+                    ran += 1
+    assert ran >= 100
+
+
+def test_raw_chunk_record_checks_are_shared_inside_a_session_only(frozen_scene):
+    from so101_demo.act.raw_physics_chunks import verify_raw_chunk
+    first, second = _chunk_pair(frozen_scene)
+    arguments = RAW_ARGUMENTS["full"](first, second)
+    with _scope(True) as session:
+        verify_raw_chunk(second)
+        verify_raw_chunk(second, **arguments)
+        assert session.computations.get("verify_raw_chunk") == 2  # two argument sets, two memo entries
+        assert any(key[0] == "raw_chunk_record_checked" for key in session.cache)
+    # a record changed after it passed is not trusted by a new session
+    changed = copy.deepcopy(second)
+    with _scope(True):
+        verify_raw_chunk(changed)
+    changed["chunk"]["samples"][0]["model_qpos"][0] = float("nan")
+    with _scope(True):
+        with pytest.raises(ValueError, match="PHYSICS_RAW_NUMBER_INVALID"):
+            verify_raw_chunk(changed, nq=14)
+    # a refusal leaves nothing behind: the same record is refused again under other arguments
+    broken = copy.deepcopy(second)
+    broken["chunk"]["samples"][1]["model_qpos"][0] = float("nan")
+    with _scope(True) as session:
+        for kwargs in ({"nq": 14}, {}, {"nq": 14, "nv": 13}):
+            with pytest.raises(ValueError, match="PHYSICS_RAW_NUMBER_INVALID"):
+                verify_raw_chunk(broken, **kwargs)
+        assert not [key for key in session.cache if key[0] == "raw_chunk_record_checked"]

@@ -113,11 +113,36 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
     `previous` is verified first, as a record on its own, unless the caller states `previous_verified`: a loop that has just
     verified `previous` with these very arguments as the current record of its previous pass (and so would have stopped on a
     defect) says so, and the chunk is not checked a second time.
-    """
-    _exact(record, _ENVELOPE)
-    if type(record["schema_version"]) is not int or record["schema_version"] != 1:
-        raise ValueError("PHYSICS_RAW_VERSION_INVALID")
-    receipt = _integer(record["received_monotonic_ns"], 1, 2**63-1)
+
+    The checks fall in two groups: those that read the record alone (envelope, integer and number types, finiteness, clocks, flags,
+    quaternion norm, the continuity of one sample to the next inside the chunk, the first/last bookkeeping) and those that compare
+    it with the arguments (the session and reset epoch, `nq`/`nv`/`max_samples`/`max_contacts`, the `previous` chunk). The standalone
+    check of a retained chunk and the continuity check of the same chunk (different arguments, so different memo entries) share the
+    first group inside a QC session: once a call over this very record has returned, the record passed every check of that group,
+    and a later call over it with other arguments runs the second group only, in the order it always ran. A call that raised
+    leaves nothing behind."""
+    from .qc_session import active
+
+    session = active()
+    marker = None if session is None else ("raw_chunk_record_checked", Identity(record))
+    known = marker is not None and marker in session.cache
+    result = _verify_raw_chunk(record, previous=previous, session_id=session_id, reset_epoch=reset_epoch, nq=nq, nv=nv,
+                               max_samples=max_samples, max_contacts=max_contacts, previous_verified=previous_verified,
+                               known=known)
+    if marker is not None and not known:
+        session.cache[marker] = True
+    return result
+
+
+def _verify_raw_chunk(record, *, previous, session_id, reset_epoch, nq, nv, max_samples, max_contacts, previous_verified, known):
+    """`verify_raw_chunk`; with `known` the checks that read the record alone are skipped (they have passed for this record)."""
+    if not known:
+        _exact(record, _ENVELOPE)
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            raise ValueError("PHYSICS_RAW_VERSION_INVALID")
+        receipt = _integer(record["received_monotonic_ns"], 1, 2**63-1)
+    else:
+        receipt = record["received_monotonic_ns"]
     for dimension in (nq, nv):
         if dimension is not None:
             _integer(dimension, 1)
@@ -126,20 +151,26 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
     if max_contacts is not None:
         _integer(max_contacts)
     chunk = record["chunk"]
-    _exact(chunk, _CHUNK)
-    if (not isinstance(chunk["simulation_session_id"], str) or not chunk["simulation_session_id"]
-            or session_id is not None and chunk["simulation_session_id"] != session_id
-            or reset_epoch is not None and chunk["reset_epoch"] != reset_epoch):
-        raise ValueError("PHYSICS_RAW_SCOPE_INVALID")
-    _integer(chunk["reset_epoch"])
-    _integer(chunk["chunk_sequence"])
-    for name in ("handoff_monotonic_ns", "publish_monotonic_ns", "publish_deferrals_total"):
-        _integer(chunk[name])     # publish-path instrumentation: telemetry, never a rule
-    if chunk["evidence_loss"] is not False or _integer(chunk["failed_publish_attempts"]) != 0:
-        raise ValueError("PHYSICS_RAW_SOURCE_LOSS")
-    samples = chunk["samples"]
-    if not isinstance(samples, list) or not samples:
-        raise ValueError("PHYSICS_RAW_SAMPLES_INVALID")
+    if not known:
+        _exact(chunk, _CHUNK)
+        if (not isinstance(chunk["simulation_session_id"], str) or not chunk["simulation_session_id"]
+                or session_id is not None and chunk["simulation_session_id"] != session_id
+                or reset_epoch is not None and chunk["reset_epoch"] != reset_epoch):
+            raise ValueError("PHYSICS_RAW_SCOPE_INVALID")
+        _integer(chunk["reset_epoch"])
+        _integer(chunk["chunk_sequence"])
+        for name in ("handoff_monotonic_ns", "publish_monotonic_ns", "publish_deferrals_total"):
+            _integer(chunk[name])     # publish-path instrumentation: telemetry, never a rule
+        if chunk["evidence_loss"] is not False or _integer(chunk["failed_publish_attempts"]) != 0:
+            raise ValueError("PHYSICS_RAW_SOURCE_LOSS")
+        samples = chunk["samples"]
+        if not isinstance(samples, list) or not samples:
+            raise ValueError("PHYSICS_RAW_SAMPLES_INVALID")
+    else:
+        samples = chunk["samples"]
+        if (session_id is not None and chunk["simulation_session_id"] != session_id
+                or reset_epoch is not None and chunk["reset_epoch"] != reset_epoch):
+            raise ValueError("PHYSICS_RAW_SCOPE_INVALID")
     if max_samples is not None and len(samples) > max_samples:
         raise ValueError("PHYSICS_RAW_PRODUCER_BOUNDS_INVALID")
     prior = None
@@ -154,6 +185,9 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
                 or receipt < previous["received_monotonic_ns"]):
             raise ValueError("PHYSICS_RAW_CONTINUITY_INVALID")
         prior = prior_chunk["samples"][-1]
+    if known:
+        _verify_known_chunk_arguments(samples, prior, nq=nq, nv=nv, max_contacts=max_contacts)
+        return record
     for sample in samples:
         _exact(sample, _STEP)
         if (sample["simulation_session_id"], sample["reset_epoch"]) != (
@@ -219,3 +253,27 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
                round(samples[-1]["simulation_time_s"] * 1e9)):
         raise ValueError("PHYSICS_RAW_ENVELOPE_INVALID")
     return record
+
+
+def _verify_known_chunk_arguments(samples, prior, *, nq, nv, max_contacts):
+    """The sample loop of `_verify_raw_chunk` for a record whose own checks have passed: only what depends on the arguments is left,
+    in the order the full loop raises it per sample: the step/time/clock continuity of the first sample to the `previous` chunk's
+    last one, the sizes of the two state vectors, the contact bound. (Inside the chunk the continuity of one sample to the next is a
+    property of the record.)"""
+    if prior is None and nq is None and nv is None and max_contacts is None:
+        return
+    first = True
+    for sample in samples:
+        if first and prior is not None:
+            sim = round(sample["simulation_time_s"] * 1e9)
+            if (sample["physics_step"] != prior["physics_step"] + 1
+                    or sim - round(prior["simulation_time_s"] * 1e9) != 2_000_000
+                    or sample["clock_interval_begin_monotonic_ns"] < prior["clock_interval_end_monotonic_ns"]):
+                raise ValueError("PHYSICS_RAW_CONTINUITY_INVALID")
+        first = False
+        if nq is not None and len(sample["model_qpos"]) != nq:
+            raise ValueError("PHYSICS_RAW_VECTOR_INVALID")
+        if nv is not None and len(sample["model_qvel"]) != nv:
+            raise ValueError("PHYSICS_RAW_VECTOR_INVALID")
+        if max_contacts is not None and sum(len(sample[name]) for name in _CONTACT_LISTS) > max_contacts:
+            raise ValueError("PHYSICS_RAW_PRODUCER_BOUNDS_INVALID")
