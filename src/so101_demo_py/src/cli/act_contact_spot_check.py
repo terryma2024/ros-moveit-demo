@@ -11,6 +11,13 @@ defaulted. The only fixed value is the over-squeeze close target the CP-3531 rea
 `--spot-check nominal` passes when the Teacher COMPLETED, the endpoint passed, no oracle flag is set, the process summary is complete,
 the phase-2 QC passed, and the frozen close target is not the over-squeeze value.
 
+`--spot-check over_squeeze` needs no QC report (QC PASS is a nominal-only criterion): an over-squeeze episode that reaches the
+diagnostic hard-stop force flag is refused by the raw-physics sealer (`PHYSICS_RAW_SOURCE_HAZARD`), so phase 2 ends INVALID with
+`act_data_qc` NOT_RUN and no QC report. That outcome is accepted only when it is exactly the hazard one (`_hazard_outcome`), and the
+Teacher manifest is then bound to the index without QC: index `processed_result_sha256` -> processed result `receipt_sha256` ->
+`raw/recording-receipt.json` `documents.teacher_manifest.sha256`. A processed result that does carry a QC report keeps the QC-bound path
+(the manifest must equal the QC binding and the receipt binding).
+
 `--spot-check over_squeeze` (the CP-3531 reading: under Teacher policy v3 the process summary never stops the run) passes when the
 frozen close target is the over-squeeze value, the Teacher COMPLETED, `ORACLE_CUP_OVERLOAD` is flagged in a phase from CLOSE_GRIPPER
 to VERIFY_PHYSICAL_GRASP, the peak summed force is above the proposal's `maximum_safe_force_n` or the peak compression above its
@@ -33,6 +40,7 @@ import re
 import sys
 
 from so101_demo.act.diagnostic_episode_inputs import verify_frozen_inputs
+from so101_demo.act.offline.recording_receipt import RECEIPT_KIND, RECEIPT_RELATIVE, TEACHER_MANIFEST_RELATIVE
 from so101_demo.act.episode_qc import REFERENCE_CHECK, read_qc_report
 from so101_demo.act.processed_result import PROCESSED_KIND, PROCESSED_NAME, data_directory
 from so101_demo.core.process_summary import FLAG_COLLISION, FLAG_OVERLOAD, HOLD_PHASES, validate_summary
@@ -43,6 +51,16 @@ SPOT_CHECKS = ('nominal', 'over_squeeze')
 OVER_SQUEEZE_CLOSE_TARGET_RAD = -0.049
 #: the phases in which the over-squeeze overload is expected: the close and the grasp checks up to VERIFY_PHYSICAL_GRASP
 OVERLOAD_WINDOW = ('CLOSE_GRIPPER', *HOLD_PHASES[:HOLD_PHASES.index('VERIFY_PHYSICAL_GRASP') + 1])
+#: the hazard the raw-physics sealer raises for the diagnostic hard-stop force flag (`act.raw_physics_chunks`)
+PHYSICS_HAZARD = 'PHYSICS_RAW_SOURCE_HAZARD'
+#: the engine latches (`act.offline.engine`) that wrap an exception message as `<prefix>: <message>`; the hazard reaches the processor
+#: report as the bare message (the source pump/step) or through these
+HAZARD_LATCH_PREFIXES = ('RECORDER_STEP_FAILED', 'RECORDER_FINALIZE_FAILED', 'RECORDER_SOURCE_CLOSE_FAILED', 'RECORDER_SEAL_FAILED',
+                         'RECORDER_FINAL_CHECK_FAILED', 'RECORDER_CLOSE_FAILED', 'RECORDER_READBACK_FAILED',
+                         'RECORDER_EVENT_HANDLER_FAILED')
+ALLOWED_HAZARD_REASONS = (PHYSICS_HAZARD, *(f'{prefix}: {PHYSICS_HAZARD}' for prefix in HAZARD_LATCH_PREFIXES))
+#: `runtime.act_processor.processing`: rc 3 -> `OFFLINE_PROCESSOR_INVALID: rc=3; <first four report reasons, 120 chars each>`, 300 chars
+_INVALID_PREFIX = 'OFFLINE_PROCESSOR_INVALID: rc=3'
 _NOMINAL_CHECKS = ('teacher_completed', 'endpoint_pass', 'no_oracle_flag', 'summary_complete', 'phase2_qc_pass',
                    'close_target_is_not_the_over_squeeze_value')
 _OVER_SQUEEZE_CHECKS = ('teacher_completed', 'close_target_is_over_squeeze', 'overload_in_window', 'peak_over_a_limit',
@@ -144,8 +162,51 @@ def _processed_result(run: Path, task: dict, sealed: Path, result_sha: str) -> t
     return path, document
 
 
-def _bound_files(run: Path, task: dict) -> dict:
-    """The task result, sealed result, phase-2 processed result, QC report and Teacher manifest of the one task, each bound by sha256."""
+def _receipt_binding(sealed: Path, document: dict, manifest: Path) -> tuple[Path, str]:
+    """The sealed recording receipt the processed result binds by `receipt_sha256`, and the Teacher manifest sha256 it records."""
+    code = 'SPOT_CHECK_BINDING_MISMATCH'
+    receipt = sealed / RECEIPT_RELATIVE
+    if receipt.is_symlink() or not receipt.is_file() or _sha(receipt) != document.get('receipt_sha256'):
+        raise ValueError(code)
+    body = _json(receipt, code)
+    entry = (body.get('documents') or {}).get('teacher_manifest') if type(body.get('documents')) is dict else None
+    if (body.get('kind') != RECEIPT_KIND or type(entry) is not dict or entry.get('path') != TEACHER_MANIFEST_RELATIVE.as_posix()
+            or type(entry.get('sha256')) is not str or _sha(manifest) != entry['sha256']):
+        raise ValueError(code)
+    return receipt, entry['sha256']
+
+
+def _hazard_outcome(processed: Path, document: dict, task: dict) -> Path:
+    """Accept a processed result with no QC report only when it is exactly the physics-hazard INVALID outcome; returns the
+    processor report it binds. Anything else (another reason, a fault, a half-filled QC binding) is refused."""
+    code = 'SPOT_CHECK_BINDING_MISMATCH'
+    reason = document.get('act_data_reason')
+    if (document.get('act_data_status') != 'INVALID' or document.get('act_data_qc') != 'NOT_RUN' or document.get('export_eligible')
+            is not False or document.get('processor_rc') != 3 or document.get('diagnostic_fault') != 'none'
+            or any(document.get(name) is not None for name in ('qc_report_path', 'qc_report_sha256', 'episode_seal_sha256'))
+            or type(reason) is not str
+            or task.get('act_data_status') != 'INVALID' or task.get('act_data_qc') != 'NOT_RUN'
+            or task.get('act_data_reason') != reason or task.get('export_eligible') is not False):
+        raise ValueError(code)
+    entry = (document.get('artifacts') or {}).get('processor_report') if type(document.get('artifacts')) is dict else None
+    if type(entry) is not dict or entry.get('path') != 'offline-processor-report.json' or type(entry.get('sha256')) is not str:
+        raise ValueError(code)
+    report = processed.parent / entry['path']
+    if report.is_symlink() or not report.is_file() or _sha(report) != entry['sha256']:
+        raise ValueError(code)
+    body = _json(report, code)
+    reasons = body.get('reasons')
+    if (body.get('verdict') != 'INVALID' or type(reasons) is not list or not reasons
+            or any(item not in ALLOWED_HAZARD_REASONS for item in reasons)
+            or reason != (_INVALID_PREFIX + '; ' + '; '.join(str(item)[:120] for item in reasons[:4]))[:300]):
+        raise ValueError(code)
+    return report
+
+
+def _bound_files(run: Path, task: dict, spot_check: str) -> dict:
+    """The task result, sealed result, phase-2 processed result, Teacher manifest and (QC route) QC report of the one task, each bound
+    by sha256. Nominal needs the QC report. Over-squeeze binds the manifest through the recording receipt and takes the QC report only
+    when the processed result has one; without it the processed result must be the physics-hazard outcome."""
     code = 'SPOT_CHECK_BINDING_MISMATCH'
     try:
         location = Path(task['location'])
@@ -159,18 +220,29 @@ def _bound_files(run: Path, task: dict) -> dict:
         if _sha(result) != task['result_sha256']:
             raise ValueError(code)
         processed, document = _processed_result(run, task, sealed[0], task['result_sha256'])
-        name = document['qc_report_path']
-        if type(name) is not str or not name or Path(name).is_absolute() or '..' in Path(name).parts:
-            raise ValueError(code)
-        qc = data_directory(processed.parent, document) / name
-        if qc.is_symlink() or not qc.is_file() or _sha(qc) != document['qc_report_sha256']:
-            raise ValueError(code)
-        bound = read_qc_report(qc)['checks'][REFERENCE_CHECK]['details']['teacher_manifest_sha256']
-        if _sha(manifest) != bound:
-            raise ValueError(code)
+        extra = {}
+        has_qc = not (document.get('qc_report_path') is None and document.get('qc_report_sha256') is None)
+        if spot_check == 'over_squeeze':
+            receipt, _manifest_sha = _receipt_binding(sealed[0], document, manifest)
+            extra['recording_receipt'] = receipt
+            if not has_qc:
+                extra['processor_report'] = _hazard_outcome(processed, document, task)
+                extra['route'] = 'recording_receipt_physics_hazard'
+        if spot_check == 'nominal' or has_qc:
+            name = document['qc_report_path']
+            if type(name) is not str or not name or Path(name).is_absolute() or '..' in Path(name).parts:
+                raise ValueError(code)
+            qc = data_directory(processed.parent, document) / name
+            if qc.is_symlink() or not qc.is_file() or _sha(qc) != document['qc_report_sha256']:
+                raise ValueError(code)
+            bound = read_qc_report(qc)['checks'][REFERENCE_CHECK]['details']['teacher_manifest_sha256']
+            if _sha(manifest) != bound:
+                raise ValueError(code)
+            extra['qc'] = qc
+            extra['route'] = 'qc_report' if spot_check == 'nominal' else 'qc_report_and_recording_receipt'
     except (OSError, KeyError, TypeError, ValueError) as error:
         raise ValueError(code) from error
-    return dict(task_result=task_result, result=result, processed=processed, qc=qc, manifest=manifest)
+    return dict(task_result=task_result, result=result, processed=processed, manifest=manifest, **extra)
 
 
 def _equal(left, right) -> bool:
@@ -190,7 +262,8 @@ def judge_run(run, spot_check, *, expected_fingerprint=None) -> dict:
     frozen_manifest, frozen, proposal_path, proposal = _frozen(run)
     if expected_fingerprint is not None and proposal['policy_fingerprint'] != expected_fingerprint:
         raise ValueError('SPOT_CHECK_FINGERPRINT_MISMATCH')
-    files = _bound_files(run, task)
+    files = _bound_files(run, task, spot_check)
+    processed_document = _json(files['processed'], 'SPOT_CHECK_BINDING_MISMATCH')
     manifest = _json(files['manifest'], 'SPOT_CHECK_SUMMARY_INVALID')
     process = manifest.get('teacher_process_summary')
     try:
@@ -248,8 +321,13 @@ def judge_run(run, spot_check, *, expected_fingerprint=None) -> dict:
         checks=checks, policy_fingerprint=proposal['policy_fingerprint'], run=str(run),
         campaign_id=_index_document.get('campaign_id'), scene_id=task.get('scene_id'), task_id=task.get('task_id'),
         collection_index=_ref(index_path), task_result=_ref(files['task_result']), sealed_result=_ref(files['result']), processed_result=_ref(files['processed']),
-        qc_report=_ref(files['qc']), teacher_manifest=_ref(files['manifest']), frozen_inputs=_ref(frozen_manifest),
-        proposal=_ref(proposal_path),
+        qc_report=_ref(files['qc']) if 'qc' in files else None, teacher_manifest=_ref(files['manifest']), frozen_inputs=_ref(frozen_manifest),
+        proposal=_ref(proposal_path), binding_route=files['route'] if spot_check == 'over_squeeze' else 'qc_report',
+        recording_receipt=_ref(files['recording_receipt']) if 'recording_receipt' in files else None,
+        processor_report=_ref(files['processor_report']) if 'processor_report' in files else None,
+        phase2_outcome=dict(act_data_status=processed_document.get('act_data_status'), act_data_qc=processed_document.get('act_data_qc'),
+                            act_data_reason=processed_document.get('act_data_reason'),
+                            processor_rc=processed_document.get('processor_rc')),
         limits=dict(maximum_safe_force_n=force_limit, maximum_compression_distance_m=compression_limit_m,
                     maximum_compression_um=compression_limit_um),
         summary_thresholds=summary_thresholds,

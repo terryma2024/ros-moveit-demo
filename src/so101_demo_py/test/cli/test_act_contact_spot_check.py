@@ -75,18 +75,52 @@ class Run:
     pass
 
 
+HAZARD = 'PHYSICS_RAW_SOURCE_HAZARD'
+HAZARD_REASONS = [HAZARD, f'RECORDER_SEAL_FAILED: {HAZARD}', f'RECORDER_SOURCE_CLOSE_FAILED: {HAZARD}']
+
+
+def hazard_reason(reasons):
+    """`runtime.act_processor.processing` for rc 3: the first four report reasons, 120 characters each, 300 in all."""
+    return ('OFFLINE_PROCESSOR_INVALID: rc=3; ' + '; '.join(item[:120] for item in reasons[:4]))[:300]
+
+
 def write_processed(run, scene, qc, *, number=1, fault='none', directory=None):
-    """processed-result.json as the phase-2 writer binds it: phase-1 result sha, QC report path and sha (under `out/` for a fault)."""
+    """processed-result.json as the phase-2 writer binds it: phase-1 result sha, the recording receipt sha, QC report path and sha
+    (under `out/` for a fault)."""
     directory = run.processed_dir if directory is None else directory
     data = directory if fault == 'none' else directory / 'out'
     return dump(directory / 'processed-result.json', dict(
         kind='ACT_PROCESSED_RESULT', schema_version=1, task_id=f'{scene}-proc-{number}', scene_id=scene, proc_attempt=number,
-        phase1_result_sha256=sha(run.result), diagnostic_fault=fault, act_data_qc=qc,
+        phase1_result_sha256=sha(run.result), receipt_sha256=sha(run.receipt), diagnostic_fault=fault, act_data_qc=qc,
         qc_report_path='qc-report.json', qc_report_sha256=sha(data / 'qc-report.json')))
 
 
+def write_hazard_processed(run, scene, *, number=1, reasons=None, **changes):
+    """processed-result.json of a run whose raw physics hit the hard-stop force flag: INVALID, NOT_RUN, no QC report, the
+    processor report (rc 3) bound under `artifacts` and its reasons in `act_data_reason`."""
+    reasons = HAZARD_REASONS if reasons is None else reasons
+    run.processor_report = dump(run.processed_dir / 'offline-processor-report.json', dict(verdict='INVALID', rc=3, reasons=reasons))
+    document = dict(
+        kind='ACT_PROCESSED_RESULT', schema_version=1, task_id=f'{scene}-proc-{number}', scene_id=scene, proc_attempt=number,
+        phase1_result_sha256=sha(run.result), receipt_sha256=sha(run.receipt), diagnostic_fault='none', processor_rc=3,
+        act_data_status='INVALID', act_data_qc='NOT_RUN', act_data_reason=hazard_reason(reasons), export_eligible=False,
+        qc_report_path=None, qc_report_sha256=None, episode_seal_sha256=None,
+        artifacts=dict(processor_report=dict(path='offline-processor-report.json', sha256=sha(run.processor_report))))
+    document.update(changes)
+    return dump(run.processed_dir / 'processed-result.json', document)
+
+
+def write_receipt(run, manifest_sha=None):
+    """raw/recording-receipt.json as `act.offline.recording_receipt` writes it (only the Teacher manifest document matters here)."""
+    run.receipt = dump(run.sealed / 'raw/recording-receipt.json', dict(
+        kind='ACT_RECORDING_RECEIPT', schema_version=1, raw_files=[],
+        documents=dict(teacher_manifest=dict(path='dynamic/dynamic-execute-manifest.json',
+                                             sha256=sha(run.manifest) if manifest_sha is None else manifest_sha, size=1))))
+    return run.receipt
+
+
 def make_run(tmp_path, *, kind='nominal', summary_document=None, close=None, qc='PASS', status='COMPLETED',
-             endpoint='PASS', scene=SCENE):
+             endpoint='PASS', scene=SCENE, hazard=False):
     """A synthetic finished spot-check run root. Returns an object with the paths the tests damage."""
     run = Run()
     run.root = root = (tmp_path / 'act-w1s-run').resolve()
@@ -104,22 +138,26 @@ def make_run(tmp_path, *, kind='nominal', summary_document=None, close=None, qc=
         teacher_execution_policy=dict(values=dict(
             gripper_close_target_rad=(OVER_SQUEEZE_CLOSE if kind == 'over_squeeze' else NOMINAL_CLOSE) if close is None else close)))
     location = root / 'wave-0/w00/g1/output/tasks' / TASK
-    sealed = location / 'attempts' / scene / (scene + '-lease-1') / 'sealed'
+    sealed = run.sealed = location / 'attempts' / scene / (scene + '-lease-1') / 'sealed'
     run.manifest = dump(sealed / 'dynamic/dynamic-execute-manifest.json', dict(
         schema='so101-teacher-execute', status='DONE', teacher_execution_status=status,
         teacher_task_result=dict(result=endpoint, rule_version='teacher_endpoint'),
         teacher_process_summary=summary_document if summary_document is not None else summary()))
     run.qc_bound_manifest_sha = sha(run.manifest)
+    write_receipt(run)
     run.result = dump(sealed / 'result.json', dict(kind='ACT_COLLECTION_RESULT', act_data_qc=qc))
     # the two-phase layout: the phase-2 QC report and processed-result.json live in <run>/processing/<scene>/<attempt>-proc-<n>,
     # never in the sealed directory (which holds result.json, dynamic/, numeric/, perception/ and raw/)
     run.processed_dir = root / 'processing' / scene / (scene + '-lease-1-proc-1')
     run.qc_path = dump(run.processed_dir / 'qc-report.json', dict(status=qc))
-    run.processed = write_processed(run, scene, qc)
+    run.processed = write_hazard_processed(run, scene) if hazard else write_processed(run, scene, qc)
+    if hazard:
+        run.qc_path.unlink()      # the sealer refused the physics hazard: there is no QC report
     run.task_result = dump(location / 'task-result.json', dict(result=dict(act_data_qc=qc)))
     task = dict(scene_id=scene, worker_id='w00', task_id=TASK, launch_id='wave-0-w00-g1', location=str(location),
                 result_status='PASSED', teacher_execution_status=status, teacher_task_result=endpoint,
-                act_data_status='VALID' if qc == 'PASS' else 'INVALID', act_data_reason=None, act_data_qc=qc,
+                act_data_status='INVALID' if hazard else 'VALID' if qc == 'PASS' else 'INVALID',
+                act_data_reason=hazard_reason(HAZARD_REASONS) if hazard else None, act_data_qc='NOT_RUN' if hazard else qc,
                 export_eligible=False, result_sha256=sha(run.result), task_result_sha256=sha(run.task_result),
                 processed_result_sha256=sha(run.processed))
     run.index_document = dict(schema_version=1, kind='act_collection_frozen_index', campaign_id='spot-campaign',
@@ -374,6 +412,140 @@ def test_a_file_that_is_not_the_one_the_index_and_qc_bound_is_refused(tmp_path, 
     else:
         run.manifest.unlink()
     refused(run, code)
+
+
+# ---- over-squeeze without a QC report: the physics-hazard outcome ---------------------------------------------------------------
+
+
+def hazard_run(tmp_path, **kwargs):
+    return make_run(tmp_path, kind='over_squeeze', summary_document=over_squeeze(), hazard=True, **kwargs)
+
+
+def rebind(run, **changes):
+    """Rewrite the processed result with `changes` and re-bind it in the index, as a faithful but different phase-2 outcome."""
+    document = json.loads(run.processed.read_text())
+    document.update(changes)
+    dump(run.processed, document)
+    index = copy.deepcopy(run.index_document)
+    index['collected_tasks'][0]['processed_result_sha256'] = sha(run.processed)
+    index['collected_tasks'][0].update({key: value for key, value in changes.items() if key in
+                                        ('act_data_status', 'act_data_qc', 'act_data_reason', 'export_eligible')})
+    dump(run.index, index)
+
+
+def test_a_hazard_over_squeeze_run_passes_without_a_qc_report_and_names_its_binding_route(tmp_path, prepared):
+    run = prepared(hazard_run(tmp_path))
+    assert not run.qc_path.exists()
+    verdict = judged(run)
+    assert verdict['verdict'] == 'PASS' and verdict['reasons'] == []
+    assert verdict['binding_route'] == 'recording_receipt_physics_hazard'
+    assert verdict['qc_report'] is None
+    assert verdict['teacher_manifest'] == dict(path=str(run.manifest), sha256=sha(run.manifest))
+    assert verdict['recording_receipt'] == dict(path=str(run.receipt), sha256=sha(run.receipt))
+    assert verdict['processor_report'] == dict(path=str(run.processor_report), sha256=sha(run.processor_report))
+    assert verdict['processed_result'] == dict(path=str(run.processed), sha256=sha(run.processed))
+    assert verdict['phase2_outcome'] == dict(act_data_status='INVALID', act_data_qc='NOT_RUN', processor_rc=3,
+                                             act_data_reason=hazard_reason(HAZARD_REASONS))
+
+
+@pytest.mark.parametrize('reasons', [[HAZARD], [HAZARD, f'RECORDER_SEAL_FAILED: {HAZARD}'], HAZARD_REASONS])
+def test_every_combination_of_the_engines_hazard_latches_is_the_hazard_outcome(tmp_path, prepared, reasons):
+    run = hazard_run(tmp_path)
+    rebind(run, **json.loads(write_hazard_processed(run, SCENE, reasons=reasons).read_text()))
+    assert judged(prepared(run))['verdict'] == 'PASS'
+
+
+def test_a_hazard_run_that_the_other_criteria_fail_still_fails_the_verdict(tmp_path, prepared):
+    run = prepared(make_run(tmp_path, kind='over_squeeze', summary_document=over_squeeze(overload_phases=()), hazard=True))
+    verdict = judged(run)
+    assert verdict['verdict'] == 'FAIL' and 'overload_in_window' in verdict['reasons']
+
+
+@pytest.mark.parametrize('damage', [
+    'manifest_changed', 'receipt_changed', 'receipt_sha_not_in_processed', 'receipt_lists_other_manifest', 'receipt_missing',
+    'receipt_other_path', 'other_reason', 'extra_reason', 'unknown_prefix', 'reason_not_the_reports', 'valid_status',
+    'fault_status', 'qc_run', 'half_qc_binding', 'fault_injected', 'rc_not_3', 'report_changed', 'report_missing',
+    'report_verdict_valid', 'index_reason_differs', 'index_says_valid', 'export_eligible'])
+def test_a_hazard_outcome_that_is_not_exactly_bound_or_not_exactly_the_hazard_is_refused(tmp_path, prepared, damage):
+    run = prepared(hazard_run(tmp_path))
+    if damage == 'manifest_changed':
+        run.manifest.write_text(run.manifest.read_text() + ' ')
+    elif damage == 'receipt_changed':
+        run.receipt.write_text(run.receipt.read_text() + ' ')
+    elif damage == 'receipt_sha_not_in_processed':
+        rebind(run, receipt_sha256='0' * 64)
+    elif damage == 'receipt_lists_other_manifest':
+        write_receipt(run, manifest_sha='0' * 64)
+        rebind(run, receipt_sha256=sha(run.receipt))
+    elif damage == 'receipt_missing':
+        run.receipt.unlink()
+    elif damage == 'receipt_other_path':
+        document = json.loads(run.receipt.read_text())
+        document['documents']['teacher_manifest']['path'] = 'dynamic/other.json'
+        dump(run.receipt, document)
+        rebind(run, receipt_sha256=sha(run.receipt))
+    elif damage in ('other_reason', 'extra_reason', 'unknown_prefix'):
+        reasons = dict(other_reason=[HAZARD, 'RECORDER_SEAL_FAILED: PHYSICS_RAW_CONTINUITY_INVALID'],
+                       extra_reason=[HAZARD, 'TEACHER_TASK_NOT_PASSED: FAIL'],
+                       unknown_prefix=[HAZARD, f'RECORDER_NOT_AN_ENGINE_LATCH: {HAZARD}'])[damage]
+        rebind(run, **json.loads(write_hazard_processed(run, SCENE, reasons=reasons).read_text()))
+    elif damage == 'reason_not_the_reports':
+        rebind(run, act_data_reason=hazard_reason([HAZARD]))
+    elif damage == 'valid_status':
+        rebind(run, act_data_status='VALID')
+    elif damage == 'fault_status':
+        rebind(run, act_data_status='FAULT')
+    elif damage == 'qc_run':
+        rebind(run, act_data_qc='FAIL')
+    elif damage == 'half_qc_binding':
+        rebind(run, qc_report_path='qc-report.json')
+    elif damage == 'fault_injected':
+        rebind(run, diagnostic_fault='SOME_FAULT')
+    elif damage == 'rc_not_3':
+        rebind(run, processor_rc=2)
+    elif damage == 'report_changed':
+        run.processor_report.write_text(run.processor_report.read_text() + ' ')
+    elif damage == 'report_missing':
+        run.processor_report.unlink()
+    elif damage == 'report_verdict_valid':
+        document = json.loads(run.processor_report.read_text())
+        document['verdict'] = 'VALID'
+        dump(run.processor_report, document)
+        rebind(run, artifacts=dict(processor_report=dict(path='offline-processor-report.json', sha256=sha(run.processor_report))))
+    elif damage == 'index_reason_differs':
+        index = copy.deepcopy(run.index_document)
+        index['collected_tasks'][0]['act_data_reason'] = 'OTHER'
+        dump(run.index, index)
+    elif damage == 'index_says_valid':
+        index = copy.deepcopy(run.index_document)
+        index['collected_tasks'][0]['act_data_status'] = 'VALID'
+        dump(run.index, index)
+    else:
+        rebind(run, export_eligible=True)
+    refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
+
+
+def test_a_hazard_outcome_is_refused_for_a_missing_processed_result_too(tmp_path, prepared):
+    run = prepared(hazard_run(tmp_path))
+    run.processed.unlink()
+    refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
+
+
+def test_a_nominal_run_without_a_qc_report_is_still_refused_even_with_the_hazard_outcome(tmp_path, prepared):
+    run = prepared(make_run(tmp_path, kind='nominal', hazard=True))
+    refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
+
+
+def test_a_qc_route_over_squeeze_run_also_needs_the_receipt_to_bind_the_same_manifest(tmp_path, prepared):
+    run = prepared(make_run(tmp_path, kind='over_squeeze', summary_document=over_squeeze()))
+    verdict = judged(run)
+    assert verdict['binding_route'] == 'qc_report_and_recording_receipt' and verdict['recording_receipt']['sha256'] == sha(run.receipt)
+    write_receipt(run, manifest_sha='0' * 64)
+    run.processed = write_processed(run, SCENE, 'PASS')
+    index = copy.deepcopy(run.index_document)
+    index['collected_tasks'][0]['processed_result_sha256'] = sha(run.processed)
+    dump(run.index, index)
+    refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
 
 
 def test_the_qc_report_is_found_under_the_fault_out_directory_when_the_processor_faulted(tmp_path, prepared):
