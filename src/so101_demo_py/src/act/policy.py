@@ -12,8 +12,64 @@ import math
 
 DT_S = 0.1
 _JOINTS = 6
-_OBSERVATION_KEYS = frozenset({"sim_time_s", "head", "wrist", "state"})
-_STATE_DIM = 8
+#: The default observation of the shipped bundles. A bundle that declares its own cameras and state width, or a caller that
+#: passes `observation=`, replaces both; nothing below assumes these names.
+_DEFAULT_CAMERAS = ("head", "wrist")
+_DEFAULT_STATE_DIM = 8
+
+
+def observation_spec(bundle: dict, *, legacy_cameras=None) -> dict:
+    """The cameras and the state width a bundle's policy takes, read from the bundle.
+
+    A bundle declares them as ``normalization.observation = {"cameras": [...], "state_dim": N}``. A bundle written before that
+    declaration existed has only its normalisation statistics: the state width is then the length of ``state_mean`` and the
+    cameras are ``legacy_cameras`` (the caller's configured default for such bundles), or the bundle is refused.
+    """
+
+    normalization = bundle.get("normalization") if isinstance(bundle, dict) else None
+    if not isinstance(normalization, dict):
+        raise ValueError("BUNDLE_OBSERVATION_INVALID")
+    mean = normalization.get("state_mean")
+    declared = normalization.get("observation")
+    if declared is None:
+        if legacy_cameras is None:
+            raise ValueError("BUNDLE_OBSERVATION_UNDECLARED")
+        cameras, state_dim = legacy_cameras, len(mean) if isinstance(mean, list) else None
+    else:
+        if not isinstance(declared, dict) or set(declared) != {"cameras", "state_dim"}:
+            raise ValueError("BUNDLE_OBSERVATION_INVALID")
+        cameras, state_dim = declared["cameras"], declared["state_dim"]
+    if (not isinstance(cameras, (list, tuple)) or not cameras or len(set(cameras)) != len(cameras)
+            or any(not isinstance(name, str) or not name or name in {"sim_time_s", "state"} for name in cameras)
+            or type(state_dim) is not int or state_dim < 1
+            or (isinstance(mean, list) and len(mean) != state_dim)):
+        raise ValueError("BUNDLE_OBSERVATION_INVALID")
+    return {"cameras": tuple(cameras), "state_dim": state_dim}
+
+
+def to_action_prefix(prediction: dict) -> dict:
+    """The execution adapter's action prefix for a runner prediction (the document `validate_action_prefix` accepts).
+
+    The identity, the sequence and the observation time come from the prediction unchanged; the target times are the prediction's
+    own, anchored to the observation. Nothing is re-based or padded here.
+    """
+
+    from .contracts import ContractError, validate_action_prefix
+
+    keys = {"sequence", "session_id", "attempt_id", "observed_s", "execution_prefix", "target_times_s", "actions"}
+    if not isinstance(prediction, dict) or set(prediction) != keys:
+        raise ValueError("POLICY_PREDICTION_INVALID")
+    try:
+        prefix = {"session_id": prediction["session_id"], "attempt_id": prediction["attempt_id"],
+                  "sequence": prediction["sequence"], "observation_time_s": prediction["observed_s"],
+                  "target_times_s": tuple(prediction["target_times_s"]),
+                  "positions": tuple(tuple(row) for row in prediction["actions"])}
+        validate_action_prefix(prefix)
+    except (ContractError, TypeError) as error:
+        raise ValueError("POLICY_PREDICTION_INVALID") from error
+    if len(prefix["positions"]) != prediction["execution_prefix"]:
+        raise ValueError("POLICY_PREDICTION_INVALID")
+    return prefix
 
 
 def target_times(observed_s: float, count: int) -> tuple:
@@ -47,7 +103,7 @@ def _actions(values, count: int) -> tuple:
 class ActPolicyRunner:
     """Applies a bundle's frozen prefix to a model's chunk and reports the action prefix."""
 
-    def __init__(self, bundle: dict, infer) -> None:
+    def __init__(self, bundle: dict, infer, *, observation: dict | None = None) -> None:
         if not isinstance(bundle, dict) or not isinstance(bundle.get("action"), dict):
             raise ValueError("POLICY_BUNDLE_INVALID")
         action = bundle["action"]
@@ -56,6 +112,13 @@ class ActPolicyRunner:
             raise ValueError("POLICY_BUNDLE_INVALID")
         if not callable(getattr(infer, "infer", None)) or not callable(getattr(infer, "reset", None)):
             raise ValueError("POLICY_INTERFACE_INVALID")
+        spec = ({"cameras": _DEFAULT_CAMERAS, "state_dim": _DEFAULT_STATE_DIM}
+                if observation is None else observation)
+        if (not isinstance(spec, dict) or set(spec) != {"cameras", "state_dim"} or not spec["cameras"]
+                or type(spec["state_dim"]) is not int or spec["state_dim"] < 1):
+            raise ValueError("POLICY_BUNDLE_INVALID")
+        self.observation_keys = frozenset({"sim_time_s", "state", *spec["cameras"]})
+        self.state_dim = spec["state_dim"]
         self.bundle = bundle
         self.infer = infer
         self.execution_prefix = prefix
@@ -74,10 +137,10 @@ class ActPolicyRunner:
         if self.session_id is None or self.attempt_id is None:
             # a chunk produced from a stale model state is not evidence for this attempt
             raise ValueError("POLICY_NOT_RESET")
-        if not isinstance(observation, dict) or set(observation) != _OBSERVATION_KEYS:
+        if not isinstance(observation, dict) or set(observation) != self.observation_keys:
             raise ValueError("POLICY_OBSERVATION_INVALID")
         if not isinstance(observation["state"], (list, tuple)) \
-                or len(observation["state"]) != _STATE_DIM:
+                or len(observation["state"]) != self.state_dim:
             raise ValueError("POLICY_OBSERVATION_INVALID")
         observed_s = observation["sim_time_s"]
         if isinstance(observed_s, bool) or not isinstance(observed_s, (int, float)) \

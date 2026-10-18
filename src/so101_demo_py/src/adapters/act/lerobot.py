@@ -123,11 +123,13 @@ def _normalise_images(images):
     return (images.to(torch.float32) / 255.0 - mean) / std
 
 
-def _as_batch(observation: dict, device: str, normalization: dict | None = None) -> dict:
+def _as_batch(observation: dict, device: str, normalization: dict | None = None, cameras=None) -> dict:
     import numpy as np                     # present in the training interpreter, imported at call time
     import torch
 
-    if not isinstance(observation, dict) or set(observation) != _OBSERVATION_KEYS:
+    image_keys = _IMAGE_KEYS if cameras is None else tuple((name, f"observation.images.{name}") for name in cameras)
+    if (not isinstance(observation, dict)
+            or set(observation) != {"sim_time_s", "state", *(key for key, _batch_key in image_keys)}):
         raise ValueError("OBSERVATION_INVALID")
     state = observation["state"]
     if not isinstance(state, (list, tuple)) or not state:
@@ -141,7 +143,7 @@ def _as_batch(observation: dict, device: str, normalization: dict | None = None)
             raise ValueError("OBSERVATION_INVALID")
         values = (values - mean) / np.asarray(normalization["state_std"], dtype=np.float64)
     batch = {_STATE_KEY: torch.tensor(values[None, :], dtype=torch.float32, device=device)}
-    for key, batch_key in _IMAGE_KEYS:
+    for key, batch_key in image_keys:
         array = np.asarray(observation[key])
         if array.ndim != 3 or array.shape[-1] != 3:
             raise ValueError("OBSERVATION_IMAGE_INVALID")
@@ -160,15 +162,17 @@ class LerobotPolicy:
     ``normalization`` is the bundle's statistics: the state is normalised before the network and the action chunk is
     de-normalised after it (LeRobot 0.6.1's policy does neither; its processors do, and the bundle does not use them)."""
 
-    def __init__(self, policy: object, device: str = "cuda", normalization: dict | None = None) -> None:
+    def __init__(self, policy: object, device: str = "cuda", normalization: dict | None = None,
+                 cameras=None) -> None:
         self._policy = policy
         self._device = device
         self._normalization = normalization
+        self._cameras = None if cameras is None else tuple(cameras)       # None = the shipped head and wrist
 
     def infer(self, observation: dict) -> tuple:
         import numpy as np
 
-        batch = _as_batch(observation, self._device, self._normalization)
+        batch = _as_batch(observation, self._device, self._normalization, self._cameras)
         chunk = self._policy.predict_action_chunk(batch)
         if hasattr(chunk, "detach"):
             chunk = chunk.detach().cpu().numpy()
@@ -191,7 +195,7 @@ class LerobotPolicy:
 
 
 def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str, learning_rate: float | None = None,
-                head_learning_rate: float | None = None):
+                head_learning_rate: float | None = None, cameras=None, state_dim: int | None = None):
     """The LeRobot 0.6.1 `ACTConfig` for this task: cameras head and wrist, state 8, action 6, no temporal ensembling.
 
     Normalisation is IDENTITY in the policy (the adapter normalises, see the module docstring) and the backbone has no pretrained
@@ -205,8 +209,8 @@ def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str
     if (not isinstance(image_shape, (list, tuple)) or len(image_shape) != 3 or image_shape[0] != 3
             or any(type(item) is not int or item < 1 for item in image_shape)):
         raise ValueError("BUNDLE_NORMALIZATION_INVALID")
-    inputs = {_STATE_KEY: PolicyFeature(FeatureType.STATE, (STATE_DIM,))}
-    for camera in CAMERAS:
+    inputs = {_STATE_KEY: PolicyFeature(FeatureType.STATE, (STATE_DIM if state_dim is None else state_dim,))}
+    for camera in (CAMERAS if cameras is None else cameras):
         inputs[f"observation.images.{camera}"] = PolicyFeature(FeatureType.VISUAL, tuple(image_shape))
     # head_learning_rate (the config key learning_rate_backbone) is the ACT backbone's rate; absent = the same as learning_rate
     extra = {} if learning_rate is None else {
@@ -221,13 +225,24 @@ def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str
         **extra)
 
 
+def _bundle_observation(bundle: dict) -> dict:
+    """The cameras and state width of the bundle (its own declaration; the shipped head and wrist for an undeclared one)."""
+
+    from so101_demo.act.policy import observation_spec
+    from so101_demo.act.training_config import CAMERAS
+
+    return observation_spec(bundle, legacy_cameras=CAMERAS)
+
+
 def _load_act_policy(path: Path, bundle: dict, device: str) -> object:
     from lerobot.policies.act.modeling_act import ACTPolicy
     from safetensors.torch import load_model
 
     action = require_action_semantics(bundle.get("action"))
+    spec = _bundle_observation(bundle)
     config = _act_config(action["chunk_size"], action["execution_prefix"],
-                         _require_normalization(bundle).get("image_shape"), device)
+                         _require_normalization(bundle).get("image_shape"), device,
+                         cameras=spec["cameras"], state_dim=spec["state_dim"])
     policy = ACTPolicy(config)
     load_model(policy, str(path))                  # strict: every tensor of the saved policy must be present and fit
     return policy.to(device).eval()
@@ -243,7 +258,9 @@ def policy_loader(root: Path, *, factory=None, device: str = "cuda"):
         path = resolve_policy_file(root, bundle)
         normalization = _require_normalization(bundle)
         policy = factory(path) if factory is not None else _load_act_policy(path, bundle, device)
-        return LerobotPolicy(policy, device, normalization)
+        declared = normalization.get("observation")
+        cameras = declared["cameras"] if isinstance(declared, dict) and "cameras" in declared else None
+        return LerobotPolicy(policy, device, normalization, cameras)
 
     return loader
 
