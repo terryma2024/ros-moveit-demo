@@ -1,8 +1,9 @@
 # SO-101 evidence on its own partition — plan
 
 Status: CONFIRMED by the human on 2026-10-18 ("在当前做到step结束后，实现上述的需求"). Execution starts after the current step: the
-third_party gate fix, and the spot checks if they are running then. The directory rules are in AGENTS.md for both platforms
-(`W=/data/work` on ai-station with the partition mount; `W=/opt/data/work` on macOS, same pattern, no mount).
+third_party gate fix, and the spot checks if they are running then. The directory layout rules are in AGENTS.md for both platforms
+(`W=/data/work` on ai-station, `W=/opt/data/work` on macOS). AGENTS.md is mount-agnostic; how a machine backs the evidence
+root, as this partition mount does, is machine setup and is recorded here and in the ledger only.
 
 ## Goal
 
