@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("--source-root", required=True)
     inspect.add_argument("--ledger", required=True)
     inspect.add_argument("--output", required=True)
+    inspect.add_argument("--rig-profile", help="rig profile file (config/act/rig-v*.yaml); default: the head+wrist rig")
 
     prepare = subparsers.add_parser("prepare", help="freeze a candidate registry into immutable inputs")
     prepare.add_argument("--candidates", required=True)
@@ -403,7 +404,10 @@ def main(argv=None) -> int:
     if arguments.command == "inspect":
         # the discovery already exists in the inputs module and is read-only: it selects nothing by recency and
         # defaults nothing, reporting a blocker for every role without an approved, identity-matching candidate
-        document = inspect_inputs(Path(arguments.source_root), Path(arguments.ledger))
+        from so101_demo.act.rig_profile import load_rig_profile
+
+        rig = None if arguments.rig_profile is None else load_rig_profile(arguments.rig_profile)
+        document = inspect_inputs(Path(arguments.source_root), Path(arguments.ledger), rig)
         Path(arguments.output).write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         print(arguments.output)
         return 0

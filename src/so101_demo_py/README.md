@@ -244,6 +244,15 @@ fixed to `true`. The task-station launch permits only
 `headless:=false` and `sensor_rendering:=true`; it adds
 `task_evidence_root`, `include_teleop`, and `teleop_port`.
 
+The ACT execution stack and the ACT task station also take `rig`, the camera
+rig of the stack: `head-wrist` (the default; head and wrist cameras and a neck)
+or `side-wrist` (a side camera and a jaw-mounted wrist camera, with no head body,
+neck joint, neck actuator, neck controller or head camera anywhere in the
+composition). The rig selects the scene, URDF, camera plugin config and
+controller config (`src/act/rig_files.py`). On the ACT launches `mujoco_scene`
+is empty by default, which means the scene of the rig (`scene.xml` or
+`scene_side_wrist.xml`).
+
 Use `ros2 launch ... --show-args` as the source of truth for the installed
 overlay. See the [launch-parameter reference](../../docs/pick-place-launch-parameters.md)
 for mode, checkpoint, resume, and validation semantics.

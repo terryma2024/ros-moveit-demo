@@ -8,8 +8,10 @@ import os
 from pathlib import Path
 
 from .qc_session import session_memo
+from .rig_files import KNOWN_SCENES, rig_for_scene, rig_model_files
 
 KIND = "ACT_DIAGNOSTIC_EPISODE_EXECUTION_INPUTS"
+#: the head+wrist rig's scene, the default; a snapshot records the scene of its rig in `scene_path` (`rig_files`)
 SCENE = "assets/mujoco/act/scene.xml"
 MOTION = "config/policies/dynamic_cup_pick/mujoco.yaml"
 _FIELDS = frozenset({"kind", "schema_version", "files", "source_files", "source_sha256",
@@ -34,10 +36,10 @@ _SOURCE_SUFFIXES = {".py", ".cpp", ".hpp", ".h", ".yaml", ".json", ".xml", ".srd
 
 
 def verify_installed_station_assets(share: Path, snapshot: dict) -> None:
-    """Bind the ACT launch's installed model/config bytes to the frozen inputs."""
+    """Bind the ACT launch's installed model/config bytes of the snapshot's rig to the frozen inputs."""
+    rig = rig_for_scene(snapshot["scene_path"])
     required = {
-        "assets/mujoco/act/so101.urdf", "assets/common/geometry-manifest.yaml",
-        "config/mujoco/act/ros2_controllers.yaml", "config/mujoco/act/mujoco_plugins.yaml",
+        rig.urdf, "assets/common/geometry-manifest.yaml", rig.controllers, rig.plugins,
         "config/mujoco/moveit_controllers.yaml", "config/mujoco/so101.srdf",
         "config/mujoco/kinematics.yaml", "config/mujoco/joint_limits.yaml",
         "config/mujoco/ompl_planning.yaml",
@@ -92,13 +94,13 @@ def _write_new(path: Path, payload: bytes) -> None:
         os.fsync(stream.fileno())
 
 
-def _model_and_targets(root: Path) -> dict:
+def _model_and_targets(root: Path, scene: str = SCENE) -> dict:
     import mujoco
     from ..adapters.act.physics import model_sha256
     from ..core.dynamic_pick import compose_pose, inverse_pose
     from ..core.dynamic_pick_policy import load_dynamic_policy_variant
 
-    model = mujoco.MjModel.from_xml_path(str(root / SCENE))
+    model = mujoco.MjModel.from_xml_path(str(root / scene))
     template = load_dynamic_policy_variant(root, backend="mujoco").template
     key = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "task_start")
     body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, template.object_id)
@@ -118,14 +120,17 @@ def _model_and_targets(root: Path) -> dict:
                         "object_id": template.object_id, "body_name": template.object_id,
                         "frame_id": "world", "reset_keyframe": "task_start",
                         "initial_target": initial, "final_target": final,
-                        "reset_recipe_sha256": _sha((root / SCENE).read_bytes()),
+                        "reset_recipe_sha256": _sha((root / scene).read_bytes()),
                         "place_recipe_sha256": _sha((root / MOTION).read_bytes()),
                         "cup_to_tcp_xyz_xyzw": transform,
                         "transform_sha256": _sha(_canonical(transform))}}
 
 
-def freeze_execution_snapshot(source_root: Path, output: Path) -> dict:
-    """Freeze the actual package source, full model assets and approved motion recipe once."""
+def freeze_execution_snapshot(source_root: Path, output: Path, rig=None) -> dict:
+    """Freeze the actual package source, full model assets and approved motion recipe once.
+
+    `rig` (a profile, a rig name or None for the head+wrist default) names the scene the snapshot is recorded against."""
+    scene = rig_model_files(rig).scene
     source = Path(source_root).resolve()
     target = Path(output)
     if target.exists() or target.is_symlink():
@@ -187,8 +192,8 @@ def freeze_execution_snapshot(source_root: Path, output: Path) -> dict:
                   "source_files": source_files,
                   "source_sha256": _sha(_canonical({"kind": "ACT_DIAGNOSTIC_EPISODE_SOURCE",
                                                     "schema_version": 1, "files": source_files})),
-                  "scene_path": SCENE, "motion_policy_path": MOTION,
-                  **_model_and_targets(target)}
+                  "scene_path": scene, "motion_policy_path": MOTION,
+                  **_model_and_targets(target, scene)}
     descriptor["snapshot_sha256"] = _sha(_canonical(descriptor))
     _write_new(target / "execution-manifest.json", _canonical(descriptor))
     # Persist the nested directory entries, not only their files and the top-level manifest.
@@ -222,7 +227,7 @@ def verify_execution_snapshot(root: Path, *, expected_sha256: str | None = None)
         document = json.loads(_regular(root / "execution-manifest.json", root))
         if (not isinstance(document, dict) or set(document) != _FIELDS or document["kind"] != KIND
                 or type(document["schema_version"]) is not int or document["schema_version"] != 1
-                or document["scene_path"] != SCENE or document["motion_policy_path"] != MOTION):
+                or document["scene_path"] not in KNOWN_SCENES or document["motion_policy_path"] != MOTION):
             raise ValueError("EXECUTION_SNAPSHOT_SCHEMA_INVALID")
         digest = _sha(_canonical({key: value for key, value in document.items() if key != "snapshot_sha256"}))
         if digest != document["snapshot_sha256"] or (expected_sha256 is not None and digest != expected_sha256):
@@ -251,7 +256,7 @@ def verify_execution_snapshot(root: Path, *, expected_sha256: str | None = None)
         if document["source_sha256"] != _sha(_canonical({"kind": "ACT_DIAGNOSTIC_EPISODE_SOURCE",
                                                          "schema_version": 1, "files": source_files})):
             raise ValueError("EXECUTION_SNAPSHOT_SOURCE_INVALID")
-        derived = _model_and_targets(root)
+        derived = _model_and_targets(root, document["scene_path"])
         if any(document[key] != value for key, value in derived.items()):
             raise ValueError("EXECUTION_SNAPSHOT_RECIPE_INVALID")
         return document

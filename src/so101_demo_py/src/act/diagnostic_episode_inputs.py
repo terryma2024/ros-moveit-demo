@@ -109,7 +109,8 @@ def _canonical(value) -> bytes:
 def execution_snapshot_binding(snapshot, root):
     """Bind verified compiled dimensions into the immutable input digest for raw readback."""
     import yaml
-    relative = "config/mujoco/act/mujoco_plugins.yaml"
+    from .rig_files import rig_for_scene
+    relative = rig_for_scene(snapshot["scene_path"]).plugins
     payload = (Path(root) / relative).read_bytes()
     config_sha = hashlib.sha256(payload).hexdigest()
     if config_sha != snapshot["files"][relative]["sha256"]:
@@ -584,6 +585,12 @@ def verify_frozen_inputs(manifest_path: Path) -> dict:
             raise ValueError("INPUTS_EXECUTION_SNAPSHOT_IDENTITY_MISMATCH")
     verify_policy_bindings(document, manifest_path, snapshot if "execution_snapshot" in document else None)
     verify_rig_profile_binding(document, manifest_path)
+    if "execution_snapshot" in document:
+        from .rig_files import rig_model_files
+        from .rig_profile import rig_from_frozen
+        # the execution snapshot is recorded against the scene of the frozen rig, never another rig's
+        if rig_model_files(rig_from_frozen(document)).scene != snapshot["scene_path"]:
+            raise ValueError("INPUTS_RIG_SCENE_MISMATCH")
     if "scene_manifest" in document:
         _bound_scene_rows(document, root)
     return document
@@ -772,6 +779,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
         extra["scene_manifest"] = {"path": SCENE_MANIFEST_PATH, "sha256": hashlib.sha256(scene_payload).hexdigest(),
                                    "bytes": len(scene_payload), "scene_count": scene_count}
     policy_payloads = {}
+    rig = None
     for name, source in (("teacher_endpoint", teacher_endpoint),
                          (EXECUTION_POLICY_BINDING, teacher_execution_policy),
                          ("episode_recorder", episode_recorder_policy)):
@@ -793,6 +801,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
             rig_payload = path.read_bytes()
         extra[RIG_PROFILE_BINDING] = rig_profile_binding(rig_payload)
         policy_payloads[RIG_PROFILE_BINDING] = rig_payload
+        rig = extra[RIG_PROFILE_BINDING]["values"]["rig"]
     if runtime_policy is not None:
         from .endpoint_pose_acceptance import load_development_runtime
         document = load_development_runtime(Path(runtime_policy))
@@ -834,7 +843,9 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
                            "identity": registry["roles"][role]["identity"]}
         if execution_inputs:
             from .execution_snapshot import freeze_execution_snapshot
-            snapshot = freeze_execution_snapshot(Path(registry["source_root"]), target / "execution")
+            # a rig other than the default names its own scene; the default rig's freeze is the call it always was
+            snapshot = freeze_execution_snapshot(Path(registry["source_root"]), target / "execution",
+                                                 *(() if rig in (None, "head-wrist") else (rig,)))
             extra["execution_snapshot"] = execution_snapshot_binding(snapshot, target / "execution")
         manifest = {"kind": MANIFEST_KIND, "schema_version": MANIFEST_SCHEMA_VERSION,
                     "source_root": registry["source_root"],
@@ -892,22 +903,27 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def profile_config_identity(source_root: Path) -> str:
+def profile_config_identity(source_root: Path, rig=None) -> str:
     """The ACT profile digest, computed from the source tree the same way the installed probe does.
 
     `so101_demo.act.calibration.installed_calibration_identity()` digests every file under the
     installed `assets/mujoco/act` and `config/mujoco/act` keyed by its package-relative path. This
     derives the same value from a named source root so the registry and the manifest can record which
     profile the frozen inputs were inspected against. That value is recorded provenance:
-    nothing compares it with the tree that is running.
+    nothing compares it with the tree that is running. Files that belong only to another camera rig (`rig_files.foreign_files`)
+    are left out, as in the installed probe, so a rig's variants do not change another rig's identity.
     """
+
+    from .rig_files import foreign_files
 
     package = Path(source_root) / "src/so101_demo_py"
     roots = (package / "assets/mujoco/act", package / "config/mujoco/act")
     if any(not root.is_dir() for root in roots):
         raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    excluded = foreign_files(rig)
     files = {str(path.relative_to(package)): _digest(path)
-             for root in roots for path in sorted(root.rglob("*")) if path.is_file()}
+             for root in roots for path in sorted(root.rglob("*"))
+             if path.is_file() and str(path.relative_to(package)) not in excluded}
     if not files:
         raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
     return hashlib.sha256(_canonical(files)).hexdigest()

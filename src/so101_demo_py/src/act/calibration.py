@@ -45,16 +45,24 @@ CHECK_MEASUREMENTS = {
 PICK_PLACE_READY_CHECKS = frozenset(("fov", "collision", "search", "synchronization", "execution"))
 
 
-def installed_calibration_identity(source_root: Path | None = None) -> tuple[str, str]:
-    """Return the source commit and installed ACT profile used by preflight."""
+def installed_calibration_identity(source_root: Path | None = None, rig=None) -> tuple[str, str]:
+    """Return the source commit and installed ACT profile used by preflight.
+
+    The profile digest covers every file under `assets/mujoco/act` and `config/mujoco/act` except the files that belong only to
+    another camera rig (`rig_files.foreign_files`), so adding a rig's variants does not change another rig's identity.
+    """
     from ament_index_python.packages import get_package_share_directory
+
+    from .rig_files import foreign_files
 
     share = Path(get_package_share_directory("so101_demo_py"))
     roots = (share / "assets/mujoco/act", share / "config/mujoco/act")
     if any(not root.is_dir() for root in roots):
         raise ValueError("ACT_PROFILE_UNAVAILABLE")
+    excluded = foreign_files(rig)
     files = {str(path.relative_to(share)): hashlib.sha256(path.read_bytes()).hexdigest()
-             for root in roots for path in sorted(root.rglob("*")) if path.is_file()}
+             for root in roots for path in sorted(root.rglob("*"))
+             if path.is_file() and str(path.relative_to(share)) not in excluded}
     if not files:
         raise ValueError("ACT_PROFILE_UNAVAILABLE")
     config_hash = hashlib.sha256(json.dumps(files, sort_keys=True,

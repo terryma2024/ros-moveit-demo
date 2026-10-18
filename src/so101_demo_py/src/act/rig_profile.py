@@ -233,6 +233,16 @@ def rig_from_frozen(frozen: dict) -> RigProfile:
     return next((known for known in KNOWN_RIGS.values() if known.document == profile.document), profile)
 
 
+def rig_from_profile_sha256(digest) -> RigProfile:
+    """The known rig a campaign config's `rig_profile_sha256` names; None (a config written before profiles) is the default rig."""
+    if digest is None:
+        return DEFAULT_RIG
+    for profile in KNOWN_RIGS.values():
+        if profile.profile_sha256 == digest:
+            return profile
+    raise ValueError("RIG_PROFILE_UNKNOWN: " + str(digest))
+
+
 def rig_from_observation(cameras, state_dim) -> RigProfile:
     """The known rig whose cameras (in order) and state width are those a bundle's `normalization.observation` declares."""
     names = tuple(cameras)
@@ -249,6 +259,15 @@ def rig_from_frame_keys(keys) -> RigProfile:
         if set(profile.frame_keys) == found:
             return profile
     raise ValueError(f"RIG_PROFILE_UNKNOWN: frame keys {sorted(found)}")
+
+
+def source_keys_for(rig: RigProfile) -> tuple:
+    """The sources of one physical sample of a rig, in order: world, scene, contact, its cameras, the arm and (only with a neck) the neck."""
+    return ("world", "scene", "contact", *rig.camera_names, "arm", *(("neck",) if rig.has_neck else ()))
+
+
+#: the source key tuple of every known rig: the closed set a stored receipt or sample must match one of
+KNOWN_SOURCE_KEYS = tuple(source_keys_for(profile) for profile in KNOWN_RIGS.values())
 
 
 def stack_state(profile: RigProfile, arm, neck_yaw=None) -> tuple:

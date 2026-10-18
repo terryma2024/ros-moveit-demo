@@ -23,7 +23,10 @@ from launch.substitutions import LaunchConfiguration
 
 from so101_demo.runtime.camera_tf import camera_static_transform_nodes
 from so101_demo.runtime.launch_composition.common import _SESSION_ID_PATTERN, MUJOCO_CUP_KEYFRAMES
-from so101_demo.runtime.launch_composition.mujoco_actions import _mujoco_stack_actions
+from so101_demo.act.rig_profile import DEFAULT_RIG, KNOWN_RIGS
+from so101_demo.runtime.launch_composition.mujoco_actions import (
+    _mujoco_stack_actions, launch_rig, rig_scene_argument,
+)
 
 
 def _configured_task_station_actions(context):
@@ -153,15 +156,16 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
             DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
             DeclareLaunchArgument(
                 "mujoco_scene",
-                default_value=str(share / ("assets/mujoco/act/scene.xml" if act_profile
-                                          else "assets/mujoco/scene.xml")),
+                # the ACT profile's empty scene is the scene of the rig
+                default_value="" if act_profile else str(share / "assets/mujoco/scene.xml"),
             ),
             DeclareLaunchArgument(
                 "mujoco_initial_keyframe",
                 default_value="task_start",
                 choices=MUJOCO_CUP_KEYFRAMES[:4] if act_profile else MUJOCO_CUP_KEYFRAMES,
             ),
-            *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",))]
+            *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
+               DeclareLaunchArgument("rig", default_value=DEFAULT_RIG.rig, choices=tuple(KNOWN_RIGS))]
               if act_profile else []),
             OpaqueFunction(function=_configured_task_station_actions),
         ]
@@ -182,10 +186,10 @@ def _configured_act_execution_stack_actions(context):
     evidence_root = Path(LaunchConfiguration("task_evidence_root").perform(context))
     if not evidence_root.is_absolute() or ".." in evidence_root.parts:
         raise RuntimeError("ACT_STACK_ROOT_INVALID")
-    scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
+    share = Path(get_package_share_directory("so101_demo_py"))
+    scene = Path(rig_scene_argument(context, share, launch_rig(context, act_profile=True)))
     if not scene.is_absolute() or not scene.is_file():
         raise RuntimeError("ACT_STACK_SCENE_INVALID")
-    share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
     return [
         SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
@@ -210,9 +214,9 @@ def build_act_execution_stack_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("session_id"),
         DeclareLaunchArgument("task_evidence_root"),
         DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
-        DeclareLaunchArgument(
-            "mujoco_scene", default_value=str(share / "assets/mujoco/act/scene.xml"),
-        ),
+        # the camera rig of the stack: it selects the scene, URDF, camera plugin and controller files (empty scene = the rig's)
+        DeclareLaunchArgument("rig", default_value=DEFAULT_RIG.rig, choices=tuple(KNOWN_RIGS)),
+        DeclareLaunchArgument("mujoco_scene", default_value=""),
         DeclareLaunchArgument(
             "mujoco_initial_keyframe", default_value="task_start",
             choices=MUJOCO_CUP_KEYFRAMES[:4],

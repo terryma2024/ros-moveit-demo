@@ -335,7 +335,62 @@ def test_a_campaign_freeze_always_records_its_rig_profile_and_the_default_is_hea
     assert (Path(world['manifest']['path']).parent / binding['path']).is_file()
 
 
-def test_the_rig_enters_the_inputs_hash_chain_so_every_case_scope_names_it(world, tmp_path):
+@pytest.fixture(scope='module')
+def side_world(world, tmp_path_factory):
+    """One real formal freeze under the side+wrist rig: its execution snapshot is that of the side+wrist scene."""
+    from so101_demo.act import execution_snapshot
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG
+
+    base = tmp_path_factory.mktemp('case-inputs-side')
+    probe = execution_snapshot.freeze_execution_snapshot(REPOSITORY, base / 'probe', SIDE_WRIST_RIG)
+    scene_bytes = (base / 'probe' / probe['scene_path']).read_bytes()
+    candidates = _write_registry(base, bound_registry(base, probe, scene_bytes))
+    root = base / 'evidence'
+    root.mkdir()
+    run = make_campaign_paths(root, 'run-1')['run']
+    original = execution_snapshot.freeze_execution_snapshot
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(execution_snapshot, 'freeze_execution_snapshot',
+                      lambda _source_root, output, rig=None: original(REPOSITORY, output, rig))
+        manifest = case_inputs.freeze_campaign_inputs(run, candidates=candidates, scene_manifest=scene_file(base),
+                                                      rig_profile=CONFIG / 'rig-v2.yaml', **policies())
+    frozen = verify_frozen_inputs(Path(manifest['path']))
+    side_campaign = dict(world['campaign'], rig_profile_sha256=SIDE_WRIST_RIG.profile_sha256)
+    args = dict(campaign_config=load_campaign_config(write_config(base, side_campaign)),
+                collection_config_sha256=frozen['roles']['collection_config']['sha256'],
+                scene_manifest_sha256=frozen['scene_manifest']['sha256'])
+    return dict(base=base, manifest=manifest, frozen=frozen, args=args, snapshot=probe)
+
+
+def test_a_side_wrist_campaign_freezes_the_side_wrist_snapshot_and_binds_only_a_side_wrist_campaign(world, side_world):
+    from so101_demo.act.rig_files import rig_model_files
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG, rig_from_frozen
+
+    frozen = side_world['frozen']
+    assert rig_from_frozen(frozen) is SIDE_WRIST_RIG
+    execution = Path(side_world['manifest']['path']).parent / frozen['execution_snapshot']['path']
+    files = rig_model_files(SIDE_WRIST_RIG)
+    assert json.loads((execution / 'execution-manifest.json').read_bytes())['scene_path'] == files.scene
+    assert frozen['execution_snapshot']['model_identity']['nq'] == 13
+    assert frozen['roles']['scene_model']['identity']['scene_sha256'] == hashlib.sha256(
+        (PACKAGE_ROOT / files.scene).read_bytes()).hexdigest()
+    # its physics chunk configuration is the side+wrist plugin config's, not the head+wrist one
+    assert frozen['execution_snapshot']['physics_chunks']['config_sha256'] == hashlib.sha256(
+        (PACKAGE_ROOT / files.plugins).read_bytes()).hexdigest()
+    binding = case_inputs.campaign_binding(side_world['manifest'], **side_world['args'])
+    assert binding['rig_profile_sha256'] == SIDE_WRIST_RIG.profile_sha256
+    # the rig enters the inputs hash chain: the two campaigns share no inputs digest
+    assert frozen['inputs_sha256'] != world['frozen']['inputs_sha256']
+    # a campaign config that names no rig, or the other one, is not this freeze's
+    campaign_config = side_world['args']['campaign_config']
+    no_rig = {key: value for key, value in campaign_config.items() if key != 'rig_profile_sha256'}
+    head_rig = dict(campaign_config, rig_profile_sha256=HEAD_WRIST_RIG.profile_sha256)
+    for config in (no_rig, head_rig):
+        refused('CASE_INPUTS_RIG_PROFILE_MISMATCH', case_inputs.campaign_binding, side_world['manifest'],
+                **dict(side_world['args'], campaign_config=config))
+
+
+def test_a_rig_forged_into_a_frozen_set_of_another_rigs_snapshot_is_refused(world, tmp_path):
     from so101_demo.act.rig_profile import SIDE_WRIST_RIG, dump_rig_profile
     from so101_demo.act.diagnostic_episode_inputs import rig_profile_binding
 
@@ -344,13 +399,12 @@ def test_the_rig_enters_the_inputs_hash_chain_so_every_case_scope_names_it(world
         (directory / 'policies' / 'rig_profile.yaml').write_bytes(payload)
         document['rig_profile'] = rig_profile_binding(payload)
 
-    forged = forged_copy(world, tmp_path, to_v2)
-    assert verify_frozen_inputs(Path(forged['path']))['inputs_sha256'] != world['frozen']['inputs_sha256']
+    # a self-consistent forger changes the profile only: the execution snapshot is still the head+wrist scene's
+    refused('INPUTS_RIG_SCENE_MISMATCH', verify_frozen_inputs, Path(forged_copy(world, tmp_path, to_v2)['path']))
 
 
 def test_a_frozen_set_and_a_campaign_config_that_name_different_rigs_are_refused(world, tmp_path):
-    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG, dump_rig_profile
-    from so101_demo.act.diagnostic_episode_inputs import rig_profile_binding
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG
 
     # the campaign config names rig v2 (its hash), the frozen set is rig v1
     v2_config = dict(world['args']['campaign_config'], rig_profile_sha256=SIDE_WRIST_RIG.profile_sha256)
@@ -359,16 +413,6 @@ def test_a_frozen_set_and_a_campaign_config_that_name_different_rigs_are_refused
     # the campaign config names rig v1 explicitly: the same as naming none
     v1_config = dict(world['args']['campaign_config'], rig_profile_sha256=HEAD_WRIST_RIG.profile_sha256)
     assert case_inputs.campaign_binding(world['manifest'], **dict(world['args'], campaign_config=v1_config)) == world['binding']
-
-    def to_v2(document, directory):
-        payload = dump_rig_profile(SIDE_WRIST_RIG)
-        (directory / 'policies' / 'rig_profile.yaml').write_bytes(payload)
-        document['rig_profile'] = rig_profile_binding(payload)
-
-    forged = forged_copy(world, tmp_path, to_v2)
-    refused('CASE_INPUTS_RIG_PROFILE_MISMATCH', case_inputs.campaign_binding, forged, **world['args'])
-    assert case_inputs.campaign_binding(forged, **dict(world['args'], campaign_config=v2_config))[
-        'rig_profile_sha256'] == SIDE_WRIST_RIG.profile_sha256
 
 
 def test_a_frozen_set_sealed_before_rig_profiles_is_head_wrist_rig_and_still_binds_a_head_wrist_campaign(world, tmp_path):

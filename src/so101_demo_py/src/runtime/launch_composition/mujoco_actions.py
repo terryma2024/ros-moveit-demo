@@ -16,6 +16,8 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterFile
 import yaml
 
+from so101_demo.act.rig_files import rig_model_files
+from so101_demo.act.rig_profile import DEFAULT_RIG, KNOWN_RIGS, RigProfile
 from so101_demo.runtime.launch_composition.common import (
     _CONTROLLERS,
     MUJOCO_CUP_KEYFRAMES,
@@ -42,6 +44,24 @@ class _MujocoStackActions:
         )
 
 
+def launch_rig(context, *, act_profile: bool) -> RigProfile:
+    """The camera rig a launch composes (`rig` launch argument; the head+wrist rig when the launch declares none).
+
+    Only the ACT profile has rigs: every other launch is the generic station and refuses a rig other than the default."""
+    name = context.launch_configurations.get("rig", DEFAULT_RIG.rig)
+    if name not in KNOWN_RIGS:
+        raise RuntimeError("ACT_RIG_UNKNOWN: " + str(name))
+    if not act_profile and name != DEFAULT_RIG.rig:
+        raise RuntimeError("ACT_RIG_REQUIRES_ACT_PROFILE")
+    return KNOWN_RIGS[name]
+
+
+def rig_scene_argument(context, share: Path, rig: RigProfile) -> str:
+    """The `mujoco_scene` of an ACT launch: the explicit argument, or (empty) the scene of the rig."""
+    scene = LaunchConfiguration("mujoco_scene").perform(context)
+    return scene if scene else str(share / rig_model_files(rig).scene)
+
+
 def _render_mujoco_robot_description(
     share: Path,
     scene: str,
@@ -52,6 +72,7 @@ def _render_mujoco_robot_description(
     initial_keyframe: str = "task_start",
     platform_name: str | None = None,
     act_profile: bool = False,
+    rig: RigProfile = DEFAULT_RIG,
 ) -> str:
     if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
         raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
@@ -61,7 +82,7 @@ def _render_mujoco_robot_description(
         sim_speed_factor != -1.0 and sim_speed_factor <= 0.0
     ):
         raise RuntimeError("sim_speed_factor must be -1.0 or finite and positive")
-    asset = "assets/mujoco/act/so101.urdf" if act_profile else "assets/mujoco/so101.urdf"
+    asset = rig_model_files(rig).urdf if act_profile else "assets/mujoco/so101.urdf"
     description = (share / asset).read_text(encoding="utf-8")
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
     description = description.replace("@SO101_MUJOCO_INITIAL_KEYFRAME@", initial_keyframe)
@@ -120,7 +141,12 @@ def _mujoco_stack_actions(
         "mujoco_plugins.yaml", "act_diagnostic_plugins.yaml", "act_camera_plugins.yaml",
     }:
         raise RuntimeError("unsupported MuJoCo plugin configuration")
-    scene = LaunchConfiguration("mujoco_scene").perform(context)
+    act_profile_value = context.launch_configurations.get("act_profile", "false")
+    if act_profile_value not in {"true", "false"}:
+        raise RuntimeError("act_profile must be true or false")
+    act_profile = act_profile_value == "true"
+    rig = launch_rig(context, act_profile=act_profile)
+    scene = rig_scene_argument(context, share, rig) if act_profile else LaunchConfiguration("mujoco_scene").perform(context)
     initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
     sensor_rendering_value = context.launch_configurations.get("sensor_rendering", "auto")
@@ -131,10 +157,6 @@ def _mujoco_stack_actions(
     else:
         raise RuntimeError("sensor_rendering must be auto, true, or false")
     timeout = LaunchConfiguration("readiness_timeout_s").perform(context)
-    act_profile_value = context.launch_configurations.get("act_profile", "false")
-    if act_profile_value not in {"true", "false"}:
-        raise RuntimeError("act_profile must be true or false")
-    act_profile = act_profile_value == "true"
     robot_description = _render_mujoco_robot_description(
         share,
         scene,
@@ -143,13 +165,19 @@ def _mujoco_stack_actions(
         sim_speed_factor=sim_speed_factor,
         initial_keyframe=initial_keyframe,
         act_profile=act_profile,
+        rig=rig,
     )
+    files = rig_model_files(rig)
+    if act_profile and rig is not DEFAULT_RIG and plugin_config_filename != "mujoco_plugins.yaml":
+        raise RuntimeError("ACT_RIG_PLUGIN_CONFIG_UNSUPPORTED: " + plugin_config_filename)
     config = share / ("config/mujoco/act" if act_profile else "config/mujoco")
-    controllers = str(config / "ros2_controllers.yaml")
+    controllers = str(share / files.controllers) if act_profile else str(config / "ros2_controllers.yaml")
+    plugin_config = (share / files.plugins if act_profile and plugin_config_filename == "mujoco_plugins.yaml"
+                     else config / plugin_config_filename)
     parameters = [
         {"use_sim_time": True, "robot_description": robot_description},
         ParameterFile(controllers, allow_substs=False),
-        ParameterFile(str(config / plugin_config_filename), allow_substs=False),
+        ParameterFile(str(plugin_config), allow_substs=False),
         {"simulation_session_id": session_id},
     ]
     robot_state_publisher = Node(
@@ -184,7 +212,7 @@ def _mujoco_stack_actions(
             parameters=[{"use_sim_time": True}],
             output="both",
         )
-        for controller in (_CONTROLLERS + ("neck_controller",) if act_profile else _CONTROLLERS)
+        for controller in (_CONTROLLERS + (("neck_controller",) if rig.has_neck else ()) if act_profile else _CONTROLLERS)
     ]
     move_group = Node(
         package="so101_mujoco_support",

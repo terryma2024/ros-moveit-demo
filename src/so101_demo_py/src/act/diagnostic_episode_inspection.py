@@ -158,13 +158,22 @@ def _inspect_anchor_scene(root: Path) -> dict:
     return _selected(document)
 
 
-def _compiled_model_identity(root: Path) -> dict:
+def _scene_file(rig=None) -> str:
+    """The source-root-relative scene of a rig (the head+wrist scene, `SCENE_FILE`, when no rig is named)."""
+    if rig is None:
+        return SCENE_FILE
+    from .rig_files import rig_model_files
+
+    return "src/so101_demo_py/" + rig_model_files(rig).scene
+
+
+def _compiled_model_identity(root: Path, rig=None) -> dict:
     """The same digest the physics checker uses: the compiled model bytes, not the XML text."""
 
     import mujoco
     import numpy as np
 
-    scene = Path(root) / SCENE_FILE
+    scene = Path(root) / _scene_file(rig)
     model = mujoco.MjModel.from_xml_path(str(scene))
     buffer = np.empty(mujoco.mj_sizeModel(model), dtype=np.uint8)
     mujoco.mj_saveModel(model, None, buffer)
@@ -183,9 +192,9 @@ def _activated_identity(proposal_path: Path | None) -> dict | None:
             "mujoco_version": payload.get("mujoco_version")}
 
 
-def _inspect_scene_model(root: Path, activated: dict | None) -> dict:
-    identity = _compiled_model_identity(root)
-    document = _source_file(root, SCENE_FILE, "scene_model", "source_controlled", identity)
+def _inspect_scene_model(root: Path, activated: dict | None, rig=None) -> dict:
+    identity = _compiled_model_identity(root, rig)
+    document = _source_file(root, _scene_file(rig), "scene_model", "source_controlled", identity)
     if activated is None:
         return _role("UNAPPROVED", "INPUT_ACTIVATION_STALE",
                      "no activated contact policy binds this scene identity", identity, [])
@@ -257,11 +266,11 @@ def _inspect_source_role(root: Path, relative: str, role: str, identity=None) ->
     return _selected(_source_file(root, relative, role, "source_controlled", identity))
 
 
-def _inspect_reset_recipe(root: Path) -> dict:
+def _inspect_reset_recipe(root: Path, rig=None) -> dict:
     import xml.etree.ElementTree as ElementTree
 
     identity = {"keyframe": "task_start", "keyframe_present": False, "cup_body": "plastic_cup"}
-    scene = Path(root) / SCENE_FILE
+    scene = Path(root) / _scene_file(rig)
     if scene.is_file():
         tree = ElementTree.parse(scene)
         for element in tree.getroot().iter("key"):
@@ -366,8 +375,11 @@ def _inspect_calibration_role(role: str, referenced: tuple[Path, ...]) -> dict:
                  dict(identity, rejected_candidates=[str(path) for path in unapproved]), [])
 
 
-def inspect_inputs(source_root: Path, ledger: Path) -> dict:
+def inspect_inputs(source_root: Path, ledger: Path, rig=None) -> dict:
     """Record, read-only, which approved candidate exists for every required non-Head input.
+
+    `rig` (a rig profile, a rig name or None for the head+wrist default) selects the scene the model identity and the reset recipe
+    are read from, and the profile digest of the rig.
 
     Nothing is selected by recency and nothing is defaulted: a role with no approved, identity-
     matching candidate is reported with the blocker `freeze_inputs` will raise.
@@ -384,25 +396,25 @@ def inspect_inputs(source_root: Path, ledger: Path) -> dict:
     evidence_root = Path(evidence).resolve()
     referenced = _ledger_referenced_json(Path(ledger), evidence_root)
 
-    identity = _compiled_model_identity(root)
+    identity = _compiled_model_identity(root, rig)
     proposal_role, activation_role = _inspect_contact(evidence_root, referenced, identity)
     activated = identity if proposal_role["status"] == "READY" else None
     collection_role, runtime_role = _inspect_motion_config(root)
     roles = {
         "anchor_scene": _inspect_anchor_scene(root),
-        "scene_model": _inspect_scene_model(root, activated),
+        "scene_model": _inspect_scene_model(root, activated, rig),
         "collection_config": collection_role,
         "runtime_config": runtime_role,
         "resource_thresholds": _inspect_resource_thresholds(root),
         "contact_proposal": proposal_role,
         "contact_activation": activation_role,
-        "reset_recipe": _inspect_reset_recipe(root),
+        "reset_recipe": _inspect_reset_recipe(root, rig),
         "reference_interpolation": _inspect_reference(root),
     }
     for role in ("path_policy", "placement_qc", "rgb_skew"):
         roles[role] = _inspect_calibration_role(role, referenced)
     document = {"kind": CANDIDATES_KIND, "schema_version": SCHEMA_VERSION, "source_root": str(root),
-                "source_commit": commit, "config_sha256": profile_config_identity(root),
+                "source_commit": commit, "config_sha256": profile_config_identity(root, rig),
                 "evidence_root": str(evidence_root), "roles": roles}
     _require_registry(document)
     return document
