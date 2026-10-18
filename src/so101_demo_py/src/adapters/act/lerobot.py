@@ -190,7 +190,8 @@ class LerobotPolicy:
         self._policy.reset()
 
 
-def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str, learning_rate: float | None = None):
+def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str, learning_rate: float | None = None,
+                head_learning_rate: float | None = None):
     """The LeRobot 0.6.1 `ACTConfig` for this task: cameras head and wrist, state 8, action 6, no temporal ensembling.
 
     Normalisation is IDENTITY in the policy (the adapter normalises, see the module docstring) and the backbone has no pretrained
@@ -207,7 +208,10 @@ def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str
     inputs = {_STATE_KEY: PolicyFeature(FeatureType.STATE, (STATE_DIM,))}
     for camera in CAMERAS:
         inputs[f"observation.images.{camera}"] = PolicyFeature(FeatureType.VISUAL, tuple(image_shape))
-    extra = {} if learning_rate is None else {"optimizer_lr": learning_rate, "optimizer_lr_backbone": learning_rate}
+    # head_learning_rate (the config key learning_rate_backbone) is the ACT backbone's rate; absent = the same as learning_rate
+    extra = {} if learning_rate is None else {
+        "optimizer_lr": learning_rate,
+        "optimizer_lr_backbone": learning_rate if head_learning_rate is None else head_learning_rate}
     return ACTConfig(
         input_features=inputs, output_features={"action": PolicyFeature(FeatureType.ACTION, (ACTION_DIM,))},
         chunk_size=chunk_size, n_action_steps=execution_prefix, temporal_ensemble_coeff=None,
@@ -409,10 +413,60 @@ def compute_statistics(samples: list, *, std_floor: float) -> dict:
     return stats
 
 
-def _chunk_samples(samples: list) -> list:
-    """Every (episode index, row index) of the given episodes: a chunk never starts in, or reaches into, another episode."""
+def first_motion_row(rows: list, threshold_rad: float) -> int | None:
+    """The first row whose arm action differs from the arm state by more than ``threshold_rad`` on any of the six joints, in RAW units.
 
-    return [(episode, row) for episode, sample in enumerate(samples) for row in range(len(sample["rows"]))]
+    State dimensions 0..5 are the arm joints (6 and 7 are the neck sin/cos); None when the episode never moves that much."""
+
+    for index, row in enumerate(rows):
+        state, action = row["observation"]["state"], row["action"]
+        if any(abs(float(action[joint]) - float(state[joint])) > threshold_rad for joint in range(6)):
+            return index
+    return None
+
+
+def sample_selection_report(samples: list, selection: dict | None) -> dict | None:
+    """Per episode first-motion row and first sampled start row for an enabled ``trim_leading_idle`` selection; None when disabled."""
+
+    if not selection or not selection.get("trim_leading_idle"):
+        return None
+    episodes = []
+    for sample in samples:
+        moved = first_motion_row(sample["rows"], selection["idle_threshold_rad"])
+        first = 0 if moved is None else max(0, moved - selection["lead_in_rows"])
+        episodes.append({"scene_id": sample.get("scene_id"), "rows": len(sample["rows"]), "first_motion_row": moved,
+                         "first_start_row": first, "trimmed": first})
+    return {"episodes": episodes}
+
+
+def _chunk_samples(samples: list, selection: dict | None = None) -> list:
+    """Every (episode index, row index) of the given episodes: a chunk never starts in, or reaches into, another episode.
+
+    With an enabled ``trim_leading_idle`` selection the start rows before ``max(0, first_motion_row - lead_in_rows)`` are dropped;
+    the dropped rows stay available as action-window targets. An episode that never moves is kept whole."""
+
+    report = sample_selection_report(samples, selection)
+    firsts = [0] * len(samples) if report is None else [entry["first_start_row"] for entry in report["episodes"]]
+    return [(episode, row) for episode, sample in enumerate(samples) for row in range(firsts[episode], len(sample["rows"]))]
+
+
+def selection_summary(samples: list, selection: dict | None) -> dict:
+    """The selection settings and what they did to one split, for training-log.json and the metrics."""
+
+    total = sum(len(sample["rows"]) for sample in samples)
+    report = sample_selection_report(samples, selection)
+    if report is None:
+        return {"enabled": False, "samples_before": total, "samples_after": total}
+    import statistics
+    motion = [entry["first_motion_row"] for entry in report["episodes"] if entry["first_motion_row"] is not None]
+    trimmed = sum(entry["trimmed"] for entry in report["episodes"])
+    return {"enabled": True, "trim_leading_idle": True, "idle_threshold_rad": selection["idle_threshold_rad"],
+            "lead_in_rows": selection["lead_in_rows"], "episodes": len(samples), "never_moving_episodes": len(samples) - len(motion),
+            "first_motion_row_min": min(motion) if motion else None,
+            "first_motion_row_median": statistics.median(motion) if motion else None,
+            "first_motion_row_max": max(motion) if motion else None,
+            "samples_before": total, "samples_after": total - trimmed,
+            "per_episode": report["episodes"]}
 
 
 def _action_window(actions, start: int, chunk_size: int) -> tuple:
@@ -505,7 +559,9 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     first = decode_png(root / episodes[0]["head"][0])
     image_shape = (3, int(first.shape[0]), int(first.shape[1]))
 
-    index = _chunk_samples(train)
+    selection = hyper.get("sample_selection")
+    index = _chunk_samples(train, selection)
+    selection_report = {"train": selection_summary(train, selection)}
 
     def chunks_dataset(episode_list, chunk_index):
         class _Chunks(torch.utils.data.Dataset):
@@ -549,7 +605,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
                                          persistent_workers=workers > 0, drop_last=False,
                                          timeout=_LOADER_TIMEOUT_S if workers > 0 else 0)
     policy = ACTPolicy(_act_config(chunk_size, action_cfg["execution_prefix"], image_shape, device,
-                                   learning_rate=hyper["learning_rate"]))
+                                   learning_rate=hyper["learning_rate"],
+                                   head_learning_rate=hyper.get("learning_rate_backbone")))
     backbone = hyper["pretrained_backbone"]
     if backbone is not None:
         _load_backbone(policy, backbone_weights, backbone["sha256"])
@@ -561,7 +618,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     validation = [sample for sample in samples if sample["split"] == "validation"]
     validation_loader, validation_used = None, 0
     if validation:
-        validation_index = _chunk_samples(validation)
+        validation_index = _chunk_samples(validation, selection)
+        selection_report["validation"] = selection_summary(validation, selection)
         picks = np.unique(np.linspace(0, len(validation_index) - 1, min(validation_count, len(validation_index))).astype(np.int64))
         validation_generator = torch.Generator()
         validation_generator.manual_seed(seed)
@@ -583,6 +641,14 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
         metrics.write(json.dumps(entry, sort_keys=True, allow_nan=False) + chr(10))
         metrics.flush()
         print(line, flush=True)
+
+    if any(item["enabled"] for item in selection_report.values()):
+        for split_name, item in selection_report.items():
+            summary = {key: value for key, value in item.items() if key != "per_episode"}
+            emit({"kind": "sample_selection", "split": split_name, **summary},
+                 f"sample_selection {split_name} samples {item['samples_before']} -> {item['samples_after']} "
+                 f"first_motion_row min/median/max={item.get('first_motion_row_min')}/{item.get('first_motion_row_median')}/"
+                 f"{item.get('first_motion_row_max')} never_moving={item.get('never_moving_episodes')}")
 
     def evaluate(at_step):
         """Mean loss over the fixed validation subset, in eval mode and without gradients; the training mode is restored."""
@@ -662,7 +728,9 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     last_validation = validations[-1] if validations else None
     (Path(target) / _LOG_FILE).write_text(json.dumps(
         {"schema_version": 1, "kind": "act_training_log", "device": str(device), "seed": seed, "steps_requested": hyper["steps"],
-         "batch_size": hyper["batch_size"], "learning_rate": hyper["learning_rate"], "train_samples": len(index),
+         "batch_size": hyper["batch_size"], "learning_rate": hyper["learning_rate"],
+         "learning_rate_backbone": hyper.get("learning_rate_backbone", hyper["learning_rate"]),
+         "sample_selection": selection_report, "train_samples": len(index),
          "elapsed_s": time.monotonic() - started, "steps": log,
          "metrics_file": METRICS_FILE, "num_workers": workers, "log_interval_steps": log_interval,
          "validation_interval_steps": validation_interval, "validation_samples": validation_used,

@@ -291,3 +291,92 @@ def test_num_workers_comes_from_the_config_and_an_argument_wins(tmp_path, monkey
         log = json.loads((tmp_path / name / "training-log.json").read_text())
         assert log["num_workers"] == expected
     assert seen[0] == 1 and seen[2] == 0                              # training loaders; the validation loaders follow each
+
+
+# ---- O7: leading-idle sample selection and the separate backbone learning rate ---------------------------------------------------------
+
+def _rows(gaps):
+    """Rows whose arm action sits ``gaps[i]`` (a six-vector or a scalar for joint 0) away from a zero state."""
+    rows = []
+    for gap in gaps:
+        action = list(gap) if isinstance(gap, (list, tuple)) else [gap, 0.0, 0.0, 0.0, 0.0, 0.0]
+        rows.append({"observation": {"state": [0.0] * 8}, "action": action})
+    return rows
+
+
+SELECTION = {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 2}
+
+
+def test_first_motion_is_found_in_raw_units_over_the_six_arm_joints_only():
+    from so101_demo.adapters.act.lerobot import first_motion_row
+    rows = _rows([0.0, 0.005, 0.004, 0.0051, 1.0])
+    assert first_motion_row(rows, 0.005) == 3                       # strictly greater than the threshold
+    rows = _rows([0.0, 0.0, [0.0, 0.0, 0.0, 0.0, 0.0, -0.02]])      # the gripper (joint 5) counts, the sign does not
+    assert first_motion_row(rows, 0.005) == 2
+    rows = _rows([0.0, 0.0])
+    rows[1]["observation"]["state"][6] = 5.0                        # the neck sin/cos dimensions are not arm joints
+    assert first_motion_row(rows, 0.005) is None
+    rows = _rows([0.0, 0.0])
+    rows[1]["observation"]["state"][0] = -0.01                      # a state offset counts as action - state
+    assert first_motion_row(rows, 0.005) == 1
+
+
+def test_the_selection_drops_start_rows_before_the_lead_in_and_keeps_never_moving_episodes_whole():
+    from so101_demo.adapters.act.lerobot import _chunk_samples, selection_summary
+    moving = {"scene_id": "m", "split": "train", "rows": _rows([0, 0, 0, 0, 0, 0.1, 0.2, 0.3])}       # r* = 5, first start 3
+    early = {"scene_id": "e", "split": "train", "rows": _rows([0, 0.1, 0.2])}                          # r* = 1, lead-in reaches row 0
+    still = {"scene_id": "s", "split": "train", "rows": _rows([0, 0, 0, 0])}                           # never moves
+    items = _chunk_samples([moving, early, still], SELECTION)
+    assert items == ([(0, row) for row in range(3, 8)] + [(1, row) for row in range(3)] + [(2, row) for row in range(4)])
+    summary = selection_summary([moving, early, still], SELECTION)
+    assert (summary["samples_before"], summary["samples_after"], summary["never_moving_episodes"]) == (15, 12, 1)
+    assert (summary["first_motion_row_min"], summary["first_motion_row_median"], summary["first_motion_row_max"]) == (1, 3.0, 5)
+    assert [entry["first_motion_row"] for entry in summary["per_episode"]] == [5, 1, None]
+    assert [entry["trimmed"] for entry in summary["per_episode"]] == [3, 0, 0]
+
+
+def test_sampling_is_identical_when_the_selection_is_absent_or_disabled():
+    from so101_demo.adapters.act.lerobot import _chunk_samples
+    samples = [{"scene_id": "m", "split": "train", "rows": _rows([0, 0, 0.1, 0.2])}]
+    plain = _chunk_samples(samples)
+    assert plain == [(0, 0), (0, 1), (0, 2), (0, 3)]
+    assert _chunk_samples(samples, None) == plain
+    assert _chunk_samples(samples, {**SELECTION, "trim_leading_idle": False}) == plain
+
+
+def test_the_trainer_applies_the_selection_to_train_and_validation_and_records_it(tmp_path, monkeypatch):
+    from so101_demo.adapters.act import lerobot
+    monkeypatch.setattr(lerobot, "first_motion_row", lambda rows, threshold: 3)         # every fixture episode first moves at row 3
+    _, _, root = _train(tmp_path, monkeypatch, steps=2, validation_interval_steps=1, validation_samples=100,
+                        sample_selection={"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 1})
+    log = json.loads((root / "training-log.json").read_text())
+    assert log["train_samples"] == 2 * (12 - 2)                                          # starts from row 2 on, 12 rows each
+    train, validation = log["sample_selection"]["train"], log["sample_selection"]["validation"]
+    assert (train["samples_before"], train["samples_after"], train["first_motion_row_median"]) == (24, 20, 3)
+    assert (validation["samples_before"], validation["samples_after"]) == (12, 10)
+    assert [entry["first_start_row"] for entry in train["per_episode"]] == [2, 2]
+    assert all(row["samples"] == 10 for row in _metrics(root) if row["kind"] == "validation")      # the subset follows the selection
+    selection_records = [row for row in _metrics(root) if row["kind"] == "sample_selection"]
+    assert [row["split"] for row in selection_records] == ["train", "validation"]
+
+
+def test_without_a_selection_the_log_records_it_disabled_and_the_sample_count_is_unchanged(tmp_path, monkeypatch):
+    _, _, root = _train(tmp_path, monkeypatch, steps=1)
+    log = json.loads((root / "training-log.json").read_text())
+    assert log["train_samples"] == 24 and log["sample_selection"]["train"] == {"enabled": False, "samples_before": 24, "samples_after": 24}
+    assert log["learning_rate_backbone"] == log["learning_rate"]
+    assert not [row for row in _metrics(root) if row["kind"] == "sample_selection"]
+
+
+def test_the_backbone_learning_rate_defaults_to_the_learning_rate_and_can_differ():
+    from so101_demo.adapters.act.lerobot import _act_config
+    shape = (3, 48, 64)
+    assert _act_config(10, 1, shape, "cpu", learning_rate=1e-4).optimizer_lr_backbone == 1e-4
+    config = _act_config(10, 1, shape, "cpu", learning_rate=1e-4, head_learning_rate=1e-5)
+    assert (config.optimizer_lr, config.optimizer_lr_backbone) == (1e-4, 1e-5)
+
+
+def test_a_training_run_records_the_backbone_rate(tmp_path, monkeypatch):
+    _, _, root = _train(tmp_path, monkeypatch, steps=1, learning_rate=1e-3, learning_rate_backbone=1e-4)
+    log = json.loads((root / "training-log.json").read_text())
+    assert (log["learning_rate"], log["learning_rate_backbone"]) == (1e-3, 1e-4)

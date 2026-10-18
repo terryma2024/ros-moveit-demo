@@ -175,3 +175,38 @@ def test_the_progress_validation_and_worker_keys_default_and_are_validated(tmp_p
             _load(tmp_path, **{f"training.{key}": value})
     with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
         _load(tmp_path, **{"training.surprise": 1})
+
+
+def test_the_o7_keys_are_optional_and_absent_ones_are_not_filled_in(tmp_path):
+    training = load_training_config(CONFIG)["training"]
+    assert "sample_selection" not in training and "learning_rate_backbone" not in training      # TRAIN-001 config is unchanged
+    selection = {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 10}
+    loaded = _load(tmp_path, **{"training.sample_selection": selection, "training.learning_rate_backbone": 1.0e-5})["training"]
+    assert loaded["sample_selection"] == selection and loaded["learning_rate_backbone"] == 1.0e-5
+
+
+@pytest.mark.parametrize("key,value", [
+    ("learning_rate_backbone", 0.0), ("learning_rate_backbone", -1e-5), ("learning_rate_backbone", "1e-5"),
+    ("learning_rate_backbone", float("nan")),
+    ("sample_selection", None), ("sample_selection", {"trim_leading_idle": True}),
+    ("sample_selection", {"trim_leading_idle": 1, "idle_threshold_rad": 0.005, "lead_in_rows": 10}),
+    ("sample_selection", {"trim_leading_idle": True, "idle_threshold_rad": 0, "lead_in_rows": 10}),
+    ("sample_selection", {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": -1}),
+    ("sample_selection", {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 1.5}),
+    ("sample_selection", {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 10, "extra": 1}),
+])
+def test_bad_o7_keys_are_refused(tmp_path, key, value):
+    code = "TRAINING_LEARNING_RATE_BACKBONE_INVALID" if key == "learning_rate_backbone" else "TRAINING_SAMPLE_SELECTION_INVALID"
+    with pytest.raises(ValueError, match=code):
+        _load(tmp_path, **{f"training.{key}": value})
+
+
+def test_the_training_002_configuration_loads_with_the_o7_values():
+    training = load_training_config(PACKAGE / "config/act/training-002.yaml")["training"]
+    assert (training["learning_rate"], training["learning_rate_backbone"], training["steps"], training["batch_size"],
+            training["num_workers"]) == (1.0e-4, 1.0e-5, 60000, 16, 8)
+    assert training["sample_selection"] == {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 10}
+    assert (training["log_interval_steps"], training["validation_interval_steps"]) == (100, 2000)
+    base = load_training_config(CONFIG)
+    other = load_training_config(PACKAGE / "config/act/training-002.yaml")
+    assert {key: other[key] for key in other if key != "training"} == {key: base[key] for key in base if key != "training"}

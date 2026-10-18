@@ -21,6 +21,10 @@ _TRAINING_KEYS = frozenset({"steps", "learning_rate", "batch_size", "pretrained_
 # changes what is trained (the maths, the seed or the sampling order).
 TRAINING_OPTIONAL_DEFAULTS = {"log_interval_steps": 100, "validation_interval_steps": 2000, "validation_samples": 512,
                               "num_workers": 4}
+# optional keys that are NOT filled in when absent (an absent key keeps the config, and so its hash, as it was): the ACT backbone
+# learning rate (absent = learning_rate) and the training-view sample selection (absent = every row starts a chunk)
+_TRAINING_ABSENT_OK = frozenset({"learning_rate_backbone", "sample_selection"})
+SAMPLE_SELECTION_KEYS = frozenset({"trim_leading_idle", "idle_threshold_rad", "lead_in_rows"})
 _MAX_NUM_WORKERS = 64
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _OBSERVATION_KEYS = frozenset({"cameras", "state_dim", "action_dim"})
@@ -86,7 +90,7 @@ def load_training_config(path) -> dict:
         # a dimension with no spread (the neck under a fixed head) must still normalise to a finite value
         raise ValueError("TRAINING_STD_FLOOR_INVALID")
     training = document["training"]
-    if not isinstance(training, dict) or not _TRAINING_KEYS <= set(training) <= _TRAINING_KEYS | set(TRAINING_OPTIONAL_DEFAULTS):
+    if not isinstance(training, dict) or not _TRAINING_KEYS <= set(training) <= _TRAINING_KEYS | set(TRAINING_OPTIONAL_DEFAULTS) | _TRAINING_ABSENT_OK:
         raise ValueError("TRAINING_CONFIG_INVALID")
     for key, default in TRAINING_OPTIONAL_DEFAULTS.items():
         training.setdefault(key, default)
@@ -101,6 +105,15 @@ def load_training_config(path) -> dict:
         raise ValueError("TRAINING_BATCH_SIZE_INVALID")
     if not _positive_float(training["learning_rate"]):
         raise ValueError("TRAINING_LEARNING_RATE_INVALID")
+    if "learning_rate_backbone" in training and not _positive_float(training["learning_rate_backbone"]):
+        raise ValueError("TRAINING_LEARNING_RATE_BACKBONE_INVALID")
+    if "sample_selection" in training:
+        selection = training["sample_selection"]
+        if (not isinstance(selection, dict) or set(selection) != SAMPLE_SELECTION_KEYS
+                or type(selection["trim_leading_idle"]) is not bool
+                or not _positive_float(selection["idle_threshold_rad"])
+                or type(selection["lead_in_rows"]) is not int or selection["lead_in_rows"] < 0):
+            raise ValueError("TRAINING_SAMPLE_SELECTION_INVALID")
     backbone = training["pretrained_backbone"]
     if backbone is not None and (
             not isinstance(backbone, dict) or set(backbone) != {"name", "sha256"}
