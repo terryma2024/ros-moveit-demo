@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3729
+latest_checkpoint: CP-3730
 next_experiment: side-wrist contact calibration (offline + live spot checks) and activation under CP-3394, then EXP-623 debug, EXP-624 qualification, EXP-625 formal 103, TRAIN-003.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3730 — EXP-7001 nominal INVALID: the side-wrist shard never became ready (startup readiness validator rejects the side-wrist check set); stopped, source fix needed
+
+- Run: `run-w1s.zsh` (zsh, the file mode is 664) at 15:33:40Z, run root REG/act-w1s-20261018T152148Z, log R/run-logs/exp7001/. CLI rc 1: `CAMPAIGN_RUN_FAILED: CONTAINER_INSTANCE_REPORTED_FAULT: SHARD_START_FAILED: MutationError`, then `CAMPAIGN_CLEANUP_UNCONFIRMED: lease and worker slots stay held`. Shard container started 15:33:57, exited 1 at 15:34:08; the Teacher service was up and terminated cleanly. No scene ran; no episode, no verdict. Not counted anywhere.
+- Evidence of the boundary (OBSERVED): the shard stack came up (MuJoCo, controllers joint_state_broadcaster/arm_controller/gripper_controller active, camera traces for task, side and wrist cameras, MoveIt). `act_instance/program.py:109` reports `SHARD_START_FAILED: <type of the stack.start error>`; `ActStackProcessOwner.start` (so101_teleop/unified/act_stack.py:136-143) maps an OSError/ValueError from the readiness probe to MutationError. wave-0/w00/g1/retirement/audit.json carries the same ValueError chain on the stop side: `ACT_STACK_READINESS_OUTPUT_INVALID <- ValueError: scope or freshness`, raised only by `_validated_observation` in so101_teleop/unified/pick_place_startup_issuer.py:40.
+- Likely root (INFERRED, not yet reproduced at the validator): `_validated_observation` requires `set(checks) == _CHECKS` with `_CHECKS` hard-coded in so101_teleop/unified/pick_place_startup_proof.py:22-25 as {mujoco_session, advancing_physics, controller_states, moveit_graph, physical_stop, head_rgb, wrist_rgb}. The observer `so101_demo_py/src/cli/act_stack_ready.py:37,134` emits `{camera}_rgb` for each camera of the rig profile, so a side-wrist stack emits `side_rgb`, not `head_rgb`. The check set differs and the observation is rejected as "scope or freshness". The side-wrist composition tests (test_act_rig_stack_composition.py) cover the observer but not this validator; this is the first container run of the side-wrist rig.
+- Needs a source change (so101_teleop startup proof/issuer made rig-profile aware, with a regression test); not made here (task rule: no src edits).
+- State left: containers of this run removed after `docker inspect` copies (R/run-logs/exp7001/{shard,teacher}-inspect-final.json) and the saved logs; docker has no container. The unified store is still VALIDATION_ACTIVE (lease b38877923bcd47148f5038da114e2911) with the worker slot held; not released (it is a held state read back, no process running; release under the standing authorisation needs a before/after record and is left to the coordinator).
 
 ## CP-3729 — PLANNED: spot checks EXP-7001 (nominal) and EXP-7002 (over_squeeze) at d1815a322; gate green, images rebuilt, host quieted
 
