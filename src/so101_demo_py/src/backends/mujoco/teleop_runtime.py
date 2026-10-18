@@ -12,7 +12,8 @@ from mujoco_ros2_control_msgs.srv import SetPause
 
 from ...ros.process_init import global_init_options, in_instance_process
 from .client import FreeJointResetOverride, JointResetOverride, MujocoRosClient
-from ...act.joints import ACT_JOINTS
+from ...act.joints import act_joints_for
+from ...act.rig_profile import DEFAULT_RIG
 from .observer import EvidenceStale, MujocoWorldObserver
 from .reset import MujocoResetClient
 from ...core.simulation.types import ResetReceipt
@@ -246,14 +247,17 @@ def transactional_reset(
     free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
     timeout_s: float = 10.0,
     act_profile: bool = False,
+    rig=DEFAULT_RIG,
 ):
     """Run the qualified controller/pause/reset/epoch transaction.
 
     `act_profile=True` is the ACT station: the neck controller is switched with the arm and gripper and the seven ACT
     joints are written and verified (with the paused scalar snapshot). It carries no broker, lease or reservation.
+    A `rig` without a neck (the side+wrist rig) has no neck controller and its ACT joints are the six arm joints.
     """
 
     teacher = act_profile is True
+    joints = act_joints_for(rig)
     scope = _RosScope()
     nodes = []
     try:
@@ -274,18 +278,18 @@ def transactional_reset(
             services,
             observer,
             simulation_session_id=simulation_session_id,
-            controller_names=(*CONTROLLERS,"neck_controller") if teacher else CONTROLLERS,
-            expected_joint_positions=(0.,)*7 if teacher else RESET_JOINTS,
+            controller_names=(*CONTROLLERS,*(("neck_controller",) if rig.has_neck else ())) if teacher else CONTROLLERS,
+            expected_joint_positions=(0.,)*len(joints) if teacher else RESET_JOINTS,
             expected_object_position=expected_object_position,
             timeout_s=timeout_s,
             progress=progress,
-            **({"expected_joint_names":ACT_JOINTS} if teacher else {}),
+            **({"expected_joint_names":joints,"act_audit":True} if teacher else {}),
         )
     except BaseException:
         scope.abandon(nodes)
         raise
     try:
-        reset_kwargs={"joint_overrides":tuple(JointResetOverride(name,0.) for name in ACT_JOINTS)} if teacher else {}
+        reset_kwargs={"joint_overrides":tuple(JointResetOverride(name,0.) for name in joints)} if teacher else {}
         receipt = resetter.reset(keyframe, free_joint_overrides,**reset_kwargs)
         return TransactionalResetEvidence(receipt, services.latest_joint_positions())
     finally:

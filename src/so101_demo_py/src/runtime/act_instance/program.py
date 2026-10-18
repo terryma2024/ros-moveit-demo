@@ -142,13 +142,26 @@ def compose_stack(launch, observer):
     return ready,ready_check,stack
 
 
-def instance_stack_launch(spec, *, ros2, stack_root, environment):
-    """The instance's stack: the plain ACT execution stack at the fixed instance identity, no namespace wrapper."""
+def instance_stack_launch(spec, *, ros2, stack_root, environment, rig=None, share=None):
+    """The instance's stack: the plain ACT execution stack at the fixed instance identity, no namespace wrapper.
+
+    `rig` (default: the rig the spec's campaign config names) is the camera rig the stack composes; a rig other than the default is
+    launched with `rig:=<name>` and its profile file under `share` (default: the installed share) is what readiness observes."""
+    from so101_demo.act.rig_files import rig_model_files
+    from so101_demo.act.rig_profile import DEFAULT_RIG
+    from so101_demo.runtime.act_instance.spec import instance_rig
     from so101_teleop.unified.act_stack import ActStackLaunch
 
+    rig = instance_rig(spec) if rig is None else rig
+    rig_arguments = {}
+    if rig is not DEFAULT_RIG:
+        if share is None:
+            from ament_index_python.packages import get_package_share_directory
+            share = get_package_share_directory("so101_demo_py")
+        rig_arguments = dict(rig=rig.rig, rig_profile=Path(share) / rig_model_files(rig).profile)
     return ActStackLaunch(ros2_executable=ros2,session_id=spec["simulation_session_id"],evidence_root=stack_root,
         ros_domain_id=ACT_INSTANCE_ROS_DOMAIN_ID,
-        environment=dict(environment) | {"GZ_PARTITION":spec["simulation_session_id"]})
+        environment=dict(environment) | {"GZ_PARTITION":spec["simulation_session_id"]},**rig_arguments)
 
 
 async def run_instance(spec, runtime_config, layout):
@@ -159,6 +172,7 @@ async def run_instance(spec, runtime_config, layout):
     selected GPU."""
     from ament_index_python.packages import get_package_prefix
     from so101_demo.runtime.container_campaign.retirement import NativeShardRetirement, _write
+    from so101_demo.runtime.container_campaign.controller_stop import observe_act_controller_stop
     from so101_demo.runtime.container_campaign.gpu_driver import verify_selected_gpu
 
     if type(layout) is not InstanceLayout or layout.owned_root != Path(spec["owned_root"]):
@@ -178,11 +192,15 @@ async def run_instance(spec, runtime_config, layout):
     stack_root.mkdir(mode=0o700)
     gpu = verify_selected_gpu(spec["gpu_uuid"])
     _write(root,"gpu-driver.json",canonical_json(gpu))
-    launch = instance_stack_launch(spec,ros2=ros2,stack_root=stack_root,environment=os.environ)
+    from so101_demo.runtime.act_instance.spec import instance_rig
+    rig = instance_rig(spec)
+    launch = instance_stack_launch(spec,ros2=ros2,stack_root=stack_root,environment=os.environ,rig=rig)
     ready,ready_check,stack = compose_stack(launch,observer)
     process = read_process_owner(os.getpid())
+    # a rig without a neck has no neck action lane to cancel and observe
+    lanes = {} if rig.has_neck else dict(goal_stop_probe=functools.partial(observe_act_controller_stop,has_neck=False))
     retirement = NativeShardRetirement(process_owner=process,launch_generation=spec["launch_generation"],
         evidence_root=root,stack=stack,
-        goal_stop_budget_s=runtime_config.heartbeat_timeout_s,stack_stop_budget_s=stack.stop_timeout_s)
+        goal_stop_budget_s=runtime_config.heartbeat_timeout_s,stack_stop_budget_s=stack.stop_timeout_s,**lanes)
     return await serve_instance(spec,runtime_config,layout,process=process,stack=stack,ready=ready,
         retirement=retirement,ready_check=ready_check)

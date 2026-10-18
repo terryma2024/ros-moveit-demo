@@ -403,6 +403,22 @@ def test_foreign_stack_or_output_refused_before_task_directory_exists(env,monkey
     assert not (output/'tasks').exists() and not (env.root/'owned-runtime-processes.json').exists()
 
 
+def test_the_runtime_ports_carry_the_frozen_rig_and_a_stack_of_another_rig_is_refused(env,monkeypatch,tmp_path):
+    from so101_demo.act.rig_profile import DEFAULT_RIG,SIDE_WRIST_RIG,dump_rig_profile
+    execution=build(env)
+    assert execution.ports.dependencies['rig'] is DEFAULT_RIG and execution.ports.dependencies['act_profile'] is True
+    old=env.stack.launch
+    profile=tmp_path/'rig-side.yaml';profile.write_bytes(dump_rig_profile(SIDE_WRIST_RIG))
+    monkeypatch.setattr(env.stack,'launch',type(old)(ros2_executable=old.ros2_executable,session_id=old.session_id,
+        evidence_root=old.evidence_root,ros_domain_id=old.ros_domain_id,environment=old.environment,
+        rig='side-wrist',rig_profile=profile))
+    output=tmp_path/'foreign-rig-output';output.mkdir(mode=0o700)
+    with pytest.raises(ValueError,match='COLLECTION_BORROWED_STACK_MISMATCH'):
+        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,output_root=output,
+            teacher_socket=TEACHER_SOCKET,ready_check=env.ready_check)
+    assert not (output/'tasks').exists()
+
+
 def test_request_stop_is_idempotent_and_refuses_the_run_before_any_port_is_touched(env):
     execution=build(env)
     assert execution.request_stop() is None and execution.request_stop() is None

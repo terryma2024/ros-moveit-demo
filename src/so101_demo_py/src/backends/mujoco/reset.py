@@ -40,12 +40,16 @@ class MujocoResetClient:
         monotonic: Callable[[], float] = time.monotonic,
         progress: Callable[[], None] = lambda: time.sleep(0.01),
         on_reset_snapshot: Callable[[Any], None] | None = None,
+        act_audit: bool | None = None,
     ) -> None:
         if not simulation_session_id or not controller_names:
             raise ValueError("session id and controller names must be non-empty")
         names = tuple(expected_joint_names)
         if names not in (ARM_JOINTS, ACT_JOINTS) or len(expected_joint_positions) != len(names):
             raise ValueError("expected reset state must match six arm or seven ACT joint names")
+        #: the ACT station audits the paused joint snapshot and the settled velocities: always with the seven ACT joints, and with
+        #: the six arm joints when the rig has no neck (`act_audit=True`)
+        self._act_audit = names == ACT_JOINTS if act_audit is None else bool(act_audit)
         if len(expected_object_position) != 3:
             raise ValueError("expected reset state must contain one object position")
         ordered_positions(dict(zip(names, expected_joint_positions, strict=True)), names)
@@ -57,8 +61,8 @@ class MujocoResetClient:
         self._controllers = tuple(controller_names)
         self._expected_joints = tuple(float(value) for value in expected_joint_positions)
         self._expected_joint_names = names
-        if names == ACT_JOINTS:
-            services.enable_reset_joint_audit()
+        if self._act_audit:
+            services.enable_reset_joint_audit(*(() if names == ACT_JOINTS else (names,)))
         self.last_reset_joint_snapshot = None
         self.last_reset_convergence = None
         self._expected_object = tuple(float(value) for value in expected_object_position)
@@ -207,13 +211,13 @@ class MujocoResetClient:
         seen = {}  # diagnostic only: values the existing calls below already return
         def converged(after_count):
             kwargs = {"after_callback_count": after_count}
-            if self._expected_joint_names != ARM_JOINTS:
+            if self._act_audit:
                 kwargs["names"] = self._expected_joint_names
             if not self._services.joints_converged(self._expected_joints, self._joint_tolerance,
                                                    **kwargs):
                 seen.update(stage="positions", abs_velocity=None)
                 return False
-            if self._expected_joint_names != ARM_JOINTS:
+            if self._act_audit:
                 velocities = tuple(self._services.latest_joint_velocities(self._expected_joint_names))
                 # Leave headroom for the final paused scalar sample: the
                 # controller can still move between this read and the pause.
@@ -237,7 +241,7 @@ class MujocoResetClient:
             )
             self._require(self._services.pause(True), "pause")
             scalar_after_count = (self._services.scalar_joint_callback_count
-                                  if self._expected_joint_names == ACT_JOINTS else None)
+                                  if self._act_audit else None)
             reset_kwargs = {"joint_overrides": joint_overrides} if joint_overrides else {}
             self._require(self._services.reset_world(keyframe, free_joint_overrides,
                                                     **reset_kwargs), "reset")
@@ -246,7 +250,7 @@ class MujocoResetClient:
                 expected_epoch=expected_epoch,
                 deadline=deadline,
             )
-            if self._expected_joint_names == ACT_JOINTS:
+            if self._act_audit:
                 after_count = scalar_after_count
                 expected_velocity = {item.name: item.velocity for item in joint_overrides}
                 target_velocity = tuple(expected_velocity.get(name, 0.)

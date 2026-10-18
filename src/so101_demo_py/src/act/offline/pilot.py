@@ -12,8 +12,10 @@ from .raw_recorder import READY_SCHEMA, _atomic_json
 
 class PilotRecording:
     def __init__(self, *, processes, root, environment, spec_factory, timeout_s=10.0,
-                 clock=time.monotonic, sleep=time.sleep):
+                 clock=time.monotonic, sleep=time.sleep, rig_profile=None):
         self.processes = processes
+        #: the rig profile file the recorder records under (`--rig-profile`); None records the default rig, with no such argument
+        self.rig_profile = None if rig_profile is None else Path(rig_profile)
         self.root = Path(root)
         self.environment = environment
         self.spec_factory = spec_factory
@@ -28,7 +30,8 @@ class PilotRecording:
             self.root.mkdir(parents=True, exist_ok=False)
             argv = (sys.executable, "-m", "so101_demo.act.offline.raw_recorder", "--bag-dir", str(self.root / "bag"),
                     "--scene-reads", str(self.root / "scene-reads.jsonl"), "--ready-file", str(self.root / "ready.json"),
-                    "--stats-file", str(self.root / "record-stats.json"), "--ready-timeout-s", str(self.timeout_s))
+                    "--stats-file", str(self.root / "record-stats.json"), "--ready-timeout-s", str(self.timeout_s),
+                    *(() if self.rig_profile is None else ("--rig-profile", str(self.rig_profile))))
             self.identity = self.processes.start(self.spec_factory(argv), environment=self.environment)
             deadline = self.clock() + self.timeout_s + 2.0
             while self.clock() < deadline:

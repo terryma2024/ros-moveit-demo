@@ -1,4 +1,4 @@
-"""ACT's four action lanes: original cancellation ACKs and subsequent statuses."""
+"""ACT's four action lanes (three for a rig without a neck): original cancellation ACKs and subsequent statuses."""
 
 from dataclasses import dataclass
 import json
@@ -16,6 +16,11 @@ _LANES = dict(arm="/arm_controller/follow_joint_trajectory/_action",
               gripper="/gripper_controller/follow_joint_trajectory/_action",
               neck="/neck_controller/follow_joint_trajectory/_action",
               moveit="/execute_trajectory/_action")
+
+
+def lanes_for(has_neck=True) -> dict:
+    """The action lanes of a stack: the neck's only when its rig has a neck."""
+    return dict(_LANES) if has_neck else {name: prefix for name, prefix in _LANES.items() if name != "neck"}
 
 
 def _ros_types():
@@ -69,12 +74,17 @@ class ControllerStopObservation:
         try:
             _require(type(self.payload) is bytes and 0 < len(self.payload) <= 1024*1024)
             value = _decode_payload(self.payload)
-            _require(set(value) == {"schema_version", "kind", "started_monotonic_ns", "completed_monotonic_ns", "lanes"})
+            # an observation of a stack without a neck says so (`without_neck: true`) and has no neck lane; one that does not say so
+            # has all four lanes, so a missing neck lane is never silently a stack without a neck
+            base = {"schema_version", "kind", "started_monotonic_ns", "completed_monotonic_ns", "lanes"}
+            without_neck = "without_neck" in value
+            _require(set(value) == base | ({"without_neck"} if without_neck else set())
+                     and (not without_neck or value["without_neck"] is True))
             _require(type(value["schema_version"]) is int and value["schema_version"] == SCHEMA_VERSION
                      and value["kind"] == "ACT_CONTROLLER_STOP_OBSERVATION")
             start, end = value["started_monotonic_ns"], value["completed_monotonic_ns"]
             _require(type(start) is int and type(end) is int and 0 < start <= end)
-            _require(type(value["lanes"]) is dict and set(value["lanes"]) == set(_LANES))
+            _require(type(value["lanes"]) is dict and set(value["lanes"]) == set(lanes_for(not without_neck)))
             fields = {"action_prefix", "cancel_sent_monotonic_ns", "cancel_received_monotonic_ns",
                       "cancel_return_code", "goals_canceling", "status_received_monotonic_ns", "statuses"}
             for name, lane in value["lanes"].items():
@@ -134,7 +144,9 @@ class ControllerStopObservation:
         return True
 
 
-def observe_act_controller_stop(*, timeout_s, monotonic_ns=time.monotonic_ns, return_on_empty_ack=False):
+def observe_act_controller_stop(*, timeout_s, monotonic_ns=time.monotonic_ns, return_on_empty_ack=False, has_neck=True):
+    """Cancel and observe every action lane of the stack. A stack without a neck (`has_neck=False`) has no neck lane: no
+    subscription, no cancel client, no lane in the observation."""
     if (type(timeout_s) not in (int, float) or not math.isfinite(timeout_s)
             or timeout_s <= 0 or int(timeout_s*1e9) <= 0 or type(return_on_empty_ack) is not bool):
         raise ValueError("ACT_CONTROLLER_STOP_CONFIG_INVALID")
@@ -154,8 +166,9 @@ def observe_act_controller_stop(*, timeout_s, monotonic_ns=time.monotonic_ns, re
     owner = _open_owner()
     lanes = {name: dict(action_prefix=prefix, cancel_sent_monotonic_ns=None,
         cancel_received_monotonic_ns=None, cancel_return_code=None, goals_canceling=None,
-        status_received_monotonic_ns=None, statuses=None) for name,prefix in _LANES.items()}
+        status_received_monotonic_ns=None, statuses=None) for name,prefix in lanes_for(has_neck).items()}
     subscriptions, clients, futures = [], {}, {}
+    neck_marker = {} if has_neck else {"without_neck": True}
     try:
         for name, lane in lanes.items():
             def callback(message, name=name):
@@ -181,14 +194,14 @@ def observe_act_controller_stop(*, timeout_s, monotonic_ns=time.monotonic_ns, re
                         lane["cancel_received_monotonic_ns"] = clock()
             document = dict(schema_version=SCHEMA_VERSION, kind="ACT_CONTROLLER_STOP_OBSERVATION",
                 started_monotonic_ns=started,
-                completed_monotonic_ns=clock(), lanes=lanes)
+                completed_monotonic_ns=clock(), lanes=lanes, **neck_marker)
             observation = ControllerStopObservation(canonical_json(document))
             if observation.proven or return_on_empty_ack and observation.empty_cancel_acknowledged:
                 return observation
             owner.spin_once(timeout_sec=min(0.01,max(0,(deadline-clock())/1e9)))
         return ControllerStopObservation(canonical_json(dict(schema_version=SCHEMA_VERSION,
             kind="ACT_CONTROLLER_STOP_OBSERVATION",
-            started_monotonic_ns=started, completed_monotonic_ns=clock(), lanes=lanes)))
+            started_monotonic_ns=started, completed_monotonic_ns=clock(), lanes=lanes, **neck_marker)))
     finally:
         del subscriptions
         owner.close()

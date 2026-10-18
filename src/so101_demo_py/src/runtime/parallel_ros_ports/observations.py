@@ -524,6 +524,7 @@ def observe_parallel_initial_gate(
     *,
     timeout_s: float = 5.0,
     teacher_profile: bool = False,
+    rig=None,
 ) -> InitialGateObservation:
     """Collect fresh joint, goal, scene, graph and MuJoCo contact observations."""
 
@@ -626,7 +627,7 @@ def observe_parallel_initial_gate(
                 and all(future.done() for future in cancel_futures.values())
                 and scene_future.done()
                 and stable_graph_samples >= 2
-                and RuntimeBinding.worker_node_inventory_matches(graph, teacher_profile=teacher_profile)
+                and RuntimeBinding.worker_node_inventory_matches(graph, teacher_profile=teacher_profile, rig=rig)
             ):
                 break
         else:

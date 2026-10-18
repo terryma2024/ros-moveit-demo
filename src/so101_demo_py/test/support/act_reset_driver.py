@@ -3,7 +3,7 @@ import json
 import sys
 from types import SimpleNamespace
 
-from so101_demo.act.joints import ACT_JOINTS
+from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS
 
 CONTROLLERS = ("arm_controller", "gripper_controller", "neck_controller")
 
@@ -29,11 +29,11 @@ class Services:
     def __init__(self):
         self.joint_callback_count = 10
         self.scalar_joint_callback_count = 20
-        self.events, self.audit = [], False
+        self.events, self.audit, self.audit_names = [], False, None
         self.checks = 0
 
-    def enable_reset_joint_audit(self):
-        self.audit = True
+    def enable_reset_joint_audit(self, names=ACT_JOINTS):
+        self.audit, self.audit_names = True, tuple(names)
 
     def pause(self, paused):
         self.events.append(("pause", paused))
@@ -65,23 +65,27 @@ class Services:
                 "positions": (0.0,) * len(names), "velocities": (0.0,) * len(names)}
 
 
-def run():
+def run(has_neck=True):
+    """The ACT reset of a rig with a neck (seven joints, three controllers) or without one (the six arm joints, two controllers)."""
     from so101_demo.backends.mujoco.client import JointResetOverride
     from so101_demo.backends.mujoco.reset import MujocoResetClient
 
+    joints = ACT_JOINTS if has_neck else ARM_JOINTS
     services = Services()
     resetter = MujocoResetClient(
-        services, Observer(), simulation_session_id="session", controller_names=CONTROLLERS,
-        expected_joint_positions=(0.0,) * 7, expected_object_position=(0.1, 0.2, 0.3), expected_joint_names=ACT_JOINTS,
-        progress=lambda: setattr(services, "joint_callback_count", services.joint_callback_count + 1))
-    receipt = resetter.reset("task_start", joint_overrides=tuple(JointResetOverride(n, 0.0) for n in ACT_JOINTS))
+        services, Observer(), simulation_session_id="session",
+        controller_names=CONTROLLERS if has_neck else CONTROLLERS[:2],
+        expected_joint_positions=(0.0,) * len(joints), expected_object_position=(0.1, 0.2, 0.3), expected_joint_names=joints,
+        progress=lambda: setattr(services, "joint_callback_count", services.joint_callback_count + 1),
+        **({} if has_neck else {"act_audit": True}))
+    receipt = resetter.reset("task_start", joint_overrides=tuple(JointResetOverride(n, 0.0) for n in joints))
     broker = sorted(name for name in sys.modules if name.rsplit(".", 1)[-1] in (
         "leased_action_client", "command_broker", "ros_broker", "teacher_worker_lifecycle",
         "controller_reservation_client", "teacher_owner_peer"))
     return dict(new_epoch=receipt.new_epoch, events=services.events, audit=services.audit,
                 names=list(services.last_names or ()), scalar=resetter.last_reset_joint_snapshot is not None,
-                broker=broker)
+                audit_names=list(services.audit_names or ()), broker=broker)
 
 
 if __name__ == "__main__":
-    print("B1BJSON " + json.dumps(run()))
+    print("B1BJSON " + json.dumps(run(has_neck="--no-neck" not in sys.argv)))

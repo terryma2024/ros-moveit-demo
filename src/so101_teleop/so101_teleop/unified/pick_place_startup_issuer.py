@@ -83,7 +83,7 @@ class InstalledActStackReadinessProbe:
         self._attempted = True
         argv = [str(self.executable), "--session-id", self.launch.session_id,
                 "--ros-domain-id", str(self.launch.ros_domain_id),
-                "--timeout-s", str(self.timeout_s)]
+                "--timeout-s", str(self.timeout_s), *self.launch.readiness_arguments()]
         try:
             result = self.run(
                 argv, env=self.launch.process_environment(), shell=False,

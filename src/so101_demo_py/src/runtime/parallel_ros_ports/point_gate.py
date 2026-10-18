@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
+from so101_demo.act.rig_profile import DEFAULT_RIG
 from so101_demo.ros.rgbd_snapshot import RosRgbdSnapshotSource
 from so101_demo.runtime.parallel_ros_ports.isolated_node import (
     _RESET_JOINTS,
@@ -38,6 +39,9 @@ class PointGate:
         call = self.dependencies.get("reset_point")
         point = self.catalog[lease.point_id]
         act_kwargs = {"act_profile": True} if self.dependencies.get("act_profile") is True else {}
+        rig = self.dependencies.get("rig")
+        if act_kwargs and rig is not None and rig.rig != DEFAULT_RIG.rig:
+            act_kwargs["rig"] = rig   # the default rig's reset call is the call it always was
         qualified = call is None
         if qualified:
             call = self.dependencies.get("execute_reset")
@@ -101,9 +105,11 @@ class PointGate:
 
     def initial_gate(self, lease, reset_receipt):
         teacher_profile = self.dependencies.get("act_profile") is True
+        rig = self.dependencies.get("rig")
         call = self.dependencies.get("observe_initial")
+        rig_arguments = {} if rig is None or rig.rig == DEFAULT_RIG.rig else {"rig": rig}
         value=(call(reset_receipt) if call is not None else observe_parallel_initial_gate(
-            reset_receipt, teacher_profile=teacher_profile))
+            reset_receipt, teacher_profile=teacher_profile, **rig_arguments))
         if type(value) is not InitialGateObservation:
             failures = ["type"]
         else:
@@ -133,7 +139,7 @@ class PointGate:
                 ("stable_graph", value.node_graph_stable is True),
                 (
                     "worker_nodes",
-                    self.worker_node_inventory_matches(value.worker_node_fqns, teacher_profile=teacher_profile),
+                    self.worker_node_inventory_matches(value.worker_node_fqns, teacher_profile=teacher_profile, rig=rig),
                 ),
             )
             failures = [name for name, accepted in predicates if not accepted]
@@ -142,7 +148,7 @@ class PointGate:
             if type(value) is InitialGateObservation and "worker_nodes" in failures:
                 # The fault reason is capped at 300 characters, which cuts off a long node list. When the task directory
                 # exists the whole observation is written there and the reason names the file, after a shorter summary.
-                reference = self._write_gate_observation(lease, value, failures, teacher_profile=teacher_profile)
+                reference = self._write_gate_observation(lease, value, failures, teacher_profile=teacher_profile, rig=rig)
                 message += ";worker_nodes=" + _worker_node_diagnostic(
                     value.worker_node_fqns, self.expected_worker_nodes(),
                     max_bytes=320 if reference is None else 100,
@@ -168,7 +174,7 @@ class PointGate:
             no_stale_node=True,
         )
 
-    def _write_gate_observation(self, lease, value, failures, *, teacher_profile):
+    def _write_gate_observation(self, lease, value, failures, *, teacher_profile, rig=None):
         """Write the complete rejected gate observation beside the task's other evidence; the file name, or None."""
         root = getattr(self.resources, "worker_root", None)
         attempt = str(getattr(lease, "attempt_id", ""))
@@ -188,7 +194,7 @@ class PointGate:
             "moveit_attached_object_ids": list(value.moveit_attached_object_ids),
             "joint_positions": list(value.joint_positions),
             "worker_nodes": self.worker_node_inventory_report(
-                value.worker_node_fqns, teacher_profile=teacher_profile),
+                value.worker_node_fqns, teacher_profile=teacher_profile, rig=rig),
         }
         payload = json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         try:

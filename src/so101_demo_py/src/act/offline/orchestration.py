@@ -152,12 +152,25 @@ class OfflineCollection:
             return
         self._start()
 
+    def _rig_profile(self):
+        """The frozen rig profile file the recorder records under, or None for the default rig (whose recorder takes no argument)."""
+        from ..rig_profile import DEFAULT_RIG, rig_from_frozen
+
+        try:
+            frozen = json.loads(self._inputs_manifest.read_bytes())
+        except FileNotFoundError:
+            return None   # a missing manifest is refused where the episode is sealed and processed; the recorder takes the default rig
+        if rig_from_frozen(frozen).rig == DEFAULT_RIG.rig:
+            return None
+        return self._inputs_manifest.parent / frozen["rig_profile"]["path"]
+
     def _start(self) -> None:
         try:
+            rig_profile = self._rig_profile()
             pilot = (self._pilot_factory or PilotRecording)(
                 processes=self._processes, root=self.raw_root, environment=self._environment,
                 spec_factory=lambda argv: self._spec_factory(RAW_ROLE, argv), timeout_s=float(self._policy["ready_timeout_s"]),
-                clock=self._clock, sleep=self._sleep)
+                clock=self._clock, sleep=self._sleep, **({} if rig_profile is None else {"rig_profile": rig_profile}))
         except Exception as error:   # noqa: BLE001 - a defect on the data side is a verdict on the data
             self.start_error = ("RAW_PILOT_START_FAILED: " + (str(error) or type(error).__name__))[:_REASON_CHARS]
             self.events.append("recorder_start_failed")

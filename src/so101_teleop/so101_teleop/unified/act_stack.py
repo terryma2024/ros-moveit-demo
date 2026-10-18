@@ -24,6 +24,10 @@ from .bridge import (
 from .contracts import MutationError, OwnerKey
 
 
+#: the camera rig of a stack that names none (a stack launched before rigs existed): head and wrist cameras with a neck
+DEFAULT_RIG = "head-wrist"
+
+
 @dataclass(frozen=True, slots=True)
 class ActStackLaunch:
     ros2_executable: Path
@@ -31,6 +35,11 @@ class ActStackLaunch:
     evidence_root: Path
     ros_domain_id: int
     environment: Mapping[str, str]
+    #: the camera rig (`so101_demo.act.rig_profile`) the stack composes. Any other rig than the default is launched with
+    #: `rig:=<name>` and observed with `--rig-profile <rig_profile>` (the rig's profile file); the default rig adds neither, so its
+    #: launch command and readiness command stay exactly what they were before rigs existed.
+    rig: str = DEFAULT_RIG
+    rig_profile: Path | None = None
 
     def __post_init__(self) -> None:
         binary, root = Path(self.ros2_executable), Path(self.evidence_root)
@@ -44,6 +53,15 @@ class ActStackLaunch:
                 or any(not isinstance(key, str) or not isinstance(value, str)
                        for key, value in self.environment.items())):
             raise ValueError("ACT_STACK_LAUNCH_INVALID")
+        if self.rig == DEFAULT_RIG:
+            if self.rig_profile is not None:
+                raise ValueError("ACT_STACK_RIG_INVALID")
+        else:
+            profile = None if self.rig_profile is None else Path(self.rig_profile)
+            if (not isinstance(self.rig, str) or re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", self.rig) is None
+                    or profile is None or not profile.is_absolute() or ".." in profile.parts
+                    or profile.is_symlink() or not profile.is_file()):
+                raise ValueError("ACT_STACK_RIG_INVALID")
 
     def argv(self) -> list[str]:
         return [
@@ -51,7 +69,12 @@ class ActStackLaunch:
             "so101_mujoco_act_execution_stack.launch.py",
             "headless:=true", "sensor_rendering:=true", "act_profile:=true",
             f"session_id:={self.session_id}", f"task_evidence_root:={self.evidence_root}",
+            *(() if self.rig == DEFAULT_RIG else (f"rig:={self.rig}",)),
         ]
+
+    def readiness_arguments(self) -> list[str]:
+        """The rig arguments of the no-motion readiness observer: none for the default rig."""
+        return [] if self.rig_profile is None else ["--rig-profile", str(self.rig_profile)]
 
     def process_environment(self) -> dict[str, str]:
         return {

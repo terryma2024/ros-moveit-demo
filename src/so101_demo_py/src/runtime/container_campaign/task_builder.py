@@ -21,6 +21,7 @@ from so101_demo.act.diagnostic_episode_inputs import require_scope_for_inputs
 from so101_demo.act.frozen_runtime_inputs import load_teacher_frozen_inputs,load_recorder_frozen_policy
 from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 from so101_demo.act.parallel_collection_contracts import read_document,scene_ids
+from so101_demo.act.rig_profile import DEFAULT_RIG,rig_from_frozen
 from so101_demo.cli.mujoco_batch.common import _lease_wire
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.parallel_batch.act_attempt import ActPerceptionDecision
@@ -70,6 +71,8 @@ class TaskInput:
     recorder_policy: dict
     teacher: dict
     shard_spec: dict
+    #: the camera rig of the collection: the profile the frozen inputs bind
+    rig: object = DEFAULT_RIG
 
 
 def _finite(value):
@@ -151,6 +154,9 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
         raise ValueError('COLLECTION_TASK_SCENE_INVALID')
     refs={name:document[name] for name in ('scope','inputs_manifest')}
     frozen,_,_=load_teacher_frozen_inputs(validate_file_ref(refs['inputs_manifest']))
+    rig=rig_from_frozen(frozen)
+    if rig.profile_sha256!=campaign.get('rig_profile_sha256',DEFAULT_RIG.profile_sha256):
+        raise ValueError('COLLECTION_CASE_RIG_MISMATCH')
     if (frozen['mode']!='formal'
             or frozen['roles']['runtime_config']['sha256']!=identity['runtime_config_sha256']
             or frozen['roles']['collection_config']['sha256']!=identity['collection_config_sha256']):
@@ -173,7 +179,7 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     return TaskInput(task_id=task.task_id,root=root,scene_id=document['scene_id'],row=row,refs=refs,
         config=config,campaign=campaign,teacher_policy=dict(frozen['teacher_execution_policy']['values']),
         recorder_policy=recorder,teacher=document['teacher'],
-        shard_spec=shard_spec)
+        shard_spec=shard_spec,rig=rig)
 
 
 def local_lease(shard_spec,scene_id,*,issued,deadline):
@@ -693,6 +699,8 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
         raise ValueError('COLLECTION_READY_CHECK_REQUIRED')
     loaded=load_task_input(task,shard_spec,teacher_socket=teacher_socket,clock=clock)
     _check_stack(stack,shard_spec,loaded.root,output_root)
+    if getattr(stack.launch,'rig',DEFAULT_RIG.rig)!=loaded.rig.rig:
+        raise ValueError('COLLECTION_BORROWED_STACK_MISMATCH')
     state=LocalTaskState(clock)
     scene=loaded.scene_id
     # The task directory is reserved before the runtime exists: the process tree writes its manifest there.
@@ -700,7 +708,7 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
         worker_root=Path(output_root),case_inputs={scene:loaded.refs},clock=clock,task_id=task.task_id)
     resources=task_resources(shard_spec,task_root=artifacts.root)
     ports=ActRosRuntimePorts(resources,catalog={scene:loaded.row},config=loaded.config,mode=RunMode.EXECUTE,
-        broker_generation=resources.generation,dependencies=dict(act_profile=True,
+        broker_generation=resources.generation,dependencies=dict(act_profile=True,rig=loaded.rig,
             workspace_provider=artifacts.workspace,authorize=local_authorize(state),
             teacher_execution_policy=loaded.teacher_policy,
             ready_probe=lambda requirements:_stack_ready(ports,ready_check))|dict(dependencies or {}))

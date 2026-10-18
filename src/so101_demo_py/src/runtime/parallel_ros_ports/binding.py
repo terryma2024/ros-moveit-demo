@@ -40,10 +40,12 @@ class RuntimeBinding:
         )
 
     @classmethod
-    def worker_node_inventory_rules(cls, *, teacher_profile=False):
-        """The required, fixed internal and generated node names of one worker."""
+    def worker_node_inventory_rules(cls, *, teacher_profile=False, rig=None):
+        """The required, fixed internal and generated node names of one worker.
+
+        The ACT (teacher) profile adds the neck controller node only for a rig with a neck (`rig` None = the head+wrist rig)."""
         required = set(cls.expected_worker_nodes())
-        if teacher_profile:
+        if teacher_profile and (rig is None or rig.has_neck):
             required.add("/neck_controller")
         fixed_internal = {
             "/controller_manager",
@@ -59,7 +61,7 @@ class RuntimeBinding:
         return required, fixed_internal, generated
 
     @classmethod
-    def worker_node_inventory_matches(cls, nodes, *, teacher_profile=False):
+    def worker_node_inventory_matches(cls, nodes, *, teacher_profile=False, rig=None):
         if (
             type(nodes) is not tuple
             or any(not isinstance(node, str) for node in nodes)
@@ -67,7 +69,7 @@ class RuntimeBinding:
             or len(set(nodes)) != len(nodes)
         ):
             return False
-        required, fixed_internal, generated = cls.worker_node_inventory_rules(teacher_profile=teacher_profile)
+        required, fixed_internal, generated = cls.worker_node_inventory_rules(teacher_profile=teacher_profile, rig=rig)
         category_counts = [0] * len(generated)
         for node in nodes:
             if node in required or node in fixed_internal:
@@ -86,10 +88,10 @@ class RuntimeBinding:
         )
 
     @classmethod
-    def worker_node_inventory_report(cls, nodes, *, teacher_profile=False):
+    def worker_node_inventory_report(cls, nodes, *, teacher_profile=False, rig=None):
         """Every way an observed node list differs from the inventory, complete and unbounded: for an evidence file."""
         observed = tuple(nodes)
-        required, fixed_internal, generated = cls.worker_node_inventory_rules(teacher_profile=teacher_profile)
+        required, fixed_internal, generated = cls.worker_node_inventory_rules(teacher_profile=teacher_profile, rig=rig)
         names = [node for node in observed if isinstance(node, str)]
         counts = {}
         for node in names:
@@ -149,8 +151,10 @@ class RuntimeBinding:
         call = self.dependencies.get("ready_probe")
         if call is not None:
             return call(_requirements)
-        # The ACT station also has the neck controller; there is no broker to wait for.
-        arguments = ("--include-neck",) if self.dependencies.get("act_profile") is True else ()
+        # The ACT station also has the neck controller (when its rig has a neck); there is no broker to wait for.
+        rig = self.dependencies.get("rig")
+        arguments = (("--include-neck",) if self.dependencies.get("act_profile") is True and (rig is None or rig.has_neck)
+                     else ())
         completed = subprocess.run(
             ros2_command("run", "so101_demo_py", "motion_stack_ready", "--timeout-s", "60", *arguments),
             timeout=65.0,

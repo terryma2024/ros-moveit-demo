@@ -537,6 +537,7 @@ class NativeComposition:
 
     def __init__(self, *, layout, environment, inputs, options) -> None:
         from so101_demo.act.policy import ActPolicyRunner
+        from so101_demo.act.rig_profile import rig_from_observation
         from so101_demo.adapters.act.inference_process import ActInferenceProcess
         from so101_demo.adapters.act.lerobot import build_policy_from_bundle
         from so101_demo.adapters.act.rollout_ros import RclpyBinding, ThreadInferenceTransport
@@ -552,8 +553,10 @@ class NativeComposition:
         self.inference = ActInferenceProcess(config=inputs.runtime_config, transport=self.transport, clock=time.monotonic)
         self.runner = ActPolicyRunner(inputs.bundle, policy, observation={
             "cameras": inputs.observation["cameras"], "state_dim": inputs.observation["state_dim"]})
+        # the rig the policy was trained on (its bundle's observation declaration) is the rig of the stack that runs it
+        self.rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
         self.launch = instance_stack_launch({"simulation_session_id": self.session_id}, ros2=Path(options.ros2),
-                                            stack_root=layout.stack_root, environment=environment)
+                                            stack_root=layout.stack_root, environment=environment, rig=self.rig)
         observer = Path(options.install_prefix) / "lib/so101_demo_py/act_stack_ready"
         _ready, _ready_check, self.stack = compose_stack(self.launch, observer)
         self.graph_probe = RosGraphClearProbe(self.launch, spin_time_s=3.0)
@@ -562,7 +565,7 @@ class NativeComposition:
                    for scene in inputs.scenes["groups"][options.group]}
         self.runtime = ActRosRuntimePorts(self.resources, catalog=catalog, config=None, mode=RunMode.EXECUTE,
                                           broker_generation=self.resources.generation,
-                                          dependencies={"act_profile": True})
+                                          dependencies={"act_profile": True, "rig": self.rig})
         self.binding = RclpyBinding()
         self.attempts = 0
 

@@ -45,6 +45,107 @@ def test_seven_joint_act_reset_with_the_neck_controller_runs_with_no_broker_modu
     assert reset[2] == ["1", "2", "3", "4", "5", "6", "neck_yaw_joint"]
 
 
+def test_six_joint_act_reset_of_a_rig_without_a_neck_switches_no_neck_controller_and_audits_six_joints():
+    script = (f"import sys; sys.path[:0] = {[*map(str, TEST_IMPORT_PATH)]!r}; import act_reset_driver as d; "
+              "print('B1BJSON ' + __import__('json').dumps(d.run(False)))")
+    done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120, check=False)
+    line = next((x for x in done.stdout.splitlines() if x.startswith("B1BJSON ")), None)
+    assert line is not None, done.stdout[-1500:] + done.stderr[-2500:]
+    result = json.loads(line[len("B1BJSON "):])
+    assert result["new_epoch"] == 4 and result["audit"] is True and result["scalar"] is True and result["broker"] == []
+    arm = ["1", "2", "3", "4", "5", "6"]
+    assert result["audit_names"] == arm and result["names"] == arm
+    switches = [event for event in result["events"] if event[0] == "switch"]
+    assert switches[0][2] == ["arm_controller", "gripper_controller"] and switches[1][1] == ["arm_controller", "gripper_controller"]
+    reset = next(event for event in result["events"] if event[0] == "reset_world")
+    assert reset[2] == arm
+    assert "neck" not in json.dumps(result)
+
+
+def test_the_scalar_joint_audit_reads_the_joints_it_was_enabled_for():
+    from types import SimpleNamespace
+    from so101_mujoco_support.msg import ScalarJointEvidence
+    from so101_demo.act.joints import ARM_JOINTS
+    from so101_demo.backends.mujoco.client import MujocoRosClient
+
+    class Node:
+        def create_client(self, kind, topic):
+            return topic
+
+        def create_subscription(self, kind, topic, callback, qos):
+            return topic
+
+    def evidence(names):
+        message = ScalarJointEvidence(joint_names=list(names), positions_rad=[0.0] * len(names),
+                                      velocities_rad_s=[0.0] * len(names), simulation_session_id="s", reset_epoch=3,
+                                      simulation_step=0, paused=True)
+        message.header.stamp.sec = 10
+        return message
+
+    client = MujocoRosClient(Node(), Node())
+    client.enable_reset_joint_audit(ARM_JOINTS)
+    client._scalar_joint_callback(evidence((*ARM_JOINTS, "neck_yaw_joint")))
+    assert client.scalar_joint_callback_count == 0     # a neck the rig does not have is not the audited set
+    client._scalar_joint_callback(evidence(tuple(reversed(ARM_JOINTS))))
+    assert client.scalar_joint_callback_count == 1
+    assert client.reset_joint_snapshot(ARM_JOINTS)["positions"] == (0.0,) * 6
+
+
+def test_the_reset_transaction_of_a_rig_without_a_neck_names_no_neck(monkeypatch):
+    """transactional_reset builds its reset client from the rig: the neck controller and the neck joint only for a rig with a neck."""
+    from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS
+    from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG
+    from so101_demo.backends.mujoco import teleop_runtime
+
+    built, resets = [], []
+
+    class Node:
+        def destroy_node(self):
+            pass
+
+    class Scope:
+        def create_node(self, name):
+            return Node()
+
+        def client_options(self):
+            return {}
+
+        def close(self):
+            pass
+
+        def abandon(self, nodes=()):
+            pass
+
+    class Services:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def latest_joint_positions(self):
+            return (0.0,) * 6
+
+    class Resetter:
+        def __init__(self, *args, **kwargs):
+            built.append(kwargs)
+
+        def reset(self, keyframe, free_joint_overrides=(), **kwargs):
+            resets.append(tuple(item.name for item in kwargs["joint_overrides"]))
+            return "receipt"
+
+    monkeypatch.setattr(teleop_runtime, "_RosScope", Scope)
+    monkeypatch.setattr(teleop_runtime, "MujocoRosClient", Services)
+    monkeypatch.setattr(teleop_runtime, "MujocoWorldObserver", lambda *args, **kwargs: object())
+    monkeypatch.setattr(teleop_runtime, "MujocoResetClient", Resetter)
+    for rig, joints, controllers in ((HEAD_WRIST_RIG, ACT_JOINTS, ("arm_controller", "gripper_controller", "neck_controller")),
+                                     (SIDE_WRIST_RIG, ARM_JOINTS, ("arm_controller", "gripper_controller"))):
+        built.clear()
+        resets.clear()
+        teleop_runtime.transactional_reset("s", act_profile=True, rig=rig)
+        assert built[0]["controller_names"] == controllers
+        assert built[0]["expected_joint_names"] == joints and built[0]["expected_joint_positions"] == (0.0,) * len(joints)
+        assert built[0]["act_audit"] is True
+        assert resets == [joints]
+
+
 def test_mujoco_ros_client_plain_services_even_when_a_context_file_is_in_the_environment(monkeypatch):
     from so101_demo.backends.mujoco.client import MujocoRosClient
     made = []

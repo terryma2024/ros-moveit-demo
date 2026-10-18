@@ -4,6 +4,11 @@ from math import isfinite
 
 ARM_JOINTS = tuple(str(index) for index in range(1, 7))
 ACT_JOINTS = ARM_JOINTS + ("neck_yaw_joint",)
+
+
+def act_joints_for(rig) -> tuple:
+    """The measured joints of the ACT station of a camera rig: the six arm joints, and the neck yaw only for a rig with a neck."""
+    return ACT_JOINTS if rig.has_neck else ARM_JOINTS
 # main profile: the limits of the original assets/mujoco/so101.xml (unchanged)
 JOINT_LIMITS = dict(zip(ARM_JOINTS, ((-1.91986, 1.91986),
     (-1.74533, 1.74533), (-1.74533, 1.5708), (-1.65806, 1.65806),

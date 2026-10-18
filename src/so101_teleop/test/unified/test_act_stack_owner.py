@@ -263,3 +263,20 @@ def test_pre_setsid_identity_cannot_capture_the_parent_process_group(monkeypatch
     ))
     with pytest.raises(Exception, match="PROCESS_GROUP_NOT_ISOLATED"):
         identity_for(pid, argv, {})
+
+
+def test_a_stack_of_another_rig_is_launched_with_the_rig_and_observed_with_its_profile(tmp_path):
+    profile = tmp_path / "rig-side.yaml"
+    profile.write_text("rig: side-wrist\n")
+    common = dict(ros2_executable=Path(sys.executable), session_id="act-case-1", evidence_root=tmp_path,
+                  ros_domain_id=179, environment={})
+    default = ActStackLaunch(**common)
+    assert default.rig == "head-wrist" and default.rig_profile is None and default.readiness_arguments() == []
+    side = ActStackLaunch(**common, rig="side-wrist", rig_profile=profile)
+    assert side.argv() == [*default.argv(), "rig:=side-wrist"]
+    assert side.readiness_arguments() == ["--rig-profile", str(profile)]
+    # the default rig is never given a profile argument, and any other rig must name an existing absolute profile file
+    for kwargs in (dict(rig_profile=profile), dict(rig="side-wrist"), dict(rig="side-wrist", rig_profile=tmp_path / "missing"),
+                   dict(rig="Side Wrist", rig_profile=profile), dict(rig="side-wrist", rig_profile=Path("rig-side.yaml"))):
+        with pytest.raises(ValueError, match="ACT_STACK_RIG_INVALID"):
+            ActStackLaunch(**common, **kwargs)

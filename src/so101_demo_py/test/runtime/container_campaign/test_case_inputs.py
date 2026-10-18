@@ -355,11 +355,15 @@ def side_world(world, tmp_path_factory):
         manifest = case_inputs.freeze_campaign_inputs(run, candidates=candidates, scene_manifest=scene_file(base),
                                                       rig_profile=CONFIG / 'rig-v2.yaml', **policies())
     frozen = verify_frozen_inputs(Path(manifest['path']))
+    scopes = case_inputs.write_case_scopes(run, inputs_manifest=manifest)
     side_campaign = dict(world['campaign'], rig_profile_sha256=SIDE_WRIST_RIG.profile_sha256)
-    args = dict(campaign_config=load_campaign_config(write_config(base, side_campaign)),
+    campaign_path = write_config(base, side_campaign)
+    args = dict(campaign_config=load_campaign_config(campaign_path),
                 collection_config_sha256=frozen['roles']['collection_config']['sha256'],
                 scene_manifest_sha256=frozen['scene_manifest']['sha256'])
-    return dict(base=base, manifest=manifest, frozen=frozen, args=args, snapshot=probe)
+    return dict(base=base, manifest=manifest, frozen=frozen, args=args, snapshot=probe, scopes=scopes,
+                campaign=side_campaign, campaign_path=campaign_path, run=run,
+                binding=case_inputs.campaign_binding(manifest, **args))
 
 
 def test_a_side_wrist_campaign_freezes_the_side_wrist_snapshot_and_binds_only_a_side_wrist_campaign(world, side_world):
@@ -388,6 +392,24 @@ def test_a_side_wrist_campaign_freezes_the_side_wrist_snapshot_and_binds_only_a_
     for config in (no_rig, head_rig):
         refused('CASE_INPUTS_RIG_PROFILE_MISMATCH', case_inputs.campaign_binding, side_world['manifest'],
                 **dict(side_world['args'], campaign_config=config))
+
+
+def test_the_container_loads_the_rig_the_frozen_inputs_bind_and_refuses_a_campaign_that_names_another(world, side_world,
+                                                                                                    tmp_path, monkeypatch):
+    from so101_demo.act.rig_profile import DEFAULT_RIG, HEAD_WRIST_RIG, SIDE_WRIST_RIG
+    from so101_demo.runtime.container_campaign import task_builder
+
+    side_task = dict(world, scopes=side_world['scopes'], frozen=side_world['frozen'], binding=side_world['binding'],
+                     campaign=side_world['campaign'], campaign_path=side_world['campaign_path'])
+    task, spec = task_for(side_task, tmp_path / 'side', monkeypatch, 'scene-a')
+    assert task_builder.load_task_input(task, spec, teacher_socket=TEACHER_SOCKET).rig is SIDE_WRIST_RIG
+    task, spec = task_for(world, tmp_path / 'head', monkeypatch, 'scene-a')
+    loaded = task_builder.load_task_input(task, spec, teacher_socket=TEACHER_SOCKET)
+    assert loaded.rig is HEAD_WRIST_RIG is DEFAULT_RIG
+    # a head+wrist freeze under a campaign config that names the side+wrist rig is not a task of that campaign
+    mismatched = dict(world, campaign_path=side_world['campaign_path'])
+    task, spec = task_for(mismatched, tmp_path / 'mismatch', monkeypatch, 'scene-a')
+    refused('COLLECTION_CASE_RIG_MISMATCH', task_builder.load_task_input, task, spec, teacher_socket=TEACHER_SOCKET)
 
 
 def test_a_rig_forged_into_a_frozen_set_of_another_rigs_snapshot_is_refused(world, tmp_path):

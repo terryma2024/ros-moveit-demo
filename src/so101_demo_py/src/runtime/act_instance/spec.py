@@ -22,6 +22,19 @@ _COLLECTION_FIELDS={'business_identity','parallel_runtime','campaign_config','wa
 _BUSINESS_FIELDS={'manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint'}
 
 
+def instance_rig(spec):
+    """The camera rig of an instance: the one its campaign config names (absent = the default rig). A spec without a campaign
+    config (a readiness shard, a rollout) is the default rig."""
+    from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_profile_sha256
+
+    reference = spec.get("campaign_config") if isinstance(spec, dict) else None
+    if reference is None:
+        return DEFAULT_RIG
+    from so101_demo.runtime.inference.config import load_campaign_config
+    campaign = load_campaign_config(validate_file_ref(reference), roles=("teacher",), expected_sha256=reference["sha256"])
+    return rig_from_profile_sha256(campaign.get("rig_profile_sha256"))
+
+
 def load_spec(path):
     from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 

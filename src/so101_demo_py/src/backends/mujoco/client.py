@@ -147,12 +147,17 @@ class MujocoRosClient:
         self._scalar_joint_callback_count = 0
         self._reset_joint_snapshot = None
         self._scalar_joint_subscription = None
+        self._audit_names = ACT_JOINTS
         self._joint_subscription = joint_state_node.create_subscription(
             JointState, "/joint_states", self._joint_callback, qos_profile_sensor_data
         )
 
-    def enable_reset_joint_audit(self):
-        """Read authoritative paused scalar snapshots without changing policy inputs."""
+    def enable_reset_joint_audit(self, names=ACT_JOINTS):
+        """Read authoritative paused scalar snapshots without changing policy inputs.
+
+        `names` are the audited joints the simulator publishes (`scalar_joint_audit_names`): the seven ACT joints, or the six arm
+        joints of a rig without a neck."""
+        self._audit_names = tuple(names)
         if self._scalar_joint_subscription is None:
             self._scalar_joint_subscription = self._joint_state_node.create_subscription(
                 ScalarJointEvidence, "/so101/simulation/joints", self._scalar_joint_callback,
@@ -160,7 +165,7 @@ class MujocoRosClient:
 
     def _scalar_joint_callback(self, message):
         names = message.joint_names
-        if (len(set(names)) != len(names) or set(names) != set(ACT_JOINTS)
+        if (len(set(names)) != len(names) or set(names) != set(self._audit_names)
                 or len(names) != len(message.positions_rad)
                 or len(names) != len(message.velocities_rad_s)):
             return
