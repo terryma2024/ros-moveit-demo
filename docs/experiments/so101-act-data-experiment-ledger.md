@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3728
+latest_checkpoint: CP-3729
 next_experiment: side-wrist contact calibration (offline + live spot checks) and activation under CP-3394, then EXP-623 debug, EXP-624 qualification, EXP-625 formal 103, TRAIN-003.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3729 — PLANNED: spot checks EXP-7001 (nominal) and EXP-7002 (over_squeeze) at d1815a322; gate green, images rebuilt, host quieted
+
+- Executed by a Sonnet 5.5 subagent for the coordinator (design docs/superpowers/specs/2026-10-18-so101-act-container-spot-check-design.md, item 11, CONFIRMED). Low-rate logs /tmp/so101-debug-w1s-spotcheck-0918. HEAD d1815a322; the diff of src, scripts and third_party between 57aeb94f0 and d1815a322 is empty (against b13874eaa only act_train.py and its test differ, the CP-3727 change).
+- Gate (v4, `--demo-workers 12`, concurrent: the ros2_control and JTC decisions were skip, tree and apt hash equal to baseline 5f4a9477de20.v3): R/gates/d1815a322f89.
+  - Run 1 (kept as R/gates/d1815a322f89.run1-fail, build root W/so101-build/gates/d1815a322f89.run1-fail, scratch R/scratch/gate-d1815a322f89.run1-fail): build_rc=0 demo_rc=0 colcon_rc=1. The only colcon failure was so101_teleop test_process_identity::test_identity_state_proves_absence_and_refuses_to_guess (`identity_state` returned UNKNOWN instead of ALIVE for a live sleep child; a load-sensitive /proc read, not one of the two known flakes). The same source passed in gate 57aeb94f04be (CP-3727).
+  - Run 2 (the one rerun): build_rc=0 demo_rc=0 colcon_rc=0 dirty_after=0 head_after=d1815a322f897bfdf70f7314cc18d269924b08a2. Build 45 s, demo 447 s, colcon 138 s.
+- Images at HEAD (build_images.zsh): inference sha256:4be8bc69eea84bf74f9c3ff9d8f63967f5de602e43eea6cc9ba7e0a0082fc487 (R/image-build-20261018T151521Z), shard sha256:e62f8e72223f35181fc41c3106ce9a684bc79e39a60abd2bab7834ebcfef8c81 (R/image-build-20261018T151700Z). In-image dpkg-query --network none: controller-manager 4.48.1-1noble.20261006.035021 (shard; the inference image has none), rclpy 7.1.11-1noble.20260615.133206 and rcl-yaml-param-parser 9.2.11-1noble.20260612.050432 in both. As required.
+- Quiet host: logs and inspect of the 33 exited containers saved in R/docker-cleanup-20261018/ (so101-act-50b24e478fbee0f1-* and so101-act-w8f-20261017T084146Z-teacher-g1), then docker rm; record R/docker-cleanup-20261018/record.jsonl (33 rm, 0 save failures). No GPU compute process was present, no foreign test process live.
+- Candidate receipt reused: kind spot_check_candidate, not commit-bound (fields: approval_reference, approved_at, approved_by, evidence_root, policy_fingerprint, receipt_kind, source_evidence_sha256; `spotcheck.candidate_receipt_problem` and the inspect/freeze bind it to the proposal fingerprint only). sha256 3517034218e6aafca1b64fe1597245ca31647f52ec7cb96d05a53c547e4da5f6.
+- PLANNED EXP-7001 nominal: inputs REG/act-w1s-inputs-20261018T152148Z (AUTHOR_OK, validate 79 items, none failed), run root REG/act-w1s-20261018T152148Z, template w1s-spotcheck-side-wrist, unique variable: the normal Teacher execution policy; criterion: Teacher completes, endpoint passes, no oracle flag, phase-2 QC PASS (judge.zsh verdict PASS). EXP-7002 over_squeeze follows only after 7001 is judged; its only change is gripper_close_target_rad -0.049 in a source copy.
+- Superseded and not reused: images of b13874eaa (inference 29231388..., shard 259250d9...) and REG/act-w1s-inputs-20261018T125609Z.
 
 ## CP-3728 — Evidence root on its own partition (plan steps 3–5); scratch batch g; sealed readback 0 problems
 
