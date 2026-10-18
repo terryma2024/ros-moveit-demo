@@ -44,8 +44,11 @@ from so101_teleop.unified.act_stack import ActStackProcessOwner
 
 
 KIND='ACT_CONTAINER_COLLECTION_TASK'
+#: `collection_mode` is the plane's collection mode, written by the Host. It is a cross-check only: the frozen set's own mode is
+#: authoritative (the Host's binding of plane and mode is the primary guard), and the two must agree.
+COLLECTION_MODES=('formal','preselected_target_diagnostic')
 _FIELDS={'schema_version','kind','task_id','worker_id','launch_generation','wave_id','scene_id',
-    'scene_manifest','scope','inputs_manifest','teacher'}
+    'scene_manifest','scope','inputs_manifest','teacher','collection_mode'}
 _ENDPOINT={'role','socket_path','service_generation','max_frame_bytes'}
 
 
@@ -157,11 +160,13 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     rig=rig_from_frozen(frozen)
     if rig.profile_sha256!=campaign.get('rig_profile_sha256',DEFAULT_RIG.profile_sha256):
         raise ValueError('COLLECTION_CASE_RIG_MISMATCH')
-    if (frozen['mode']!='formal'
+    if (frozen['mode'] not in COLLECTION_MODES
             or frozen['roles']['runtime_config']['sha256']!=identity['runtime_config_sha256']
             or frozen['roles']['collection_config']['sha256']!=identity['collection_config_sha256']):
         raise ValueError('COLLECTION_CASE_RUNTIME_MISMATCH')
-    scope=read_collection_scope(validate_file_ref(refs['scope']),expected_mode='formal',
+    if document['collection_mode']!=frozen['mode']:
+        raise ValueError('COLLECTION_CASE_MODE_MISMATCH')
+    scope=read_collection_scope(validate_file_ref(refs['scope']),expected_mode=frozen['mode'],
         expected_inputs_sha256=frozen['inputs_sha256'])
     if scope['scene_id']!=document['scene_id']:
         raise ValueError('COLLECTION_CASE_SCOPE_MISMATCH')

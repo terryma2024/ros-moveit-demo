@@ -46,9 +46,13 @@ class CollectionCaseArtifacts:
         paths={name:validate_file_ref(ref) for name,ref in refs.items()}
         inputs=read_document(paths['inputs_manifest'])
         _require_sha256('inputs_sha256',inputs.get('inputs_sha256'))
-        scope=read_collection_scope(paths['scope'],expected_mode='formal',
+        # the frozen set's mode (formal, or the spot check's diagnostic mode) is the case's; the scope must carry that very mode
+        mode=inputs.get('mode')
+        if mode not in ('formal','preselected_target_diagnostic'):
+            raise ValueError('COLLECTION_CASE_SCOPE_MISMATCH')
+        scope=read_collection_scope(paths['scope'],expected_mode=mode,
             expected_inputs_sha256=inputs['inputs_sha256'])
-        if scope['scene_id']!=scene or inputs.get('mode')!='formal':
+        if scope['scene_id']!=scene:
             raise ValueError('COLLECTION_CASE_SCOPE_MISMATCH')
         if 'scene_manifest' in inputs:
             # a set that binds a scene list: the scope must be one of its rows, read from the hash-chained manifest

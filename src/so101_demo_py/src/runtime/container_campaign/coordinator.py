@@ -156,8 +156,9 @@ class InstanceDispatch:
 
     def __init__(self, *, control, shard, assignment, journal, endpoints, scene_manifest, case_inputs,
                  config, context, dispatch_allowed, clock=time.monotonic, sleep=asyncio.sleep, gate=None,
-                 phase1_deadline_s=None):
+                 phase1_deadline_s=None, collection_mode='formal'):
         launch = shard.launch
+        self.collection_mode = collection_mode   # the plane's mode, written into every task document as a cross-check
         self.phase1_deadline_s = phase1_deadline_s   # no scene is claimed from this instant on; None: no phase-1 limit
         self.gate, self.recording_claim, self.done, self.unsent = gate, False, False, False
         self.control, self.shard, self.assignment, self.journal = control, shard, assignment, journal
@@ -275,7 +276,7 @@ class InstanceDispatch:
         document = dict(schema_version=1, kind=TASK_INPUT_KIND, task_id=task_id, worker_id=self.worker_id,
             launch_generation=self.generation, wave_id=self.wave_id, scene_id=scene_id,
             scene_manifest=dict(self.scene_manifest), scope=dict(refs['scope']),
-            inputs_manifest=dict(refs['inputs_manifest']))
+            inputs_manifest=dict(refs['inputs_manifest']), collection_mode=self.collection_mode)
         for role in ('teacher',):
             endpoint = self.endpoints[role]
             document[role] = dict(role=role, socket_path=str(self.shard.teacher_socket),
@@ -406,11 +407,12 @@ class InstanceDispatch:
 class ConcurrentCollectionCoordinator:
     def __init__(self, *, context, config, case_inputs, scene_manifest, control_factory=None,
                  clock=time.monotonic, sleep=asyncio.sleep, max_recording_shards=None,
-                 max_tasks_in_flight=None, min_assignment_gap_s=None):
+                 max_tasks_in_flight=None, min_assignment_gap_s=None, collection_mode='formal'):
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != 'act_collection_start'
                 or type(config) is not ParallelRuntimeConfigLinuxCuda
                 or type(case_inputs) is not dict or not case_inputs or type(scene_manifest) is not dict
                 or not callable(clock) or not callable(sleep)
+                or collection_mode not in ('formal', 'preselected_target_diagnostic')
                 or (control_factory is not None and not callable(control_factory))
                 or (max_recording_shards is not None
                     and (type(max_recording_shards) is not int or max_recording_shards < 1))
@@ -424,7 +426,7 @@ class ConcurrentCollectionCoordinator:
             if type(refs) is not dict or set(refs) != {'scope', 'inputs_manifest'}:
                 raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
         self.context, self.config, self.case_inputs = context, config, case_inputs
-        self.scene_manifest = scene_manifest
+        self.scene_manifest, self.collection_mode = scene_manifest, collection_mode
         self.max_recording_shards = max_recording_shards
         self.max_tasks_in_flight, self.min_assignment_gap_s = max_tasks_in_flight, min_assignment_gap_s
         self.control_factory = control_factory or (lambda shard: ContainerTaskControl(owner=shard))
@@ -501,7 +503,7 @@ class ConcurrentCollectionCoordinator:
             journal=journal, endpoints=endpoints, scene_manifest=self.scene_manifest,
             case_inputs=self.case_inputs, config=self.config, context=self.context,
             dispatch_allowed=dispatch_allowed, clock=self.clock, sleep=self.sleep, gate=gate,
-            phase1_deadline_s=self.phase1_deadline_s)
+            phase1_deadline_s=self.phase1_deadline_s, collection_mode=self.collection_mode)
             for shard in shards]
         if gate is not None:
             gate.members = dispatches

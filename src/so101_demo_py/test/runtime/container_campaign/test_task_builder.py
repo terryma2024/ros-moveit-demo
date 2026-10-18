@@ -56,7 +56,7 @@ BOUND_ROWS=[dict(scene_id='scene-a',seed=11,split='train',cup_position_world_m=[
             dict(scene_id='scene-b',seed=12,split='validation',cup_position_world_m=[.25,-.05,.165])]
 
 
-def make_env(tmp_path,monkeypatch,*,bound_scene=None):
+def make_env(tmp_path,monkeypatch,*,bound_scene=None,mode='formal'):
     """`bound_scene` names a row of BOUND_ROWS: the frozen set then binds that scene list (real `freeze_inputs`) and the task
     document points its scene manifest at the frozen copy; otherwise the unchanged `default` single-scene fixture."""
     bound_rows=None if bound_scene is None else BOUND_ROWS
@@ -69,10 +69,10 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
             scope_scene=(bound_row['scene_id'],bound_row['seed']))
     # Synthetic approvals stay explicitly synthetic; current freeze/readback,
     # policies and execution snapshot are real. No admission/qualification claim.
-    frozen['mode']='formal';rehash(frozen_path,frozen)
+    frozen['mode']=mode;rehash(frozen_path,frozen)
     frozen=json.loads(frozen_path.read_bytes())
     scope=tmp_path/'formal-scope.json'
-    write_collection_scope(build_collection_scope('formal',scene_id='default' if bound_row is None else bound_row['scene_id'],
+    write_collection_scope(build_collection_scope(mode,scene_id='default' if bound_row is None else bound_row['scene_id'],
         seed=0 if bound_row is None else bound_row['seed'],inputs_sha256=frozen['inputs_sha256']),scope)
     native_dir=tmp_path/'native';native_dir.mkdir()
     _,root,process,native,retirement,calls=native_fixture(native_dir,monkeypatch)
@@ -118,7 +118,7 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
         deadline_monotonic_s=time.monotonic()+3600,wave_id='wave-0',gpu_uuid=campaign['gpu_uuid'])
     document=dict(schema_version=1,kind='ACT_CONTAINER_COLLECTION_TASK',task_id='task-1',worker_id='w00',
         launch_generation=1,wave_id='wave-0',scene_id=row['scene_id'],scene_manifest=ref(scene_path),
-        scope=ref(scope),inputs_manifest=ref(frozen_path))
+        scope=ref(scope),inputs_manifest=ref(frozen_path),collection_mode=mode)
     for role in ('teacher',):
         document[role]=dict(role=role,socket_path='/act/ipc/'+role+'/inference.sock',
             service_generation='service-'+role,max_frame_bytes=campaign[role+'_service']['max_frame_bytes'])
@@ -1356,3 +1356,40 @@ def test_classification_fails_closed_without_matching_facts(tmp_path):
                                               facts)) is str
     assert type(builder().classify_task_fault(teacher_decision(outcome,teacher_execution_status=None),facts)) is str
     assert type(builder().classify_task_fault(object(),facts)) is str
+
+
+# ---- the collection mode: the frozen mode (formal or diagnostic), the scope's mode and the task document's all agree -----------
+
+DIAGNOSTIC='preselected_target_diagnostic'
+
+
+def test_a_spot_check_task_over_a_diagnostic_frozen_set_is_loaded(tmp_path,monkeypatch):
+    env=make_env(tmp_path,monkeypatch,mode=DIAGNOSTIC)
+    assert env.document['collection_mode']==DIAGNOSTIC
+    loaded=builder().load_task_input(make_task(env),env.spec,teacher_socket=TEACHER_SOCKET)
+    assert loaded.scene_id=='default' and env.calls==[]
+
+
+@pytest.mark.parametrize('frozen_mode,stated',[(DIAGNOSTIC,'formal'),('formal',DIAGNOSTIC),('formal','other'),('formal',None)])
+def test_the_task_documents_collection_mode_must_be_the_frozen_mode(tmp_path,monkeypatch,frozen_mode,stated):
+    env=make_env(tmp_path,monkeypatch,mode=frozen_mode)
+    document=copy.deepcopy(env.document);document['collection_mode']=stated
+    with pytest.raises(ValueError):builder().load_task_input(make_task(env,document),env.spec,teacher_socket=TEACHER_SOCKET)
+    assert not (env.output/'tasks').exists() and env.calls==[]
+
+
+def test_a_task_document_without_a_collection_mode_is_refused(env):
+    document=copy.deepcopy(env.document);del document['collection_mode']
+    with pytest.raises(ValueError,match='COLLECTION_TASK_INPUT_INVALID'):
+        builder().load_task_input(make_task(env,document),env.spec,teacher_socket=TEACHER_SOCKET)
+
+
+def test_a_scope_of_the_other_mode_is_refused_over_either_frozen_mode(tmp_path,monkeypatch):
+    for frozen_mode,scope_mode in ((DIAGNOSTIC,'formal'),('formal',DIAGNOSTIC)):
+        env=make_env(tmp_path/frozen_mode,monkeypatch,mode=frozen_mode) if (tmp_path/frozen_mode).mkdir() is None else None
+        frozen=json.loads(env.frozen_path.read_bytes())
+        other=env.tmp/'other-scope.json'
+        write_collection_scope(build_collection_scope(scope_mode,scene_id='default',seed=0,
+            inputs_sha256=frozen['inputs_sha256']),other)
+        document=copy.deepcopy(env.document);document['scope']=ref(other)
+        with pytest.raises(ValueError):builder().load_task_input(make_task(env,document),env.spec,teacher_socket=TEACHER_SOCKET)

@@ -574,3 +574,30 @@ def test_a_permanent_stop_after_the_phase1_deadline_cannot_be_reopened(tmp_path,
     with pytest.raises(ValueError, match='CONTAINER_DISPATCH_REOPEN_REFUSED'):
         world.coordinator.reopen_dispatch(PHASE1_DEADLINE_REASON)
     assert world.coordinator.stop_reason == reason
+
+
+@pytest.mark.parametrize('mode', [None, 'formal', 'preselected_target_diagnostic'])
+def test_the_task_document_carries_the_planes_collection_mode(tmp_path, monkeypatch, mode):
+    """The Host writes the plane's collection mode into every task document (default: formal); the loader cross-checks it."""
+    import time
+    from test_task_builder import make_env
+    env = make_env(tmp_path, monkeypatch, mode=mode or 'formal')
+    shard = SimpleNamespace(root=env.root, teacher_socket=TEACHER_SOCKET, launch=SimpleNamespace(launch_id='wave-0-w00-g1',
+        worker_id='w00', launch_generation=1, wave_id='wave-0', owned_root=str(env.root)))
+    endpoints = {'teacher': SimpleNamespace(service_generation='service-teacher',
+                                            max_frame_bytes=env.campaign['teacher_service']['max_frame_bytes'])}
+    extra = {} if mode is None else dict(collection_mode=mode)
+    dispatch = InstanceDispatch(control=None, shard=shard, assignment=None, journal=None, endpoints=endpoints,
+        scene_manifest=env.document['scene_manifest'], config=env.runtime,
+        context=SimpleNamespace(deadline_monotonic_s=time.monotonic()+3000),
+        case_inputs={'default': dict(scope=env.document['scope'], inputs_manifest=env.document['inputs_manifest'])},
+        dispatch_allowed=lambda: True, **extra)
+    document = json.loads(open(dispatch.prepare_task('default').inputs_ref.path).read())
+    assert document['collection_mode'] == (mode or 'formal')
+    assert document == dict(env.document, task_id=document['task_id'])
+
+
+def test_the_coordinator_accepts_only_a_known_collection_mode():
+    from so101_demo.runtime.container_campaign.coordinator import ConcurrentCollectionCoordinator
+    with pytest.raises(ValueError, match='CONTAINER_COORDINATOR_CONFIG_INVALID'):
+        ConcurrentCollectionCoordinator(context=None, config=None, case_inputs={}, scene_manifest={}, collection_mode='other')

@@ -169,7 +169,8 @@ def task_for(world, tmp_path, monkeypatch, scene):
                 wave_id='wave-0', gpu_uuid=campaign['gpu_uuid'])
     document = dict(schema_version=1, kind=task_builder.KIND, task_id='task-1', worker_id='w00', launch_generation=1,
                     wave_id='wave-0', scene_id=scene, scene_manifest=binding['scene_manifest'],
-                    scope=world['scopes'][scene]['scope'], inputs_manifest=world['scopes'][scene]['inputs_manifest'])
+                    scope=world['scopes'][scene]['scope'], inputs_manifest=world['scopes'][scene]['inputs_manifest'],
+                    collection_mode=frozen['mode'])
     endpoints = endpoint_fields(campaign)
     # the launched service roles are whatever the loader's closed field set names
     document.update({role: endpoints[role] for role in ('head', 'teacher') if role in task_builder._FIELDS})

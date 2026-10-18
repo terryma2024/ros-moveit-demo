@@ -142,3 +142,40 @@ def test_case_binding_refuses_diagnostic_or_mismatched_originals(tmp_path,proble
     with pytest.raises(ValueError):
         module.CollectionCaseArtifacts(worker_id='w00',launch_generation=1,worker_root=tmp_path,
             case_inputs=refs,clock=lambda:11.)
+
+
+def mode_fixture(tmp_path,*,inputs_mode,scope_mode):
+    inputs=tmp_path/'scene-a-inputs.json'
+    inputs.write_text(json.dumps(dict(inputs_sha256='1'*64,mode=inputs_mode)))
+    scope=tmp_path/'scene-a-scope.json'
+    write_collection_scope(build_collection_scope(scope_mode,scene_id='scene-a',seed=0,inputs_sha256='1'*64),scope)
+    return {'scene-a':{name:dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+                       for name,path in (('scope',scope),('inputs_manifest',inputs))}}
+
+
+def test_a_spot_check_case_is_a_diagnostic_scope_over_a_diagnostic_frozen_set(tmp_path):
+    module=importlib.import_module('so101_demo.runtime.container_campaign.case_artifacts')
+    refs=mode_fixture(tmp_path,inputs_mode='preselected_target_diagnostic',scope_mode='preselected_target_diagnostic')
+    worker=tmp_path/'worker';worker.mkdir(mode=0o700)
+    results=module.CollectionCaseArtifacts(worker_id='w00',launch_generation=1,worker_root=worker,case_inputs=refs,
+        clock=lambda:11.)
+    lease=LeaseIdentity('batch',1,'w00',1,'scene-a','attempt-scene-a',1,10.,100.)
+    assert tuple(map(str,results.case_binding(lease)))==(refs['scene-a']['scope']['path'],
+                                                         refs['scene-a']['inputs_manifest']['path'])
+
+
+@pytest.mark.parametrize('inputs_mode,scope_mode',[('preselected_target_diagnostic','formal'),
+                                                   ('formal','preselected_target_diagnostic'),
+                                                   ('other','formal'),(None,'formal')])
+def test_the_scope_mode_must_equal_the_frozen_mode_and_the_mode_must_be_known(tmp_path,inputs_mode,scope_mode):
+    module=importlib.import_module('so101_demo.runtime.container_campaign.case_artifacts')
+    if inputs_mode in ('other',None):
+        refs=mode_fixture(tmp_path,inputs_mode='formal',scope_mode=scope_mode)
+        path=refs['scene-a']['inputs_manifest']['path']
+        with open(path,'w') as stream:json.dump(dict(inputs_sha256='1'*64,mode=inputs_mode),stream)
+        refs['scene-a']['inputs_manifest']['sha256']=hashlib.sha256(open(path,'rb').read()).hexdigest()
+    else:
+        refs=mode_fixture(tmp_path,inputs_mode=inputs_mode,scope_mode=scope_mode)
+    with pytest.raises(ValueError):
+        module.CollectionCaseArtifacts(worker_id='w00',launch_generation=1,worker_root=tmp_path,case_inputs=refs,
+            clock=lambda:11.)
