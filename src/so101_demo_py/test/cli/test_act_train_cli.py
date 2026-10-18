@@ -239,3 +239,82 @@ def test_the_cli_hands_the_backbone_weights_path_to_the_trainer(tmp_path, monkey
     assert cli.main([*_argv(manifest, index, binding, config, tmp_path / "bundle"), "--backbone-weights", str(weights)],
                     owner_factory=lambda **_: owner, requirements_path=_resolved_lock(tmp_path)) == 0
     assert seen["weights"] == weights
+
+
+# ---- evidence-partition layout (2026-10-18): dataset and policy live outside the evidence root, the run directory in evidence records them ----
+
+
+def _sha256_of(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_dataset_output_and_evidence_dir_place_the_export_apart_and_record_it(tmp_path, monkeypatch):
+    import so101_demo.cli.act_train as cli
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    datasets = tmp_path / "datasets" / "merged-v2"
+    policies = tmp_path / "policies" / "run-1"
+    policies.mkdir(parents=True)
+    evidence = tmp_path / "evidence" / "run-1"
+    seen = {}
+
+    def factory_builder(gpu_binding, run_root):
+        seen["run_root"] = run_root
+        return lambda **_: {"device": "cuda", "run_root": str(run_root)}
+
+    def trainer(config_, dataset, out):
+        out.mkdir()
+        (out / "bundle.json").write_text('{"kind": "act_bundle"}')
+        (out / "policy.safetensors").write_bytes(b"weights")
+        return {"schema_version": 1, "kind": "act_bundle"}
+    monkeypatch.setattr(cli, "local_owner_factory", factory_builder)
+    bundle = policies / "bundle"
+    assert cli.main([*_argv(manifest, index, binding, config, bundle), "--dataset-output", str(datasets),
+                     "--evidence-dir", str(evidence)], trainer=trainer, requirements_path=_resolved_lock(tmp_path)) == 0
+    assert (datasets / "export-manifest.json").is_file()
+    assert not (policies / "bundle.dataset").exists()
+    assert seen["run_root"] == evidence / "owner"
+    record = json.loads((evidence / "training-outputs.json").read_text())
+    assert record["kind"] == "act_training_outputs"
+    assert record["dataset"] == {"path": str(datasets), "export_manifest_sha256": _sha256_of(datasets / "export-manifest.json")}
+    assert (evidence / "export-manifest.json").read_bytes() == (datasets / "export-manifest.json").read_bytes()
+    assert record["bundle"]["path"] == str(bundle)
+    assert record["bundle"]["files"] == {"bundle.json": _sha256_of(bundle / "bundle.json"),
+                                         "policy.safetensors": _sha256_of(bundle / "policy.safetensors")}
+    assert record["state"]["status"] == "COMPLETED"
+    assert json.loads((policies / "bundle.state.json").read_text())["status"] == "COMPLETED"
+
+
+def test_a_failed_training_still_records_where_the_dataset_went(tmp_path, monkeypatch):
+    import so101_demo.cli.act_train as cli
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    datasets = tmp_path / "datasets" / "d"
+    evidence = tmp_path / "evidence"
+
+    def trainer(*_a):
+        raise ValueError("TRAINER_BOOM")
+    monkeypatch.setattr(cli, "local_owner_factory", lambda gpu_binding, run_root: (lambda **_: {"device": "cuda", "run_root": str(run_root)}))
+    with pytest.raises(ValueError, match="TRAINER_BOOM"):
+        cli.main([*_argv(manifest, index, binding, config, tmp_path / "bundle"), "--dataset-output", str(datasets),
+                  "--evidence-dir", str(evidence)], trainer=trainer, requirements_path=_resolved_lock(tmp_path))
+    record = json.loads((evidence / "training-outputs.json").read_text())
+    assert record["dataset"]["path"] == str(datasets) and record["bundle"] is None
+    assert record["state"]["status"] == "FAILED" and "TRAINER_BOOM" in record["state"]["error"]
+
+
+def test_dataset_output_and_evidence_record_refuse_to_overwrite(tmp_path, monkeypatch):
+    import so101_demo.cli.act_train as cli
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    datasets = tmp_path / "ds"
+    datasets.mkdir()
+    with pytest.raises(ValueError, match="TRAINING_OUTPUT_EXISTS"):
+        cli.main([*_argv(manifest, index, binding, config, tmp_path / "bundle"), "--dataset-output", str(datasets)],
+                 trainer=lambda *_a: {"kind": "act_bundle"}, owner_factory=lambda **_: {"device": "cuda", "run_root": str(tmp_path)},
+                 requirements_path=_resolved_lock(tmp_path))
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "training-outputs.json").write_text("{}")
+    with pytest.raises(ValueError, match="TRAINING_EVIDENCE_EXISTS"):
+        cli.main([*_argv(manifest, index, binding, config, tmp_path / "bundle2"), "--evidence-dir", str(evidence)],
+                 trainer=lambda *_a: {"kind": "act_bundle"}, owner_factory=lambda **_: {"device": "cuda", "run_root": str(tmp_path)},
+                 requirements_path=_resolved_lock(tmp_path))
+    assert not (tmp_path / "bundle2.dataset").exists()          # refused before the export wrote anything
