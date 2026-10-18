@@ -152,8 +152,12 @@ def seal_task(task_dir, lease, scope_path, inputs_path, *, seed, outcome, qc, po
         expected['status'], expected['reason'] = 'FAIL', expected['checks'][topic_loss.CHECK_NAME]['reason']
     if qc == 'FAIL':
         fail_teacher_reference(expected, 'TEACHER_REFERENCE_END_AFTER_RECORDING')
+    claim = sealed_teacher(store, outcome, data='VALID')
+    # a real QC report binds the Teacher manifest it read (the oracle-exclusion rule reads that binding)
+    expected['checks'][episode_qc.REFERENCE_CHECK]['details']['teacher_manifest_sha256'] = sha(
+        store.working/'dynamic'/'dynamic-execute-manifest.json')
     PENDING[str(store.episode_root)] = expected
-    return store.seal(seal, teacher=sealed_teacher(store, outcome, data='VALID'))
+    return store.seal(seal, teacher=claim)
 
 
 def stop_evidence(spec, owner, process):
