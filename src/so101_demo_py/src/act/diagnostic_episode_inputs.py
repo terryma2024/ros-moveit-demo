@@ -643,7 +643,7 @@ def verify_proposal_in_own_mode(proposal) -> None:
     verify_disabled_proposal(proposal, validation_mode=proposal_validation_mode(proposal))
 
 
-def _verify_roles(registry: dict, *, mode=None) -> dict:
+def _verify_roles(registry: dict, *, mode=None, rig=None) -> dict:
     """Resolve one approved candidate per role, run the semantic cross-checks, return the bytes.
 
     The verified bytes are handed back so a freeze copies exactly what was approved. Reading the
@@ -683,7 +683,7 @@ def _verify_roles(registry: dict, *, mode=None) -> dict:
     # the identity of the anchor and of the resource policy is derived from the verified bytes and
     # compared with what the registry asserts, so a consistent assertion cannot stand in for the
     # bytes it claims to describe
-    derived_anchor = anchor_identity_from_bytes(payloads["anchor_scene"])
+    derived_anchor = anchor_identity_from_bytes(payloads["anchor_scene"], rig)
     asserted_anchor = registry["roles"]["anchor_scene"]["identity"]
     if not isinstance(asserted_anchor, dict) or any(
             asserted_anchor.get(key) != value for key, value in derived_anchor.items()):
@@ -768,7 +768,18 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
         except OSError as error:
             raise ValueError("INPUT_SCENE_MANIFEST_INVALID") from error
         scene_count = len(_scene_rows(scene_payload, "INPUT_SCENE_MANIFEST_INVALID"))
-    payloads = _verify_roles(registry, mode=mode)
+    rig_payload = None
+    if rig_profile is not None:
+        if isinstance(rig_profile, bytes):
+            rig_payload = rig_profile
+        else:
+            path = Path(rig_profile)
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("INPUTS_RIG_PROFILE_INVALID")
+            rig_payload = path.read_bytes()
+    # the anchor's neck start is part of the identity only for a rig that has a neck, so the rig is known before the roles are verified
+    payloads = _verify_roles(registry, mode=mode,
+                             rig=rig_profile_binding(rig_payload)["values"]["rig"] if rig_payload is not None else None)
     roles = {}
     extra = {}
     if mode is not None:
@@ -790,15 +801,8 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
             raise ValueError("INPUTS_POLICY_BINDING_INVALID: " + name)
         policy_payloads[name] = path.read_bytes()
         extra[name] = policy_binding(name, policy_payloads[name])
-    if rig_profile is not None:
+    if rig_payload is not None:
         # the rig of the collection: bound like a policy, and so part of the inputs hash chain every case scope names
-        if isinstance(rig_profile, bytes):
-            rig_payload = rig_profile
-        else:
-            path = Path(rig_profile)
-            if path.is_symlink() or not path.is_file():
-                raise ValueError("INPUTS_RIG_PROFILE_INVALID")
-            rig_payload = path.read_bytes()
         extra[RIG_PROFILE_BINDING] = rig_profile_binding(rig_payload)
         policy_payloads[RIG_PROFILE_BINDING] = rig_payload
         rig = extra[RIG_PROFILE_BINDING]["values"]["rig"]
@@ -945,8 +949,17 @@ def _positive_number(value) -> bool:
             and math.isfinite(value) and value > 0)
 
 
-def anchor_identity_from_bytes(payload: bytes) -> dict:
-    """Derive the frozen anchor identity from the verified bytes of the anchor file."""
+def anchor_identity_from_bytes(payload: bytes, rig=None) -> dict:
+    """Derive the frozen anchor identity from the verified bytes of the anchor file.
+
+    `rig` (a profile, a name or None for the head+wrist default) decides whether the anchor has a neck start: a rig without a
+    neck neither requires nor reads the file's `neck_start_rad`, and its identity has no such key.
+    """
+
+    from .rig_files import rig_name
+    from .rig_profile import known_rig
+
+    has_neck = known_rig(rig_name(rig)).has_neck
 
     import yaml
 
@@ -961,13 +974,15 @@ def anchor_identity_from_bytes(payload: bytes) -> dict:
     cup, neck = anchor.get("cup_start_m"), anchor.get("neck_start_rad")
     if (not isinstance(cup, list) or len(cup) != 3
             or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in cup)
-            or tuple(float(value) for value in cup) != FROZEN_ANCHOR_CUP_M
-            or isinstance(neck, bool) or not isinstance(neck, (int, float))
-            or float(neck) != FROZEN_ANCHOR_NECK_RAD):
+            or tuple(float(value) for value in cup) != FROZEN_ANCHOR_CUP_M):
         raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
-    return {"scene_id": FROZEN_ANCHOR_SCENE_ID, "seed": FROZEN_ANCHOR_SEED,
-            "cup_start_m": list(FROZEN_ANCHOR_CUP_M), "neck_start_rad": FROZEN_ANCHOR_NECK_RAD,
-            "anchor_file_sha256": hashlib.sha256(payload).hexdigest()}
+    identity = {"scene_id": FROZEN_ANCHOR_SCENE_ID, "seed": FROZEN_ANCHOR_SEED, "cup_start_m": list(FROZEN_ANCHOR_CUP_M)}
+    if has_neck:
+        if isinstance(neck, bool) or not isinstance(neck, (int, float)) or float(neck) != FROZEN_ANCHOR_NECK_RAD:
+            raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+        identity["neck_start_rad"] = FROZEN_ANCHOR_NECK_RAD
+    identity["anchor_file_sha256"] = hashlib.sha256(payload).hexdigest()
+    return identity
 
 
 def resource_policy_identity(runtime_bytes: bytes, collection_bytes: bytes, *,

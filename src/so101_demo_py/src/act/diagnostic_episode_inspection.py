@@ -127,12 +127,12 @@ def _git_commit(root: Path) -> str:
     return commit
 
 
-def _inspect_anchor_scene(root: Path) -> dict:
+def _inspect_anchor_scene(root: Path, rig=None) -> dict:
     path = Path(root) / ANCHOR_FILE
     if not path.is_file() or path.is_symlink():
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED", "anchor file absent", None, [])
     try:
-        identity = anchor_identity_from_bytes(path.read_bytes())
+        identity = anchor_identity_from_bytes(path.read_bytes(), rig)
     except ValueError:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
                      "the anchor file does not carry the milestone's frozen default anchor",
@@ -401,7 +401,7 @@ def inspect_inputs(source_root: Path, ledger: Path, rig=None) -> dict:
     activated = identity if proposal_role["status"] == "READY" else None
     collection_role, runtime_role = _inspect_motion_config(root)
     roles = {
-        "anchor_scene": _inspect_anchor_scene(root),
+        "anchor_scene": _inspect_anchor_scene(root, rig),
         "scene_model": _inspect_scene_model(root, activated, rig),
         "collection_config": collection_role,
         "runtime_config": runtime_role,
