@@ -171,6 +171,11 @@ class ContainerCampaignOwner:
                 if type(rows) is not list or not rows or any(type(row) is not dict for row in rows):
                     raise ValueError('CAMPAIGN_MANIFEST_INVALID')
                 ids=tuple(row['scene_id'] for row in rows)
+            # the coordinator writes its collection mode into every task document: a spot check is a diagnostic-mode run, every other
+            # plane a formal one
+            expected_mode='preselected_target_diagnostic' if plane=='spot_check' else 'formal'
+            if getattr(self.coordinator,'collection_mode','formal')!=expected_mode:
+                raise ValueError('CAMPAIGN_COLLECTION_MODE_MISMATCH')
             worker_ids=tuple(slot.worker_id for slot in self.slots)
             # The time limits are checked before anything is launched. The 1 s tolerance covers the nanosecond rounding of the
             # admitted deadline.

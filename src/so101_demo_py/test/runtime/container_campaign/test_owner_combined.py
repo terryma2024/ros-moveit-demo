@@ -215,3 +215,54 @@ def test_a_phase_two_fault_or_missing_scene_is_reported_as_a_task_fault_so_the_c
         asyncio.run(run())
     finally:
         phase.world.registry.close()
+
+
+def test_a_spot_check_campaign_plans_its_one_scene_marked_and_writes_an_index_without_committed_episodes(tmp_path, monkeypatch):
+    """The spot-check plane: the owner plans the single scene as one unreserved, plane-marked wave; the frozen index is a
+    qualification index (it lists the task, never a committed episode, even for a processed export-eligible scene)."""
+    import importlib
+    module = importlib.import_module('so101_demo.runtime.container_campaign.owner')
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=1, qualification=True)
+    owner = phase.owner
+    monkeypatch.setattr(module, 'validate_run_contract', lambda document: ('spot_check', dict(
+        worker_count=owner.context.worker_count, scene_manifest=None)))
+    monkeypatch.setattr(module, 'scene_ids', lambda manifest, count=None: ('scene-00',))
+    owner.verifier.verify_processing = combined_for
+    owner.coordinator.collection_mode = 'preselected_target_diagnostic'
+
+    async def run():
+        await owner.run(phase.world.manifest)
+        plans = json.loads((owner.root/'campaign-index.json').read_text())['waves']
+        assert plans == [dict(wave_index=0, scene_ids=['scene-00'], assignment=None, plane='spot_check')]
+        index = json.loads((owner.root/'collection-index.json').read_text())
+        assert index['qualification'] is True and index['committed_episodes'] == [] and len(index['collected_tasks']) == 1
+        assert index['collected_tasks'][0]['export_eligible'] is True   # eligible in itself, but never listed as committed
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        phase.world.registry.close()
+
+
+@pytest.mark.parametrize('plane,coordinator_mode', [('spot_check', 'formal'), ('functional', 'preselected_target_diagnostic')])
+def test_the_owner_refuses_a_coordinator_whose_collection_mode_is_not_the_planes(tmp_path, monkeypatch, plane, coordinator_mode):
+    """The coordinator writes its mode into every task document: a spot check needs the diagnostic mode, every other plane the
+    formal one, and a mismatch is refused before anything is planned or launched."""
+    import importlib
+    module = importlib.import_module('so101_demo.runtime.container_campaign.owner')
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=1, qualification=True)
+    owner = phase.owner
+    monkeypatch.setattr(module, 'validate_run_contract', lambda document: (plane, dict(
+        worker_count=owner.context.worker_count, scene_manifest=None)))
+    monkeypatch.setattr(module, 'scene_ids', lambda manifest, count=None: ('scene-00',))
+    owner.coordinator.collection_mode = coordinator_mode
+
+    async def run():
+        with pytest.raises(ValueError, match='CAMPAIGN_COLLECTION_MODE_MISMATCH'):
+            await owner.run(phase.world.manifest)
+        assert not (owner.root/'campaign-index.json').exists()
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        phase.world.registry.close()
