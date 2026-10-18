@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import "@/styles/unified-layout.css";
 
-export type ShellPage = "teleop" | "validation" | "tasks";
+export type ShellPage = "teleop" | "validation" | "tasks" | "archives";
 
 export type DomainHealth = {
   teleop: "ready" | "unavailable" | "blocked";
@@ -22,6 +22,7 @@ export type DomainHealth = {
 };
 
 const PAGES: { page: ShellPage; path: string; label: string }[] = [
+  { page: "archives", path: "/archives", label: "Archives" },
   { page: "teleop", path: "/", label: "Teleop" },
   { page: "validation", path: "/expert-validation", label: "Expert Validation" },
 ];
@@ -90,7 +91,7 @@ export function AppShell({
                     <li key={entry.page}>
                       <Button
                         type="button"
-                        variant={page === entry.page ? "secondary" : "outline"}
+                        variant={page === entry.page ? "default" : "outline"}
                         className="w-full justify-start"
                         aria-current={page === entry.page ? "page" : undefined}
                         onClick={() => navigate(entry.path)}
@@ -114,7 +115,7 @@ export function AppShell({
             <li key={entry.page}>
               <Button
                 type="button"
-                variant={page === entry.page ? "secondary" : "outline"}
+                variant={page === entry.page ? "default" : "outline"}
                 className="w-full justify-start"
                 aria-current={page === entry.page ? "page" : undefined}
                 onClick={() => navigate(entry.path)}

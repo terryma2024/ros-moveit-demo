@@ -70,7 +70,7 @@ def export_openapi(output: str | Path) -> Path:
     def keep(path: str) -> bool:
         if path in UNIFIED_ONLY_PATHS:
             return False
-        if path.startswith("/expert-validation"):
+        if path.startswith(("/expert-validation", "/api/archives")):
             return False
         return not path.startswith("/control/instances")
 
