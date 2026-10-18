@@ -210,3 +210,19 @@ def test_the_training_002_configuration_loads_with_the_o7_values():
     base = load_training_config(CONFIG)
     other = load_training_config(PACKAGE / "config/act/training-002.yaml")
     assert {key: other[key] for key in other if key != "training"} == {key: base[key] for key in base if key != "training"}
+
+
+def test_the_side_wrist_configuration_is_the_o7_values_on_the_new_rig():
+    from so101_demo.adapters.act.lerobot import preprocessing_sha256
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG
+
+    document = load_training_config(PACKAGE / "config/act/training-side-wrist.yaml")
+    old = load_training_config(PACKAGE / "config/act/training-002.yaml")
+    assert document["observation"] == {"cameras": ["side", "wrist"], "state_dim": 6, "action_dim": 6}
+    assert document["frozen"]["preprocessing_sha256"] == preprocessing_sha256(SIDE_WRIST_RIG)
+    assert document["frozen"]["preprocessing_sha256"] != old["frozen"]["preprocessing_sha256"]
+    assert document["training"]["num_workers"] == 16
+    # nothing else of the training differs from training-002: the rates, batch, steps, selection, logging and the backbone
+    assert {**document["training"], "num_workers": 8} == old["training"]
+    assert document["action"] == old["action"] and document["normalization"] == old["normalization"]
+    assert document["frozen"]["seed"] == old["frozen"]["seed"]
