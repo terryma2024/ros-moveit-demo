@@ -10,6 +10,7 @@ judge compares against are read from the proposal the run froze; the tests give 
 import copy
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,16 @@ class Run:
     pass
 
 
+def write_processed(run, scene, qc, *, number=1, fault='none', directory=None):
+    """processed-result.json as the phase-2 writer binds it: phase-1 result sha, QC report path and sha (under `out/` for a fault)."""
+    directory = run.processed_dir if directory is None else directory
+    data = directory if fault == 'none' else directory / 'out'
+    return dump(directory / 'processed-result.json', dict(
+        kind='ACT_PROCESSED_RESULT', schema_version=1, task_id=f'{scene}-proc-{number}', scene_id=scene, proc_attempt=number,
+        phase1_result_sha256=sha(run.result), diagnostic_fault=fault, act_data_qc=qc,
+        qc_report_path='qc-report.json', qc_report_sha256=sha(data / 'qc-report.json')))
+
+
 def make_run(tmp_path, *, kind='nominal', summary_document=None, close=None, qc='PASS', status='COMPLETED',
              endpoint='PASS', scene=SCENE):
     """A synthetic finished spot-check run root. Returns an object with the paths the tests damage."""
@@ -98,14 +109,19 @@ def make_run(tmp_path, *, kind='nominal', summary_document=None, close=None, qc=
         schema='so101-teacher-execute', status='DONE', teacher_execution_status=status,
         teacher_task_result=dict(result=endpoint, rule_version='teacher_endpoint'),
         teacher_process_summary=summary_document if summary_document is not None else summary()))
-    run.qc_path = dump(sealed / 'qc-report.json', dict(status=qc))
     run.qc_bound_manifest_sha = sha(run.manifest)
     run.result = dump(sealed / 'result.json', dict(kind='ACT_COLLECTION_RESULT', act_data_qc=qc))
+    # the two-phase layout: the phase-2 QC report and processed-result.json live in <run>/processing/<scene>/<attempt>-proc-<n>,
+    # never in the sealed directory (which holds result.json, dynamic/, numeric/, perception/ and raw/)
+    run.processed_dir = root / 'processing' / scene / (scene + '-lease-1-proc-1')
+    run.qc_path = dump(run.processed_dir / 'qc-report.json', dict(status=qc))
+    run.processed = write_processed(run, scene, qc)
     run.task_result = dump(location / 'task-result.json', dict(result=dict(act_data_qc=qc)))
     task = dict(scene_id=scene, worker_id='w00', task_id=TASK, launch_id='wave-0-w00-g1', location=str(location),
                 result_status='PASSED', teacher_execution_status=status, teacher_task_result=endpoint,
                 act_data_status='VALID' if qc == 'PASS' else 'INVALID', act_data_reason=None, act_data_qc=qc,
-                export_eligible=False, result_sha256=sha(run.result), task_result_sha256=sha(run.task_result))
+                export_eligible=False, result_sha256=sha(run.result), task_result_sha256=sha(run.task_result),
+                processed_result_sha256=sha(run.processed))
     run.index_document = dict(schema_version=1, kind='act_collection_frozen_index', campaign_id='spot-campaign',
                               qualification=True, scene_count=1, collected_tasks=[task], committed_episodes=[])
     run.index = dump(root / 'collection-index.json', run.index_document)
@@ -319,6 +335,12 @@ def test_a_frozen_set_that_is_not_diagnostic_one_scene_is_refused(tmp_path, prep
     ('manifest', 'SPOT_CHECK_BINDING_MISMATCH'),
     ('proposal', 'SPOT_CHECK_FROZEN_PROPOSAL_INVALID'),
     ('missing_manifest', 'SPOT_CHECK_BINDING_MISMATCH'),
+    ('processed_result', 'SPOT_CHECK_BINDING_MISMATCH'),
+    ('missing_processed_result', 'SPOT_CHECK_BINDING_MISMATCH'),
+    ('qc_report', 'SPOT_CHECK_BINDING_MISMATCH'),
+    ('missing_qc_report', 'SPOT_CHECK_BINDING_MISMATCH'),
+    ('no_index_processed_sha', 'SPOT_CHECK_BINDING_MISMATCH'),
+    ('phase1_result_not_bound', 'SPOT_CHECK_BINDING_MISMATCH'),
 ])
 def test_a_file_that_is_not_the_one_the_index_and_qc_bound_is_refused(tmp_path, prepared, damage, code):
     run = prepared(make_run(tmp_path, kind='over_squeeze', summary_document=over_squeeze()))
@@ -330,9 +352,57 @@ def test_a_file_that_is_not_the_one_the_index_and_qc_bound_is_refused(tmp_path, 
         run.manifest.write_text(run.manifest.read_text() + ' ')
     elif damage == 'proposal':
         run.proposal_path.write_text(run.proposal_path.read_text() + ' ')
+    elif damage == 'processed_result':
+        run.processed.write_text(run.processed.read_text() + ' ')
+    elif damage == 'missing_processed_result':
+        run.processed.unlink()
+    elif damage == 'qc_report':
+        run.qc_path.write_text(run.qc_path.read_text() + ' ')
+    elif damage == 'missing_qc_report':
+        run.qc_path.unlink()
+    elif damage == 'no_index_processed_sha':
+        document = copy.deepcopy(run.index_document)
+        document['collected_tasks'][0]['processed_result_sha256'] = None
+        dump(run.index, document)
+    elif damage == 'phase1_result_not_bound':
+        document = json.loads(run.processed.read_text())
+        document['phase1_result_sha256'] = '0' * 64
+        dump(run.processed, document)
+        index = copy.deepcopy(run.index_document)
+        index['collected_tasks'][0]['processed_result_sha256'] = sha(run.processed)
+        dump(run.index, index)
     else:
         run.manifest.unlink()
     refused(run, code)
+
+
+def test_the_qc_report_is_found_under_the_fault_out_directory_when_the_processor_faulted(tmp_path, prepared):
+    run = prepared(make_run(tmp_path))
+    out = run.processed_dir / 'out'
+    out.mkdir()
+    run.qc_path = Path(shutil.move(str(run.qc_path), str(out / 'qc-report.json')))
+    run.processed = write_processed(run, SCENE, 'PASS', fault='SOME_FAULT')
+    index = copy.deepcopy(run.index_document)
+    index['collected_tasks'][0]['processed_result_sha256'] = sha(run.processed)
+    dump(run.index, index)
+    assert judged(run)['verdict'] == 'PASS'
+
+
+def test_several_processing_attempts_with_the_bound_processed_result_are_refused_but_unbound_ones_are_ignored(tmp_path, prepared):
+    run = prepared(make_run(tmp_path))
+    other = run.root / 'processing' / SCENE / (SCENE + '-lease-1-proc-2')
+    other.mkdir(parents=True)
+    (other / 'processed-result.json').write_text(run.processed.read_text())      # same bytes: two candidates
+    refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
+    (other / 'processed-result.json').write_text('{}')                            # different bytes: not the bound one
+    assert judged(run)['verdict'] == 'PASS'
+
+
+def test_the_verdict_names_the_bound_qc_report_and_processed_result(tmp_path, prepared):
+    run = prepared(make_run(tmp_path))
+    verdict = judged(run)
+    assert verdict['qc_report'] == dict(path=str(run.qc_path), sha256=sha(run.qc_path))
+    assert verdict['processed_result'] == dict(path=str(run.processed), sha256=sha(run.processed))
 
 
 def test_a_summary_that_is_not_well_formed_is_refused(tmp_path, prepared):

@@ -1,8 +1,10 @@
 """Judge one finished container contact-policy spot-check run and write `spot-check-verdict.json`.
 
 The input is the run root of an `act_collect_parallel --spot-check` campaign: its `collection-index.json` (one collected task, a
-qualification index with no committed episode), the task result and sealed result the index binds, the QC report and the Teacher
-`dynamic-execute-manifest.json` that QC bound (the judged manifest is the bound one, by sha256), and the run's frozen inputs, from
+qualification index with no committed episode), the task result and sealed result the index binds, the phase-2 processed result
+the index binds by `processed_result_sha256` (`<run>/processing/<scene>/<attempt>-proc-<n>/processed-result.json`, exactly one
+candidate), the QC report that result binds by `qc_report_sha256`, the Teacher `dynamic-execute-manifest.json` that QC bound (the
+judged manifest is the bound one, by sha256), and the run's frozen inputs, from
 which the contact proposal and the Teacher execution policy are read. Every limit is read from the frozen proposal; nothing is
 defaulted. The only fixed value is the over-squeeze close target the CP-3531 reading names (`OVER_SQUEEZE_CLOSE_TARGET_RAD`).
 
@@ -27,10 +29,12 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import sys
 
 from so101_demo.act.diagnostic_episode_inputs import verify_frozen_inputs
 from so101_demo.act.episode_qc import REFERENCE_CHECK, read_qc_report
+from so101_demo.act.processed_result import PROCESSED_KIND, PROCESSED_NAME, data_directory
 from so101_demo.core.process_summary import FLAG_COLLISION, FLAG_OVERLOAD, HOLD_PHASES, validate_summary
 
 VERDICT_KIND = 'ACT_CONTACT_SPOT_CHECK_VERDICT'
@@ -105,8 +109,43 @@ def _frozen(run: Path) -> tuple[Path, dict, Path, dict]:
     return manifest, frozen, path, proposal
 
 
+_PROC_DIR = re.compile(r'(?P<attempt>.+)-proc-(?P<number>[1-9][0-9]*)')
+
+
+def _processed_result(run: Path, task: dict, sealed: Path, result_sha: str) -> tuple[Path, dict]:
+    """The phase-2 processed result of the task, found the way the production verifier binds it.
+
+    The phase-2 output directory of a scene is `<run>/processing/<scene>/<attempt>-proc-<n>` (`act.processed_result` requires
+    `base.name == f"{attempt}-proc-{number}"`, `base.parent.name == scene_id`, `attempt == sealed.parent.name`, and the campaign requires
+    it under `<run>/processing/<scene>`). The index entry carries `processed_result_sha256`, the sha256 of its `processed-result.json`.
+    The candidates are exactly the directories of that form; the one whose `processed-result.json` hashes to the index value is the
+    bound one. None or several is refused."""
+    code = 'SPOT_CHECK_BINDING_MISMATCH'
+    scene, bound = task['scene_id'], task['processed_result_sha256']
+    if type(scene) is not str or type(bound) is not str or not bound:
+        raise ValueError(code)
+    attempt = sealed.parent.name
+    parent = run / 'processing' / scene
+    found = []
+    for entry in sorted(parent.iterdir()):
+        match = _PROC_DIR.fullmatch(entry.name)
+        if match is None or match['attempt'] != attempt or entry.is_symlink() or not entry.is_dir():
+            continue
+        document = entry / PROCESSED_NAME
+        if document.is_file() and not document.is_symlink() and _sha(document) == bound:
+            found.append((entry, document, int(match['number'])))
+    if len(found) != 1:
+        raise ValueError(code)
+    _entry, path, number = found[0]
+    document = _json(path, code)
+    if (document.get('kind') != PROCESSED_KIND or document.get('scene_id') != scene or document.get('proc_attempt') != number
+            or document.get('task_id') != f'{scene}-proc-{number}' or document.get('phase1_result_sha256') != result_sha):
+        raise ValueError(code)
+    return path, document
+
+
 def _bound_files(run: Path, task: dict) -> dict:
-    """The task result, sealed result, QC report and Teacher manifest of the one task, each bound by sha256."""
+    """The task result, sealed result, phase-2 processed result, QC report and Teacher manifest of the one task, each bound by sha256."""
     code = 'SPOT_CHECK_BINDING_MISMATCH'
     try:
         location = Path(task['location'])
@@ -116,15 +155,22 @@ def _bound_files(run: Path, task: dict) -> dict:
         sealed = sorted(location.glob('attempts/*/*/sealed'))
         if len(sealed) != 1 or _sha(task_result) != task['task_result_sha256']:
             raise ValueError(code)
-        result, qc, manifest = sealed[0] / 'result.json', sealed[0] / 'qc-report.json', sealed[0] / 'dynamic/dynamic-execute-manifest.json'
+        result, manifest = sealed[0] / 'result.json', sealed[0] / 'dynamic/dynamic-execute-manifest.json'
         if _sha(result) != task['result_sha256']:
+            raise ValueError(code)
+        processed, document = _processed_result(run, task, sealed[0], task['result_sha256'])
+        name = document['qc_report_path']
+        if type(name) is not str or not name or Path(name).is_absolute() or '..' in Path(name).parts:
+            raise ValueError(code)
+        qc = data_directory(processed.parent, document) / name
+        if qc.is_symlink() or not qc.is_file() or _sha(qc) != document['qc_report_sha256']:
             raise ValueError(code)
         bound = read_qc_report(qc)['checks'][REFERENCE_CHECK]['details']['teacher_manifest_sha256']
         if _sha(manifest) != bound:
             raise ValueError(code)
     except (OSError, KeyError, TypeError, ValueError) as error:
         raise ValueError(code) from error
-    return dict(task_result=task_result, result=result, qc=qc, manifest=manifest)
+    return dict(task_result=task_result, result=result, processed=processed, qc=qc, manifest=manifest)
 
 
 def _equal(left, right) -> bool:
@@ -201,7 +247,7 @@ def judge_run(run, spot_check, *, expected_fingerprint=None) -> dict:
         kind=VERDICT_KIND, schema_version=1, spot_check=spot_check, verdict='FAIL' if reasons else 'PASS', reasons=reasons,
         checks=checks, policy_fingerprint=proposal['policy_fingerprint'], run=str(run),
         campaign_id=_index_document.get('campaign_id'), scene_id=task.get('scene_id'), task_id=task.get('task_id'),
-        collection_index=_ref(index_path), task_result=_ref(files['task_result']), sealed_result=_ref(files['result']),
+        collection_index=_ref(index_path), task_result=_ref(files['task_result']), sealed_result=_ref(files['result']), processed_result=_ref(files['processed']),
         qc_report=_ref(files['qc']), teacher_manifest=_ref(files['manifest']), frozen_inputs=_ref(frozen_manifest),
         proposal=_ref(proposal_path),
         limits=dict(maximum_safe_force_n=force_limit, maximum_compression_distance_m=compression_limit_m,
