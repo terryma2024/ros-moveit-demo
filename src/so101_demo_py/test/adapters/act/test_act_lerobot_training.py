@@ -21,18 +21,20 @@ CONFIG = PACKAGE_ROOT / "config/act/training.yaml"
 SPLITS = {"act-1": "train", "act-2": "train", "act-3": "validation"}
 
 
-def _config(steps=3, batch_size=2):
+def _config(steps=3, batch_size=2, **training):
     from so101_demo.act.training_config import load_training_config
     config = load_training_config(CONFIG)
-    config["training"] = {**config["training"], "steps": steps, "batch_size": batch_size, "pretrained_backbone": None}
+    # the CPU tests load in-process (num_workers 0) unless a test asks for workers
+    config["training"] = {**config["training"], "steps": steps, "batch_size": batch_size, "pretrained_backbone": None,
+                          "num_workers": 0, **training}
     return config
 
 
-def _train(tmp_path, monkeypatch, *, steps=3, neck=(0.0, 1.0), name="bundle"):
+def _train(tmp_path, monkeypatch, *, steps=3, neck=(0.0, 1.0), name="bundle", **training):
     from so101_demo.act.training import train_act
     from so101_demo.adapters.act.lerobot import train_act_bundle
     dataset = synthetic_dataset(tmp_path, monkeypatch, splits=SPLITS, neck=neck)
-    config = _config(steps=steps)
+    config = _config(steps=steps, **training)
 
     def trainer(cfg, view, output):
         return train_act_bundle(cfg, view, output, requirements_sha256="a" * 64, device="cpu")
@@ -108,11 +110,12 @@ def test_the_trainer_cycles_only_the_train_split(tmp_path, monkeypatch):
     real = lerobot._chunk_samples
 
     def spy(samples, *args, **kwargs):
-        seen["scenes"] = [item["scene_id"] for item in samples]
+        seen.setdefault("calls", []).append([item["scene_id"] for item in samples])
         return real(samples, *args, **kwargs)
     monkeypatch.setattr(lerobot, "_chunk_samples", spy)
     _train(tmp_path, monkeypatch)
-    assert seen["scenes"] == ["act-1", "act-2"]
+    # the training index is the first call and holds the train episodes only; the validation episodes are indexed separately for evaluation
+    assert seen["calls"][0] == ["act-1", "act-2"] and seen["calls"][1:] == [["act-3"]]
 
 
 def test_tail_padding_is_masked_and_never_borrows_another_episode():
@@ -219,3 +222,72 @@ def test_a_backbone_whose_bytes_do_not_match_the_pinned_hash_is_refused_at_load(
         _load_backbone(policy, weights, "0" * 64)
     _load_backbone(policy, weights, digest)
     assert _act_config(10, 1, [3, 32, 32], "cpu").pretrained_backbone_weights is None       # LeRobot never downloads
+
+
+def _metrics(root):
+    return [json.loads(line) for line in (root / "metrics.jsonl").read_text().splitlines()]
+
+
+def test_the_loop_writes_progress_and_validation_records_at_the_configured_intervals(tmp_path, monkeypatch, capsys):
+    from so101_demo.act.bundle import load_bundle
+    _, _, root = _train(tmp_path, monkeypatch, steps=5, log_interval_steps=2, validation_interval_steps=4, validation_samples=3)
+    records = _metrics(root)
+    train = [row for row in records if row["kind"] == "train"]
+    assert [row["step"] for row in train] == [2, 4, 5]               # every 2 steps and the last, a partial window included
+    assert [row["window_steps"] for row in train] == [2, 2, 1]
+    for row in train:
+        for key in ("loss", "l1_loss", "kld_loss", "learning_rate", "samples_per_s", "elapsed_s", "eta_s",
+                    "wait_s_per_step", "compute_s_per_step", "wait_share"):
+            assert row[key] == row[key] and row[key] >= 0.0, key
+        assert 0.0 <= row["wait_share"] <= 1.0
+    assert train[-1]["eta_s"] == 0.0 and train[0]["learning_rate"] == 1.0e-5
+    log = json.loads((root / "training-log.json").read_text())
+    window_mean = sum(entry["loss"] for entry in log["steps"][:2]) / 2
+    assert train[0]["loss"] == pytest.approx(window_mean)
+    validation = [row for row in records if row["kind"] == "validation"]
+    assert [row["step"] for row in validation] == [4, 5]             # the interval and the last step
+    assert all(row["samples"] == 3 and row["loss"] == row["loss"] for row in validation)
+    assert log["validations"] == validation and log["last_validation"] == validation[-1]
+    assert log["metrics_file"] == "metrics.jsonl" and log["num_workers"] == 0 and len(log["steps"]) == 5
+    assert load_bundle(root / "bundle.json")["normalization"]["last_validation"] == validation[-1]
+    out = capsys.readouterr().out
+    assert "step=2/5" in out and "step=5/5" in out and "validation step=4" in out
+
+
+def test_validation_does_not_change_what_is_trained(tmp_path, monkeypatch):
+    """The training losses are identical with validation running every step and with it effectively never running."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    _, _, frequent = _train(tmp_path / "a", monkeypatch, steps=4, validation_interval_steps=1, validation_samples=4, name="b")
+    _, _, rare = _train(tmp_path / "b", monkeypatch, steps=4, validation_interval_steps=10 ** 6, validation_samples=4, name="b")
+    first = [entry["loss"] for entry in json.loads((frequent / "training-log.json").read_text())["steps"]]
+    second = [entry["loss"] for entry in json.loads((rare / "training-log.json").read_text())["steps"]]
+    assert first == second
+
+
+def test_the_validation_subset_is_fixed_and_drawn_only_from_validation_episodes(tmp_path, monkeypatch):
+    _, _, root = _train(tmp_path, monkeypatch, steps=2, validation_interval_steps=1, validation_samples=2)
+    validation = [row for row in _metrics(root) if row["kind"] == "validation"]
+    assert [row["step"] for row in validation] == [1, 2] and all(row["samples"] == 2 for row in validation)
+
+
+def test_num_workers_comes_from_the_config_and_an_argument_wins(tmp_path, monkeypatch):
+    from so101_demo.act.training import train_act
+    from so101_demo.adapters.act.lerobot import train_act_bundle
+    dataset = synthetic_dataset(tmp_path, monkeypatch, splits=SPLITS)
+    seen = []
+    real = torch.utils.data.DataLoader
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs["num_workers"])
+        return real(*args, **kwargs)
+    monkeypatch.setattr(torch.utils.data, "DataLoader", spy)
+    for name, config_workers, argument, expected in (("a", 1, None, 1), ("b", 1, 0, 0)):
+        outcome = train_act(config=_config(steps=1, num_workers=config_workers), requirements={"status": "RESOLVED"}, dataset=dataset,
+                            owner={"device": "cuda", "run_root": str(tmp_path)}, output=tmp_path / name,
+                            trainer=lambda cfg, view, out, argument=argument: train_act_bundle(
+                                cfg, view, out, requirements_sha256="a" * 64, device="cpu", num_workers=argument))
+        assert outcome["status"] == "COMPLETED"
+        log = json.loads((tmp_path / name / "training-log.json").read_text())
+        assert log["num_workers"] == expected
+    assert seen[0] == 1 and seen[2] == 0                              # training loaders; the validation loaders follow each

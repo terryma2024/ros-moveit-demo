@@ -149,3 +149,29 @@ def test_a_configuration_of_another_schema_is_refused(tmp_path):
     del document["normalization"]["std_floor"]
     with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
         load_training_config(_write(tmp_path, document))
+
+
+def test_the_progress_validation_and_worker_keys_default_and_are_validated(tmp_path):
+    document = load_training_config(CONFIG)["training"]
+    assert (document["log_interval_steps"], document["validation_interval_steps"], document["validation_samples"],
+            document["num_workers"]) == (100, 2000, 512, 4)
+    raw = yaml.safe_load(CONFIG.read_text())
+    for key in ("log_interval_steps", "validation_interval_steps", "validation_samples", "num_workers"):
+        del raw["training"][key]
+    path = tmp_path / "old.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    assert load_training_config(path)["training"]["num_workers"] == 4          # an older file without the keys still loads
+    assert _load(tmp_path, **{"training.num_workers": 0})["training"]["num_workers"] == 0
+    for key, value, code in (("log_interval_steps", 0, "TRAINING_LOG_INTERVAL_STEPS_INVALID"),
+                             ("log_interval_steps", 1.5, "TRAINING_LOG_INTERVAL_STEPS_INVALID"),
+                             ("validation_interval_steps", -1, "TRAINING_VALIDATION_INTERVAL_STEPS_INVALID"),
+                             ("validation_samples", 0, "TRAINING_VALIDATION_SAMPLES_INVALID"),
+                             ("validation_samples", True, "TRAINING_VALIDATION_SAMPLES_INVALID"),
+                             ("num_workers", -1, "TRAINING_NUM_WORKERS_INVALID"),
+                             ("num_workers", 65, "TRAINING_NUM_WORKERS_INVALID"),
+                             ("num_workers", "4", "TRAINING_NUM_WORKERS_INVALID"),
+                             ("num_workers", 2.0, "TRAINING_NUM_WORKERS_INVALID")):
+        with pytest.raises(ValueError, match=code):
+            _load(tmp_path, **{f"training.{key}": value})
+    with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
+        _load(tmp_path, **{"training.surprise": 1})

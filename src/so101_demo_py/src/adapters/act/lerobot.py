@@ -28,6 +28,10 @@ _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling
 _POLICY_FILE = "policy.safetensors"
 BUNDLE_FILE = "bundle.json"
 _LOG_FILE = "training-log.json"
+METRICS_FILE = "metrics.jsonl"
+DEFAULT_LOG_INTERVAL_STEPS = 100
+DEFAULT_VALIDATION_INTERVAL_STEPS = 2000
+DEFAULT_VALIDATION_SAMPLES = 512
 _MODEL_SOURCE = "lerobot-act"
 
 #: D8: the one table that maps the recorder's PNG keys (sealed episodes and validators fix these names) to the runtime observation
@@ -486,37 +490,43 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     chunk_size = action_cfg["chunk_size"]
     state_mean, state_std = np.asarray(stats["state_mean"]), np.asarray(stats["state_std"])
     action_mean, action_std = np.asarray(stats["action_mean"]), np.asarray(stats["action_std"])
-    episodes = []
-    for sample in train:
-        rows = sample["rows"]
-        states = ((np.asarray([row["observation"]["state"] for row in rows]) - state_mean) / state_std).astype(np.float32)
-        actions = ((np.asarray([row["action"] for row in rows]) - action_mean) / action_std).astype(np.float32)
-        episodes.append({"states": states, "actions": actions,
-                         "head": [row["observation"]["head_png"] for row in rows],
-                         "wrist": [row["observation"]["wrist_png"] for row in rows]})
+    def build_episodes(split_samples):
+        built = []
+        for sample in split_samples:
+            rows = sample["rows"]
+            states = ((np.asarray([row["observation"]["state"] for row in rows]) - state_mean) / state_std).astype(np.float32)
+            actions = ((np.asarray([row["action"] for row in rows]) - action_mean) / action_std).astype(np.float32)
+            built.append({"states": states, "actions": actions,
+                          "head": [row["observation"]["head_png"] for row in rows],
+                          "wrist": [row["observation"]["wrist_png"] for row in rows]})
+        return built
+
+    episodes = build_episodes(train)
     first = decode_png(root / episodes[0]["head"][0])
     image_shape = (3, int(first.shape[0]), int(first.shape[1]))
 
     index = _chunk_samples(train)
 
-    class _Chunks(torch.utils.data.Dataset):
-        def __len__(self):
-            return len(index)
+    def chunks_dataset(episode_list, chunk_index):
+        class _Chunks(torch.utils.data.Dataset):
+            def __len__(self):
+                return len(chunk_index)
 
-        def __getitem__(self, position):
-            episode_index, row = index[position]
-            episode = episodes[episode_index]
-            images = []
-            for camera in ("head", "wrist"):
-                array = decode_png(root / episode[camera][row])
-                if array.shape != (image_shape[1], image_shape[2], 3):
-                    raise ValueError("TRAINING_IMAGE_SHAPE_MISMATCH")
-                images.append(np.ascontiguousarray(array.transpose(2, 0, 1)))
-            chunk, pad = _action_window(episode["actions"], row, chunk_size)
-            # numpy, not tensors: worker tensors travel through shared memory and a socket under TMPDIR, whose 107-byte path limit the
-            # deep scratch directories of the evidence roots exceed (the DataLoader then hangs); pickled arrays need neither
-            return {_STATE_KEY: episode["states"][row], "observation.images.head": images[0],
-                    "observation.images.wrist": images[1], "action": chunk, "action_is_pad": pad}
+            def __getitem__(self, position):
+                episode_index, row = chunk_index[position]
+                episode = episode_list[episode_index]
+                images = []
+                for camera in ("head", "wrist"):
+                    array = decode_png(root / episode[camera][row])
+                    if array.shape != (image_shape[1], image_shape[2], 3):
+                        raise ValueError("TRAINING_IMAGE_SHAPE_MISMATCH")
+                    images.append(np.ascontiguousarray(array.transpose(2, 0, 1)))
+                chunk, pad = _action_window(episode["actions"], row, chunk_size)
+                # numpy, not tensors: worker tensors travel through shared memory and a socket under TMPDIR, whose 107-byte path limit the
+                # deep scratch directories of the evidence roots exceed (the DataLoader then hangs); pickled arrays need neither
+                return {_STATE_KEY: episode["states"][row], "observation.images.head": images[0],
+                        "observation.images.wrist": images[1], "action": chunk, "action_is_pad": pad}
+        return _Chunks()
 
     def stack(items):
         return {key: np.stack([item[key] for item in items]) for key in items[0]}
@@ -525,8 +535,16 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     torch.manual_seed(seed)
     generator = torch.Generator()
     generator.manual_seed(seed)
-    workers = (4 if str(device).startswith("cuda") else 0) if num_workers is None else num_workers
-    loader = torch.utils.data.DataLoader(_Chunks(), batch_size=hyper["batch_size"], shuffle=True, generator=generator,
+    if num_workers is not None:
+        workers = num_workers                                   # an explicit argument wins
+    elif "num_workers" in hyper:
+        workers = hyper["num_workers"]                          # the training.yaml key (default 4)
+    else:
+        workers = 4 if str(device).startswith("cuda") else 0
+    log_interval = hyper.get("log_interval_steps", DEFAULT_LOG_INTERVAL_STEPS)
+    validation_interval = hyper.get("validation_interval_steps", DEFAULT_VALIDATION_INTERVAL_STEPS)
+    validation_count = hyper.get("validation_samples", DEFAULT_VALIDATION_SAMPLES)
+    loader = torch.utils.data.DataLoader(chunks_dataset(episodes, index), batch_size=hyper["batch_size"], shuffle=True, generator=generator,
                                          num_workers=workers, collate_fn=stack,
                                          persistent_workers=workers > 0, drop_last=False,
                                          timeout=_LOADER_TIMEOUT_S if workers > 0 else 0)
@@ -538,12 +556,69 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     policy.to(device).train()
     optimizer = torch.optim.AdamW(policy.get_optim_params(), lr=hyper["learning_rate"], weight_decay=_WEIGHT_DECAY)
 
-    log, step = [], 0
+    # validation: the exported dataset's validation episodes (already digest-verified by load_training_view) over a fixed, evenly spaced
+    # subset of their chunks. The loader owns its generator, so evaluating never advances the global or the training RNG.
+    validation = [sample for sample in samples if sample["split"] == "validation"]
+    validation_loader, validation_used = None, 0
+    if validation:
+        validation_index = _chunk_samples(validation)
+        picks = np.unique(np.linspace(0, len(validation_index) - 1, min(validation_count, len(validation_index))).astype(np.int64))
+        validation_generator = torch.Generator()
+        validation_generator.manual_seed(seed)
+        validation_loader = torch.utils.data.DataLoader(
+            chunks_dataset(build_episodes(validation), [validation_index[int(position)] for position in picks]),
+            batch_size=hyper["batch_size"], shuffle=False, generator=validation_generator, num_workers=workers, collate_fn=stack,
+            persistent_workers=False, drop_last=False, timeout=_LOADER_TIMEOUT_S if workers > 0 else 0)
+        validation_used = int(len(picks))
+
+    def to_device(batch):
+        batch = {key: torch.from_numpy(value).to(device) for key, value in batch.items()}
+        for camera in ("head", "wrist"):
+            batch[f"observation.images.{camera}"] = _normalise_images(batch[f"observation.images.{camera}"])
+        return batch
+
+    metrics = open(Path(target) / METRICS_FILE, "w")
+
+    def emit(entry, line):
+        metrics.write(json.dumps(entry, sort_keys=True, allow_nan=False) + chr(10))
+        metrics.flush()
+        print(line, flush=True)
+
+    def evaluate(at_step):
+        """Mean loss over the fixed validation subset, in eval mode and without gradients; the training mode is restored."""
+        began = time.monotonic()
+        totals, count = {"loss": 0.0, "l1_loss": 0.0, "kld_loss": 0.0}, 0
+        policy.eval()
+        try:
+            with torch.no_grad():
+                for batch in validation_loader:
+                    size = len(batch["action"])
+                    loss, parts = policy(to_device(batch))
+                    totals["loss"] += float(loss.item()) * size
+                    totals["l1_loss"] += float(parts["l1_loss"]) * size
+                    totals["kld_loss"] += float(parts.get("kld_loss", 0.0)) * size
+                    count += size
+        finally:
+            policy.train()
+        entry = {"kind": "validation", "step": at_step, "samples": count, "elapsed_s": time.monotonic() - began,
+                 **{key: value / count for key, value in totals.items()}}
+        if not all(np.isfinite(entry[key]) for key in totals):
+            raise ValueError("TRAINING_VALIDATION_LOSS_NOT_FINITE")
+        emit(entry, f"validation step={at_step} loss={entry['loss']:.5f} l1={entry['l1_loss']:.5f} samples={count}")
+        return entry
+
+    def fresh_window():
+        return {"steps": 0, "samples": 0, "loss": 0.0, "l1_loss": 0.0, "kld_loss": 0.0, "wait_s": 0.0, "compute_s": 0.0}
+
+    log, validations, step = [], [], 0
+    window = fresh_window()
+    previous_end = time.perf_counter()
     while step < hyper["steps"]:
         for batch in loader:
-            batch = {key: torch.from_numpy(value).to(device) for key, value in batch.items()}
-            for camera in ("head", "wrist"):
-                batch[f"observation.images.{camera}"] = _normalise_images(batch[f"observation.images.{camera}"])
+            # wait: the end of the previous optimiser step to the batch being on the host. compute: the batch to the end of the step,
+            # which includes `loss.item()`; that already synchronises the device every step, so neither span needs an extra sync.
+            batch_ready = time.perf_counter()
+            batch = to_device(batch)
             loss, parts = policy(batch)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -553,15 +628,46 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
             value = float(loss.item())
             if not np.isfinite(value):
                 raise ValueError("TRAINING_LOSS_NOT_FINITE")
-            log.append({"step": step, "loss": value, "l1_loss": float(parts["l1_loss"]), "kld_loss": float(parts.get("kld_loss", 0.0))})
-            if step >= hyper["steps"]:
+            entry = {"step": step, "loss": value, "l1_loss": float(parts["l1_loss"]), "kld_loss": float(parts.get("kld_loss", 0.0))}
+            log.append(entry)
+            step_end = time.perf_counter()
+            window["steps"] += 1
+            window["samples"] += len(batch["action"])
+            for key in ("loss", "l1_loss", "kld_loss"):
+                window[key] += entry[key]
+            window["wait_s"] += batch_ready - previous_end
+            window["compute_s"] += step_end - batch_ready
+            last = step >= hyper["steps"]
+            if step % log_interval == 0 or last:
+                n = window["steps"]
+                busy = max(window["wait_s"] + window["compute_s"], 1e-9)
+                record = {"kind": "train", "step": step, "loss": window["loss"] / n, "l1_loss": window["l1_loss"] / n,
+                          "kld_loss": window["kld_loss"] / n, "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                          "samples_per_s": window["samples"] / busy, "elapsed_s": time.monotonic() - started,
+                          "eta_s": (hyper["steps"] - step) * busy / n, "window_steps": n,
+                          "wait_s_per_step": window["wait_s"] / n, "compute_s_per_step": window["compute_s"] / n,
+                          "wait_share": window["wait_s"] / busy}
+                emit(record, f"step={step}/{hyper['steps']} loss={record['loss']:.5f} l1={record['l1_loss']:.5f} "
+                             f"kld={record['kld_loss']:.5f} lr={record['learning_rate']:.2e} {record['samples_per_s']:.1f} samples/s "
+                             f"wait={record['wait_share']:.1%} elapsed={record['elapsed_s']:.0f}s eta={record['eta_s']:.0f}s")
+                window = fresh_window()
+            if validation_loader is not None and (step % validation_interval == 0 or last):
+                validations.append(evaluate(step))
+            previous_end = time.perf_counter()      # log and validation time is neither wait nor compute
+            if last:
                 break
+    metrics.close()
     policy.eval()
     save_model(policy, str(Path(target) / _POLICY_FILE))
+    last_validation = validations[-1] if validations else None
     (Path(target) / _LOG_FILE).write_text(json.dumps(
         {"schema_version": 1, "kind": "act_training_log", "device": str(device), "seed": seed, "steps_requested": hyper["steps"],
          "batch_size": hyper["batch_size"], "learning_rate": hyper["learning_rate"], "train_samples": len(index),
-         "elapsed_s": time.monotonic() - started, "steps": log}, sort_keys=True, allow_nan=False) + chr(10))
+         "elapsed_s": time.monotonic() - started, "steps": log,
+         "metrics_file": METRICS_FILE, "num_workers": workers, "log_interval_steps": log_interval,
+         "validation_interval_steps": validation_interval, "validation_samples": validation_used,
+         "validations": validations, "last_validation": last_validation}, sort_keys=True, allow_nan=False) + chr(10))
+    stats = {**stats, "last_validation": last_validation}
     return {**stats, "image_shape": list(image_shape), "pretrained_backbone": backbone}
 
 

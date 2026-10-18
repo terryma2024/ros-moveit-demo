@@ -17,6 +17,11 @@ import yaml
 # schema 2: the frozen contract plus the optimisation hyper-parameters and the normalisation std floor
 _CONFIG_KEYS = frozenset({"schema_version", "kind", "action", "observation", "normalization", "frozen", "training"})
 _TRAINING_KEYS = frozenset({"steps", "learning_rate", "batch_size", "pretrained_backbone"})
+# optional keys, filled with these defaults when absent: progress logging, validation and the DataLoader width. None of them
+# changes what is trained (the maths, the seed or the sampling order).
+TRAINING_OPTIONAL_DEFAULTS = {"log_interval_steps": 100, "validation_interval_steps": 2000, "validation_samples": 512,
+                              "num_workers": 4}
+_MAX_NUM_WORKERS = 64
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _OBSERVATION_KEYS = frozenset({"cameras", "state_dim", "action_dim"})
 _FROZEN_KEYS = frozenset({"seed", "preprocessing_sha256"})
@@ -81,8 +86,15 @@ def load_training_config(path) -> dict:
         # a dimension with no spread (the neck under a fixed head) must still normalise to a finite value
         raise ValueError("TRAINING_STD_FLOOR_INVALID")
     training = document["training"]
-    if not isinstance(training, dict) or set(training) != _TRAINING_KEYS:
+    if not isinstance(training, dict) or not _TRAINING_KEYS <= set(training) <= _TRAINING_KEYS | set(TRAINING_OPTIONAL_DEFAULTS):
         raise ValueError("TRAINING_CONFIG_INVALID")
+    for key, default in TRAINING_OPTIONAL_DEFAULTS.items():
+        training.setdefault(key, default)
+    for key in ("log_interval_steps", "validation_interval_steps", "validation_samples"):
+        if type(training[key]) is not int or training[key] < 1:
+            raise ValueError(f"TRAINING_{key.upper()}_INVALID")
+    if type(training["num_workers"]) is not int or not 0 <= training["num_workers"] <= _MAX_NUM_WORKERS:
+        raise ValueError("TRAINING_NUM_WORKERS_INVALID")
     if type(training["steps"]) is not int or training["steps"] < 1:
         raise ValueError("TRAINING_STEPS_INVALID")
     if type(training["batch_size"]) is not int or training["batch_size"] < 1:
