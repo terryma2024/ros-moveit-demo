@@ -1,6 +1,6 @@
 # SO-101 ACT optimisation batch after TRAIN-001: design and plan
 
-Status: PROPOSED on 2026-10-18, awaiting human confirmation.
+Status: CONFIRMED by the human on 2026-10-18 ("都确认"); executing.
 
 ## Background
 

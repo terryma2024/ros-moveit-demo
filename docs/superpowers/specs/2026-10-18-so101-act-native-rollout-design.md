@@ -1,6 +1,6 @@
 # SO-101 ACT: native closed-loop rollout in MuJoCo — design
 
-Status: PROPOSED on 2026-10-18, awaiting human confirmation. It is part O6 of `docs/superpowers/plans/2026-10-18-so101-act-optimisation-batch.md`.
+Status: CONFIRMED by the human on 2026-10-18 ("都确认"). It is part O6 of `docs/superpowers/plans/2026-10-18-so101-act-optimisation-batch.md`.
 
 ## Human decisions (2026-10-18)
 
