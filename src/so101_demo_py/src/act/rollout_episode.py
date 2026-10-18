@@ -312,6 +312,12 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
                 result["stop"] = {"confirmed": False, "error": _text(stop_error)}
     finally:
         retire_errors = []
+        if loop.pending is not None:
+            # a request still in flight at the end is never applied; the boundary must be free for the next episode
+            try:
+                ports.inference.abandon()
+            except Exception as error:
+                retire_errors.append("INFERENCE_ABANDON_FAILED: " + _text(error))
         if recorder is not None:
             try:
                 facts = recorder.finish()

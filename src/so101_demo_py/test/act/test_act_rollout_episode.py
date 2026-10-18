@@ -234,6 +234,7 @@ def test_a_policy_that_places_the_cup_is_done_and_the_nodes_follow_the_gate():
     assert result["counts"]["applied"] > 5 and result["counts"]["late_replies"] == 0
     assert len(sink.steps) >= result["counts"]["observations"] and sink.world_rows
     assert result["substitutions"]["start_target"] == "commanded_reset_pose"
+    assert ports.inference.pending is None                      # a request left in flight is abandoned, not carried over
 
 
 def test_the_applied_prefix_is_a_valid_prefix_of_the_observation():

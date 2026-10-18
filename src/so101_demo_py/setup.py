@@ -138,6 +138,8 @@ setup(
             "act_inference_worker = so101_demo.cli.act_inference_worker:main",
             "act_session = so101_demo.cli.act_session:main",
             "act_evaluate = so101_demo.cli.act_evaluate:main",
+            "act_rollout_scenes = so101_demo.cli.act_rollout_scenes:main",
+            "act_rollout_native = so101_demo.cli.act_rollout_native:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
             # launches on this platform, because so101_parallel_batch refuses it outright.

@@ -224,7 +224,10 @@ def verify_scene_document(document: dict, *, taken_xy, place_xy,
                           place_exclusion_m: float = PLACE_EXCLUSION_M,
                           min_gap_within_m: float = MIN_GAP_WITHIN_M,
                           min_gap_to_taken_m: float = MIN_GAP_TO_TAKEN_M) -> None:
-    """Re-check a scene list against the rules, from the scenes' own coordinates (recorded distances are not trusted)."""
+    """Re-check a scene list against the rules, from the scenes' own coordinates (recorded distances are not trusted).
+
+    ``taken_xy`` or ``place_xy`` of None skips the rule that needs it (a run that only has the list checks its hash, its
+    structure and the within-list gap)."""
 
     if not isinstance(document, dict) or document.get("kind") != KIND or document.get("schema_version") != 1 \
             or not isinstance(document.get("groups"), dict) or not set(document["groups"]) <= set(GROUPS):
@@ -232,8 +235,8 @@ def verify_scene_document(document: dict, *, taken_xy, place_xy,
     body = {key: value for key, value in document.items() if key != "manifest_sha256"}
     if document.get("manifest_sha256") != hashlib.sha256(_canonical(body)).hexdigest():
         raise ValueError("ROLLOUT_SCENES_HASH_INVALID")
-    place = _xy(place_xy, "ROLLOUT_SCENES_INVALID")
-    taken = [_xy(point, "ROLLOUT_SCENES_INVALID") for point in taken_xy]
+    place = None if place_xy is None else _xy(place_xy, "ROLLOUT_SCENES_INVALID")
+    taken = None if taken_xy is None else [_xy(point, "ROLLOUT_SCENES_INVALID") for point in taken_xy]
     flat = [(name, scene) for name, scenes in document["groups"].items() for scene in scenes]
     for name, scene in flat:
         xy = _xy(scene.get("xy"), "ROLLOUT_SCENES_INVALID")
@@ -241,7 +244,7 @@ def verify_scene_document(document: dict, *, taken_xy, place_xy,
             raise ValueError("ROLLOUT_SCENES_INVALID")
         if name == GROUP_STANDARD:
             continue
-        if math.dist(xy, place) < place_exclusion_m - 1e-12:
+        if place is not None and math.dist(xy, place) < place_exclusion_m - 1e-12:
             raise ValueError("ROLLOUT_SCENE_PLACE_EXCLUSION: " + scene["scene_id"])
         if taken and min(math.dist(xy, point) for point in taken) < min_gap_to_taken_m - 1e-12:
             raise ValueError("ROLLOUT_SCENE_GAP_TO_TAKEN: " + scene["scene_id"])
