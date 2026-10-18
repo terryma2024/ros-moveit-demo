@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import math
 
+from .rig_profile import DEFAULT_RIG
+
 DT_S = 0.1
 _JOINTS = 6
 #: The default observation of the shipped bundles. A bundle that declares its own cameras and state width, or a caller that
 #: passes `observation=`, replaces both; nothing below assumes these names.
-_DEFAULT_CAMERAS = ("head", "wrist")
-_DEFAULT_STATE_DIM = 8
+_DEFAULT_CAMERAS = DEFAULT_RIG.camera_names
+_DEFAULT_STATE_DIM = DEFAULT_RIG.state_dim
 
 
 def observation_spec(bundle: dict, *, legacy_cameras=None) -> dict:

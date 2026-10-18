@@ -257,6 +257,18 @@ def _colors_ignored(enabled):
 
 # ---- the processor -----------------------------------------------------------------------------------------------------
 
+def _inputs_rig(inputs_manifest):
+    """The rig the frozen inputs bind. A manifest that cannot be read here is refused by the policy load that follows; the rig
+    is then the default (v1), which only the bag's own topics can contradict."""
+    from ..frozen_runtime_inputs import load_frozen_rig
+    from ..rig_profile import DEFAULT_RIG
+
+    try:
+        return load_frozen_rig(inputs_manifest)
+    except (OSError, ValueError):
+        return DEFAULT_RIG
+
+
 def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifest=None, stats_file=None,
                 episode_factory=None, sources_factory=None, policy=None, qc_runner=None, camera_repair=False,
                 teacher_clock_repair=False, ignore_scene_colors=False, qc_output=None) -> dict:
@@ -276,9 +288,10 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
 
     info = bag_info(bag)
     clock_map, clock_facts = load_clock_map(bag, stats_file=stats_file)
+    rig = _inputs_rig(inputs_manifest)
     scan_began = _REAL["perf_counter"]()
     loss_facts = load_loss_facts(bag, stats_file=stats_file)
-    scan = scan_bag(bag, info=info, **loss_facts)
+    scan = scan_bag(bag, info=info, rig=rig, **loss_facts)
     scan_s = _REAL["perf_counter"]() - scan_began
     reasons = list(scan["reasons"])
     if clock_facts["max_residual_ns"] is not None and clock_facts["max_residual_ns"] > CLOCK_RESIDUAL_LIMIT_NS:
@@ -349,18 +362,19 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
             window_start = scan.get("window_start")
             clock_repair = TeacherClockRepair() if teacher_clock_repair else None
             node = ReplayNode(stream, clock, camera_repair=repair, teacher_clock_repair=clock_repair,
-                              start_at_stamp_ns=None if window_start is None else window_start["bag_stamp_ns"])
+                              start_at_stamp_ns=None if window_start is None else window_start["bag_stamp_ns"],
+                              camera_topics=rig.image_topics)
             episode = (episode_factory or (lambda o: open_recorder_episode(o, offline=True)))(options)
             if sources_factory is None:
                 from .sources import OfflineRosSources
 
                 sources = OfflineRosSources(node, episode, options, policy=policy,
-                                            final_normal_stop_seq=timeline.get("final_normal_stop_seq"))
+                                            final_normal_stop_seq=timeline.get("final_normal_stop_seq"), rig=rig)
             else:
                 sources = sources_factory(node, episode, options, policy)
             engine = OfflineEngine(episode=episode, sources=sources, policy=policy, identity=stream_identity,
                                    result_file=Path(work) / "recorder-result.json",
-                                   clock=clock.monotonic, sleep=clock.advance)
+                                   clock=clock.monotonic, sleep=clock.advance, rig=rig)
             # a DIAGNOSTIC run looks past the camera defect: the scan names it, the engine is not told
             rc = engine.process(node, preset_reasons=[r for r in reasons
                                                        if not (camera_repair and r.startswith("OFFLINE_CAMERA_"))])

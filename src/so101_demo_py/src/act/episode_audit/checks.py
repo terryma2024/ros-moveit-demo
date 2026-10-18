@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 
 from so101_demo.act.qc_session import cached_lines
+from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_frozen
 from so101_demo.parallel_batch.contracts.common import ContractError
 from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
 
@@ -61,8 +62,26 @@ _ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequenc
                                  "stamp_s", "received_monotonic_ns", "shape", "dtype", "pixel_sha256"})
 
 
-_ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_acquisition_id",
-                         "wrist_acquisition_id", "reference_sequence"})
+def row_fields(rig) -> frozenset:
+    """The closed key set of one row binding of `rig`: one `<camera>_acquisition_id` slot per camera, in camera order."""
+    return frozenset({"row_index", "sim_time_s", *(f"{name}_acquisition_id" for name in rig.camera_names),
+                      "reference_sequence"})
+
+
+def rig_of_audit(audit) -> object:
+    """The rig an episode audit was collected under: the profile bound by the frozen inputs it carries (`inputs.json`).
+
+    An audit written before profiles existed carries none and is rig v1. An unreadable `inputs.json` is also v1 here;
+    the manifest inventory check that precedes every caller has already refused a missing or altered file.
+    """
+    try:
+        inputs = json.loads((Path(audit) / "inputs.json").read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return DEFAULT_RIG
+    return rig_from_frozen(inputs) if isinstance(inputs, dict) else DEFAULT_RIG
+
+
+_ROW_FIELDS = row_fields(DEFAULT_RIG)
 
 
 _REFERENCE_FIELDS = frozenset({"sequence", "task_sequence", "reference_time_s", "source", "positions", "accepted"})
@@ -816,15 +835,16 @@ class _Files:
                 "events": self.events, "references": self.references, "physics": self.physics}
 
 
-def _capture_window_matches_observed(window, row_times, acquisitions, *, mode):
+def _capture_window_matches_observed(window, row_times, acquisitions, *, mode, rig=DEFAULT_RIG):
     """Recompute the continuous camera inventory and label clocks in either scope."""
+    cameras = list(rig.camera_names)
     if (not _window_ok(window, mode=mode)
-            or window["streams_required"] != ["head", "wrist"]
-            or set(window["source_schedule"]) != {"head", "wrist"}
+            or window["streams_required"] != cameras
+            or set(window["source_schedule"]) != set(cameras)
             or window["cadence_s"] != _GRID_S or window["permitted_gaps_s"] != []):
         return False
     observed = {camera: sorted(row["stamp_s"] for row in acquisitions.values()
-                               if row["camera"] == camera) for camera in ("head", "wrist")}
+                               if row["camera"] == camera) for camera in cameras}
     if (any(not stamps or stamps != sorted(set(stamps)) for stamps in observed.values())
             or window["source_schedule"] != observed):
         return False

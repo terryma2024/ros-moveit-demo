@@ -6,7 +6,9 @@ import json
 import math
 from pathlib import Path
 
-from so101_demo.act.acquisition import CAMERAS, canonical_acquisition_id
+from so101_demo.act.acquisition import canonical_acquisition_id
+from so101_demo.act.rig_profile import DEFAULT_RIG
+from so101_demo.act.episode_audit.checks import row_fields as _row_fields, rig_of_audit
 from so101_demo.act.episode_audit.checks import (
     _ACQUISITION_FIELDS,
     _EVENT_FIELDS,
@@ -21,7 +23,6 @@ from so101_demo.act.episode_audit.checks import (
     _REFERENCE_FIELDS,
     _REFERENCE_FRAME_FIELDS,
     _REFERENCE_RAW_FIELDS,
-    _ROW_FIELDS,
     _STREAM_NAMES,
     _TOLERANCE_S,
     _WINDOW_FIELDS,
@@ -87,7 +88,10 @@ def verify_audit_manifest(path: Path) -> dict:
             or manifest["scope_sha256"] != _sha256(audit / "source.json")):
         # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
-    _verify_streams(audit, manifest["identity"])
+    # the rig the episode was collected under is the profile its frozen inputs bind (v1 for an audit that binds none)
+    rig = rig_of_audit(audit)
+    row_fields = _row_fields(rig)
+    _verify_streams(audit, manifest["identity"], rig)
     from so101_demo.act.teacher_collection import (
         first_command_clock,
         validate_first_command_window,
@@ -102,18 +106,18 @@ def verify_audit_manifest(path: Path) -> dict:
         if row['kind']=='collection_boundary' and row['payload']['collection_boundary']['stage']=='normal_stop']
     validate_normal_end_window(None if not normal_ends else normal_ends[0],manifest['window'])
     if set(manifest["window"]) == _WINDOW_FIELDS:
-        bound = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
+        bound = _records(audit / "row-bindings.jsonl", row_fields, "AUDIT_ROW_INVALID")
         acquired = _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
                             "AUDIT_ACQUISITION_INVALID")
         if not _capture_window_matches_observed(manifest["window"],
                 [row["sim_time_s"] for row in bound],
                 {row["acquisition_id"]: row for row in acquired},
-                mode=json.loads((audit / "source.json").read_bytes())["mode"]):
+                mode=json.loads((audit / "source.json").read_bytes())["mode"], rig=rig):
             raise ValueError("AUDIT_WINDOW_INVALID")
     if formal_window:
         # the seal's window-to-observed predicate is repeated here, from the rows this readback holds,
         # so an invented in-range instant cannot pass by satisfying `_window_ok` and the coverage gate alone
-        _bound_rows = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
+        _bound_rows = _records(audit / "row-bindings.jsonl", row_fields, "AUDIT_ROW_INVALID")
         _acquisition_rows = _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
                                      "AUDIT_ACQUISITION_INVALID")
         if not _window_matches_observed(manifest["window"],
@@ -129,14 +133,16 @@ def verify_audit_manifest(path: Path) -> dict:
     return manifest
 
 
-def _verify_streams(audit: Path, identity: dict) -> None:
+def _verify_streams(audit: Path, identity: dict, rig=DEFAULT_RIG) -> None:
     """Re-apply admission semantics to every stream, not just its checksum."""
+
+    cameras = rig.camera_names
 
     acquisitions = {}
     per_camera: dict = {}
     for row in _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
                         "AUDIT_ACQUISITION_INVALID"):
-        if (row["camera"] not in CAMERAS or list(row["shape"]) != [480, 640, 3]
+        if (row["camera"] not in cameras or list(row["shape"]) != [480, 640, 3]
                 or row["session_id"] != identity.get("session_id")
                 or row["reset_epoch"] != identity.get("reset_epoch")
                 or row["dtype"] != "uint8" or not _hex64(row["pixel_sha256"])
@@ -194,18 +200,18 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     bound: set = set()
     indexes: set = set()
     last_time: float | None = None
-    for row in _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID"):
+    for row in _records(audit / "row-bindings.jsonl", _row_fields(rig), "AUDIT_ROW_INVALID"):
+        slots = [row[f"{camera}_acquisition_id"] for camera in cameras]
         if (type(row["row_index"]) is not int or row["row_index"] < 0
                 or row["row_index"] in indexes or row["row_index"] != len(indexes)
-                or row["head_acquisition_id"] == row["wrist_acquisition_id"]
+                or any(slots[i] == slots[j] for i in range(len(slots)) for j in range(i + 1, len(slots)))
                 or not isinstance(row["sim_time_s"], (int, float))
                 or isinstance(row["sim_time_s"], bool)
                 or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0):
             raise ValueError("AUDIT_ROW_INVALID")
         indexes.add(row["row_index"])
         stamps = []
-        for value, camera in ((row["head_acquisition_id"], "head"),
-                              (row["wrist_acquisition_id"], "wrist")):
+        for value, camera in zip(slots, cameras, strict=True):
             frame = acquisitions.get(value)
             if frame is None or value in bound or frame["camera"] != camera:
                 raise ValueError("AUDIT_BINDING_UNKNOWN")
@@ -217,7 +223,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                 raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
             stamps.append(frame["stamp_s"])
             bound.add(value)
-        if abs(stamps[0] - stamps[1]) > _MAX_SKEW_S + _TOLERANCE_S:
+        if max(stamps) - min(stamps) > _MAX_SKEW_S + _TOLERANCE_S:
             raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
         if last_time is not None and abs(row["sim_time_s"] - (last_time + _GRID_S)) > _TOLERANCE_S:
             raise ValueError("AUDIT_ROW_SCHEDULE_INVALID")
@@ -344,7 +350,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             previous = source
     inputs = json.loads((audit / "inputs.json").read_bytes())
     if "execution_snapshot" in inputs:
-        bound_rows = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
+        bound_rows = _records(audit / "row-bindings.jsonl", _row_fields(rig), "AUDIT_ROW_INVALID")
         if (len(queues) != 1 or queues[0]["accepted_samples"] != len(bound_rows)
                 or queues[0]["written_samples"] != len(bound_rows)):
             raise ValueError("AUDIT_RECORDER_QUEUE_INCOMPLETE")

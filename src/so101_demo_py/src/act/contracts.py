@@ -52,18 +52,21 @@ def validate_action(values):
     return vector(values, 6)
 
 
-def validate_observation(value):
-    fields(value, ("session_id", "attempt_id", "sim_time_s", "head", "wrist", "state"))
+def validate_observation(value, rig=None):
+    """One runtime observation of `rig` (default: the v1 rig, head and wrist, an 8-wide state with the neck sin/cos)."""
+    if rig is None:
+        from .rig_profile import DEFAULT_RIG as rig
+    fields(value, ("session_id", "attempt_id", "sim_time_s", *rig.camera_names, "state"))
     identifier(value["session_id"])
     identifier(value["attempt_id"])
     finite(value["sim_time_s"], nonnegative=True)
-    state = vector(value["state"], 8)
-    if not math.isclose(state[6] ** 2 + state[7] ** 2, 1., abs_tol=1e-6):
+    state = vector(value["state"], rig.state_dim)
+    if rig.has_neck and not math.isclose(state[6] ** 2 + state[7] ** 2, 1., abs_tol=1e-6):
         raise ContractError("NECK_ENCODING_INVALID")
     # Array inspection is local; this module has no robotics or training imports.
     import numpy as np
 
-    for key in ("head", "wrist"):
+    for key in rig.camera_names:
         image = value[key]
         if (not isinstance(image, np.ndarray) or image.dtype != np.uint8
                 or image.shape != (480, 640, 3)):

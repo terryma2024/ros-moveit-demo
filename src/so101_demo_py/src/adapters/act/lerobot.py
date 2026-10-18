@@ -21,8 +21,11 @@ import hashlib
 import json
 from pathlib import Path
 
-_OBSERVATION_KEYS = frozenset({"sim_time_s", "state", "head", "wrist"})
-_IMAGE_KEYS = (("head", "observation.images.head"), ("wrist", "observation.images.wrist"))
+from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_frame_keys, rig_from_observation
+
+_OBSERVATION_KEYS = frozenset({"sim_time_s", "state", *DEFAULT_RIG.camera_names})
+#: the image keys of a policy without a declared camera set: the default rig's (v1); a bundle declares its own cameras
+_IMAGE_KEYS = tuple((name, f"observation.images.{name}") for name in DEFAULT_RIG.camera_names)
 _STATE_KEY = "observation.state"
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _POLICY_FILE = "policy.safetensors"
@@ -35,18 +38,25 @@ DEFAULT_VALIDATION_SAMPLES = 512
 _MODEL_SOURCE = "lerobot-act"
 
 #: D8: the one table that maps the recorder's PNG keys (sealed episodes and validators fix these names) to the runtime observation
-#: keys. It is used by the dataset loader only; the runtime keys stay `head` / `wrist`.
-OBSERVATION_DECODE_TABLE = (("head_png", "head"), ("wrist_png", "wrist"))
+#: keys. It is used by the dataset loader only; the runtime keys are the camera names of the rig. This is the table of the default
+#: rig (v1: `head_png`->`head`, `wrist_png`->`wrist`); a rig's own table is `rig.decode_table` (`<camera>_png`->`<camera>`).
+OBSERVATION_DECODE_TABLE = DEFAULT_RIG.decode_table
+
+_IMAGE_PREPROCESSING = {"decode": "PNG -> uint8 HxWx3 RGB", "to_tensor": "float32 CHW, x / 255",
+                        "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+
+
+def preprocessing_for(rig) -> dict:
+    """The frozen preprocessing of `rig`: its decode table, the image constants and the state and action widths. The hash of the
+    default rig's (v1) document is the one the shipped training configs froze; another rig's table and width make another hash."""
+    return {"observation_decode": dict(rig.decode_table), "image": _IMAGE_PREPROCESSING,
+            "state_dim": rig.state_dim, "action_dim": 6}
+
 
 #: Everything that turns a stored observation into a network input and is therefore frozen: the decode table, the image decode, the
 #: image scaling and normalisation constants, and the state and action widths. `preprocessing_sha256()` is bound in the training config.
-PREPROCESSING = {
-    "observation_decode": dict(OBSERVATION_DECODE_TABLE),
-    "image": {"decode": "PNG -> uint8 HxWx3 RGB", "to_tensor": "float32 CHW, x / 255",
-              "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]},
-    "state_dim": 8,
-    "action_dim": 6,
-}
+#: This is the default rig's (v1) document; `preprocessing_for(rig)` is any rig's.
+PREPROCESSING = preprocessing_for(DEFAULT_RIG)
 
 
 def sha256_file(path: Path) -> str:
@@ -62,8 +72,9 @@ def canonical_sha256(value: object) -> str:
                                      ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
-def preprocessing_sha256() -> str:
-    return canonical_sha256(PREPROCESSING)
+def preprocessing_sha256(rig=None) -> str:
+    """The hash a training config freezes: of the default rig's (v1) preprocessing, or of `rig`'s."""
+    return canonical_sha256(PREPROCESSING if rig is None else preprocessing_for(rig))
 
 
 def require_action_semantics(action: object) -> dict:
@@ -350,12 +361,16 @@ def decode_png(path) -> "numpy.ndarray":
     return array
 
 
-def decode_observation(observation: dict, dataset_root) -> dict:
-    """A stored observation -> the runtime observation: the D8 table maps `head_png`/`wrist_png` to decoded `head`/`wrist`."""
+def decode_observation(observation: dict, dataset_root, rig=None) -> dict:
+    """A stored observation -> the runtime observation: the D8 table maps each `<camera>_png` to the decoded `<camera>`.
+
+    `rig` names the table; without it the rig is the one whose frame keys the stored observation carries (v1: `head_png` and
+    `wrist_png` to `head` and `wrist`)."""
 
     root = Path(dataset_root)
     decoded = {"sim_time_s": observation["sim_time_s"], "state": list(observation["state"])}
-    for png_key, key in OBSERVATION_DECODE_TABLE:
+    table = (rig_from_frame_keys(observation) if rig is None else rig).decode_table
+    for png_key, key in table:
         relative = observation.get(png_key)
         if (not isinstance(relative, str) or not relative or Path(relative).is_absolute()
                 or ".." in Path(relative).parts):
@@ -507,10 +522,21 @@ _LOADER_TIMEOUT_S = 600     # a worker that died raises after this long instead 
 _WEIGHT_DECAY = 1e-4
 
 
+def _config_rig(config: dict):
+    """The rig a training config declares (`observation.cameras` and `state_dim`); a config without the declaration is the default rig."""
+    observation = config.get("observation") if isinstance(config, dict) else None
+    if not isinstance(observation, dict) or "cameras" not in observation:
+        return DEFAULT_RIG
+    try:
+        return rig_from_observation(observation["cameras"], observation.get("state_dim"))
+    except ValueError as error:
+        raise ValueError("TRAINING_CONFIG_INVALID") from error
+
+
 def _require_trainable_config(config: dict, requirements_sha256: str) -> None:
     if not isinstance(config, dict) or config.get("schema_version") != 2:
         raise ValueError("TRAINING_CONFIG_INVALID")
-    if config.get("frozen", {}).get("preprocessing_sha256") != preprocessing_sha256():
+    if config.get("frozen", {}).get("preprocessing_sha256") != preprocessing_sha256(_config_rig(config)):
         # the config froze a different decode/normalisation than this adapter implements
         raise ValueError("TRAINING_PREPROCESSING_DRIFT")
     if not isinstance(requirements_sha256, str) or len(requirements_sha256) != 64:
@@ -554,6 +580,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     from safetensors.torch import save_model
 
     started = time.monotonic()
+    rig = _config_rig(config)
+    cameras = rig.camera_names
     samples, root = load_training_view(view)
     stats = compute_statistics(samples, std_floor=config["normalization"]["std_floor"])
     train = [sample for sample in samples if sample["split"] == "train"]
@@ -568,12 +596,11 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
             states = ((np.asarray([row["observation"]["state"] for row in rows]) - state_mean) / state_std).astype(np.float32)
             actions = ((np.asarray([row["action"] for row in rows]) - action_mean) / action_std).astype(np.float32)
             built.append({"states": states, "actions": actions,
-                          "head": [row["observation"]["head_png"] for row in rows],
-                          "wrist": [row["observation"]["wrist_png"] for row in rows]})
+                          **{camera: [row["observation"][rig.frame_key(camera)] for row in rows] for camera in cameras}})
         return built
 
     episodes = build_episodes(train)
-    first = decode_png(root / episodes[0]["head"][0])
+    first = decode_png(root / episodes[0][cameras[0]][0])
     image_shape = (3, int(first.shape[0]), int(first.shape[1]))
 
     selection = hyper.get("sample_selection")
@@ -588,17 +615,16 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
             def __getitem__(self, position):
                 episode_index, row = chunk_index[position]
                 episode = episode_list[episode_index]
-                images = []
-                for camera in ("head", "wrist"):
+                images = {}
+                for camera in cameras:
                     array = decode_png(root / episode[camera][row])
                     if array.shape != (image_shape[1], image_shape[2], 3):
                         raise ValueError("TRAINING_IMAGE_SHAPE_MISMATCH")
-                    images.append(np.ascontiguousarray(array.transpose(2, 0, 1)))
+                    images[f"observation.images.{camera}"] = np.ascontiguousarray(array.transpose(2, 0, 1))
                 chunk, pad = _action_window(episode["actions"], row, chunk_size)
                 # numpy, not tensors: worker tensors travel through shared memory and a socket under TMPDIR, whose 107-byte path limit the
                 # deep scratch directories of the evidence roots exceed (the DataLoader then hangs); pickled arrays need neither
-                return {_STATE_KEY: episode["states"][row], "observation.images.head": images[0],
-                        "observation.images.wrist": images[1], "action": chunk, "action_is_pad": pad}
+                return {_STATE_KEY: episode["states"][row], **images, "action": chunk, "action_is_pad": pad}
         return _Chunks()
 
     def stack(items):
@@ -623,7 +649,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
                                          timeout=_LOADER_TIMEOUT_S if workers > 0 else 0)
     policy = ACTPolicy(_act_config(chunk_size, action_cfg["execution_prefix"], image_shape, device,
                                    learning_rate=hyper["learning_rate"],
-                                   head_learning_rate=hyper.get("learning_rate_backbone")))
+                                   head_learning_rate=hyper.get("learning_rate_backbone"),
+                                   cameras=cameras, state_dim=rig.state_dim))
     backbone = hyper["pretrained_backbone"]
     if backbone is not None:
         _load_backbone(policy, backbone_weights, backbone["sha256"])
@@ -648,7 +675,7 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
 
     def to_device(batch):
         batch = {key: torch.from_numpy(value).to(device) for key, value in batch.items()}
-        for camera in ("head", "wrist"):
+        for camera in cameras:
             batch[f"observation.images.{camera}"] = _normalise_images(batch[f"observation.images.{camera}"])
         return batch
 
@@ -753,7 +780,10 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
          "validation_interval_steps": validation_interval, "validation_samples": validation_used,
          "validations": validations, "last_validation": last_validation}, sort_keys=True, allow_nan=False) + chr(10))
     stats = {**stats, "last_validation": last_validation}
-    return {**stats, "image_shape": list(image_shape), "pretrained_backbone": backbone}
+    # the bundle declares the cameras and state width it was trained with (read back by `policy.observation_spec`, the rollout
+    # executor and the policy loader); a bundle written before this key existed is the default rig
+    return {**stats, "image_shape": list(image_shape), "pretrained_backbone": backbone,
+            "observation": {"cameras": list(cameras), "state_dim": rig.state_dim}}
 
 
 def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_sha256: str, device: str = "cuda",

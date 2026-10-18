@@ -14,7 +14,8 @@ import threading
 
 from PIL import Image as PillowImage
 
-from so101_demo.act.joints import ACT_JOINTS
+from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS
+from so101_demo.act.rig_profile import DEFAULT_RIG
 
 
 def _finite(value) -> float:
@@ -47,10 +48,15 @@ def _write_new(path: Path, raw: bytes) -> None:
 class SynchronizedFrameRecorder:
     """Join one atomic physics step to causal dual RGB, info and measured joints."""
 
-    CAMERAS = ("head", "wrist")
+    #: the default rig's (v1) cameras; an instance's cameras (`self.cameras`) are those of its rig
+    CAMERAS = DEFAULT_RIG.camera_names
 
     def __init__(self, root: Path, *, session_id: str, reset_epoch: int,
-                 source_floor_s: float, max_age_s: float, max_skew_s: float) -> None:
+                 source_floor_s: float, max_age_s: float, max_skew_s: float, rig=DEFAULT_RIG) -> None:
+        self.rig = rig
+        self.cameras = rig.camera_names
+        #: the measured joints a sample records: the arm, and the neck only for a rig that has one
+        self.joints = ACT_JOINTS if rig.has_neck else ARM_JOINTS
         root = Path(root)
         if (not root.is_absolute() or ".." in root.parts
                 or not isinstance(session_id, str)
@@ -69,7 +75,7 @@ class SynchronizedFrameRecorder:
         self.root, self.session_id, self.reset_epoch = root, session_id, reset_epoch
         self.floor_s, self.max_age_s, self.max_skew_s = floor, age, skew
         self._buffers = {key: deque(maxlen=32) for key in (
-            "head", "wrist", "head_info", "wrist_info", "joints",
+            *self.cameras, *(f"{camera}_info" for camera in self.cameras), "joints",
         )}
         self._lock = threading.RLock()
         self._last_step = -1
@@ -81,7 +87,7 @@ class SynchronizedFrameRecorder:
         self._rejects = (root / "rejections.jsonl").open("x", encoding="utf-8")
 
     def accept_image(self, camera: str, message) -> None:
-        if camera not in self.CAMERAS:
+        if camera not in self.cameras:
             raise ValueError("SYNCHRONIZED_CAPTURE_RGB_INVALID")
         try:
             stamp = _stamp(message)
@@ -98,7 +104,7 @@ class SynchronizedFrameRecorder:
             self._buffers[camera].append((stamp, raw))
 
     def accept_info(self, camera: str, message) -> None:
-        if camera not in self.CAMERAS:
+        if camera not in self.cameras:
             raise ValueError("SYNCHRONIZED_CAPTURE_CAMERA_INFO_INVALID")
         try:
             stamp = _stamp(message)
@@ -126,8 +132,8 @@ class SynchronizedFrameRecorder:
                 raise ValueError("joint mapping")
             positions = dict(zip(names, message.position, strict=True))
             velocities = dict(zip(names, message.velocity, strict=True))
-            q = tuple(_finite(positions[name]) for name in ACT_JOINTS)
-            v = tuple(_finite(velocities[name]) for name in ACT_JOINTS)
+            q = tuple(_finite(positions[name]) for name in self.joints)
+            v = tuple(_finite(velocities[name]) for name in self.joints)
         except (AttributeError, KeyError, TypeError, ValueError) as error:
             raise ValueError("SYNCHRONIZED_CAPTURE_JOINTS_INVALID") from error
         if stamp <= self.floor_s:
@@ -176,9 +182,9 @@ class SynchronizedFrameRecorder:
             if step <= self._last_step:
                 raise ValueError("SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID")
             selected = {key: self._select(key, at_s) for key in (
-                "head", "wrist", "joints",
+                *self.cameras, "joints",
             )}
-            for camera in self.CAMERAS:
+            for camera in self.cameras:
                 stamp = selected[camera][0]
                 info = [item for item in self._buffers[f"{camera}_info"]
                         if item[0] == stamp]
@@ -194,7 +200,7 @@ class SynchronizedFrameRecorder:
                 raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_SKEW")
             index = self._count
             cameras = {}
-            for camera in self.CAMERAS:
+            for camera in self.cameras:
                 stamp, raw = selected[camera]
                 path = self.root / f"{index:05d}-{camera}.png"
                 with path.open("xb") as stream:
@@ -226,7 +232,7 @@ class SynchronizedFrameRecorder:
             os.fsync(self._rows.fileno())
             self._last_step = step
             self._last_source_stamps = {key: selected[key][0]
-                                        for key in (*self.CAMERAS, "joints")}
+                                        for key in (*self.cameras, "joints")}
             self._count += 1
             return row
 

@@ -37,11 +37,18 @@ from ..teacher_event_stream import (
     TeacherEventError,
     decode_event,
 )
+from ..rig_profile import DEFAULT_RIG
 from .policy import check_outputs_absent
 
 RC_VALID, RC_INVALID = 0, 3
 RESULT_SCHEMA = "SO101_RECORDER_RESULT"
-REQUIRED_SOURCES = ("head", "wrist", "physics", "scene_state", "world", "joint_states")
+
+def required_sources_for(rig) -> tuple:
+    """The sources a capture must have received: the rig's cameras, then the physics, scene state, world and joint states."""
+    return (*rig.camera_names, "physics", "scene_state", "world", "joint_states")
+
+
+REQUIRED_SOURCES = required_sources_for(DEFAULT_RIG)
 #: a poll below this advances the replay by this much (a zero poll would never move the virtual clock)
 MIN_STEP_S = 0.001
 _MAX_REASONS = 16
@@ -84,8 +91,11 @@ def _publish_json(path: Path, document: dict, *, replace: bool = False) -> None:
 
 
 class OfflineEngine:
-    def __init__(self, *, episode, sources, policy, identity: StreamIdentity, result_file, clock, sleep) -> None:
+    def __init__(self, *, episode, sources, policy, identity: StreamIdentity, result_file, clock, sleep,
+                 rig=DEFAULT_RIG) -> None:
         self.episode, self.sources, self.policy, self.identity = episode, sources, dict(policy), identity
+        self.rig = rig
+        self.required_sources = required_sources_for(rig)
         self.result_file = Path(result_file)
         self.clock, self.sleep = clock, sleep
         self.monitor = EventStreamMonitor(identity)
@@ -405,7 +415,7 @@ class OfflineEngine:
         except Exception as error:
             self.latch("RECORDER_SOURCE_COUNTS_UNAVAILABLE: " + self._reason(error))
             return
-        for name in REQUIRED_SOURCES:
+        for name in self.required_sources:
             if not self._counts.get(name):
                 self.latch(f"RECORDER_SOURCE_MISSING: {name}")
         try:

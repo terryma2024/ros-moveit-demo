@@ -26,10 +26,11 @@ import sys
 import threading
 import time
 from pathlib import Path
+from so101_demo.act.rig_profile import DEFAULT_RIG
 from so101_demo.runtime.act_instance.identity import instance_output, instance_root
 from .bag_root import bag_root_decision
 from .delivery_diag import DeliveryGapMonitor, recorder_only_stalls
-from .probe_trace import ProbeTrace
+from .probe_trace import ProbeTrace, trace_topics_for
 from .scene_read_writer import CLOSE_TIMEOUT_S, SceneReadWriter, SceneReadWriterError
 
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
@@ -44,31 +45,58 @@ STOP_SIGKILL_AT_S = 15.0
 STOP_LOG_TAIL_BYTES = 4096
 EVENTS_TOPIC = "/so101/teacher/events"
 SCENE_READS_TOPIC = "/so101/raw/planning_scene_reads"
-CAMERA_TOPICS = ("/head_camera/color", "/head_camera/camera_info", "/wrist_camera/color", "/wrist_camera/camera_info")
 SIMULATION_TOPICS = ("/so101/simulation/evidence", "/so101/simulation/physics_step_chunks",
                      "/so101/simulation/robot_contacts", "/so101/simulation/scene_state", "/so101/simulation/joints",
                      "/so101/simulation/physics_hazard")
-CONTROL_TOPICS = ("/joint_states", "/arm_controller/controller_state", "/gripper_controller/controller_state",
-                  "/neck_controller/controller_state")
-#: Everything the Recorder subscribes to (cameras, world, scene state, chunks, joint states, controller states, the Teacher's
-#: events, the simulation clock) and the topics around them the pilot may need.
-TOPICS = ("/clock", *CAMERA_TOPICS, *SIMULATION_TOPICS, *CONTROL_TOPICS, EVENTS_TOPIC, SCENE_READS_TOPIC)
-#: Topics that must have a publisher and be subscribed before the Teacher may start (the events topic has none until it does).
-CORE_TOPICS = ("/clock", "/head_camera/color", "/wrist_camera/color", "/so101/simulation/evidence",
-               "/so101/simulation/physics_step_chunks", "/so101/simulation/scene_state", "/joint_states",
-               "/arm_controller/controller_state", "/gripper_controller/controller_state",
-               "/neck_controller/controller_state", "/head_camera/camera_info", "/wrist_camera/camera_info",
-               "/so101/simulation/robot_contacts", SCENE_READS_TOPIC)
-#: Deep reliable queues for the high-rate topics (500 steps/s of chunks, 500 Hz controller states): the recorder must not be the
-#: slow subscriber. The world topic is left to rosbag2's own adaptation to the publisher (transient-local, 256 deep).
-DEEP_RELIABLE = {"/so101/simulation/physics_step_chunks": 1000, "/so101/simulation/robot_contacts": 10000,
-                 "/arm_controller/controller_state": 20000, "/gripper_controller/controller_state": 20000,
-                 "/neck_controller/controller_state": 20000, "/clock": 20000,
-                 # A single wrist camera_info was lost on the transport layer in two runs of the second v2 round (rosbag2's
-                 # default queue is 10 deep): camera_info is tiny and the images are 10 Hz, so a deep queue costs memory only
-                 # while the recorder falls behind
-                 "/head_camera/camera_info": 100, "/wrist_camera/camera_info": 100,
-                 "/head_camera/color": 50, "/wrist_camera/color": 50}
+NECK_STATE_TOPIC = "/neck_controller/controller_state"
+
+
+def camera_topics_for(rig) -> tuple:
+    """Per camera of the rig: its image topic, then its camera_info topic."""
+    return rig.camera_topics
+
+
+def control_topics_for(rig) -> tuple:
+    return ("/joint_states", "/arm_controller/controller_state", "/gripper_controller/controller_state",
+            *((NECK_STATE_TOPIC,) if rig.has_neck else ()))
+
+
+def topics_for(rig) -> tuple:
+    """Everything the Recorder subscribes to (cameras, world, scene state, chunks, joint states, controller states, the Teacher's
+    events, the simulation clock) and the topics around them the pilot may need, for `rig`: a rig without a neck records no
+    neck topic and a rig without a head no head camera topic."""
+    return ("/clock", *camera_topics_for(rig), *SIMULATION_TOPICS, *control_topics_for(rig), EVENTS_TOPIC, SCENE_READS_TOPIC)
+
+
+def core_topics_for(rig) -> tuple:
+    """Topics that must have a publisher and be subscribed before the Teacher may start (the events topic has none until it does)."""
+    return ("/clock", *rig.image_topics, "/so101/simulation/evidence",
+            "/so101/simulation/physics_step_chunks", "/so101/simulation/scene_state", "/joint_states",
+            "/arm_controller/controller_state", "/gripper_controller/controller_state",
+            *((NECK_STATE_TOPIC,) if rig.has_neck else ()), *rig.info_topics,
+            "/so101/simulation/robot_contacts", SCENE_READS_TOPIC)
+
+
+def deep_reliable_for(rig) -> dict:
+    """Deep reliable queues for the high-rate topics (500 steps/s of chunks, 500 Hz controller states): the recorder must not be the
+    slow subscriber. The world topic is left to rosbag2's own adaptation to the publisher (transient-local, 256 deep)."""
+    deep = {"/so101/simulation/physics_step_chunks": 1000, "/so101/simulation/robot_contacts": 10000,
+            "/arm_controller/controller_state": 20000, "/gripper_controller/controller_state": 20000,
+            **({NECK_STATE_TOPIC: 20000} if rig.has_neck else {}), "/clock": 20000}
+    # A single wrist camera_info was lost on the transport layer in two runs of the second v2 round (rosbag2's
+    # default queue is 10 deep): camera_info is tiny and the images are 10 Hz, so a deep queue costs memory only
+    # while the recorder falls behind
+    deep.update({topic: 100 for topic in rig.info_topics})
+    deep.update({topic: 50 for topic in rig.image_topics})
+    return deep
+
+
+#: The default rig's (v1) lists, byte-identical to the literals they replace (a test pins that).
+CAMERA_TOPICS = camera_topics_for(DEFAULT_RIG)
+CONTROL_TOPICS = control_topics_for(DEFAULT_RIG)
+TOPICS = topics_for(DEFAULT_RIG)
+CORE_TOPICS = core_topics_for(DEFAULT_RIG)
+DEEP_RELIABLE = deep_reliable_for(DEFAULT_RIG)
 
 
 #: `debug` is what makes rosbag2 print the per-topic loss lines (there is no per-topic status at `info`).
@@ -127,7 +155,7 @@ def clock_anchor() -> dict:
     return {"system_ns": system, "monotonic_ns": (mono_a + mono_b) // 2, "uncertainty_ns": mono_b - mono_a}
 
 
-def build_options(bag_dir: Path, topics=TOPICS, node_name=NODE_NAME):
+def build_options(bag_dir: Path, topics=TOPICS, node_name=NODE_NAME, rig=DEFAULT_RIG):
     import rosbag2_py
     from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 
@@ -140,7 +168,7 @@ def build_options(bag_dir: Path, topics=TOPICS, node_name=NODE_NAME):
     options.topic_polling_interval = __import__("datetime").timedelta(milliseconds=100)
     options.topic_qos_profile_overrides = {
         topic: QoSProfile(depth=depth, history=HistoryPolicy.KEEP_LAST, reliability=ReliabilityPolicy.RELIABLE)
-        for topic, depth in DEEP_RELIABLE.items() if topic in topics}
+        for topic, depth in deep_reliable_for(rig).items() if topic in topics}
     return storage, options
 
 
@@ -156,10 +184,10 @@ def bag_compression_setting() -> dict:
             "level": BAG_STORAGE_CONFIG["compressionLevel"], "chunk_size": BAG_STORAGE_CONFIG["chunkSize"]}
 
 
-def qos_overrides_for(topics) -> dict:
+def qos_overrides_for(topics, rig=DEFAULT_RIG) -> dict:
     """{topic: QoS profile} for the deep reliable queues of the recorded topics (keep_last, reliable, volatile, depth > 0)."""
     return {topic: {"history": "keep_last", "depth": depth, "reliability": "reliable", "durability": "volatile"}
-            for topic, depth in DEEP_RELIABLE.items() if topic in topics}
+            for topic, depth in deep_reliable_for(rig).items() if topic in topics}
 
 
 def record_argv(bag_dir, qos_path, node_name, topics, storage_config_path=None) -> list:
@@ -278,8 +306,12 @@ class SceneReadSidecar:
 
 
 class RawRecorder:
-    def __init__(self, bag_dir, *, topics=TOPICS, core_topics=CORE_TOPICS, node_name=NODE_NAME, scene_reads=None,
-                 domain_node=None) -> None:
+    def __init__(self, bag_dir, *, topics=None, core_topics=None, node_name=NODE_NAME, scene_reads=None,
+                 domain_node=None, rig=DEFAULT_RIG) -> None:
+        #: the rig whose cameras (and neck, when it has one) this recorder subscribes to; explicit topic lists win
+        self.rig = rig
+        topics = topics_for(rig) if topics is None else topics
+        core_topics = core_topics_for(rig) if core_topics is None else core_topics
         self.bag_dir, self.topics, self.core_topics, self.node_name = Path(bag_dir), tuple(topics), tuple(core_topics), node_name
         self.scene_reads_path = None if scene_reads is None else Path(scene_reads)
         self._recorder = None
@@ -315,7 +347,8 @@ class RawRecorder:
             if self.bag_root['code'] is not None:raise ValueError(self.bag_root['code'])
         if not rclpy.ok():
             rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO)
-        self._trace = ProbeTrace(self.bag_dir.parent / (self.bag_dir.name + "-probe-trace.jsonl"))
+        self._trace = ProbeTrace(self.bag_dir.parent / (self.bag_dir.name + "-probe-trace.jsonl"),
+                                 topics=trace_topics_for(self.rig))
         self._probe = rclpy.create_node(self.node_name + "_probe",
                                         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)])
         self._executor = SingleThreadedExecutor()
@@ -325,7 +358,7 @@ class RawRecorder:
         import yaml
 
         qos_path = self.bag_dir.parent / (self.bag_dir.name + "-qos.yaml")
-        overrides = qos_overrides_for(self.topics)
+        overrides = qos_overrides_for(self.topics, self.rig)
         qos_path.write_text(yaml.safe_dump(overrides))
         storage_path = self.bag_dir.parent / (self.bag_dir.name + "-storage.yaml")
         storage_path.write_text(yaml.safe_dump(BAG_STORAGE_CONFIG))
@@ -480,7 +513,8 @@ class RawRecorder:
                                          "failure": self._trace.failure}
                 # diagnostics only, bounded, never raises: recorder receipt later than the probe's for the same message
                 stats["recorder_only_stall"] = recorder_only_stalls(
-                    self.bag_dir, self.bag_dir.parent / (self.bag_dir.name + "-probe-trace.jsonl"))
+                    self.bag_dir, self.bag_dir.parent / (self.bag_dir.name + "-probe-trace.jsonl"),
+                    topics=self.rig.camera_topics)
         except BaseException as error:   # noqa: BLE001
             stats["stop_error"] = repr(error)
         stats.update(self.verify_closed())
@@ -522,8 +556,12 @@ def main(argv=None) -> int:
     parser.add_argument("--ready-file", type=Path, required=True)
     parser.add_argument("--stats-file", type=Path, required=True)
     parser.add_argument("--ready-timeout-s", type=float, default=30.0)
+    parser.add_argument("--rig-profile", type=Path, default=None,
+                        help="rig profile (config/act/rig-v*.yaml) whose cameras and neck are recorded; default: rig v1")
     options = parser.parse_args(argv)
-    recorder = RawRecorder(options.bag_dir, scene_reads=options.scene_reads)
+    from .. import rig_profile
+    rig = rig_profile.DEFAULT_RIG if options.rig_profile is None else rig_profile.load_rig_profile(options.rig_profile)
+    recorder = RawRecorder(options.bag_dir, scene_reads=options.scene_reads, rig=rig)
     stop = threading.Event()
     for number in (signal.SIGTERM, signal.SIGINT):
         signal.signal(number, lambda *_: stop.set())

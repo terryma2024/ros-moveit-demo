@@ -40,7 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-age-s", type=float, required=True)
     parser.add_argument("--max-skew-s", type=float, required=True)
     parser.add_argument("--duration-s", type=float, required=True)
+    parser.add_argument("--rig-profile", type=Path, default=None,
+                        help="rig profile (config/act/rig-v*.yaml) naming the cameras to record; default: rig v1")
     options = parser.parse_args(argv)
+    from so101_demo.act.rig_profile import DEFAULT_RIG, load_rig_profile
+    rig = DEFAULT_RIG if options.rig_profile is None else load_rig_profile(options.rig_profile)
     root = options.evidence_root
     if (not root.is_absolute() or ".." in root.parts or not root.is_dir()
             or root.is_symlink()
@@ -65,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         experiments / options.run_id,
         session_id=options.session_id, reset_epoch=options.reset_epoch,
         source_floor_s=options.source_floor_s,
-        max_age_s=options.max_age_s, max_skew_s=options.max_skew_s,
+        max_age_s=options.max_age_s, max_skew_s=options.max_skew_s, rig=rig,
     )
     frame_node = world_node = frame_executor = world_executor = None
     threads: list[Thread] = []
@@ -92,15 +96,15 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError as error:
                 recorder.record_rejection(str(error))
 
-        for camera in ("head", "wrist"):
+        for camera in rig.cameras:
             frame_node.create_subscription(
-                Image, f"/{camera}_camera/color",
-                lambda message, label=camera: accept(recorder.accept_image, label, message),
+                Image, camera.image_topic,
+                lambda message, label=camera.name: accept(recorder.accept_image, label, message),
                 RGB_QOS,
             )
             frame_node.create_subscription(
-                CameraInfo, f"/{camera}_camera/camera_info",
-                lambda message, label=camera: accept(recorder.accept_info, label, message),
+                CameraInfo, camera.info_topic,
+                lambda message, label=camera.name: accept(recorder.accept_info, label, message),
                 RGB_QOS,
             )
         frame_node.create_subscription(

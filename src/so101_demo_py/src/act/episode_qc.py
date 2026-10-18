@@ -25,6 +25,7 @@ from pathlib import Path
 from so101_demo.application.e2e_acceptance import SCHEMA_TEACHER, is_manifest_of
 from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from so101_demo.act.qc_session import active, cached_lines, file_signature, load_model, session_memo
+from so101_demo.act.rig_profile import DEFAULT_RIG, KNOWN_RIGS, rig_from_frozen
 
 PHYSICS_STREAM = "physics.jsonl"
 REFERENCE_STREAM = "references.jsonl"
@@ -409,8 +410,15 @@ def verify_episode_physical_audit(episode_root, audit_manifest, scope):
 QC_REPORT_FIELDS = frozenset({"kind", "schema_version", "status", "rule_version", "identity",
     "episode_seal_sha256", "audit_manifest_sha256", "inputs_sha256", "scope_sha256", "counts",
     "checks", "reason"})
-QC_COUNT_FIELDS = frozenset({"records", "head_acquisitions", "wrist_acquisitions", "references",
-                            "events", "physics", "native_steps"})
+def qc_count_fields(rig) -> frozenset:
+    """The closed count fields of a QC report of `rig`: one `<camera>_acquisitions` count per camera of the rig."""
+    return frozenset({"records", *(f"{name}_acquisitions" for name in rig.camera_names), "references",
+                      "events", "physics", "native_steps"})
+
+
+QC_COUNT_FIELDS = qc_count_fields(DEFAULT_RIG)
+#: every count field set a report of a known rig may carry
+_KNOWN_QC_COUNT_FIELDS = tuple(qc_count_fields(rig) for rig in KNOWN_RIGS.values())
 
 
 QC_SCHEMA_VERSION = 3
@@ -552,7 +560,7 @@ def validate_qc_report(report):
         for name in ("episode_seal_sha256", "audit_manifest_sha256", "inputs_sha256", "scope_sha256"):
             sha256(report[name])
         counts = report["counts"]
-        if (type(counts) is not dict or set(counts) != QC_COUNT_FIELDS
+        if (type(counts) is not dict or set(counts) not in _KNOWN_QC_COUNT_FIELDS
                 or any(type(value) is not int or value < 0 for value in counts.values())):
             raise ValueError("counts")
         checks = report["checks"]
@@ -570,7 +578,7 @@ def validate_qc_report(report):
                    if item["status"] == "FAIL"]
         success = not failing
         if ((report["status"] == "PASS") != success or report["reason"] != (failing[0] if failing else "")
-                or success and any(counts[name] == 0 for name in QC_COUNT_FIELDS)):
+                or success and any(value == 0 for value in counts.values())):
             raise ValueError("verdict")
         return json.loads(json.dumps(report, allow_nan=False))
     except (ValueError, TypeError, KeyError, OverflowError) as error:
@@ -738,6 +746,9 @@ def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manife
     if (frozen.get('mode') not in ('preselected_target_diagnostic','formal')
             or not {'runtime_policy','execution_snapshot'} <= set(frozen)):
         raise ValueError('NATIVE_QC_CURRENT_INPUTS_REQUIRED')
+    # the rig of the episode is the profile the frozen inputs bind (v1 for a set sealed before profiles existed); the audit's
+    # own copy of the inputs is proven equal to them just below
+    rig = rig_from_frozen(frozen)
     audit_root = root/'audit'
     manifest_path = audit_root/'audit-manifest.json'
     local_inputs = json.loads(_report_path(audit_root/'inputs.json').read_bytes())
@@ -766,8 +777,8 @@ def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manife
         status='FAIL' if failing else 'PASS', identity=manifest['identity'], reason=failing[0]['reason'] if failing else '',
         episode_seal_sha256=_manifest_digest(root/'seal.json'), audit_manifest_sha256=_manifest_digest(manifest_path),
         inputs_sha256=frozen['inputs_sha256'], scope_sha256=_manifest_digest(scope_path),
-        counts=dict(records=episode['record_count'], head_acquisitions=sum(row['camera']=='head' for row in acquisitions),
-            wrist_acquisitions=sum(row['camera']=='wrist' for row in acquisitions),
+        counts=dict(records=episode['record_count'],
+            **{f'{camera}_acquisitions': sum(row['camera']==camera for row in acquisitions) for camera in rig.camera_names},
             references=len(read_verified_rows(audit_root, REFERENCE_STREAM)), events=len(events),
             physics=physics_chunk_count(events), native_steps=summary['native_steps']), checks=checks)
     return validate_qc_report(document)

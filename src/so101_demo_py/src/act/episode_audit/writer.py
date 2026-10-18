@@ -19,11 +19,11 @@ from so101_demo.act.episode_audit.checks import (
     _REFERENCE_FIELDS,
     _REFERENCE_FRAME_FIELDS,
     _REFERENCE_RAW_FIELDS,
-    _ROW_FIELDS,
     _TOLERANCE_S,
     _WINDOW_FIELDS,
     MANIFEST_KIND,
     SOURCE_KINDS,
+    row_fields,
     _canonical,
     _capture_window_matches_observed,
     _closed,
@@ -45,6 +45,7 @@ from so101_demo.act.episode_audit.checks import (
     _window_ok,
 )
 from so101_demo.act.episode_audit.formal_coverage import formal_coverage_ok
+from so101_demo.act.rig_profile import rig_from_frozen
 
 
 class EpisodeAuditWriter:
@@ -69,6 +70,8 @@ class EpisodeAuditWriter:
             # the audit always names the frozen inputs it belongs to
             raise ValueError("AUDIT_INPUTS_INVALID")
         from so101_demo.act.diagnostic_episode_inputs import audit_execution_model_identity
+        # the rig of the episode is the profile its frozen inputs bind; inputs that bind none are rig v1
+        self.rig = rig_from_frozen(inputs)
         self._execution_model = audit_execution_model_identity(inputs)
         self._execution_chunks = (inputs["execution_snapshot"]["physics_chunks"]
                                   if self._execution_model is not None else None)
@@ -134,17 +137,23 @@ class EpisodeAuditWriter:
         self._acquisitions[record["acquisition_id"]] = record
         self._append("acquisitions", record)
 
-    def bind_row(self, row_index, sim_time_s, head_id, wrist_id, reference_sequence) -> None:
+    def bind_row(self, row_index, sim_time_s, *slots_and_reference) -> None:
+        """Bind one row to one acquisition per camera of the rig (in camera order) and to its reference sequence:
+        `bind_row(index, sim_time_s, <camera 1 id>, <camera 2 id>, ..., reference_sequence)`."""
         self._require_open()
+        cameras = self.rig.camera_names
+        if len(slots_and_reference) != len(cameras) + 1:
+            raise ValueError("AUDIT_ROW_INVALID")
+        ids, reference_sequence = slots_and_reference[:-1], slots_and_reference[-1]
         record = {"row_index": _integer(row_index, "AUDIT_ROW_INVALID"),
                   "sim_time_s": _finite(sim_time_s, "AUDIT_ROW_INVALID", nonnegative=True),
-                  "head_acquisition_id": head_id, "wrist_acquisition_id": wrist_id,
+                  **{f"{camera}_acquisition_id": value for camera, value in zip(cameras, ids, strict=True)},
                   "reference_sequence": _integer(reference_sequence, "AUDIT_ROW_INVALID")}
-        _closed(record, _ROW_FIELDS, "AUDIT_ROW_INVALID")
-        if head_id == wrist_id:
-            # the same acquisition in both slots is never a real stereo pair
+        _closed(record, row_fields(self.rig), "AUDIT_ROW_INVALID")
+        if any(ids[i] == ids[j] for i in range(len(ids)) for j in range(i + 1, len(ids))):
+            # the same acquisition in two slots is never a real stereo pair
             raise ValueError("AUDIT_BINDING_INVALID")
-        for value, camera in ((head_id, "head"), (wrist_id, "wrist")):
+        for value, camera in zip(ids, cameras, strict=True):
             if not isinstance(value, str) or not value or value not in self._acquisitions:
                 # a row may not be bound to an acquisition the audit never saw
                 raise ValueError("AUDIT_BINDING_UNKNOWN")
@@ -165,14 +174,14 @@ class EpisodeAuditWriter:
             # rows are a contiguous schedule: no gaps, no reordering
             raise ValueError("AUDIT_ROW_ORDER_INVALID")
         stamps = []
-        for value in (head_id, wrist_id):
+        for value in ids:
             frame = self._acquisitions[value]
             age = record["sim_time_s"] - frame["stamp_s"]
             if age < -_TOLERANCE_S or age > _MAX_SOURCE_AGE_S + _TOLERANCE_S:
                 # a frame from the future, or one too old, is not causal for this instant
                 raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
             stamps.append(frame["stamp_s"])
-        if abs(stamps[0] - stamps[1]) > _MAX_SKEW_S + _TOLERANCE_S:
+        if max(stamps) - min(stamps) > _MAX_SKEW_S + _TOLERANCE_S:
             raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
         if self._last_row_time_s is not None and abs(
                 record["sim_time_s"] - (self._last_row_time_s + _GRID_S)) > _TOLERANCE_S:
@@ -189,7 +198,7 @@ class EpisodeAuditWriter:
         self._row_indexes.add(record["row_index"])
         self._row_times.append(record["sim_time_s"])
         self._last_row_time_s = record["sim_time_s"]
-        self._bound.update((head_id, wrist_id))
+        self._bound.update(ids)
         self._bound_references.add(record["reference_sequence"])
         self._append("row-bindings", record)
 
@@ -427,12 +436,12 @@ class EpisodeAuditWriter:
         self._require_open()
         schedule = {camera: sorted(row["stamp_s"] for row in self._acquisitions.values()
                                   if row["camera"] == camera)
-                    for camera in ("head", "wrist")}
+                    for camera in self.rig.camera_names}
         if any(not stamps or stamps != sorted(set(stamps)) for stamps in schedule.values()):
             raise ValueError("AUDIT_WINDOW_INVALID")
         stamps = [stamp for values in schedule.values() for stamp in values]
         first, cutoff = facts["first_command_s"], facts["label_cutoff_s"]
-        window = {"source_schedule": schedule, "streams_required": ["head", "wrist"],
+        window = {"source_schedule": schedule, "streams_required": list(self.rig.camera_names),
             "cadence_s": cadence_s, "permitted_gaps_s": [],
             "collection_start_s": min(stamps), "collection_end_s": max(stamps),
             "first_command_s": first, "physics_end_s": facts["physics_end_s"],
@@ -479,7 +488,7 @@ class EpisodeAuditWriter:
             # a formal audit states the ratified window; a diagnostic audit may record a legacy one
             raise ValueError("AUDIT_WINDOW_INVALID")
         if set(window) == _WINDOW_FIELDS and not _capture_window_matches_observed(
-                window, self._row_times, self._acquisitions, mode=self.scope["mode"]):
+                window, self._row_times, self._acquisitions, mode=self.scope["mode"], rig=self.rig):
             raise ValueError("AUDIT_WINDOW_INVALID")
         if self.scope.get("mode") == "formal" and not self._window_matches_rows(window):
             # and it must describe the rows and acquisitions this audit actually holds

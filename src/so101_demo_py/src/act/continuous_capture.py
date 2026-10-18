@@ -24,11 +24,11 @@ from pathlib import Path
 
 from .acquisition import Acquisition, AcquisitionGuard, pixel_digest
 from .deadline import ACT_TIMEOUT_S
+from .rig_profile import DEFAULT_RIG
 from .synchronizer import source_age_ok_ns, time_ns
 
 _TOLERANCE_S = 1e-6
 _REFERENCE_SOURCE = "CONTROLLER_REFERENCE"
-_STREAMS = ("head", "wrist")
 # the observer's raw frame fields, forwarded to the audit when the observer supplies them
 _RAW_REFERENCE_FIELDS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
 # the ratified Proposal A shape; the two groups are alternatives and never travel together
@@ -63,7 +63,11 @@ class ContinuousEpisodeCapture:
                  dt_s: float = 0.1, max_source_age_s: float = 0.1, max_skew_s: float = 0.0,
                  deadline_s: float = ACT_TIMEOUT_S, monotonic=time.monotonic,
                  frame_capacity: int = 8, reference_capacity: int = 128,
-                 pending_capacity: int = 32, asynchronous_sources: bool = False) -> None:
+                 pending_capacity: int = 32, asynchronous_sources: bool = False, rig=DEFAULT_RIG) -> None:
+        #: the rig whose cameras this capture pairs (v1 unless the caller names another)
+        self.rig = rig
+        self.cameras = rig.camera_names
+        self._recorder_local_keys = frozenset(f"{camera}_acquisition_id" for camera in self.cameras)
         if dt_s != 0.1 or max_source_age_s != 0.1:
             raise ValueError("CAPTURE_GRID_INVALID")
         if isinstance(deadline_s, bool) or not isinstance(deadline_s, (int, float)) \
@@ -106,7 +110,7 @@ class ContinuousEpisodeCapture:
         self._reference_ordinal = 0
         self._asynchronous_sources = asynchronous_sources
         self._source_wait_started = None
-        self._frames: dict = {camera: deque(maxlen=frame_capacity) for camera in _STREAMS}
+        self._frames: dict = {camera: deque(maxlen=frame_capacity) for camera in self.cameras}
         self._acquisition_audit_queue = deque()
         self._acquisition_audit_capacity = 2 * frame_capacity
         self._references: dict = {}
@@ -536,16 +540,15 @@ class ContinuousEpisodeCapture:
             at_s = self._next_grid_ns / 1e9
             if self._physical_end_s is not None and at_s > self._physical_end_s + _TOLERANCE_S:
                 break
-            head = self._causal("head", at_s)
-            wrist = self._causal("wrist", at_s)
-            if head is None or wrist is None:
+            causal = [self._causal(camera, at_s) for camera in self.cameras]
+            if any(frame is None for frame in causal):
                 if self._asynchronous_sources and self._physical_end_s is None:
                     if self._observed_sim_s is None or self._observed_sim_s < at_s - _TOLERANCE_S:
                         break  # No actual source has established eligibility for this next slot.
                     # Ordered camera delivery can still supply the original missing partner.
                     # Once that camera has advanced beyond this grid instant, no future callback
                     # can supply a causal frame. Otherwise retain this exact grid slot for <=.1s.
-                    missing = (camera for camera, frame in (("head", head), ("wrist", wrist))
+                    missing = (camera for camera, frame in zip(self.cameras, causal, strict=True)
                                if frame is None)
                     if any(self._frames[camera]
                            and self._frames[camera][-1].stamp_s > at_s + _TOLERANCE_S
@@ -556,7 +559,7 @@ class ContinuousEpisodeCapture:
                     if self._monotonic() - self._source_wait_started > self.max_source_age_s:
                         self._fail("NO_NEW_ACQUISITION")
                     break
-                if not self._frames["head"] and not self._frames["wrist"]:
+                if not any(self._frames[camera] for camera in self.cameras):
                     # both sources have run dry: a genuine terminal tail
                     break
                 # a source still holds frames but cannot serve this instant with a new acquisition,
@@ -575,9 +578,9 @@ class ContinuousEpisodeCapture:
                     self._fail("INPUT_STALE")
                 break
             self._source_wait_started = None
-            self._mint(at_s, head, wrist)
-            self._frames["head"].remove(head)
-            self._frames["wrist"].remove(wrist)
+            self._mint(at_s, *causal)
+            for camera, frame in zip(self.cameras, causal, strict=True):
+                self._frames[camera].remove(frame)
             self._next_grid_ns += time_ns(self.dt_s)
             self._next_grid_s = self._next_grid_ns / 1e9
 
@@ -605,14 +608,16 @@ class ContinuousEpisodeCapture:
                 return False
         return True
 
-    def _mint(self, at_s: float, head: Acquisition, wrist: Acquisition) -> None:
+    def _mint(self, at_s: float, *frames: Acquisition) -> None:
+        """Mint one row from one causal acquisition per camera of the rig, in camera order."""
         try:
-            self.guard.accept(head)
-            self.guard.accept(wrist)
+            for frame in frames:
+                self.guard.accept(frame)
         except ValueError as error:
             # the guard's own refusal (reuse, regression) is terminal for the capture too
             self._reject(str(error))
-        if abs(time_ns(head.stamp_s) - time_ns(wrist.stamp_s)) > time_ns(self.max_skew_s):
+        stamps_ns = [time_ns(frame.stamp_s) for frame in frames]
+        if max(stamps_ns) - min(stamps_ns) > time_ns(self.max_skew_s):
             self._fail("CAPTURE_SOURCE_SKEW")
         try:
             observation, source_audit = self.sampler.sample_with_audit(
@@ -621,11 +626,11 @@ class ContinuousEpisodeCapture:
             # the production synchronizer refuses with INPUT_STALE / INPUT_SKEW here
             self._reject(self._reason(error, "CAPTURE_SAMPLE_INVALID"))
         selected = source_audit.get("source_stamps", {})
-        if (abs(selected.get("head", -1) - head.stamp_s) > _TOLERANCE_S
-                or abs(selected.get("wrist", -1) - wrist.stamp_s) > _TOLERANCE_S):
+        if any(abs(selected.get(camera, -1) - frame.stamp_s) > _TOLERANCE_S
+               for camera, frame in zip(self.cameras, frames, strict=True)):
             self._fail("ACQUISITION_SELECTION_MISMATCH")
         # the images the row will store must be the ones whose identity it carries
-        for camera, frame in (("head", head), ("wrist", wrist)):
+        for camera, frame in zip(self.cameras, frames, strict=True):
             try:
                 selected_digest = pixel_digest(observation[camera])
             except (ValueError, TypeError, KeyError) as error:
@@ -643,11 +648,11 @@ class ContinuousEpisodeCapture:
         audit.update(source_audit)
         # The recorder's closed audit set names the episode it belongs to; the physical half and the sampler do not supply
         # it, the capture owns it (without these two keys the first live row was refused with EPISODE_AUDIT_SCHEMA).
-        audit.update({"head_acquisition_id": head.acquisition_id,
-                      "wrist_acquisition_id": wrist.acquisition_id,
+        audit.update({**{f"{camera}_acquisition_id": frame.acquisition_id
+                         for camera, frame in zip(self.cameras, frames, strict=True)},
                       "session_id": self._session_id, "attempt_id": self._attempt_id})
         self._pending.append({"observation": observation, "audit": audit,
-                              "acquisitions": (head, wrist), "target_s": (time_ns(at_s) + time_ns(self.dt_s)) / 1e9,
+                              "acquisitions": tuple(frames), "target_s": (time_ns(at_s) + time_ns(self.dt_s)) / 1e9,
                               "labelled": False, "reference": None})
 
     def _reference_state(self, row) -> str:
@@ -686,7 +691,7 @@ class ContinuousEpisodeCapture:
                 # belong to the audit's row-bindings records: the row keeps them for the audit
                 # writer, and the recorder is handed the dictionary without them
                 self.recorder.append(row["observation"], entry["positions"],
-                                     {k: v for k, v in audit.items() if k not in _RECORDER_LOCAL_KEYS})
+                                     {k: v for k, v in audit.items() if k not in self._recorder_local_keys})
             except Exception as error:  # noqa: BLE001 - a refusing writer is terminal
                 self._reject(self._reason(error, "CAPTURE_RECORD_FAILED"))
             index = self._written
@@ -704,7 +709,7 @@ class ContinuousEpisodeCapture:
                 # evidence that never became a row
                 try:
                     self.audit.bind_row(index, row["observation"]["sim_time_s"],
-                                        audit["head_acquisition_id"], audit["wrist_acquisition_id"],
+                                        *(audit[f"{camera}_acquisition_id"] for camera in self.cameras),
                                         entry["sequence"])
                 except Exception as error:  # noqa: BLE001
                     self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))

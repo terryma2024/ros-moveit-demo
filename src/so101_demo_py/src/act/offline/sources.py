@@ -46,6 +46,7 @@ from ...act.scene_operation import SceneOperationError
 from ...act.synchronizer import source_age_ok_ns
 from ...ros.recorder_data_side import RecorderDataSide
 from .raw_recorder import SCENE_READS_TOPIC
+from so101_demo.act.rig_profile import DEFAULT_RIG
 from .replay import InlineExecutor, ReplayNode
 
 _SEED_ACTIVATION_RESERVE_S = 0.05
@@ -127,14 +128,19 @@ class ControllerReferencePort:
 
 
 class OfflineRosSources:
+    #: the rig whose cameras the capture needs (rig v1 unless the constructor is given another)
+    rig = DEFAULT_RIG
     #: how long an association waits for its source to appear in the histories before it is INVALID
     ALIGNMENT_RETRY_S = 1.0
     #: virtual time one waiting pass of the data side costs (about one loop pass of the live Recorder)
     PROGRESS_STEP_S = 0.002
 
     def __init__(self, node: ReplayNode, episode, options, *, bind=None, world_observer_factory=None,
-                 reference_port_factory=None, physical_provider=None, policy=None, final_normal_stop_seq=None) -> None:
+                 reference_port_factory=None, physical_provider=None, policy=None, final_normal_stop_seq=None,
+                 rig=DEFAULT_RIG) -> None:
         self.node, self.episode, self.options = node, episode, options
+        #: the rig whose cameras the offline capture must receive (rig v1 unless the processor names another)
+        self.rig = rig
         #: the frozen Recorder policy (episode_recorder): its receiver-lag bound goes to the physics adapter
         self._policy = {} if policy is None else dict(policy)
         #: how long a source may wait for its raw chunk: the receiver-lag policy (the adapter fails the data beyond it)
@@ -152,7 +158,7 @@ class OfflineRosSources:
         self._reference_factory, self._physical_provider = reference_port_factory, physical_provider
         self._stream = self.binding = self.world = self.reference_port = self.host = None
         self._joint_subscription = None
-        self._counts = {"head": 0, "wrist": 0, "joint_states": 0}
+        self._counts = {**{camera: 0 for camera in rig.camera_names}, "joint_states": 0}
         self._hazards_seen = 0
         self._lag_window_pending = False
         self._finish_started = False
@@ -761,7 +767,7 @@ class OfflineRosSources:
             if adapter.hazard is not None or adapter._closed:
                 raise PermissionError("RECORDER_CAPTURE_START_SOURCE_LOST")
             pair = dict(adapter._pre_capture_frames)
-        if set(pair) != {"head", "wrist"}:
+        if set(pair) != set(self.rig.camera_names):
             self._gate("seed_unavailable")
             return None
         seed_s = max(frame.stamp_s for frame, _ in pair.values())

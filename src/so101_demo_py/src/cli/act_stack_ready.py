@@ -11,28 +11,38 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
+from so101_demo.act.rig_profile import DEFAULT_RIG
+
 # One ListControllers call that has not answered after this long is abandoned and resent.
 CONTROLLER_QUERY_TIMEOUT_S = 2.0
-_CONTROLLERS = (
-    "joint_state_broadcaster", "arm_controller", "gripper_controller", "neck_controller",
-)
+def controllers_for(rig) -> tuple:
+    """The controllers that must be active: the neck controller only for a rig that has a neck."""
+    return ("joint_state_broadcaster", "arm_controller", "gripper_controller",
+            *(("neck_controller",) if rig.has_neck else ()))
+
+
+def actions_for(rig) -> tuple:
+    return ("/execute_trajectory", "/arm_controller/follow_joint_trajectory",
+            "/gripper_controller/follow_joint_trajectory",
+            *(("/neck_controller/follow_joint_trajectory",) if rig.has_neck else ()))
+
+
+def check_order_for(rig) -> tuple:
+    """(check name, failure code) in order: the world, physics, controllers, graph and stop, then one RGB check per camera."""
+    return (("mujoco_session", "ACT_STACK_WORLD_SESSION_INVALID"),
+            ("advancing_physics", "ACT_STACK_PHYSICS_NOT_ADVANCING"),
+            ("controller_states", "ACT_STACK_CONTROLLER_NOT_ACTIVE"),
+            ("moveit_graph", "ACT_STACK_GRAPH_INCOMPLETE"),
+            ("physical_stop", "ACT_STACK_NOT_PHYSICALLY_STOPPED"),
+            *((f"{camera}_rgb", f"ACT_STACK_{camera.upper()}_RGB_STALE") for camera in rig.camera_names))
+
+
+_CONTROLLERS = controllers_for(DEFAULT_RIG)
 _SERVICES = (
     "/apply_planning_scene", "/get_planning_scene", "/plan_kinematic_path",
 )
-_ACTIONS = (
-    "/execute_trajectory", "/arm_controller/follow_joint_trajectory",
-    "/gripper_controller/follow_joint_trajectory",
-    "/neck_controller/follow_joint_trajectory",
-)
-_CHECK_ORDER = (
-    ("mujoco_session", "ACT_STACK_WORLD_SESSION_INVALID"),
-    ("advancing_physics", "ACT_STACK_PHYSICS_NOT_ADVANCING"),
-    ("controller_states", "ACT_STACK_CONTROLLER_NOT_ACTIVE"),
-    ("moveit_graph", "ACT_STACK_GRAPH_INCOMPLETE"),
-    ("physical_stop", "ACT_STACK_NOT_PHYSICALLY_STOPPED"),
-    ("head_rgb", "ACT_STACK_HEAD_RGB_STALE"),
-    ("wrist_rgb", "ACT_STACK_WRIST_RGB_STALE"),
-)
+_ACTIONS = actions_for(DEFAULT_RIG)
+_CHECK_ORDER = check_order_for(DEFAULT_RIG)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,8 +73,10 @@ def _camera_ok(value, *, world_time: float, now_s: float) -> tuple[bool, bool]:
 
 def evaluate_act_stack_readiness(*, session_id: str, ros_domain_id: int, now_s: float,
                                  worlds, joints, rgb, controllers, services, actions,
-                                 stop_velocity_rad_s: float = 0.01) -> ActStackReadiness:
-    """Require all seven startup axes from fresh observed sources at one instant."""
+                                 stop_velocity_rad_s: float = 0.01, rig=DEFAULT_RIG) -> ActStackReadiness:
+    """Require all startup axes (the seven of rig v1: five stack axes and one RGB axis per camera) from fresh observed sources at one instant."""
+    controllers_required, actions_required = controllers_for(rig), actions_for(rig)
+    joint_width = 7 if rig.has_neck else 6
     if (not isinstance(session_id, str) or not session_id
             or type(ros_domain_id) is not int or not 0 <= ros_domain_id <= 232
             or not _finite(now_s) or now_s <= 0
@@ -91,9 +103,9 @@ def evaluate_act_stack_readiness(*, session_id: str, ros_domain_id: int, now_s: 
                    and 0 <= now_s - pair[1]["received_s"] <= 0.25)
     except (KeyError, TypeError, ValueError):
         world_scope = physics = False
-    controls = all(controllers.get(name) == "active" for name in _CONTROLLERS)
+    controls = all(controllers.get(name) == "active" for name in controllers_required)
     graph = (all(services.get(name) is True for name in _SERVICES)
-             and all(actions.get(name) is True for name in _ACTIONS))
+             and all(actions.get(name) is True for name in actions_required))
     try:
         samples = joints[-8:]
         stop = (len(samples) >= 3
@@ -104,7 +116,7 @@ def evaluate_act_stack_readiness(*, session_id: str, ros_domain_id: int, now_s: 
                         and 0 <= now_s - sample["received_s"] <= 0.5
                         and (not physics or abs(sample["stamp_s"] - pair[-1]["sim_time_s"]) <= 0.25)
                         and isinstance(sample["velocity"], (tuple, list))
-                        and len(sample["velocity"]) == 7
+                        and len(sample["velocity"]) == joint_width
                         and all(_finite(speed) and abs(speed) <= stop_velocity_rad_s
                                 for speed in sample["velocity"]) for sample in samples)
                 and all(later["stamp_s"] > earlier["stamp_s"]
@@ -114,21 +126,19 @@ def evaluate_act_stack_readiness(*, session_id: str, ros_domain_id: int, now_s: 
     except (KeyError, TypeError, ValueError):
         stop, joint_stale = False, True
     world_time = pair[-1]["sim_time_s"] if physics else float("nan")
-    head_shape, head_fresh = _camera_ok(rgb.get("head"), world_time=world_time, now_s=now_s)
-    wrist_shape, wrist_fresh = _camera_ok(rgb.get("wrist"), world_time=world_time, now_s=now_s)
+    camera_state = {camera: _camera_ok(rgb.get(camera), world_time=world_time, now_s=now_s) for camera in rig.camera_names}
     checks = {
         "mujoco_session": bool(world_scope), "advancing_physics": bool(physics),
         "controller_states": controls, "moveit_graph": graph,
-        "physical_stop": bool(stop), "head_rgb": head_shape and head_fresh,
-        "wrist_rgb": wrist_shape and wrist_fresh,
+        "physical_stop": bool(stop),
+        **{f"{camera}_rgb": shape and fresh for camera, (shape, fresh) in camera_state.items()},
     }
-    failure = next((code for name, code in _CHECK_ORDER if not checks[name]), None)
+    failure = next((code for name, code in check_order_for(rig) if not checks[name]), None)
     if failure == "ACT_STACK_NOT_PHYSICALLY_STOPPED" and joint_stale:
         failure = "ACT_STACK_JOINTS_STALE"
-    if failure == "ACT_STACK_HEAD_RGB_STALE" and not head_shape:
-        failure = "ACT_STACK_HEAD_RGB_INVALID"
-    if failure == "ACT_STACK_WRIST_RGB_STALE" and not wrist_shape:
-        failure = "ACT_STACK_WRIST_RGB_INVALID"
+    for camera, (shape, _fresh) in camera_state.items():
+        if failure == f"ACT_STACK_{camera.upper()}_RGB_STALE" and not shape:
+            failure = f"ACT_STACK_{camera.upper()}_RGB_INVALID"
     if failure is not None:
         return ActStackReadiness(False, failure, None, checks)
     artifact = {
@@ -157,7 +167,7 @@ def _abandon(client, future) -> None:
 
 
 def advance_controller_query(client, pending, controllers, *, now_s: float,
-                             next_query_s: float, request_factory):
+                             next_query_s: float, request_factory, required=_CONTROLLERS):
     """Keep one service future alive, then stop querying after all four are active.
 
     A response can be lost (the controller manager logs "failed to send response ... (timeout)"), and an rclpy future for a
@@ -178,7 +188,7 @@ def advance_controller_query(client, pending, controllers, *, now_s: float,
         _abandon(client, pending.future)
         pending = None
         next_query_s = min(next_query_s, now_s)
-    if (not all(controllers.get(name) == "active" for name in _CONTROLLERS)
+    if (not all(controllers.get(name) == "active" for name in required)
             and now_s >= next_query_s):
         pending = _PendingQuery(client.call_async(request_factory()), now_s)
         next_query_s = now_s + 0.5
@@ -191,7 +201,11 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--ros-domain-id", type=int, required=True)
     parser.add_argument("--timeout-s", type=float, default=60.0)
     parser.add_argument("--stop-velocity-rad-s", type=float, default=0.01)
+    parser.add_argument("--rig-profile", default=None,
+                        help="rig profile (config/act/rig-v*.yaml); default: rig v1 (head and wrist cameras, neck)")
     options = parser.parse_args(arguments)
+    from so101_demo.act.rig_profile import load_rig_profile
+    rig = DEFAULT_RIG if options.rig_profile is None else load_rig_profile(options.rig_profile)
     if not 0 < options.timeout_s <= 120:
         parser.error("--timeout-s must be in (0, 120]")
     if os.environ.get("ROS_DOMAIN_ID") != str(options.ros_domain_id):
@@ -205,8 +219,9 @@ def main(arguments: list[str] | None = None) -> int:
     from rclpy.action import ActionClient
     from rclpy.qos import qos_profile_sensor_data
     from sensor_msgs.msg import Image, JointState
-    from so101_demo.act.joints import ACT_JOINTS, ordered_positions
+    from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS, ordered_positions
     from so101_demo.adapters.act.ros_observation import RGB_QOS
+    measured_joints = ACT_JOINTS if rig.has_neck else ARM_JOINTS
     from so101_demo.backends.mujoco.observer import EvidenceStale, MujocoWorldObserver
 
     rclpy.init()
@@ -227,9 +242,9 @@ def main(arguments: list[str] | None = None) -> int:
                 raise ValueError("joint shape")
             stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
             velocity = ordered_positions(dict(zip(message.name, message.velocity, strict=True)),
-                                         ACT_JOINTS)
+                                         measured_joints)
             ordered_positions(dict(zip(message.name, message.position, strict=True)),
-                              ACT_JOINTS)
+                              measured_joints)
             joints.append({"stamp_s": stamp, "received_s": time.monotonic(),
                            "velocity": velocity})
         except (TypeError, ValueError):
@@ -246,19 +261,19 @@ def main(arguments: list[str] | None = None) -> int:
     subscriptions = [node.create_subscription(
         JointState, "/joint_states", joint_callback, qos_profile_sensor_data,
     )]
-    for stream in ("head", "wrist"):
+    for camera in rig.cameras:
         subscriptions.append(node.create_subscription(
-            Image, f"/{stream}_camera/color",
-            lambda msg, stream=stream: camera_callback(msg, stream), RGB_QOS,
+            Image, camera.image_topic,
+            lambda msg, stream=camera.name: camera_callback(msg, stream), RGB_QOS,
         ))
     controller_client = node.create_client(ListControllers, "/controller_manager/list_controllers")
     service_types = (ApplyPlanningScene, GetPlanningScene, GetMotionPlan)
     service_clients = {name: node.create_client(kind, name)
                        for name, kind in zip(_SERVICES, service_types, strict=True)}
-    action_types = (ExecuteTrajectory, FollowJointTrajectory,
-                    FollowJointTrajectory, FollowJointTrajectory)
+    required_actions = actions_for(rig)
+    action_types = (ExecuteTrajectory, *(FollowJointTrajectory for _ in required_actions[1:]))
     action_clients = {name: ActionClient(node, kind, name)
-                      for name, kind in zip(_ACTIONS, action_types, strict=True)}
+                      for name, kind in zip(required_actions, action_types, strict=True)}
     controllers: dict[str, str] = {}
     pending = None
     next_controller_query_s = 0.0
@@ -270,7 +285,7 @@ def main(arguments: list[str] | None = None) -> int:
             pending, controllers, next_controller_query_s = advance_controller_query(
                 controller_client, pending, controllers, now_s=time.monotonic(),
                 next_query_s=next_controller_query_s,
-                request_factory=ListControllers.Request,
+                request_factory=ListControllers.Request, required=controllers_for(rig),
             )
             try:
                 current = world.snapshot_with_receipt()
@@ -292,7 +307,7 @@ def main(arguments: list[str] | None = None) -> int:
                           for name, client in service_clients.items()},
                 actions={name: client.server_is_ready()
                          for name, client in action_clients.items()},
-                stop_velocity_rad_s=options.stop_velocity_rad_s,
+                stop_velocity_rad_s=options.stop_velocity_rad_s, rig=rig,
             )
             if latest.ready and not bad_input and world.rejected_count == 0:
                 print(json.dumps(latest.artifact, sort_keys=True), flush=True)

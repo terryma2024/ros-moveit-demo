@@ -22,7 +22,12 @@ import re
 
 import numpy as np
 
-CAMERAS = ("head", "wrist")
+from .rig_profile import DEFAULT_RIG, KNOWN_RIGS
+
+#: The cameras of the default rig (v1). Which cameras an episode may carry is its rig's business (`rig.camera_names`); an
+#: Acquisition itself only has to be a camera of some known rig.
+CAMERAS = DEFAULT_RIG.camera_names
+ALL_CAMERAS = tuple(dict.fromkeys(name for rig in KNOWN_RIGS.values() for name in rig.camera_names))
 _RGB_SHAPE = (480, 640, 3)
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -58,7 +63,7 @@ class Acquisition:
     pixel_sha256: str
 
     def __post_init__(self) -> None:
-        if self.camera not in CAMERAS:
+        if self.camera not in ALL_CAMERAS:
             raise ValueError("ACQUISITION_CAMERA_INVALID")
         _require_identifier(self.session_id, "ACQUISITION_SESSION_INVALID")
         if type(self.reset_epoch) is not int or self.reset_epoch < 0:
@@ -90,12 +95,13 @@ def canonical_acquisition_id(session_id: str, reset_epoch: int, camera: str,
 class AcquisitionMinter:
     """Create the identity of a frame at the moment the real frame is received."""
 
-    def __init__(self) -> None:
+    def __init__(self, rig=DEFAULT_RIG) -> None:
         self._last: dict = {}
+        self.rig = rig
 
     def mint(self, camera, *, session_id, reset_epoch, stamp_s, received_monotonic_ns,
              pixels) -> Acquisition:
-        if camera not in CAMERAS:
+        if camera not in self.rig.camera_names:
             raise ValueError("ACQUISITION_CAMERA_INVALID")
         _require_identifier(session_id, "ACQUISITION_SESSION_INVALID")
         if type(reset_epoch) is not int or reset_epoch < 0:

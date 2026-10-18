@@ -372,7 +372,7 @@ def _check_frames(jobs, workers) -> None:
 
 
 _SCENE_ID=re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*')
-_FRAME_NAME=re.compile(r'frames/[0-9]{6}-(?:head|wrist)\.png')
+_FRAME_NAME=re.compile(r'frames/[0-9]{6}-([a-z][a-z0-9_]*)\.png')
 _SHA256_HEX=re.compile(r'[0-9a-f]{64}')
 
 
@@ -426,7 +426,21 @@ def sealed_episode_content(episode):
         raise ValueError('TRAINING_EPISODE_CONTENT_INVALID') from error
     if len(rows)!=seal['record_count']:
         raise ValueError('TRAINING_EPISODE_CONTENT_INVALID')
-    return training_content({'frames':len(rows),'rows':rows})
+    return training_content({'frames':len(rows),'rows':rows},episode_rig(episode))
+
+
+def episode_rig(episode):
+    """The rig of a committed episode: the profile its frozen inputs bind, rig v1 for a set sealed before profiles existed.
+
+    The episode's collection evidence names its frozen inputs manifest; the commit verification that precedes every caller has
+    already proven that manifest, so it is only read here."""
+    from .rig_profile import DEFAULT_RIG,rig_from_frozen
+    evidence=episode.get('collection_evidence') if isinstance(episode,dict) else None
+    try:
+        document=json.loads(Path(evidence['inputs_manifest']).read_bytes())
+    except (OSError,ValueError,TypeError,KeyError):
+        return DEFAULT_RIG
+    return rig_from_frozen(document) if isinstance(document,dict) else DEFAULT_RIG
 
 
 def _content_observations(content):
@@ -442,24 +456,30 @@ def _content_actions(content):
     return [content['action']]
 
 
-def _check_dimensions(content):
-    """State width 8 and action width 6 (act/training_config.py), refused at export rather than at the first training batch."""
-    from .training_config import ACTION_DIM,STATE_DIM
+def _check_dimensions(content,rig=None):
+    """The rig's state width (8 for rig v1) and action width 6 (act/training_config.py), refused at export rather than at the first training batch."""
+    from .training_config import ACTION_DIM
+    from .rig_profile import DEFAULT_RIG
+    state_dim=(DEFAULT_RIG if rig is None else rig).state_dim
     observations=_content_observations(content)
     if not observations:
         raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
-    if (any(len(observation.get('state',())) != STATE_DIM for observation in observations)
+    if (any(len(observation.get('state',())) != state_dim for observation in observations)
             or any(len(action) != ACTION_DIM for action in _content_actions(content))):
         raise ValueError('EXPORT_EPISODE_DIMENSION_INVALID')
 
 
-def _frame_plan(scene_id,content,files):
+def _frame_plan(scene_id,content,files,rig=None):
     """[(source name, dataset-relative path, sha256)] for every frame the content references; refuses what the seal does not bind."""
+    from .rig_profile import DEFAULT_RIG
+    rig=DEFAULT_RIG if rig is None else rig
     plan=[]
     for observation in _content_observations(content):
-        for key in ('head_png','wrist_png'):
+        for camera in rig.camera_names:
+            key=rig.frame_key(camera)
             name=observation.get(key)
-            if not isinstance(name,str) or not _FRAME_NAME.fullmatch(name) or name not in files:
+            match=_FRAME_NAME.fullmatch(name) if isinstance(name,str) else None
+            if match is None or match.group(1)!=camera or name not in files:
                 raise ValueError('EXPORT_EPISODE_FRAME_MISSING')
             plan.append((name,f'episodes/{scene_id}/{name}',_seal_digest(files[name])))
     return plan
@@ -468,7 +488,14 @@ def _frame_plan(scene_id,content,files):
 #: What a training sample may contain (user, 2026-10-10: collision and force data do not enter training): the observation (joint state,
 #: head and wrist image) and the action. The per-record audit (contact lists, normal forces), the Teacher process summary, the
 #: oracle flags and every other contact, force or collision field stay in the sealed episode and its metadata.
-TRAINING_OBSERVATION_KEYS=('sim_time_s','state','head_png','wrist_png')
+def _all_frame_keys():
+    from .rig_profile import KNOWN_RIGS
+    return tuple(dict.fromkeys(key for rig in KNOWN_RIGS.values() for key in rig.frame_keys))
+
+
+#: the union over the known rigs (head_png, wrist_png, side_png): a reader that does not know the rig keeps the frame keys of
+#: any of them; an exporter knows the rig of the episode and restricts the whitelist to its own (`training_content(content, rig)`).
+TRAINING_OBSERVATION_KEYS=('sim_time_s','state',*_all_frame_keys())
 TRAINING_CONTENT_KEYS=('frames','rows','state','observation','action')
 
 
@@ -480,11 +507,11 @@ def _numbers(value):
     return list(value)
 
 
-def _training_observation(observation):
+def _training_observation(observation,rig=None):
     if not isinstance(observation,dict):
         raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
     kept={}
-    for key in TRAINING_OBSERVATION_KEYS:
+    for key in TRAINING_OBSERVATION_KEYS if rig is None else ('sim_time_s','state',*rig.frame_keys):
         if key not in observation:
             continue
         value=observation[key]
@@ -499,7 +526,7 @@ def _training_observation(observation):
     return kept
 
 
-def training_content(content) -> dict:
+def training_content(content,rig=None) -> dict:
     """The whitelisted view of an episode's content: only ``rows`` of ``observation`` and ``action`` (or a single ``observation`` and
     ``action``), plus the plain ``frames``/``state`` counters, survive; everything else, however it is named, is dropped. A row without an observation and a numeric action, or
     a value that hides a mapping in a numeric field, is refused."""
@@ -517,7 +544,7 @@ def training_content(content) -> dict:
         elif key in ('state','action'):
             kept[key]=_numbers(value)
         elif key=='observation':
-            kept[key]=_training_observation(value)
+            kept[key]=_training_observation(value,rig)
         else:
             if not isinstance(value,list):
                 raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
@@ -525,7 +552,7 @@ def training_content(content) -> dict:
             for row in value:
                 if not isinstance(row,dict) or 'observation' not in row or 'action' not in row:
                     raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
-                rows.append({'observation':_training_observation(row['observation']),'action':_numbers(row['action'])})
+                rows.append({'observation':_training_observation(row['observation'],rig),'action':_numbers(row['action'])})
             kept[key]=rows
     if not kept:
         raise ValueError('EXPORT_EPISODE_CONTENT_MISSING')
@@ -823,16 +850,19 @@ def _export_records(episodes, seen, frame_jobs):
         content = episode.get("content")
         if not isinstance(content, dict) or not content:
             raise ValueError("EXPORT_EPISODE_CONTENT_MISSING")
-        content = training_content(content)
+        # the rig is the profile the verified episode's frozen inputs bind; an unverified one is refused just below
+        rig = episode_rig(episode) if proof is not None else None
+        content = training_content(content, rig)
         if proof is None:
             _, proof = _verified_collection(episode)
-        _check_dimensions(content)
+            rig = episode_rig(episode)
+        _check_dimensions(content, rig)
         # the frames are bound by the seal the commit proof named, never by anything the caller passed in
         root, seal = sealed_episode(episode['collection_evidence'], proof)
-        plan = _frame_plan(scene_id, content, seal['files'])
+        plan = _frame_plan(scene_id, content, seal['files'], rig)
         frame_jobs.append((root, plan))
         relative = {name: destination for name, destination, _ in plan}
-        content = _with_frame_paths(content, relative)
+        content = _with_frame_paths(content, relative, rig)
         payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE
         records.append({"scene_id": scene_id, "split": split,
                         "content_sha256": hashlib.sha256(payload).hexdigest(),
@@ -858,10 +888,13 @@ def _file_sha256(path, missing):
         raise ValueError(missing) from error
 
 
-def _with_frame_paths(content, relative):
+def _with_frame_paths(content, relative, rig=None):
     """The content with every frame name replaced by its dataset-relative path."""
+    from .rig_profile import DEFAULT_RIG
+    frame_keys = (DEFAULT_RIG if rig is None else rig).frame_keys
+
     def observation(item):
-        return {key: (relative[value] if key in ('head_png', 'wrist_png') else value) for key, value in item.items()}
+        return {key: (relative[value] if key in frame_keys else value) for key, value in item.items()}
     rewritten = dict(content)
     if 'rows' in content:
         rewritten['rows'] = [{'observation': observation(row['observation']), 'action': row['action']} for row in content['rows']]

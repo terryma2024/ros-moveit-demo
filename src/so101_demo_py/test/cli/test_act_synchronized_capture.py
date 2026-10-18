@@ -83,6 +83,35 @@ def test_causal_sample_preserves_both_rgb_images_and_joint_provenance(tmp_path):
     assert saved == [row]
 
 
+def test_a_side_wrist_rig_samples_its_own_cameras_and_the_six_arm_joints_only(tmp_path):
+    from so101_demo.act.joints import ARM_JOINTS
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG
+    recorder = SynchronizedFrameRecorder(
+        tmp_path / "capture", session_id="capture-299", reset_epoch=2, source_floor_s=.5, max_age_s=.05, max_skew_s=.03,
+        rig=SIDE_WRIST_RIG)
+    for camera, color in (("side", (10, 20, 30)), ("wrist", (40, 50, 60))):
+        recorder.accept_image(camera, image(.99, f"{camera}_camera_frame", color))
+        recorder.accept_info(camera, info(.99, f"{camera}_camera_frame"))
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_RGB_INVALID"):          # a camera the rig does not have
+        recorder.accept_image("head", image(.99, "head_camera_frame", (1, 2, 3)))
+    # a six-joint state is a complete measurement for this rig (no neck joint)
+    recorder.accept_joints(SimpleNamespace(header=header(.985, "base"), name=list(ARM_JOINTS),
+                                           position=[0.] * 6, velocity=[0.] * 6))
+    row = recorder.capture(world())
+    assert row["joint_positions_rad"] == [0.] * 6 and set(row) >= {"side", "wrist"} and "head" not in row
+    assert sorted(path.name for path in (tmp_path / "capture").glob("*.png")) == ["00000-side.png", "00000-wrist.png"]
+    assert recorder.finish()["samples"] == 1
+
+
+def test_the_default_rig_still_needs_the_neck_joint(tmp_path):
+    from so101_demo.act.joints import ARM_JOINTS
+    recorder = SynchronizedFrameRecorder(
+        tmp_path / "capture", session_id="capture-299", reset_epoch=2, source_floor_s=.5, max_age_s=.05, max_skew_s=.03)
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_JOINTS_INVALID"):
+        recorder.accept_joints(SimpleNamespace(header=header(.985, "base"), name=list(ARM_JOINTS),
+                                               position=[0.] * 6, velocity=[0.] * 6))
+
+
 def test_wrong_epoch_and_reused_images_never_create_a_second_sample(tmp_path):
     recorder = prepared(tmp_path)
     with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID"):

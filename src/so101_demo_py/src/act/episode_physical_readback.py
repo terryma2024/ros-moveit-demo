@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .contracts import finite, integer, vector
 from .qc_session import load_model
+from .rig_profile import rig_from_frozen
 from .joints import ACT_JOINTS, ARM_JOINTS, ordered_positions
 from .scene_association import (association_anchor, canonical, claim_scene_records, concurrent_apply_geometry_matches,
                                 decode_ros, _call, verify_scene_association)
@@ -22,6 +23,7 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
     from .raw_physics_chunks import verify_raw_chunk
 
     try:
+        rig = rig_from_frozen(inputs)
         model_identity = audit_execution_model_identity(inputs)
         if model_identity is None or not rows or not raw_chunks or not associations:
             raise ValueError("required originals absent")
@@ -173,13 +175,16 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
             if canonical(copied) != canonical(controller["positions"]):
                 raise ValueError("measured state differs from original message")
             native = at_source(stamp / 1e9, grid)
-            if list(ordered_positions(copied, ACT_JOINTS)) != positions(model, native, ACT_JOINTS):
+            joints = ACT_JOINTS if rig.has_neck else ARM_JOINTS
+            if list(ordered_positions(copied, joints)) != positions(model, native, joints):
                 raise ValueError("original measured state differs from native step")
             arm = at_source(audit["source_stamps"]["arm"], grid)
-            neck = at_source(audit["source_stamps"]["neck"], grid)
-            yaw = positions(model, neck, ("neck_yaw_joint",))[0]
-            measured = positions(model, arm, ARM_JOINTS) + [math.sin(yaw), math.cos(yaw)]
-            vector(observation["state"], 8)
+            measured = positions(model, arm, ARM_JOINTS)
+            if rig.has_neck:
+                neck = at_source(audit["source_stamps"]["neck"], grid)
+                yaw = positions(model, neck, ("neck_yaw_joint",))[0]
+                measured = measured + [math.sin(yaw), math.cos(yaw)]
+            vector(observation["state"], rig.state_dim)
             if list(observation["state"]) != measured:
                 raise ValueError("8D measured state differs from original native source")
             old_stamp, old_generation = stamp, controller["generation"]

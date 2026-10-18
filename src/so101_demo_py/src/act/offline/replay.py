@@ -22,6 +22,8 @@ import time
 import types
 from dataclasses import dataclass
 
+from so101_demo.act.rig_profile import DEFAULT_RIG
+
 
 # ---- clock mapping -------------------------------------------------------------------------------------------------
 
@@ -250,7 +252,7 @@ class _ReplayClockHandle:
         return Time(nanoseconds=self._node.sim_ns, clock_type=ClockType.ROS_TIME)
 
 
-CAMERA_TOPICS = ("/head_camera/color", "/wrist_camera/color")
+CAMERA_TOPICS = DEFAULT_RIG.image_topics    # the default rig's (v1) image topics; a rig names its own via `rig.image_topics`
 
 
 class CameraGridRepair:
@@ -366,8 +368,10 @@ class ReplayNode:
     WITHHELD_BEFORE_WINDOW = ("/so101/simulation/evidence",)
 
     def __init__(self, stream: BagStream, clock: VirtualClock, *, clock_topic: str = "/clock", camera_repair=None,
-                 start_at_stamp_ns: int | None = None, teacher_clock_repair=None) -> None:
+                 start_at_stamp_ns: int | None = None, teacher_clock_repair=None, camera_topics=CAMERA_TOPICS) -> None:
         self.camera_repair = camera_repair
+        #: the image topics a diagnostic camera repair may touch (the rig's cameras)
+        self.camera_topics = tuple(camera_topics)
         self.teacher_clock_repair = teacher_clock_repair
         # the episode window start: world evidence recorded before this bag stamp (the receipt of the first unpaused
         # world record after the worker's last pre-Teacher pause) is not delivered
@@ -499,7 +503,7 @@ class ReplayNode:
             variants = [decoded]
             if (self.teacher_clock_repair is not None and message.topic == "/so101/teacher/events" and decoded is not None):
                 decoded.data = self.teacher_clock_repair.apply(decoded.data)
-            if self.camera_repair is not None and message.topic in CAMERA_TOPICS and decoded is not None:
+            if self.camera_repair is not None and message.topic in self.camera_topics and decoded is not None:
                 variants = self.camera_repair.apply(message.topic, decoded)
             queue = self._held.setdefault(message.topic, [])
             for decoded in variants:

@@ -13,7 +13,15 @@ import threading
 import time
 from collections import deque
 
-TRACE_TOPICS = ("/clock", "/head_camera/color", "/head_camera/camera_info", "/wrist_camera/color", "/wrist_camera/camera_info")
+from so101_demo.act.rig_profile import DEFAULT_RIG
+
+
+def trace_topics_for(rig) -> tuple:
+    """The simulation clock and, per camera of the rig, its image and camera_info topics."""
+    return ("/clock", *rig.camera_topics)
+
+
+TRACE_TOPICS = trace_topics_for(DEFAULT_RIG)
 FIELDS = ["topic", "real_ns", "mono_ns", "stamp_ns"]
 MAX_BUFFERED = 200_000
 

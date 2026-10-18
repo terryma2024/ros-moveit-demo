@@ -15,7 +15,8 @@ RGB_QOS=QoSProfile(depth=32,reliability=ReliabilityPolicy.RELIABLE)
 from sensor_msgs.msg import Image, JointState
 
 from so101_demo.act.acquisition import AcquisitionMinter
-from so101_demo.act.joints import ACT_JOINTS, ordered_positions
+from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS, ordered_positions
+from so101_demo.act.rig_profile import DEFAULT_RIG
 from so101_demo.act.synchronizer import time_ns
 
 
@@ -24,6 +25,9 @@ class RosObservationAdapter:
                  on_hazard=None, sim_time=None):
         self._lock = getattr(capture, "ingress_lock", None) or threading.RLock()
         self.synchronizer = synchronizer
+        #: the rig is the synchronizer's: the cameras this adapter subscribes to, mints and pairs, and the neck only if it has one
+        self.rig = getattr(synchronizer, "rig", DEFAULT_RIG)
+        self.cameras = self.rig.camera_names
         self.session_id = None
         self.source_floor_s = None
         self.rejected = []
@@ -41,15 +45,15 @@ class RosObservationAdapter:
         # minter belongs to this adapter because this is where a real frame first exists
         self.capture = capture
         self.reset_epoch = reset_epoch
-        self.acquisitions = AcquisitionMinter()
+        self.acquisitions = AcquisitionMinter(self.rig)
         self.last_acquisitions = {}
         self._pre_capture_frames = {}
         self._capture_seed_admitted = False
         self._activation_in_progress = False
         self.subscriptions = []
         try:
-            for stream in ("head", "wrist"):
-                self.subscriptions.append(node.create_subscription(Image, f"/{stream}_camera/color",
+            for stream in self.cameras:
+                self.subscriptions.append(node.create_subscription(Image, self.rig.camera(stream).image_topic,
                     lambda message, stream=stream: self._image(stream, message), RGB_QOS))
             self.subscriptions.append(node.create_subscription(JointState, "/joint_states",
                 self._joints, qos_profile_sensor_data))
@@ -69,7 +73,7 @@ class RosObservationAdapter:
             self.session_id = session_id
             if reset_epoch is not None:
                 self.reset_epoch = reset_epoch
-            self.acquisitions = AcquisitionMinter()
+            self.acquisitions = AcquisitionMinter(self.rig)
             self.last_acquisitions = {}
             self._pre_capture_frames = {}
             self._capture_seed_admitted = False
@@ -173,7 +177,7 @@ class RosObservationAdapter:
             if (self._closed or self.hazard is not None or self.capture is None
                     or self.capture.started or self._capture_seed_admitted):
                 raise ValueError("INPUT_COLLECTION_SEED_FIXED")
-            if set(self._pre_capture_frames) != {"head", "wrist"}:
+            if set(self._pre_capture_frames) != set(self.cameras):
                 raise ValueError("INPUT_COLLECTION_SEED_UNAVAILABLE")
             pair = {camera: (frame, pixels.copy()) for camera, (frame, pixels) in self._pre_capture_frames.items()}
             self._validate_capture_seed(pair, floor=floor)
@@ -190,7 +194,7 @@ class RosObservationAdapter:
         from so101_demo.act.contracts import finite
         with self._lock:
             floor = finite(floor, nonnegative=True)
-            if set(self._pre_capture_frames) != {"head", "wrist"}:
+            if set(self._pre_capture_frames) != set(self.cameras):
                 return "INPUT_COLLECTION_SEED_UNAVAILABLE"
             refusal = self._seed_refusal(dict(self._pre_capture_frames), floor=floor, reserve_s=reserve_s)
             return None if refusal is None else refusal[0]
@@ -211,7 +215,7 @@ class RosObservationAdapter:
         """Return None when the pair is a valid seed, else `(reason, facts)`. Shared by the raising and read-only paths."""
         from so101_demo.act.acquisition import pixel_digest
         from so101_demo.act.contracts import ContractError, finite
-        if not isinstance(pair, dict) or set(pair) != {"head", "wrist"} or self.sim_time is None:
+        if not isinstance(pair, dict) or set(pair) != set(self.cameras) or self.sim_time is None:
             return "INPUT_COLLECTION_SEED_INVALID", None
         now_ns = time_ns(self.synchronizer.monotonic())
         sim_now_ns = time_ns(finite(self.sim_time(), nonnegative=True))
@@ -230,10 +234,10 @@ class RosObservationAdapter:
                     "max_skew_ns": max_skew_ns,
                     "cameras": {camera: {"stamp_ns": time_ns(pair[camera][0].stamp_s),
                                          "received_monotonic_ns": pair[camera][0].received_monotonic_ns}
-                                for camera in ("head", "wrist")}}
+                                for camera in self.cameras}}
 
         stamps = []
-        for camera in ("head", "wrist"):
+        for camera in self.cameras:
             frame, pixels = pair[camera]
             original = self._pre_capture_frames.get(camera)
             if (original is None or frame != original[0] or frame.camera != camera
@@ -288,7 +292,7 @@ class RosObservationAdapter:
                         or self.capture is None or not getattr(self.capture, "active", False)):
                     raise ValueError("INPUT_COLLECTION_SEED_FIXED")
                 self._validate_capture_seed(pair, floor=self.source_floor_s)
-                for camera in ("head", "wrist"):
+                for camera in self.cameras:
                     self.capture.on_acquisition(*pair[camera])
                 self._capture_seed_admitted = True
                 self._pre_capture_frames.clear()
@@ -314,11 +318,13 @@ class RosObservationAdapter:
             stamp = self._stamp(message)
             if len(message.name) != len(message.position) or len(set(message.name)) != len(message.name):
                 raise ValueError("JOINT_MAPPING_INVALID")
-            values = ordered_positions(dict(zip(message.name, message.position, strict=True)), ACT_JOINTS)
+            values = ordered_positions(dict(zip(message.name, message.position, strict=True)),
+                                       ACT_JOINTS if self.rig.has_neck else ARM_JOINTS)
             self.synchronizer.push("arm", self.session_id, stamp, values[:6],
                                    received_monotonic_s=received_monotonic_s)
-            self.synchronizer.push("neck", self.session_id, stamp, values[6],
-                                   received_monotonic_s=received_monotonic_s)
+            if self.rig.has_neck:
+                self.synchronizer.push("neck", self.session_id, stamp, values[6],
+                                       received_monotonic_s=received_monotonic_s)
         except (AttributeError, TypeError, ValueError, OverflowError) as error:
             self._reject(str(error), received_monotonic_s=(time.monotonic()
                          if received_monotonic_s is None else received_monotonic_s))

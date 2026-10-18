@@ -10,6 +10,8 @@ import json
 import sys
 import time
 
+from so101_demo.act.rig_profile import DEFAULT_RIG
+
 GAP_THRESHOLD_NS = 150_000_000
 IO_THRESHOLD_NS = 100_000_000
 MAX_LINES_PER_WINDOW = 20
@@ -99,7 +101,7 @@ STALL_MAX_LINES = 10
 STALL_MAX_MESSAGES = 50_000
 STALL_MAX_SECONDS = 10.0
 STALL_MAX_TRACE_BYTES = 64 * 1024 * 1024
-STALL_TOPICS = ("/head_camera/color", "/head_camera/camera_info", "/wrist_camera/color", "/wrist_camera/camera_info")
+STALL_TOPICS = DEFAULT_RIG.camera_topics     # the cameras of the default rig; a rig names its own via `rig.camera_topics`
 
 
 def recorder_only_stalls(bag_dir, trace_path, *, stream=None, topics=STALL_TOPICS, read_messages=None, header_stamp_ns=None,

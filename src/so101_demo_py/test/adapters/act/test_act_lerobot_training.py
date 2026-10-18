@@ -57,6 +57,8 @@ def test_a_tiny_cpu_training_run_leaves_a_loadable_hash_verified_bundle(tmp_path
     normalization = bundle["normalization"]
     assert normalization["split"] == "train" and normalization["episode_count"] == 2          # validation is not in the statistics
     assert normalization["image_shape"] == [3, 48, 64]
+    # the bundle declares the cameras and state width it was trained with (read back by the policy loader and the rollout executor)
+    assert normalization["observation"] == {"cameras": ["head", "wrist"], "state_dim": 8}
     log = json.loads((root / "training-log.json").read_text())
     assert len(log["steps"]) == 3 and all(entry["loss"] == entry["loss"] for entry in log["steps"])
 
@@ -380,3 +382,67 @@ def test_a_training_run_records_the_backbone_rate(tmp_path, monkeypatch):
     _, _, root = _train(tmp_path, monkeypatch, steps=1, learning_rate=1e-3, learning_rate_backbone=1e-4)
     log = json.loads((root / "training-log.json").read_text())
     assert (log["learning_rate"], log["learning_rate_backbone"]) == (1e-3, 1e-4)
+
+
+def _side_wrist_dataset(tmp_path, *, rows=12, size=(64, 48)):
+    """An exported dataset of the side+wrist rig (6-wide state, `side_png` / `wrist_png`), written as the exporter writes it."""
+    import math
+
+    from act_training_fixture import smooth_png
+    root = tmp_path / "side-wrist-dataset"
+    episodes, counter = [], 0
+    for index, (scene, split) in enumerate(SPLITS.items()):
+        frames, content_rows = {}, []
+        for row in range(rows):
+            observation = {"sim_time_s": round(row * 0.1, 6),
+                           "state": [0.4 * math.sin(0.35 * row + 0.7 * index + joint) for joint in range(6)]}
+            for camera in ("side", "wrist"):
+                counter += 1
+                relative = f"episodes/{scene}/frames/{row:06d}-{camera}.png"
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                payload = smooth_png(size[0], size[1], counter)
+                (root / relative).write_bytes(payload)
+                frames[relative] = hashlib.sha256(payload).hexdigest()
+                observation[f"{camera}_png"] = relative
+            content_rows.append({"observation": observation, "action": [value + 0.05 for value in observation["state"]]})
+        payload = (json.dumps({"frames": rows, "rows": content_rows}, sort_keys=True, indent=2) + "\n").encode()
+        (root / "episodes" / f"{scene}.json").write_bytes(payload)
+        episodes.append({"scene_id": scene, "split": split, "content_sha256": hashlib.sha256(payload).hexdigest(),
+                         "frames": dict(sorted(frames.items()))})
+    (root / "export-manifest.json").write_text(json.dumps(
+        {"schema_version": 1, "kind": "act_dataset_export", "scene_count": len(episodes), "source_manifest_sha256": "a" * 64,
+         "campaign_index_sha256": "b" * 64, "episodes": episodes}, sort_keys=True, indent=2) + "\n")
+    return root
+
+
+def test_a_side_wrist_dataset_trains_a_bundle_that_declares_its_cameras_and_six_wide_state(tmp_path):
+    """The trainer reads the cameras, the frame keys, the state width and the preprocessing hash from the config's rig."""
+    import numpy as np
+
+    from so101_demo.act.bundle import load_bundle
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG
+    from so101_demo.act.training import load_training_samples, train_act
+    from so101_demo.adapters.act.lerobot import (
+        build_policy_from_bundle, decode_observation, preprocessing_sha256, train_act_bundle)
+    dataset = _side_wrist_dataset(tmp_path)
+    config = _config(steps=2)
+    config["observation"] = {"cameras": ["side", "wrist"], "state_dim": 6, "action_dim": 6}
+    with pytest.raises(ValueError, match="TRAINING_PREPROCESSING_DRIFT"):          # the config still freezes the head+wrist hash
+        train_act_bundle(config, dataset, tmp_path / "refused", requirements_sha256="a" * 64, device="cpu")
+    config["frozen"]["preprocessing_sha256"] = preprocessing_sha256(SIDE_WRIST_RIG)
+
+    def trainer(cfg, view, output):
+        return train_act_bundle(cfg, view, output, requirements_sha256="a" * 64, device="cpu")
+    outcome = train_act(config=config, requirements={"status": "RESOLVED"}, dataset=dataset,
+                        owner={"device": "cuda", "run_root": str(tmp_path)}, output=tmp_path / "bundle", trainer=trainer)
+    assert outcome["status"] == "COMPLETED"
+    bundle = load_bundle(tmp_path / "bundle" / "bundle.json")
+    normalization = bundle["normalization"]
+    assert normalization["observation"] == {"cameras": ["side", "wrist"], "state_dim": 6}
+    assert len(normalization["state_mean"]) == 6 and normalization["floored_dims"]["state"] == []
+    policy = build_policy_from_bundle(tmp_path / "bundle", device="cpu")
+    policy.reset()
+    observation = decode_observation(load_training_samples(dataset)[0]["rows"][2]["observation"], dataset)
+    assert set(observation) == {"sim_time_s", "state", "side", "wrist"} and len(observation["state"]) == 6
+    chunk = policy.infer(observation)
+    assert len(chunk) == 10 and all(len(action) == 6 for action in chunk) and np.isfinite(np.asarray(chunk)).all()

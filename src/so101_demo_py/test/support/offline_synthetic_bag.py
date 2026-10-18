@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
+from so101_demo.act.rig_profile import DEFAULT_RIG
 from so101_demo.act.offline.bag_io import BagWriter
 from so101_demo.act.offline.raw_recorder import CORE_TOPICS, EVENTS_TOPIC, SCENE_READS_TOPIC
 from so101_demo.act.teacher_event_stream import StreamIdentity, TeacherEventStream
@@ -95,8 +96,8 @@ def scripted_events():
     return list(zip(times, published))
 
 
-def messages(*, paused_worlds=()):
-    """[(topic, type name, receipt system ns, message)] of the whole scenario."""
+def messages(*, paused_worlds=(), rig=DEFAULT_RIG):
+    """[(topic, type name, receipt system ns, message)] of the whole scenario, with the cameras (and the neck, if any) of `rig`."""
     from builtin_interfaces.msg import Time
     from control_msgs.msg import JointTrajectoryControllerState
     from rosgraph_msgs.msg import Clock
@@ -116,7 +117,7 @@ def messages(*, paused_worlds=()):
         add("/clock", "rosgraph_msgs/msg/Clock", sim_s, "clock", Clock(clock=Time(sec=sim_ns // 10**9, nanosec=sim_ns % 10**9)))
         arm, gripper = arm_reference(sim_s)
         for kind, names, positions in (("arm", tuple(ARM_JOINTS[:5]), arm),
-                                       ("gripper", GRIPPER, gripper), ("neck", NECK, [0.0])):
+                                       ("gripper", GRIPPER, gripper), *((("neck", NECK, [0.0]),) if rig.has_neck else ())):
             message = JointTrajectoryControllerState()
             _stamp(message.header.stamp, sim_ns)
             message.joint_names = list(names)
@@ -154,16 +155,16 @@ def messages(*, paused_worlds=()):
         add("/so101/simulation/physics_step_chunks", "so101_mujoco_support/msg/PhysicsStepEvidenceChunk", stamp, "chunk",
             _chunk(sequence, last - 49, 50))
     for stamp in STAMPS:
-        for camera in ("head", "wrist"):
+        for camera in rig.camera_names:
             image = Image(height=480, width=640, encoding="rgb8", step=1920, data=np.zeros(480 * 640 * 3, np.uint8).tobytes())
             _stamp(image.header.stamp, round(stamp * 1e9))
             image.header.frame_id = f"{camera}_camera"
-            add(f"/{camera}_camera/color", "sensor_msgs/msg/Image", stamp, "image", image)
+            add(rig.camera(camera).image_topic, "sensor_msgs/msg/Image", stamp, "image", image)
     for stamp in STAMPS:
-        for camera in ("head", "wrist"):
+        for camera in rig.camera_names:
             info = CameraInfo(height=480, width=640)
             _stamp(info.header.stamp, round(stamp * 1e9))
-            add(f"/{camera}_camera/camera_info", "sensor_msgs/msg/CameraInfo", stamp, "image", info)
+            add(rig.camera(camera).info_topic, "sensor_msgs/msg/CameraInfo", stamp, "image", info)
     add("/so101/simulation/robot_contacts", "so101_mujoco_support/msg/RobotContactEvidence", 0.95, "other",
         RobotContactEvidence(simulation_session_id=SESSION, reset_epoch=EPOCH, physics_step=475))
     mono = mono_of(0.95)
@@ -176,14 +177,14 @@ def messages(*, paused_worlds=()):
 
 
 def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=(), transport_lost=0, transport_lost_by_topic=None,
-                transport_lost_events=None) -> Path:
+                transport_lost_events=None, rig=DEFAULT_RIG) -> Path:
     """Write `root/bag` (MCAP) and `root/record-stats.json`; returns the bag directory.
 
     `omit_topics`: topics left out entirely. `drop`: (topic, index) messages left out (index counts per topic from 0).
     """
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
-    plan = messages(paused_worlds=paused_worlds)
+    plan = messages(paused_worlds=paused_worlds, rig=rig)
     plan.sort(key=lambda item: item[2])
     bag = root / "bag"
     writer = BagWriter(bag)

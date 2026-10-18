@@ -18,32 +18,45 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 
-from .raw_recorder import CORE_TOPICS, EVENTS_TOPIC
+from ..rig_profile import DEFAULT_RIG
+from .raw_recorder import EVENTS_TOPIC, NECK_STATE_TOPIC, core_topics_for
 
-CONTROLLER_STATE_TOPICS = ("/arm_controller/controller_state", "/gripper_controller/controller_state",
-                           "/neck_controller/controller_state")
+
+def controller_state_topics_for(rig) -> tuple:
+    """The controller_state topics the episode judges: arm and gripper, and the neck's only for a rig that has one."""
+    return ("/arm_controller/controller_state", "/gripper_controller/controller_state",
+            *((NECK_STATE_TOPIC,) if rig.has_neck else ()))
+
+
+CONTROLLER_STATE_TOPICS = controller_state_topics_for(DEFAULT_RIG)
 CHUNK_TOPIC = "/so101/simulation/physics_step_chunks"
 WORLD_TOPIC = "/so101/simulation/evidence"
 STATE_PERIOD_NS = 2_000_000
 STATE_TAIL_NS = 100_000_000
 #: topics whose messages are decoded in the scan (the images are large, and only counted from the bag's own metadata)
-CAMERA_INFO_TOPICS = ("/head_camera/camera_info", "/wrist_camera/camera_info")   # same stamps as the images, and small
+CAMERA_INFO_TOPICS = DEFAULT_RIG.info_topics   # same stamps as the images, and small; a rig names its own via `rig.info_topics`
 CAMERA_PERIOD_NS = 100_000_000
 CLOCK_TOPIC = "/clock"
 JOINT_STATES_TOPIC = "/joint_states"
 SCENE_STATE_TOPIC = "/so101/simulation/scene_state"
 CONTACTS_TOPIC = "/so101/simulation/robot_contacts"
 SCENE_READS_TOPIC = "/so101/raw/planning_scene_reads"
-COLOR_TOPICS = {"/head_camera/color": "/head_camera/camera_info", "/wrist_camera/color": "/wrist_camera/camera_info"}
+COLOR_TOPICS = DEFAULT_RIG.color_topics
 CLOCK_PERIOD_NS = 2_000_000
 JOINT_STATES_PERIOD_NS = 10_000_000
-_DECODED = (EVENTS_TOPIC, CHUNK_TOPIC, WORLD_TOPIC, *CONTROLLER_STATE_TOPICS, *CAMERA_INFO_TOPICS, CLOCK_TOPIC,
-            JOINT_STATES_TOPIC, SCENE_STATE_TOPIC, SCENE_READS_TOPIC, *COLOR_TOPICS)
+
+
+def _decoded_for(rig) -> tuple:
+    return (EVENTS_TOPIC, CHUNK_TOPIC, WORLD_TOPIC, *controller_state_topics_for(rig), *rig.info_topics, CLOCK_TOPIC,
+            JOINT_STATES_TOPIC, SCENE_STATE_TOPIC, SCENE_READS_TOPIC, *rig.color_topics)
+
+
+_DECODED = _decoded_for(DEFAULT_RIG)
 _NS = 1_000_000_000
 
 
-def required_topics() -> tuple:
-    return tuple(dict.fromkeys((*CORE_TOPICS, EVENTS_TOPIC)))
+def required_topics(rig=DEFAULT_RIG) -> tuple:
+    return tuple(dict.fromkeys((*core_topics_for(rig), EVENTS_TOPIC)))
 
 
 def parse_events(texts) -> list:
@@ -101,7 +114,7 @@ def _overlaps(gap, intervals) -> bool:
 
 
 def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, transport_lost_by_topic=None,
-             transport_lost_events=None, scene_read_sidecar_stamps=None) -> dict:
+             transport_lost_events=None, scene_read_sidecar_stamps=None, rig=DEFAULT_RIG) -> dict:
     """{"reasons": [...], "timeline": {...}, "continuity": {...}, "counts": {...}, "topic_loss": {...}} for the bag at `bag`.
 
     `transport_lost` is the number of messages the recorder reported lost on the transport layer (None when unknown, which fails
@@ -116,23 +129,24 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
 
     info = bag_info(bag) if info is None else info
     counts = {topic: item["count"] for topic, item in sorted(info["topics"].items())}
-    reasons = [f"OFFLINE_BAG_TOPIC_MISSING: {topic}" for topic in required_topics() if counts.get(topic, 0) == 0]
+    reasons = [f"OFFLINE_BAG_TOPIC_MISSING: {topic}" for topic in required_topics(rig) if counts.get(topic, 0) == 0]
+    controller_topics, camera_info_topics, color_topics = controller_state_topics_for(rig), rig.info_topics, rig.color_topics
     types: dict = {}
     events_text, states, chunks, worlds, cameras = [], defaultdict(list), [], [], defaultdict(list)
     clock_stamps, joint_stamps, scene_states, color_stamps = [], [], [], defaultdict(list)
     clock_marks = []        # (simulation ns, bag stamp ns) of every /clock message: the map between the two clocks
     read_counts: dict = defaultdict(int)
     read_stamps: list = []  # simulation time (ns) of every planning-scene read in the bag (None for one that cannot be read)
-    for topic, type_name, bag_stamp, data in read_messages(bag, topics=[t for t in _DECODED if t in counts]):
+    for topic, type_name, bag_stamp, data in read_messages(bag, topics=[t for t in _decoded_for(rig) if t in counts]):
         read_counts[topic] += 1
         if type_name not in types:
             types[type_name] = get_message(type_name)
         message = deserialize_message(data, types[type_name])
         if topic == EVENTS_TOPIC:
             events_text.append(message.data)
-        elif topic in CONTROLLER_STATE_TOPICS:
+        elif topic in controller_topics:
             states[topic].append(_stamp_ns(message.header.stamp))
-        elif topic in CAMERA_INFO_TOPICS:
+        elif topic in camera_info_topics:
             cameras[topic].append(_stamp_ns(message.header.stamp))
         elif topic == CLOCK_TOPIC:
             clock_stamps.append(int(message.clock.sec) * _NS + int(message.clock.nanosec))
@@ -141,7 +155,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
             joint_stamps.append(_stamp_ns(message.header.stamp))
         elif topic == SCENE_STATE_TOPIC:
             scene_states.append((int(message.reset_epoch), int(message.simulation_step), _stamp_ns(message.header.stamp)))
-        elif topic in COLOR_TOPICS:
+        elif topic in color_topics:
             color_stamps[topic].append(_stamp_ns(message.header.stamp))
         elif topic == SCENE_READS_TOPIC:
             read_stamps.append(_read_sim_ns(message.data))
@@ -189,34 +203,37 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
     stop_ns = facts["normal_stop_sim_ns"]
     labels = []
     if reset_ns is not None and stop_ns is not None:
-        head_info = [s for s in cameras.get("/head_camera/camera_info", []) if reset_ns <= s <= stop_ns]
-        wrist_info = [s for s in cameras.get("/wrist_camera/camera_info", []) if reset_ns <= s <= stop_ns]
-        head_image = [s for s in color_stamps.get("/head_camera/color", []) if reset_ns <= s <= stop_ns]
-        wrist_image = [s for s in color_stamps.get("/wrist_camera/color", []) if reset_ns <= s <= stop_ns]
-        # The pair is judged on the IMAGE stamps (the frames the rows use). A camera_info lost on one camera while both
-        # paired images are present is a transport loss the topic-loss gate already reports (diagnostic): the camera grid is then the
-        # union of the two cameras' infos. Without images in the bag the camera_info pair decides, as before.
-        if head_image or wrist_image:
-            pair_equal = head_image == wrist_image
-            head = sorted(set(head_info) | set(wrist_info)) if pair_equal else head_info
+        names = rig.camera_names
+        infos = {name: [s for s in cameras.get(rig.camera(name).info_topic, []) if reset_ns <= s <= stop_ns] for name in names}
+        images = {name: [s for s in color_stamps.get(rig.camera(name).image_topic, []) if reset_ns <= s <= stop_ns]
+                  for name in names}
+        # All the rig's cameras share one grid. They are judged on the IMAGE stamps (the frames the rows use). A camera_info lost on
+        # one camera while all the images are present is a transport loss the topic-loss gate already reports (diagnostic): the
+        # camera grid is then the union of the cameras' infos. Without images in the bag the camera_info stamps decide, as before.
+        first = names[0]
+        infos_equal = all(infos[name] == infos[first] for name in names[1:])
+        if any(images.values()):
+            pair_equal = all(images[name] == images[first] for name in names[1:])
+            grid = sorted(set().union(*infos.values())) if pair_equal else infos[first]
         else:
-            pair_equal = head_info == wrist_info
-            head = head_info
-        off_grid = [[a, b] for a, b in zip(head, head[1:]) if b - a != CAMERA_PERIOD_NS]
-        report["camera_grid"] = {"frames": len(head), "off_grid_count": len(off_grid), "first_off_grid": off_grid[:10],
-                                     "head_wrist_equal": pair_equal, "paired_on": "images" if (head_image or wrist_image) else "camera_info",
-                                     "camera_info_pair_equal": head_info == wrist_info}
+            pair_equal = infos_equal
+            grid = infos[first]
+        off_grid = [[a, b] for a, b in zip(grid, grid[1:]) if b - a != CAMERA_PERIOD_NS]
+        report["camera_grid"] = {"frames": len(grid), "off_grid_count": len(off_grid), "first_off_grid": off_grid[:10],
+                                 "_".join(names) + "_equal": pair_equal,
+                                 "paired_on": "images" if any(images.values()) else "camera_info",
+                                 "camera_info_pair_equal": infos_equal}
         if off_grid:
             reasons.append(f"OFFLINE_CAMERA_GRID: {len(off_grid)} intervals other than 100 ms (a +2 ms frame or a missing frame)")
         if not pair_equal:
             reasons.append("OFFLINE_CAMERA_PAIR_STAMPS_DIFFER")
-        labels = [s + CAMERA_PERIOD_NS for s in head]
+        labels = [s + CAMERA_PERIOD_NS for s in grid]
 
     # ---- controller_state: continuous at every label instant (arm, gripper); other gaps are diagnostic (episode_qc rule)
     from ..episode_qc import reference_frames_needed_ns
     needed = sorted({frame for instant in labels for frame in reference_frames_needed_ns(instant, STATE_PERIOD_NS)})
     import bisect
-    for topic in CONTROLLER_STATE_TOPICS:
+    for topic in controller_topics:
         stamps = states.get(topic, [])
         selected = [s for s in stamps if begin <= s <= end]
         every_gap = [[a, b] for a, b in zip(stamps, stamps[1:]) if b - a != STATE_PERIOD_NS]
@@ -266,7 +283,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
         scene_reads_expected=scene_reads_expected, start_sim=start_sim, transport_lost_by_topic=transport_lost_by_topic,
         scene_read_stamps=read_stamps, scene_read_sidecar_stamps=scene_read_sidecar_stamps,
         contact_missing=contact_missing, event_sequence=sequence, transport_lost_events=transport_lost_events,
-        clock_marks=clock_marks)
+        clock_marks=clock_marks, rig=rig)
     return report
 
 
@@ -305,7 +322,7 @@ def _sequence_missing(values) -> int:
 def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns, epoch, states, chunks, worlds, cameras,
                 clock_stamps, joint_stamps, scene_states, color_stamps, transport_lost, scene_reads_expected, start_sim,
                 transport_lost_by_topic=None, contact_missing=None, event_sequence=(), transport_lost_events=None,
-                clock_marks=(), scene_read_stamps=(), scene_read_sidecar_stamps=None) -> dict:
+                clock_marks=(), scene_read_stamps=(), scene_read_sidecar_stamps=None, rig=DEFAULT_RIG) -> dict:
     """Phase C: every topic the episode uses is judged on its own continuity over the window, and the recorder's aggregate
     transport loss is reconciled with what the topics show. Adds reasons to `reasons`; returns the facts for the gate document.
 
@@ -341,7 +358,7 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
             reasons.append(f"OFFLINE_TOPIC_LOSS:{topic} gaps={len(inside)} missing={missing_in}")
 
     # existing sequence rules: their verdict stands, their facts join the document
-    for topic in CONTROLLER_STATE_TOPICS:
+    for topic in controller_state_topics_for(rig):
         item = report["continuity"].get(topic, {})
         gaps = _grid_gaps(states.get(topic, []), STATE_PERIOD_NS)
         neck = topic.startswith("/neck_")
@@ -349,13 +366,13 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
                used=not neck, messages=len(states.get(topic, [])), gaps=gaps, period=STATE_PERIOD_NS, judged=False, reason=False)
         topics[topic]["missing_in_window"] = 0 if neck else item.get("gap_count", 0)
         topics[topic]["diagnostic_in_window"] = item.get("diagnostic_gaps", 0) if not neck else item.get("gaps_in_window", 0)
-    for topic in CAMERA_INFO_TOPICS:
+    for topic in rig.info_topics:
         gaps = _grid_gaps(cameras.get(topic, []), CAMERA_PERIOD_NS)
-        record(topic, rule="100 ms stamp grid, head equals wrist (OFFLINE_CAMERA_GRID)", used=True,
+        record(topic, rule=f"100 ms stamp grid, {' equals '.join(rig.camera_names)} (OFFLINE_CAMERA_GRID)", used=True,
                messages=len(cameras.get(topic, [])), gaps=gaps, period=CAMERA_PERIOD_NS,
                window_lo=reset_ns if reset_ns is not None else lo, window_hi=stop_ns if stop_ns is not None else end,
                judged=False, reason=False)
-        topics[topic]["missing_in_window"] = report.get("camera_grid", {}).get("off_grid_count", 0) if topic == CAMERA_INFO_TOPICS[0] else 0
+        topics[topic]["missing_in_window"] = report.get("camera_grid", {}).get("off_grid_count", 0) if topic == rig.info_topics[0] else 0
 
     # new rules (C2)
     record(CLOCK_TOPIC, rule="2 ms stamp grid", used=True, messages=len(clock_stamps), gaps=clock_gaps, period=CLOCK_PERIOD_NS)
@@ -364,7 +381,7 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
     # the colour images: the camera_info of the same frame is the witness that the frame existed
     rows_lo = reset_ns if reset_ns is not None else lo
     rows_hi = stop_ns if stop_ns is not None else end
-    for image_topic, info_topic in COLOR_TOPICS.items():
+    for image_topic, info_topic in rig.color_topics.items():
         have = set(color_stamps.get(image_topic, []))
         absent = [s for s in cameras.get(info_topic, []) if s not in have]
         inside = [s for s in absent if rows_lo <= s <= rows_hi]
@@ -459,7 +476,7 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
         topics[EVENTS_TOPIC]["rule"] = "seq 1..N up to the terminal event (a loss after it is outside the episode)"
     if transport_lost_by_topic is not None and transport_lost is not None:
         return _with_breakdown(topics, detected, reasons, lo=lo, end=end, rows_lo=rows_lo, rows_hi=rows_hi,
-                               transport_lost=transport_lost, by_topic=transport_lost_by_topic,
+                               transport_lost=transport_lost, by_topic=transport_lost_by_topic, rig=rig,
                                events=transport_lost_events, wall_begin_ns=next((wall for sim, wall in clock_marks if sim >= lo), None))
     # ---- the recorder's aggregate
     unattributed = None if transport_lost is None else max(transport_lost - attributed, 0)
@@ -499,7 +516,7 @@ def _split_events(count, events, wall_begin_ns):
 
 
 def _with_breakdown(topics, detected, reasons, *, lo, end, rows_lo, rows_hi, transport_lost, by_topic, events=None,
-                    wall_begin_ns=None) -> dict:
+                    wall_begin_ns=None, rig=DEFAULT_RIG) -> dict:
     """The per-topic reconciliation (C5, rule `topic_loss`), used when the recorder reported its losses topic by topic.
 
     * the per-topic numbers must sum to the total and name only recorded topics (else OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED);
@@ -508,8 +525,9 @@ def _with_breakdown(topics, detected, reasons, *, lo, end, rows_lo, rows_hi, tra
       once, else OFFLINE_TOPIC_LOSS:<topic> reported_in_window=n detected=m (a gap inside the window is itself judged by the rule);
     * on a topic the episode does not use the loss is recorded only.
     """
-    from .raw_recorder import TOPICS
+    from .raw_recorder import topics_for
 
+    TOPICS = topics_for(rig)
     for topic in TOPICS:           # a recorded topic the scan has no rule for is recorded only
         topics.setdefault(topic, {"rule": "none (not used by the episode)", "used": False, "messages": 0, "gaps": 0, "stalls": 0,
                                   "missing_in_window": 0, "missing_outside_window": 0, "diagnostic_in_window": 0,

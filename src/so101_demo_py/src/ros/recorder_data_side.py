@@ -316,7 +316,7 @@ class RecorderDataSide:
                                                              episode.identity['reset_epoch'])
                    for frame in frames.values()):
                 raise ValueError('DYNAMIC_CAMERA_TAIL_SCOPE_INVALID')
-            if set(frames) == {'head', 'wrist'} and all(
+            if set(frames) == set(getattr(capture, 'cameras', ('head', 'wrist'))) and all(
                     round(frame.stamp_s * 1e9) >= stop_clock['sim_time_ns'] for frame in frames.values()):
                 break
             self._progress()

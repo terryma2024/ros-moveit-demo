@@ -18,6 +18,7 @@ from pathlib import Path
 from .continuous_capture import ContinuousEpisodeCapture
 from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
+from .rig_profile import rig_from_frozen
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
            "ProductionProducer", "assemble_episode_capture",
@@ -55,12 +56,15 @@ def assemble_episode_capture(
     if recorder_policy is not None:
         from .collection_config import validate_recorder_policy
         recorder_policy = validate_recorder_policy(recorder_policy)
+    # the rig of the episode is the profile its frozen inputs bind (rig v1 for inputs that bind none)
+    rig = rig_from_frozen(inputs)
     recorder = EpisodeRecorder(
         episode_root,
         session_id=identity["session_id"],
         attempt_id=identity["attempt_id"],
         reset_epoch=identity["reset_epoch"],
         provenance=provenance,
+        rig=rig,
     )
     audit = EpisodeAuditWriter(episode_root, scope, identity, inputs)
     if recorder_policy is not None:
@@ -74,6 +78,7 @@ def assemble_episode_capture(
         audit=audit,
         audit_writer=audit_writer,
         **({} if scope_path is None else {"scope": scope_path}),
+        rig=rig,
         # the capture's own remaining options - `scope` (the path of the file the writer puts the scope document in,
         # which is not the document itself), `deadline_s`, `monotonic` - pass straight through rather than being
         # duplicated here, so a caller that needs them is not forced to assemble the recorder and writer by hand
@@ -103,17 +108,21 @@ class ProductionProducer:
 
     STREAMS = ("head", "wrist", "arm", "neck")
 
-    def __init__(self, *, max_age_s: float = 0.1, max_skew_s: float = 0.1, frames=None) -> None:
+    def __init__(self, *, max_age_s: float = 0.1, max_skew_s: float = 0.1, frames=None, rig=None) -> None:
+        from .rig_profile import DEFAULT_RIG
         from .synchronizer import RgbObservationSynchronizer
+        self.rig = DEFAULT_RIG if rig is None else rig
+        #: the streams of the rig: its cameras, the arm and (when the rig has a neck) the neck yaw
+        self.streams = (*self.rig.camera_names, "arm", *(("neck",) if self.rig.has_neck else ()))
         #: where a frame comes from for a stream at an index - the run's own camera frames when it has
         #: them. The default synthesises zeroes, which is enough for a harness and wrong for a live run:
         #: the capture compares each row's pixels against the acquisition it recorded
         #: (`ACQUISITION_PIXEL_MISMATCH`), so a real episode must push the frames it actually captured.
         self.frames = frames
 
-        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s)
+        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s, rig=self.rig)
         #: where a frame-feeding loop records the instants it has supplied, one list per stream
-        self.stamps = {stream: [] for stream in self.STREAMS}
+        self.stamps = {stream: [] for stream in self.streams}
         self._pushed = 0
         self._latest = None
         #: the synchronizer's own audit from the last sample
@@ -126,13 +135,13 @@ class ProductionProducer:
         if self._pushed == 0:
             self.synchronizer.reset(session_id)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        while self._pushed < max(len(self.stamps[stream]) for stream in self.STREAMS):
-            for stream in self.STREAMS:
+        while self._pushed < max(len(self.stamps[stream]) for stream in self.streams):
+            for stream in self.streams:
                 recorded = self.stamps[stream]
                 stamp = float(recorded[self._pushed]) if self._pushed < len(recorded) else self._latest
                 if stamp is None:
                     continue
-                if stream in ("head", "wrist"):
+                if stream in self.rig.camera_names:
                     value = frame if self.frames is None else self.frames(stream, self._pushed)
                 elif stream == "arm":
                     value = [0.0] * 6
@@ -277,7 +286,8 @@ class PointEpisode:
         self.identity = dict(identity)
         # the callable the capture asks for a row, under the name the hook and the tests use
         self._physical_audit = physical_audit
-        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s)
+        self.rig = rig_from_frozen(inputs)
+        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s, rig=self.rig)
         self.capture = assemble_episode_capture(
             sampler=LiveSampler(self.synchronizer), physical_audit=physical_audit, identity=self.identity,
             provenance=provenance, inputs=inputs, episode_root=episode_root, scope=scope,
@@ -333,7 +343,7 @@ class PointEpisode:
         from .acquisition import AcquisitionMinter
 
         if self._minter is None:
-            self._minter = AcquisitionMinter()
+            self._minter = AcquisitionMinter(self.rig)
         received_s = (self.synchronizer.monotonic() if received_monotonic_s is None
                       else float(received_monotonic_s))
         frame = self._minter.mint(
@@ -355,7 +365,7 @@ class PointEpisode:
         if arm is not None:
             self.synchronizer.push("arm", session_id, float(stamp_s), list(arm),
                                    received_monotonic_s=self.synchronizer.monotonic())
-        if neck is not None:
+        if neck is not None and self.rig.has_neck:
             self.synchronizer.push("neck", session_id, float(stamp_s), float(neck),
                                    received_monotonic_s=self.synchronizer.monotonic())
 

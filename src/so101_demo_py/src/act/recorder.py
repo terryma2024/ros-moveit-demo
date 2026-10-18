@@ -13,6 +13,7 @@ import tempfile
 import zlib
 
 from .contracts import finite, identifier, integer, sha256, validate_action, validate_observation, vector
+from .rig_profile import DEFAULT_RIG
 from .synchronizer import bracketed_age_ok_ns, source_age_ok_ns, time_ns
 
 
@@ -27,6 +28,7 @@ _AUDIT_KEYS = frozenset({
     "mujoco_truth", "contacts", "planning_scene", "controller_state",
 })
 from so101_demo.act.episode_audit.verification import verify_audit_manifest
+from so101_demo.act.episode_audit.checks import rig_of_audit
 from .qc_session import file_signature, session_memo, tree_signature
 
 _PROVENANCE_KEYS = frozenset({
@@ -117,7 +119,8 @@ def _regular_hash(path: Path) -> tuple[str, int]:
 class EpisodeRecorder:
     def __init__(self, root: Path, *, session_id: str, attempt_id: str,
                  reset_epoch: int, provenance: dict, dt_s: float = 0.1,
-                 max_source_age_s: float = 0.1) -> None:
+                 max_source_age_s: float = 0.1, rig=DEFAULT_RIG) -> None:
+        self.rig = rig
         self.root = Path(root)
         if not self.root.is_absolute() or ".." in self.root.parts:
             raise ValueError("EPISODE_ROOT_INVALID")
@@ -173,7 +176,8 @@ class EpisodeRecorder:
                            validate_action(audit["reference_positions"]), strict=True))):
             raise ValueError("EPISODE_REFERENCE_INVALID")
         stamps = audit["source_stamps"]
-        if not isinstance(stamps, dict) or set(stamps) != {"head", "wrist", "arm", "neck"}:
+        if not isinstance(stamps, dict) or set(stamps) != {*self.rig.camera_names, "arm",
+                                                           *(("neck",) if self.rig.has_neck else ())}:
             raise ValueError("EPISODE_SOURCE_STAMPS_INVALID")
         if any(not source_age_ok_ns(time_ns(t), time_ns(stamp), time_ns(self.max_source_age_s))
                for stamp in stamps.values()):
@@ -225,7 +229,7 @@ class EpisodeRecorder:
     def append(self, observation: dict, action: tuple, audit: dict) -> None:
         if self._failed or self._closed:
             raise RecorderInfraError("RECORDER_NOT_WRITABLE")
-        checked = validate_observation(observation)
+        checked = validate_observation(observation, rig=self.rig)
         if checked["session_id"] != self.session_id or checked["attempt_id"] != self.attempt_id:
             raise ValueError("EPISODE_SCOPE_INVALID")
         label = validate_action(action)
@@ -235,16 +239,15 @@ class EpisodeRecorder:
             raise ValueError("EPISODE_TIME_GAP")
         self._audit(checked, label, audit)
         index = len(self._times)
-        head_path = f"frames/{index:06d}-head.png"
-        wrist_path = f"frames/{index:06d}-wrist.png"
+        paths = {camera: f"frames/{index:06d}-{camera}.png" for camera in self.rig.camera_names}
         row = {
             "observation": {"sim_time_s": t, "state": checked["state"],
-                            "head_png": head_path, "wrist_png": wrist_path},
+                            **{self.rig.frame_key(camera): path for camera, path in paths.items()}},
             "action": label, "audit": audit,
         }
         try:
-            self._write_file(head_path, _rgb_png(checked["head"]))
-            self._write_file(wrist_path, _rgb_png(checked["wrist"]))
+            for camera, path in paths.items():
+                self._write_file(path, _rgb_png(checked[camera]))
             self._records.write(_canonical(row) + b"\n")
             self._records.flush()
         except (OSError, ValueError, TypeError) as error:
@@ -431,6 +434,8 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
         raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
     # and the audit must still verify end to end, not merely hash to the sealed digest
     verify_audit_manifest(audit_manifest)
+    # the episode's rig is the profile the audit's frozen inputs bind (v1 for one that binds none)
+    rig = rig_of_audit(audit_manifest.parent)
     with (audit_manifest.parent / "episode.json").open("rb") as stream:
         audit_identity = json.loads(stream.read())
     if (audit_identity.get("session_id") != document["session_id"]
@@ -470,8 +475,7 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
             named = references.get(binding["reference_sequence"])
             if named is None or list(row["action"]) != list(named["positions"]):
                 raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-            for slot, png_key in (("head_acquisition_id", "head_png"),
-                                  ("wrist_acquisition_id", "wrist_png")):
+            for slot, png_key in ((f"{camera}_acquisition_id", rig.frame_key(camera)) for camera in rig.camera_names):
                 acquisition = acquisitions.get(binding[slot])
                 if acquisition is None or _decoded_pixel_sha256(
                         root / row["observation"][png_key]) != acquisition["pixel_sha256"]:
@@ -486,6 +490,7 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
     checker.reset_epoch = integer(document["reset_epoch"])
     checker.dt_s = 0.1
     checker.max_source_age_s = 0.1
+    checker.rig = rig
     checker._times = []
     checker._release_epoch = None
     checker._release_time_s = None
@@ -494,17 +499,16 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
         if not isinstance(row, dict) or set(row) != {"observation", "action", "audit"}:
             raise ValueError("EPISODE_RECORD_SCHEMA")
         obs = row["observation"]
-        if not isinstance(obs, dict) or set(obs) != {"sim_time_s", "state", "head_png", "wrist_png"}:
+        if not isinstance(obs, dict) or set(obs) != {"sim_time_s", "state", *rig.frame_keys}:
             raise ValueError("EPISODE_RECORD_SCHEMA")
         t = finite(obs["sim_time_s"], nonnegative=True)
-        state = vector(obs["state"], 8)
-        if not math.isclose(state[6] ** 2 + state[7] ** 2, 1., abs_tol=1e-6):
+        state = vector(obs["state"], rig.state_dim)
+        if rig.has_neck and not math.isclose(state[6] ** 2 + state[7] ** 2, 1., abs_tol=1e-6):
             raise ValueError("EPISODE_RECORD_SCHEMA")
-        head = f"frames/{index:06d}-head.png"
-        wrist = f"frames/{index:06d}-wrist.png"
-        if obs["head_png"] != head or obs["wrist_png"] != wrist:
+        frames = {camera: f"frames/{index:06d}-{camera}.png" for camera in rig.camera_names}
+        if any(obs[rig.frame_key(camera)] != path for camera, path in frames.items()):
             raise ValueError("EPISODE_SEAL_FILES_INVALID")
-        expected_files.update((head, wrist))
+        expected_files.update(frames.values())
         if checker._times and not math.isclose(t - checker._times[-1], checker.dt_s,
                                                 rel_tol=0, abs_tol=1e-6):
             raise ValueError("EPISODE_TIME_GAP")

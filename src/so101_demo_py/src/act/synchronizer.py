@@ -7,6 +7,7 @@ import threading
 import time
 
 from .contracts import finite, identifier, validate_observation, vector
+from .rig_profile import DEFAULT_RIG
 
 
 def time_ns(seconds):
@@ -47,6 +48,8 @@ def causal_sample(samples, at_s, max_age_s):
 
 
 class RgbObservationSynchronizer:
+    #: The streams of the default rig (v1); an instance's `streams` come from its rig profile: the cameras in order, `arm`,
+    #: and `neck` only for a rig that has one.
     STREAMS = ("head", "wrist", "arm", "neck")
 
     #: The joint-state streams arrive at the controller rate (500 Hz): a ring of 32 holds 64 ms, so a loop pass longer than
@@ -55,15 +58,18 @@ class RgbObservationSynchronizer:
     STATE_CAPACITY = 2048
 
     def __init__(self, *, max_age_s, max_skew_s, capacity=None,
-                 monotonic=time.monotonic):
+                 monotonic=time.monotonic, rig=DEFAULT_RIG):
+        self.rig = rig
+        self.cameras = rig.camera_names
+        self.streams = (*self.cameras, "arm", *(("neck",) if rig.has_neck else ()))
         explicit = capacity is not None
         capacity = 32 if capacity is None else capacity
         self.max_age_s = finite(max_age_s, nonnegative=True)
         self.max_skew_s = finite(max_skew_s, nonnegative=True)
         if type(capacity) is not int or capacity < 2:
             raise ValueError("invalid ring capacity")
-        self.buffers = {stream: deque(maxlen=capacity if explicit or stream in ("head", "wrist") else self.STATE_CAPACITY)
-                        for stream in self.STREAMS}
+        self.buffers = {stream: deque(maxlen=capacity if explicit or stream in self.cameras else self.STATE_CAPACITY)
+                        for stream in self.streams}
         self._session = None
         self._attempt = None
         self._last_sample = None
@@ -84,12 +90,12 @@ class RgbObservationSynchronizer:
         received = finite(self.monotonic() if received_monotonic_s is None
                           else received_monotonic_s, nonnegative=True)
         with self._lock:
-            if stream not in self.STREAMS or session_id != self._session:
+            if stream not in self.streams or session_id != self._session:
                 raise ValueError("INPUT_SESSION_INVALID")
             buffer = self.buffers[stream]
             if buffer and sim_time_s <= buffer[-1][0]:
                 raise ValueError("INPUT_TIMESTAMP_INVALID")
-            if stream in ("head", "wrist"):
+            if stream in self.cameras:
                 import numpy as np
                 if not isinstance(value, np.ndarray) or value.dtype != np.uint8 or value.shape != (480, 640, 3):
                     raise ValueError("INPUT_RGB_INVALID")
@@ -115,16 +121,18 @@ class RgbObservationSynchronizer:
             stamps = [item[0] for item in values.values()]
             if max(map(time_ns, stamps)) - min(map(time_ns, stamps)) > time_ns(self.max_skew_s):
                 raise ValueError("INPUT_SKEW")
-            yaw = values["neck"][1]
+            yaw = values["neck"][1] if self.rig.has_neck else None
             result = dict(session_id=session_id, attempt_id=attempt_id, sim_time_s=at_s,
-                          state=values["arm"][1] + (math.sin(yaw), math.cos(yaw)),
-                          head=values["head"][1].copy(), wrist=values["wrist"][1].copy())
-            validate_observation(result)
+                          state=(values["arm"][1] + (math.sin(yaw), math.cos(yaw)) if self.rig.has_neck
+                                 else values["arm"][1]),
+                          **{camera: values[camera][1].copy() for camera in self.cameras})
+            validate_observation(result, rig=self.rig)
             self._attempt, self._last_sample = attempt_id, at_s
+            neck_audit = dict(neck_yaw_rad=yaw) if self.rig.has_neck else {}
             self.last_audit = dict(source_stamps=dict(zip(values, stamps, strict=True)),
                                    source_received_wall_s={stream: item[2]
                                                            for stream, item in values.items()},
-                                   neck_yaw_rad=yaw, session_id=session_id, attempt_id=attempt_id)
+                                   **neck_audit, session_id=session_id, attempt_id=attempt_id)
             return result
 
     def sample_with_audit(self, session_id, attempt_id, at_s):

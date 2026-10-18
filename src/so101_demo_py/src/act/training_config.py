@@ -14,6 +14,8 @@ import math
 
 import yaml
 
+from .rig_profile import DEFAULT_RIG, KNOWN_RIGS
+
 # schema 2: the frozen contract plus the optimisation hyper-parameters and the normalisation std floor
 _CONFIG_KEYS = frozenset({"schema_version", "kind", "action", "observation", "normalization", "frozen", "training"})
 _TRAINING_KEYS = frozenset({"steps", "learning_rate", "batch_size", "pretrained_backbone"})
@@ -29,9 +31,9 @@ _MAX_NUM_WORKERS = 64
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _OBSERVATION_KEYS = frozenset({"cameras", "state_dim", "action_dim"})
 _FROZEN_KEYS = frozenset({"seed", "preprocessing_sha256"})
-_CAMERAS = ("head", "wrist")
-CAMERAS = _CAMERAS
-STATE_DIM = 8
+#: The default rig's (v1) cameras and state width; the config declares its own (a known rig's cameras with that rig's width).
+CAMERAS = DEFAULT_RIG.camera_names
+STATE_DIM = DEFAULT_RIG.state_dim
 ACTION_DIM = 6
 _SMOKE_CHUNK_SIZE = 10
 _SMOKE_EXECUTION_PREFIX = 1
@@ -75,10 +77,11 @@ def load_training_config(path) -> dict:
     observation = document["observation"]
     if not isinstance(observation, dict) or set(observation) != _OBSERVATION_KEYS:
         raise ValueError("TRAINING_CONFIG_INVALID")
-    if tuple(observation["cameras"]) != _CAMERAS:
+    rigs = [rig for rig in KNOWN_RIGS.values() if rig.camera_names == tuple(observation["cameras"])]
+    if not rigs:
         raise ValueError("TRAINING_CAMERAS_INVALID")
-    if observation["state_dim"] != STATE_DIM or observation["action_dim"] != ACTION_DIM:
-        # the plan's contract is two RGB views and an 8-dimensional state to a 6-joint action block
+    if observation["state_dim"] != rigs[0].state_dim or observation["action_dim"] != ACTION_DIM:
+        # the contract is the cameras of one known rig and that rig's state width (8 with the neck, 6 without), to a 6-joint action block
         raise ValueError("TRAINING_DIMENSIONS_INVALID")
 
     normalization = document["normalization"]
