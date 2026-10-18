@@ -1,0 +1,39 @@
+# SO-101 ACT closed-loop rollout: the wiring of the native executor (design 2026-10-18-so101-act-native-rollout-design.md).
+#
+# What is NOT here: every runtime bound of the run (execution deadline, state freshness, the unavailable-state stop, the RGB
+# sync age and skew, the stop velocity and wait, the endpoint tolerances) comes from the frozen inputs manifest, and the inference
+# timeouts from config/act/runtime.yaml. This file holds only names and the controller timing the frozen inputs do not carry.
+kind: act_rollout
+schema_version: 1
+
+# Which ROS image topic carries each camera a policy bundle may name. The executor reads the camera names from the bundle
+# (normalization.observation.cameras) and looks each one up here; a camera without a topic is refused before the stack starts.
+# `side` is the rig-v2 camera: its topic follows the naming convention and must be confirmed against the v2 launch.
+camera_topics:
+  head: /head_camera/color
+  wrist: /wrist_camera/color
+  side: /side_camera/color
+
+joint_state_topic: /joint_states
+
+# A bundle written before it declared its observation names no cameras: this is the camera set it was trained with.
+undeclared_bundle_cameras: [head, wrist]
+
+controller_actions:
+  arm: /arm_controller/follow_joint_trajectory
+  gripper: /gripper_controller/follow_joint_trajectory
+
+# ActExecutionAdapter timing. The goal is stamped `submit_lead_s` ahead of the simulation clock and must be accepted within
+# `accept_timeout_s` of wall time (accept < lead < the 0.1 s action grid, so a reply later than 0.1 - lead after its observation is
+# a counted PREFIX_LATE, not a command). These are initial values: no measurement report exists for the non-head executor.
+control:
+  submit_lead_s: 0.03
+  accept_timeout_s: 0.02
+
+# The arm counts as having moved when a measured arm joint is this far (rad) from its first observed value. It is the idle
+# threshold of the TRAIN-002 training view (config/act/training-002.yaml sample_selection.idle_threshold_rad), so "never moved" means
+# the same thing at training and at rollout.
+no_motion_threshold_rad: 0.005
+
+# The most a world-state read may lag the simulation before the cup pose is treated as unavailable.
+world_max_age_s: 1.0
