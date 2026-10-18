@@ -3,7 +3,9 @@
 import copy
 from dataclasses import asdict
 import json
+import io
 import math
+import pickle
 from pathlib import Path
 
 from .contracts import fields, integer, vector, finite
@@ -23,15 +25,46 @@ def world_source_record(received, scene, *, execution_root):
             "reset_epoch": world.reset_epoch, "simulation_step": world.simulation_step}}, allow_nan=False))
 
 
-def _world_source_key(document, *, identity, previous=None):
+def _content_bytes(document):
+    """The type-exact serialisation of a document: pickle keeps types (1, 1.0 and True, or int and str dictionary keys, never give
+    the same bytes), and with the memo switched off it does not depend on which parse shared which string objects. Equal bytes mean
+    an equal value; a different dictionary order only costs a miss."""
+    buffer = io.BytesIO()
+    pickler = pickle.Pickler(buffer, protocol=5)
+    pickler.fast = True
+    pickler.dump(document)
+    return buffer.getvalue()
+
+
+def _scope_key(identity):
+    # the document checks read only these two identity fields (the audit stream and the native QC pass identities that differ in
+    # every other field); an identity that lacks either is keyed whole, and the call then raises where it always did
+    try:
+        return json.dumps([identity["session_id"], identity["reset_epoch"]], default=str)
+    except Exception:
+        return json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _content_key(document, *, identity):
+    """The key of the document-only checks: the document's content and the scope. A document that cannot be serialised (or is
+    recursive) is keyed by identity, as before."""
+    scope = _scope_key(identity)
+    try:
+        return (_content_bytes(document), scope)
+    except Exception:
+        from .qc_session import Identity
+        return (Identity(document), scope)
+
+
+def _object_key(document, *, identity):
     from .qc_session import Identity
-
-    return (Identity(document), None if previous is None else Identity(previous),
-            json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str))
+    return (Identity(document), _scope_key(identity))
 
 
-@session_memo(_world_source_key, copy_result=False)
-def validate_world_source(document, *, identity, previous=None):
+@session_memo(_content_key, copy_result=False)
+def _validate_world_source_document(document, *, identity):
+    """Every check of `validate_world_source` that looks at the document alone, once per distinct source content inside a QC
+    session (the audit manifest stream and the native QC both walk the same sources)."""
     from ..adapters.act.scene_state import SceneStateObserver
     fields(document, {"kind", "schema_version", "execution_root", "physics", "received_monotonic_ns",
                       "scene_state", "scene_received_monotonic_ns", "native_reference"})
@@ -68,6 +101,18 @@ def validate_world_source(document, *, identity, previous=None):
             or round(scene["simulation_time_s"] * 1e9) != round(world.simulation_time_s * 1e9)
             or scene["paused"] or scene["clock_interval_begin_monotonic_ns"] > document["received_monotonic_ns"]):
         raise ValueError("WORLD_SOURCE_CLOCK_INVALID")
+    return world
+
+
+@session_memo(_object_key, copy_result=False)
+def _validate_world_source_object(document, *, identity):
+    """The same source object is asked about many times (the verify loop, the two selections); only the first call per object
+    serialises it for the content key."""
+    return _validate_world_source_document(document, identity=identity)
+
+
+def validate_world_source(document, *, identity, previous=None):
+    world = _validate_world_source_object(document, identity=identity)
     if previous is not None:
         old = _world(previous["physics"])
         if (world.publisher_sequence != old.publisher_sequence + 1 or world.simulation_step <= old.simulation_step

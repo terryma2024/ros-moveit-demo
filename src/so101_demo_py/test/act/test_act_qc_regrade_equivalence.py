@@ -1,0 +1,272 @@
+"""Proof that the QC regrade speed-ups (O1) leave every verdict and refusal reason unchanged.
+
+Each section keeps a verbatim copy of the pre-change function as the reference and compares (value | exception type and message)
+of the reference and the shipped function on valid and corrupt synthetic inputs. Fixtures build their own data."""
+
+import copy
+import math
+from pathlib import Path
+
+import pytest
+
+from test_act_native_world_history import frozen_scene, source_record  # noqa: F401  (pytest fixture)
+
+
+def outcome(function, *args, **kwargs):
+    try:
+        return ("value", function(*args, **kwargs))
+    except Exception as error:  # noqa: BLE001 - the refusal type and message are the comparison
+        return ("raised", type(error).__name__, str(error))
+
+
+# ---- (3) validate_world_source: the document checks are shared per source content ------------------------------------------
+
+IDENTITY = {"session_id": "alignment-session", "reset_epoch": 1}
+
+
+def _reference_imports():
+    from so101_demo.act.contracts import fields, integer, vector
+    from so101_demo.act.native_endpoints import WORLD_KIND
+    from so101_demo.act.scene_association import _world
+    return fields, integer, vector, WORLD_KIND, _world
+
+
+def reference_validate_world_source(document, *, identity, previous=None):
+    from so101_demo.adapters.act.scene_state import SceneStateObserver
+    fields, integer, vector, WORLD_KIND, _world = _reference_imports()
+    fields(document, {"kind", "schema_version", "execution_root", "physics", "received_monotonic_ns",
+                      "scene_state", "scene_received_monotonic_ns", "native_reference"})
+    if document["kind"] != WORLD_KIND or type(document["schema_version"]) is not int or document["schema_version"] != 1:
+        raise ValueError("WORLD_SOURCE_VERSION_INVALID")
+    if (not isinstance(document["execution_root"], str) or not Path(document["execution_root"]).is_absolute()
+            or ".." in Path(document["execution_root"]).parts):
+        raise ValueError("WORLD_SOURCE_EXECUTION_ROOT_INVALID")
+    for key in ("received_monotonic_ns", "scene_received_monotonic_ns"):
+        integer(document[key], minimum=1)
+    world = _world(document["physics"])
+    if (world.simulation_session_id != identity["session_id"] or world.reset_epoch != identity["reset_epoch"]
+            or world.frame_id != "world" or world.object_state.body != "plastic_cup"
+            or world.paused or world.truncated or world.simulation_step < 1):
+        raise ValueError("WORLD_SOURCE_SCOPE_INVALID")
+    state = world.object_state
+    for values in (state.position_world, state.linear_velocity_world, state.angular_velocity_world):
+        vector(values, 3)
+    vector(state.orientation_xyzw, 4)
+    if abs(math.sqrt(sum(value * value for value in state.orientation_xyzw)) - 1) > 1e-3:
+        raise ValueError("WORLD_SOURCE_POSE_INVALID")
+    reference = document["native_reference"]
+    fields(reference, {"kind", "session_id", "reset_epoch", "simulation_step"})
+    integer(reference["reset_epoch"], minimum=1)
+    integer(reference["simulation_step"], minimum=1)
+    if reference != {"kind": "native_physics_step", "session_id": identity["session_id"],
+            "reset_epoch": identity["reset_epoch"], "simulation_step": world.simulation_step}:
+        raise ValueError("WORLD_SOURCE_REFERENCE_INVALID")
+    scene = document["scene_state"]
+    SceneStateObserver(model_sha256=scene["model_sha256"], nq=len(scene["qpos"]), nv=len(scene["qvel"]),
+        max_age_s=.1, monotonic=lambda: document["scene_received_monotonic_ns"] / 1e9).validate(scene)
+    if ((scene["simulation_session_id"], scene["reset_epoch"], scene["simulation_step"])
+            != (world.simulation_session_id, world.reset_epoch, world.simulation_step)
+            or round(scene["simulation_time_s"] * 1e9) != round(world.simulation_time_s * 1e9)
+            or scene["paused"] or scene["clock_interval_begin_monotonic_ns"] > document["received_monotonic_ns"]):
+        raise ValueError("WORLD_SOURCE_CLOCK_INVALID")
+    if previous is not None:
+        old = _world(previous["physics"])
+        if (world.publisher_sequence != old.publisher_sequence + 1 or world.simulation_step <= old.simulation_step
+                or world.simulation_time_s <= old.simulation_time_s
+                or document["received_monotonic_ns"] < previous["received_monotonic_ns"]):
+            raise ValueError("WORLD_SOURCE_SEQUENCE_INVALID")
+    return world
+
+
+def _following(first, *, sequence=1, step=1, seconds=.01, receipt=1000):
+    value = copy.deepcopy(first)
+    value["physics"]["publisher_sequence"] += sequence
+    value["physics"]["simulation_step"] += step
+    value["physics"]["simulation_time_s"] += seconds
+    value["scene_state"]["simulation_step"] += step
+    value["scene_state"]["simulation_time_s"] += seconds
+    value["native_reference"]["simulation_step"] += step
+    value["received_monotonic_ns"] += receipt
+    return value
+
+
+def _set(path, replacement):
+    def mutate(value):
+        target = value
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = replacement
+    return mutate
+
+
+def _delete(path):
+    def mutate(value):
+        target = value
+        for key in path[:-1]:
+            target = target[key]
+        del target[path[-1]]
+    return mutate
+
+
+DOCUMENT_MUTATIONS = {
+    "none": lambda value: None,
+    "kind": _set(["kind"], "OTHER"),
+    "version_true": _set(["schema_version"], True),
+    "version_two": _set(["schema_version"], 2),
+    "root_relative": _set(["execution_root"], "relative/root"),
+    "root_dotdot": _set(["execution_root"], "/a/../b"),
+    "root_not_str": _set(["execution_root"], 5),
+    "received_zero": _set(["received_monotonic_ns"], 0),
+    "received_float": _set(["received_monotonic_ns"], 1.5),
+    "scene_received_bool": _set(["scene_received_monotonic_ns"], True),
+    "session": _set(["physics", "simulation_session_id"], "other"),
+    "epoch": _set(["physics", "reset_epoch"], 2),
+    "frame": _set(["physics", "frame_id"], "gripper"),
+    "body": _set(["physics", "object_state", "body"], "box"),
+    "paused": _set(["physics", "paused"], True),
+    "truncated": _set(["physics", "truncated"], True),
+    "step_zero": _set(["physics", "simulation_step"], 0),
+    "position_short": _set(["physics", "object_state", "position_world"], [0., 0.]),
+    "position_nan": _set(["physics", "object_state", "position_world"], [0., float("nan"), 0.]),
+    "velocity_inf": _set(["physics", "object_state", "linear_velocity_world"], [0., float("inf"), 0.]),
+    "quaternion_short": _set(["physics", "object_state", "orientation_xyzw"], [0., 0., 1.]),
+    "quaternion_norm": _set(["physics", "object_state", "orientation_xyzw"], [0., 0., 0., 1.01]),
+    "physics_extra": _set(["physics", "extra"], 1),
+    "physics_missing": _delete(["physics", "paused"]),
+    "reference_kind": _set(["native_reference", "kind"], "x"),
+    "reference_step": _set(["native_reference", "simulation_step"], 99),
+    "reference_session": _set(["native_reference", "session_id"], "other"),
+    "reference_epoch_bool": _set(["native_reference", "reset_epoch"], True),
+    "reference_extra": _set(["native_reference", "extra"], 1),
+    "scene_model": _set(["scene_state", "model_sha256"], "0" * 64),
+    "scene_qpos_short": _set(["scene_state", "qpos"], [0.]),
+    "scene_step": _set(["scene_state", "simulation_step"], 5),
+    "scene_time": _set(["scene_state", "simulation_time_s"], 5.),
+    "scene_paused": _set(["scene_state", "paused"], True),
+    "scene_clock": _set(["scene_state", "clock_interval_begin_monotonic_ns"], 2 ** 62),
+    "scene_missing": _delete(["scene_state", "qvel"]),
+    "document_extra": _set(["extra"], 1),
+    "document_missing": _delete(["native_reference"]),
+}
+
+
+def _step_back(first, value):
+    for part in ("physics", "scene_state", "native_reference"):
+        value[part]["simulation_step"] = first["physics"]["simulation_step"]
+
+
+def _time_back(first, value):
+    for part in ("physics", "scene_state"):
+        value[part]["simulation_time_s"] = first["physics"]["simulation_time_s"]
+
+
+PREVIOUS_MUTATIONS = {
+    "ok": lambda first, value: None,
+    "gap": lambda first, value: value["physics"].__setitem__("publisher_sequence", first["physics"]["publisher_sequence"] + 2),
+    "replay": lambda first, value: value["physics"].__setitem__("publisher_sequence", first["physics"]["publisher_sequence"]),
+    "step_back": _step_back,
+    "time_back": _time_back,
+    "receipt_back": lambda first, value: value.__setitem__("received_monotonic_ns", first["received_monotonic_ns"] - 1),
+}
+
+
+def _scope(session):
+    import contextlib
+    from so101_demo.act.qc_session import qc_session
+    return qc_session("readback:qc") if session else contextlib.nullcontext()
+
+
+@pytest.fixture(scope="module")
+def first_source(frozen_scene):
+    record, _ = source_record(frozen_scene)
+    return record
+
+
+@pytest.mark.parametrize("session", [False, True])
+def test_world_source_document_checks_agree_with_the_reference(first_source, session):
+    from so101_demo.act.native_endpoints import validate_world_source
+    cases = [("valid", copy.deepcopy(first_source))]
+    for name, mutate in DOCUMENT_MUTATIONS.items():
+        value = copy.deepcopy(first_source)
+        mutate(value)
+        cases.append((name, value))
+    with _scope(session):
+        for _ in range(2):  # the second round hits the content memo inside a session
+            for name, value in cases:
+                expected = outcome(reference_validate_world_source, value, identity=IDENTITY)
+                assert outcome(validate_world_source, value, identity=IDENTITY) == expected, name
+                # an equal copy in a different object is answered from the memo with the same outcome
+                assert outcome(validate_world_source, copy.deepcopy(value), identity=IDENTITY) == expected, name
+    assert outcome(reference_validate_world_source, cases[0][1], identity=IDENTITY)[0] == "value"
+    accepted = [name for name, value in cases if outcome(reference_validate_world_source, value, identity=IDENTITY)[0] == "value"]
+    assert accepted == ["valid", "none", "scene_model", "scene_qpos_short"], accepted
+
+
+@pytest.mark.parametrize("session", [False, True])
+def test_world_source_identity_scope_is_part_of_the_shared_result(first_source, session):
+    from so101_demo.act.native_endpoints import validate_world_source
+    with _scope(session):
+        for identity in (IDENTITY, {"session_id": "alignment-session", "reset_epoch": 2}, {"session_id": "x", "reset_epoch": 1}, IDENTITY):
+            assert outcome(validate_world_source, first_source, identity=identity) == outcome(
+                reference_validate_world_source, first_source, identity=identity)
+
+
+@pytest.mark.parametrize("session", [False, True])
+@pytest.mark.parametrize("name", sorted(PREVIOUS_MUTATIONS))
+def test_world_source_previous_checks_agree_with_the_reference(first_source, session, name):
+    from so101_demo.act.native_endpoints import validate_world_source
+    following = _following(first_source)
+    PREVIOUS_MUTATIONS[name](first_source, following)
+    with _scope(session):
+        for _ in range(2):
+            assert outcome(validate_world_source, following, identity=IDENTITY, previous=first_source) == outcome(
+                reference_validate_world_source, following, identity=IDENTITY, previous=first_source)
+        # the same source without a predecessor is not judged by the earlier predecessor
+        assert outcome(validate_world_source, following, identity=IDENTITY) == outcome(
+            reference_validate_world_source, following, identity=IDENTITY)
+        for broken in ({}, {"physics": {}}, {"physics": 5}):
+            assert outcome(validate_world_source, following, identity=IDENTITY, previous=broken) == outcome(
+                reference_validate_world_source, following, identity=IDENTITY, previous=broken)
+
+
+def test_world_source_keys_never_mix_types(first_source):
+    from so101_demo.act.native_endpoints import validate_world_source
+    mutated = copy.deepcopy(first_source)
+    mutated["scene_received_monotonic_ns"] = float(mutated["scene_received_monotonic_ns"])
+    with _scope(True):
+        validate_world_source(first_source, identity=IDENTITY)
+        assert outcome(validate_world_source, mutated, identity=IDENTITY) == outcome(
+            reference_validate_world_source, mutated, identity=IDENTITY)
+        assert outcome(validate_world_source, mutated, identity=IDENTITY)[0] == "raised"
+        unpicklable = copy.deepcopy(first_source)
+        unpicklable["kind"] = lambda: None
+        assert outcome(validate_world_source, unpicklable, identity=IDENTITY) == outcome(
+            reference_validate_world_source, unpicklable, identity=IDENTITY)
+
+
+def test_world_source_is_validated_once_per_content_inside_a_session(first_source):
+    from so101_demo.act.native_endpoints import validate_world_source
+    with _scope(True) as session:
+        first = validate_world_source(copy.deepcopy(first_source), identity=IDENTITY)
+        import json
+        second = validate_world_source(json.loads(json.dumps(first_source)), identity=IDENTITY)
+        assert first is second
+        assert session.computations.get("_validate_world_source_document") == 1
+
+
+def test_world_source_result_is_shared_between_identities_that_differ_only_outside_the_scope_fields(first_source):
+    from so101_demo.act.native_endpoints import validate_world_source
+    audit_identity = {**IDENTITY, "attempt_id": "a", "release_epoch": 0}
+    native_identity = {**IDENTITY, "lease": {"lease_issued_monotonic_s": 1.}}
+    with _scope(True) as session:
+        assert validate_world_source(first_source, identity=audit_identity) is validate_world_source(
+            first_source, identity=native_identity)
+        assert session.computations.get("_validate_world_source_document") == 1
+        for identity in ({}, {"session_id": "alignment-session"}, {"reset_epoch": 1}, None, 5):
+            assert outcome(validate_world_source, first_source, identity=identity) == outcome(
+                reference_validate_world_source, first_source, identity=identity)
+        broken = copy.deepcopy(first_source)
+        broken["kind"] = "OTHER"
+        for identity in ({}, {"reset_epoch": 1}, None):  # a refusal of the document comes before the identity is read
+            assert outcome(validate_world_source, broken, identity=identity) == outcome(
+                reference_validate_world_source, broken, identity=identity)
