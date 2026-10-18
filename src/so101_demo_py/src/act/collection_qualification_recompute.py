@@ -53,10 +53,21 @@ def sha256(raw):
 
 
 def read_frozen_inputs(path):
-    """The strict verified frozen input set. A seam only for tests whose frozen set is controlled; production passes through."""
+    """The strict verified frozen input set. A seam only for tests whose frozen set is controlled; production passes through.
+
+    A qualification is evidence about the formal collection, so the set must be a formal-mode one whose contact receipt is a user
+    activation. A diagnostic-mode set (a container contact-policy spot check) or a plan-signed candidate receipt can never be
+    qualified, whatever else its run says: it is refused here, and the run's report then names `FROZEN_INPUTS_INVALID`."""
     from so101_demo.act.diagnostic_episode_inputs import verify_frozen_inputs
 
-    return verify_frozen_inputs(Path(path))
+    frozen = verify_frozen_inputs(Path(path))
+    try:
+        approval = frozen['roles']['contact_activation']['approval']
+    except (KeyError, TypeError) as error:
+        raise ValueError('FROZEN_INPUTS_NOT_FORMAL_ACTIVATION') from error
+    if frozen.get('mode') != 'formal' or approval != 'user_activation':
+        raise ValueError('FROZEN_INPUTS_NOT_FORMAL_ACTIVATION')
+    return frozen
 
 
 def _bytes(path):

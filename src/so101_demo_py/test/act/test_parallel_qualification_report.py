@@ -430,3 +430,61 @@ def test_the_frozen_rig_must_be_the_rig_the_contract_identity_names(tmp_path):
 def build_for(world, contract_path):
     path = build_collection_qualification_report(world.run, contract=contract_path)
     return path, json.loads(path.read_bytes())
+
+
+# ---- a spot-check (diagnostic-mode, candidate-receipt) run can never be qualification evidence ---------------------------------
+
+
+REAL_READER = recompute.read_frozen_inputs   # the production reader, captured before any fixture replaces it
+
+
+def frozen_document(mode='formal', approval='user_activation'):
+    return dict(mode=mode, inputs_sha256='a' * 64, roles=dict(contact_activation=dict(approval=approval)))
+
+
+@pytest.mark.parametrize('mode,approval,accepted', [
+    ('formal', 'user_activation', True),
+    ('preselected_target_diagnostic', 'user_activation', False),
+    ('formal', 'spot_check_candidate', False),
+    ('preselected_target_diagnostic', 'spot_check_candidate', False),
+    ('formal', 'source_controlled', False),
+    (None, 'user_activation', False),
+])
+def test_the_strict_frozen_reader_needs_the_formal_mode_and_a_user_activation(monkeypatch, tmp_path, mode, approval, accepted):
+    from so101_demo.act import diagnostic_episode_inputs
+
+    monkeypatch.setattr(diagnostic_episode_inputs, 'verify_frozen_inputs', lambda path: frozen_document(mode, approval))
+    if accepted:
+        assert recompute.read_frozen_inputs(tmp_path / 'inputs-manifest.json')['mode'] == 'formal'
+    else:
+        with pytest.raises(ValueError, match='FROZEN_INPUTS_NOT_FORMAL_ACTIVATION'):
+            recompute.read_frozen_inputs(tmp_path / 'inputs-manifest.json')
+
+
+def test_a_frozen_set_without_the_activation_role_is_refused(monkeypatch, tmp_path):
+    from so101_demo.act import diagnostic_episode_inputs
+
+    monkeypatch.setattr(diagnostic_episode_inputs, 'verify_frozen_inputs', lambda path: dict(mode='formal', roles={}))
+    with pytest.raises(ValueError, match='FROZEN_INPUTS_NOT_FORMAL_ACTIVATION'):
+        recompute.read_frozen_inputs(tmp_path / 'inputs-manifest.json')
+
+
+@pytest.mark.parametrize('mode,approval', [('preselected_target_diagnostic', 'user_activation'),
+                                           ('formal', 'spot_check_candidate')])
+def test_a_run_over_such_a_frozen_set_is_never_qualified(world, monkeypatch, mode, approval):
+    """The run is the controlled world, whose frozen reader is the strict one up to the verification (replaced by the controlled
+    read): the strict reader's own requirement alone must keep it from QUALIFIED."""
+    from so101_demo.act import diagnostic_episode_inputs
+
+    monkeypatch.setattr(recompute, 'read_frozen_inputs', REAL_READER)
+    controlled = controlled_frozen_reader
+
+    def verified(path):
+        document = controlled(path)
+        document['mode'] = mode
+        document['roles'] = dict(document['roles'], contact_activation=dict(approval=approval))
+        return document
+
+    monkeypatch.setattr(diagnostic_episode_inputs, 'verify_frozen_inputs', verified)
+    _, document = build(world)
+    assert document['status'] == 'NOT_QUALIFIED' and 'FROZEN_INPUTS_INVALID' in document['reasons']
