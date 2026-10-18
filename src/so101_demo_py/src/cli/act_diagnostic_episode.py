@@ -36,6 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("--ledger", required=True)
     inspect.add_argument("--output", required=True)
     inspect.add_argument("--rig-profile", help="rig profile file (config/act/rig-v*.yaml); default: the head+wrist rig")
+    inspect.add_argument("--spot-check-receipt", help="list this one plan-signed spot_check_candidate receipt (under the "
+                         "ledger's evidence root) as the contact activation candidate, approval spot_check_candidate; only a "
+                         "preselected_target_diagnostic freeze accepts it. Default: none, the formal listing")
 
     prepare = subparsers.add_parser("prepare", help="freeze a candidate registry into immutable inputs")
     prepare.add_argument("--candidates", required=True)
@@ -407,7 +410,13 @@ def main(argv=None) -> int:
         from so101_demo.act.rig_profile import load_rig_profile
 
         rig = None if arguments.rig_profile is None else load_rig_profile(arguments.rig_profile)
-        document = inspect_inputs(Path(arguments.source_root), Path(arguments.ledger), rig)
+        try:
+            document = inspect_inputs(Path(arguments.source_root), Path(arguments.ledger), rig,
+                                      spot_check_receipt=None if arguments.spot_check_receipt is None
+                                      else Path(arguments.spot_check_receipt))
+        except ValueError as error:
+            print(f"act_diagnostic_episode: {error}", file=sys.stderr)
+            return 2
         Path(arguments.output).write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         print(arguments.output)
         return 0

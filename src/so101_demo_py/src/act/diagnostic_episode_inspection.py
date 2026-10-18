@@ -314,7 +314,26 @@ def _verify_activation_for(path: Path, proposal_path: Path, identity: dict) -> b
     return True
 
 
-def _inspect_contact(evidence_root: Path, referenced: tuple[Path, ...], identity: dict) -> tuple[dict, dict]:
+def _verify_spot_check_candidate(path: Path, proposal_path: Path, identity: dict) -> bool:
+    """A receipt of kind `spot_check_candidate` for this proposal and scene identity, verified with the opt-in the diagnostic
+    freeze itself uses. A normal (unkeyed) receipt is not a candidate and is refused here."""
+    from .contact_policy import SPOT_CHECK_CANDIDATE, verify_activation
+
+    try:
+        document = json.loads(path.read_bytes())
+        payload = json.loads(proposal_path.read_bytes())["payload"]
+        if not isinstance(document, dict) or document.get("receipt_kind") != SPOT_CHECK_CANDIDATE:
+            return False
+        verify_activation(payload, document, expected_model_sha256=identity["model_sha256"],
+                          expected_scene_sha256=identity["scene_sha256"],
+                          expected_mujoco_version=identity["mujoco_version"], allow_spot_check_candidate=True)
+    except (ValueError, KeyError, TypeError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return True
+
+
+def _inspect_contact(evidence_root: Path, referenced: tuple[Path, ...], identity: dict,
+                     spot_check_receipt: Path | None = None) -> tuple[dict, dict]:
     proposals = [path for path in referenced
                  if _verify_disabled(path) and _activated_identity(path) == identity]
     proposal_role = _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
@@ -334,6 +353,21 @@ def _inspect_contact(evidence_root: Path, referenced: tuple[Path, ...], identity
             activation_role = _selected(_role("READY", None, None, identity, [
                 {"path": str(path), "sha256": _digest(path), "approved": True,
                  "approval": "user_activation"} for path in verified]))
+    if spot_check_receipt is not None:
+        # the opt-in names one candidate receipt explicitly. It must be a file under the registered evidence root that is a
+        # spot_check_candidate of the one proposal for this scene identity; it then is the activation role's only candidate, so
+        # the diagnostic freeze sees exactly one. Anything else is refused, never skipped.
+        code = "INPUT_SPOT_CHECK_RECEIPT_INVALID"
+        try:
+            candidate = Path(spot_check_receipt).resolve(strict=True)
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            raise ValueError(code) from error
+        if (not candidate.is_file() or not candidate.is_relative_to(Path(evidence_root).resolve())
+                or len(proposals) != 1 or not _verify_spot_check_candidate(candidate, proposals[0], identity)):
+            raise ValueError(code)
+        activation_role = _selected(_role("READY", None, None, identity, [
+            {"path": str(candidate), "sha256": _digest(candidate), "approved": True,
+             "approval": "spot_check_candidate"}]))
     return proposal_role, activation_role
 
 
@@ -375,11 +409,15 @@ def _inspect_calibration_role(role: str, referenced: tuple[Path, ...]) -> dict:
                  dict(identity, rejected_candidates=[str(path) for path in unapproved]), [])
 
 
-def inspect_inputs(source_root: Path, ledger: Path, rig=None) -> dict:
+def inspect_inputs(source_root: Path, ledger: Path, rig=None, *, spot_check_receipt: Path | None = None) -> dict:
     """Record, read-only, which approved candidate exists for every required non-Head input.
 
     `rig` (a rig profile, a rig name or None for the head+wrist default) selects the scene the model identity and the reset recipe
     are read from, and the profile digest of the rig.
+
+    `spot_check_receipt` (opt-in, default None) names one plan-signed `spot_check_candidate` receipt, which then is the contact
+    activation role's only candidate with the approval kind `spot_check_candidate`; only a `preselected_target_diagnostic` freeze
+    accepts it. Without it a candidate receipt is never listed.
 
     Nothing is selected by recency and nothing is defaulted: a role with no approved, identity-
     matching candidate is reported with the blocker `freeze_inputs` will raise.
@@ -397,7 +435,7 @@ def inspect_inputs(source_root: Path, ledger: Path, rig=None) -> dict:
     referenced = _ledger_referenced_json(Path(ledger), evidence_root)
 
     identity = _compiled_model_identity(root, rig)
-    proposal_role, activation_role = _inspect_contact(evidence_root, referenced, identity)
+    proposal_role, activation_role = _inspect_contact(evidence_root, referenced, identity, spot_check_receipt)
     activated = identity if proposal_role["status"] == "READY" else None
     collection_role, runtime_role = _inspect_motion_config(root)
     roles = {
