@@ -308,6 +308,8 @@ def test_infrastructure_faults_still_stop_the_campaign(tmp_path, config, kind):
 
 
 def test_ready_instance_is_polled_during_barrier(tmp_path, config):
+    # The fake clock advances 1 s per poll, so an fsync stall could push it past the task backstop; keep the backstop far away.
+    config = replace(config, executing_hard_timeout_s=10**6)
     world = make_world(tmp_path, config, workers=('w00', 'w01'), scenes=('s1', 's2'))
     async def scenario():
         world.controls['w01'].gate = gate = asyncio.Event()
@@ -324,6 +326,7 @@ def test_ready_instance_is_polled_during_barrier(tmp_path, config):
 
     polled, assigned_early, outcome = asyncio.run(scenario())
     assert polled >= 4 and assigned_early == []
+    assert 'scene_faults' not in outcome, outcome.get('scene_faults')
     assert len(outcome['case_results']) == 2 and outcome['infra_errors'] == []
 
 

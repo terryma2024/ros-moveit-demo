@@ -125,6 +125,11 @@ def test_native_timeout_is_bounded(coordinator, scope):
     budget = policy.timeout_s + 0.2 + 0.2 + 0.5
     assert elapsed <= budget, (elapsed, budget)
     assert fake.terminated and fake.killed
+    # The BLOCKED state is written by a detached bounded-IO thread: under fsync load the write can land after check() returns.
+    deadline = time.monotonic() + 10.0
+    while not coordinator.state_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert coordinator.state_path.exists(), "BLOCKED cleanup-state.json was not written within 10 s"
     state = json.loads(coordinator.state_path.read_text())
     assert state["cleanup_state"] == probe_module.PROBE_CLEANUP_BLOCKED
     assert state["pid"] == os.getpid()
