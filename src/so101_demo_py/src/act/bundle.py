@@ -281,22 +281,16 @@ def _teacher_oracle_exclusion(evidence):
 
     The manifest is the one the QC bound (its sha256 is in the QC reference check), so neither a replaced manifest nor a summary
     edited to hide a flag reaches this rule. A Teacher manifest without a process summary (policy v1/v2) is not judged here."""
-    import hashlib
-
-    from .episode_qc import REFERENCE_CHECK, read_qc_report
-    from .result_store import _read_regular, _safe
-    from .teacher_process import exclusion_of_manifest
+    from .result_store import _safe
+    from .teacher_process import bound_teacher_oracle_exclusion
     try:
         location=_safe(Path(evidence['result_location']))
         # the QC report is phase 2's (schema 4), the Teacher manifest phase 1's
         data=_safe(Path(evidence['processing_output'])) if 'processing_output' in evidence else location
-        bound=read_qc_report(data/'qc-report.json')['checks'][REFERENCE_CHECK]['details']['teacher_manifest_sha256']
-        raw=_read_regular(location/'dynamic'/'dynamic-execute-manifest.json')
     except (OSError,ValueError,TypeError,KeyError) as error:
         raise ValueError('EXPORT_EPISODE_TEACHER_MANIFEST_UNREADABLE') from error
-    if hashlib.sha256(raw).hexdigest()!=bound:
-        raise ValueError('EXPORT_EPISODE_TEACHER_MANIFEST_UNBOUND')
-    return exclusion_of_manifest(raw)
+    # the one rule, shared with the phase-2 data verdict (`teacher_process.bound_teacher_oracle_exclusion`)
+    return bound_teacher_oracle_exclusion(data/'qc-report.json',location/'dynamic'/'dynamic-execute-manifest.json')
 
 
 def _make_pool(workers: int):

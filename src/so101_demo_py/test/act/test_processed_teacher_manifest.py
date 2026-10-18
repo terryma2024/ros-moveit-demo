@@ -37,6 +37,8 @@ def build_graded_scene(tmp_path):
     audit.write_text(json.dumps(dict(identity=dict(scene.identity, lease=scene.lease, mode="formal"))))
     report = dict(kind="ACT_EPISODE_QC", schema_version=3, rule_version=episode_qc.QC_RULE_VERSION, status="PASS", reason="",
                   identity=dict(scene.identity, lease=scene.lease, mode="formal"), counts=dict(records=3),
+                  checks={episode_qc.REFERENCE_CHECK: dict(details=dict(
+                      teacher_manifest_sha256=sha((scene.sealed / "dynamic/dynamic-execute-manifest.json").read_bytes())))},
                   inputs_sha256="1" * 64, scope_sha256=sha(scene.scope.read_bytes()), audit_manifest_sha256=sha(audit.read_bytes()),
                   episode_seal_sha256=sha((scene.out / "episode/seal.json").read_bytes()))
     report_path = scene.out / "qc-report.json"

@@ -243,6 +243,15 @@ def grade_episode(*, out, qc_output, lease, identity, scope, inputs_manifest, te
                                                  trust_memo=trust_memo, teacher_manifest=Path(teacher_manifest))
     except (OSError, ValueError, TypeError, KeyError) as error:
         return invalid("RESULT_QC_NOT_RUN: " + (str(error) or type(error).__name__))
+    if report["status"] == "PASS":
+        # the export gate's Teacher-oracle rule (the same function), applied at collection: a committed episode is exportable
+        from so101_demo.act.teacher_process import bound_teacher_oracle_exclusion
+        try:
+            exclusion = bound_teacher_oracle_exclusion(Path(qc_output), Path(teacher_manifest))
+        except ValueError as error:
+            return invalid("TEACHER_ORACLE_UNVERIFIABLE: " + (str(error) or type(error).__name__))
+        if exclusion is not None:
+            return invalid(f"TEACHER_ORACLE_EXCLUDED: {exclusion[0]} {exclusion[1]}")
     binding = dict(qc_report_path=Path(qc_output).relative_to(out).as_posix(), qc_report_sha256=digest,
                    inputs_sha256=report["inputs_sha256"], scope_sha256=report["scope_sha256"],
                    audit_manifest_sha256=report["audit_manifest_sha256"], collection_mode=mode)

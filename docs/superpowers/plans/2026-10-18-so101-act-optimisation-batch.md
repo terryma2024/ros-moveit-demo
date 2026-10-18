@@ -49,6 +49,7 @@ Measurements this plan builds on:
   - Apply the same Teacher-oracle completeness rule in phase-2 processing, as a data verdict. The episode becomes INVALID with that reason, so it is not export eligible and becomes a retry candidate.
   - formal_postrun checks that every committed episode passes the export gates.
 - **Scope:** this adds a refusal and lowers no threshold. It changes collection code and therefore the controlled identity, so a future collection needs new images and a requalification. No collection is planned now.
+- **As implemented:** `teacher_process.bound_teacher_oracle_exclusion(qc_report, teacher_manifest)` is the one rule; `bundle._teacher_oracle_exclusion` (export) and `processing.grade_episode` (phase 2) both call it. A QC-PASS episode the rule excludes grades `INVALID` with `act_data_reason` `TEACHER_ORACLE_EXCLUDED: <flag> <phase>` (the export message minus its `EXPORT_EPISODE_ORACLE_EXCLUDED` prefix), QC `NOT_RUN`, no binding, `export_eligible` false. A manifest the rule cannot read or bind grades `TEACHER_ORACLE_UNVERIFIABLE: <export code>`. The host readback regrades a VALID verdict with the same function, so old VALID data the rule refuses (frm-044) is refused. The formal post-run templates check that every committed episode passes `bundle._verified_collection_uncached`.
 
 ### O3 — Training progress, validation metrics, bubble timing
 

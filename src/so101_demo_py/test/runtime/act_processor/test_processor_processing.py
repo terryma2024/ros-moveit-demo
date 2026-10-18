@@ -420,6 +420,9 @@ def patch_store(monkeypatch, *, seal=None, qc=None, audit=None):
             raise qc
         return dict(status="PASS", inputs_sha256="i" * 64, scope_sha256="s" * 64, audit_manifest_sha256="a" * 64), "d" * 64, "formal"
     monkeypatch.setattr(result_store, "_verify_result_qc", verify)
+    # the Teacher-oracle rule has its own tests (test_processor_oracle_exclusion.py); the QC report here is a stub
+    from so101_demo.act import teacher_process
+    monkeypatch.setattr(teacher_process, "bound_teacher_oracle_exclusion", lambda report, manifest: None)
     return seen
 
 

@@ -75,5 +75,25 @@ def exclusion_of_manifest(manifest_bytes: bytes) -> tuple[str, str] | None:
     return oracle_exclusion(manifest.get("teacher_process_summary"))
 
 
-__all__ = ["EXCLUDED_CODE", "METADATA_FILE", "METADATA_SCHEMA", "SUMMARY_SCHEMA", "exclusion_of_manifest", "metadata_document",
+def bound_teacher_oracle_exclusion(qc_report: Path, teacher_manifest: Path) -> tuple[str, str] | None:
+    """(flag, phase) when the Teacher manifest the QC report bound makes the episode not training-eligible, else None.
+
+    The single rule of the oracle exclusion: the export gate (`bundle._teacher_oracle_exclusion`) and the phase-2 data verdict
+    (`runtime.act_processor.processing.grade_episode`) both call it, so collection and export can never disagree. The manifest is
+    the one the QC bound (its sha256 is in the QC reference check), so neither a replaced manifest nor a summary edited to hide a
+    flag reaches the rule. A Teacher manifest without a process summary (policy v1/v2) is not judged here.
+    Raises ``EXPORT_EPISODE_TEACHER_MANIFEST_UNREADABLE`` or ``EXPORT_EPISODE_TEACHER_MANIFEST_UNBOUND``."""
+    from .episode_qc import REFERENCE_CHECK, read_qc_report
+    from .result_store import _read_regular
+    try:
+        bound = read_qc_report(Path(qc_report))["checks"][REFERENCE_CHECK]["details"]["teacher_manifest_sha256"]
+        raw = _read_regular(Path(teacher_manifest))
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        raise ValueError("EXPORT_EPISODE_TEACHER_MANIFEST_UNREADABLE") from error
+    if hashlib.sha256(raw).hexdigest() != bound:
+        raise ValueError("EXPORT_EPISODE_TEACHER_MANIFEST_UNBOUND")
+    return exclusion_of_manifest(raw)
+
+
+__all__ = ["EXCLUDED_CODE", "bound_teacher_oracle_exclusion", "METADATA_FILE", "METADATA_SCHEMA", "SUMMARY_SCHEMA", "exclusion_of_manifest", "metadata_document",
            "validate_summary", "write_metadata"]
