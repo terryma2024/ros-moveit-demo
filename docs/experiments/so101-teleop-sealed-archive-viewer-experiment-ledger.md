@@ -8,7 +8,7 @@ worktree: /data/work/ws_moveit/.worktrees/teleop-archive-viewer
 source_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/teleop-archive-viewer
 branch: codex/teleop-archive-viewer
 base_commit: 007cb1e3c1830f9348052fa2cc4f39e4bd0396a7
-current_commit: f6cc106b94ee58f0d8a9bb93591bc26f7a730d22 (prior manifest Data Table checkpoint; broader controls/PNG preview follow)
+current_commit: 39cb02125a05e14cbb57f6d4d741d2baf6625dbe (prior controls/PNG preview checkpoint; Select width correction follows)
 evidence_root: /data/work/so101-evidence/teleop-archive-viewer/20261017T062429Z-007cb1e3
 confirmed_conclusions:
   - OBSERVED: remote tip matched ls-remote when the isolated worktree was created
@@ -21,7 +21,7 @@ disproven_routes:
   - existing page routing uses paths, not page query parameters
 open_hypotheses:
   - real discovery and cold package latency require measurement during approved implementation
-latest_checkpoint: CP-014-ARCHIVES-SHADCN-PREVIEW-GATES-PASSED
+latest_checkpoint: CP-015-SELECT-MENU-WIDTH-GATES-PASSED
 next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived sample10 available
 ```
 
@@ -270,3 +270,13 @@ next_experiment: Genuine-full-registry-availability-and-real-acceptance; derived
 - Final headed Chrome `final-verified/browser-result.json`:root switching clears package/scene; server filters/search/sort preserved; synthetic-only verification38/38 reaches Progress100 without mismatch/missing; keyboard End/Home and pointer seek synchronize both905-row cameras and both chart cursors; play/pause retained. PNG000003-head preview loads original pixels with zero automatic downloads, explicit download hash matches seal; Escape/X/focus restoration verified. All1811 seal file metadata entries match API over paged Collapsible tables; JSON viewer opens; desktop/mobile430px dialogs/filters/playback fit; zero pageerrors. Final browser/native screenshots opened/inspected, including visible slider track and reason ellipsis. Same service3589065 and both search roots preserved, current build/install/served assets byte-match.
 - Read-only readback: sample parent/package18607 entries and synthetic62 paths retain mode/size/mtime/hash; download matches manifest SHA256. Inline self review checked controls/state/query/identity semantics, read-only image route, complete lazy metadata, focus/accessibility, layout and owned cleanup; no unresolved finding. Genuine original seven-root/full EXP-620 acceptance remains unavailable; this is derived sample UI acceptance plus synthetic verification only.
 - Retained entire registered root/batch, before/after screenshots, all failed/successful tests/builds/probes, profiles/download/installed provenance and hash readback. Archived none; read-back scratch in retention.json are deletion candidates only, nothing deleted. Final owned GUI browser stopped; manual Tailscale service remains healthy for user. Ready for one scoped archive-controls/preview commit and normal authorized origin feature push.
+
+
+## Select menu width correction
+
+- PLANNED: user reports Search root dropdown wraps archive-viewer-fixtures into three lines. Same registered root, batch `select-menu-width-20261018T015229Z-d4214e`, direct AI-STATION-001, clean feature HEAD39cb02125a, manual service3589065 preserved. Investigate shared Select geometry and compiled Tailwind3 utilities; candidate boundaries are an unscoped w-4 on option/trigger and unported v4 variable width syntax. Freeze real browser before/after metrics and screenshots, apply minimum shared Select correction, full Bun/build and root/filter/page-size keyboard/desktop/mobile checks; inline review, no backend/schema/fixture/ROS changes, no dst/subagents/reconfirmation. Retain all evidence.
+- OBSERVED live baseline: option44px/76px high, menu144px, trigger208.27px; archive-viewer-fixtures rendered3 lines. Source/cn readback proves the unscoped w-4 after the SVG height selector overrides option w-full and trigger w-fit; v4 Radix variable-width syntax did not generate the intended Tailwind3 viewport minimum. Corrected SVG width scopes at all occurrences, popper viewport min-width and content available-height/origin to v3 syntax; options retain full width, single-line text with bounded truncation. No selection/API/state changes.
+- Browser RED/GREEN is the layout regression gate: jsdom has no real CSS geometry, so no style-mirroring unit test added. Final Chrome verified option196.27px/36px high, menu204.27px >= trigger200.27px; full name1 line on1440px desktop and430px mobile, menu stays within viewport. Mouse root switch clears package/scene; keyboard Enter/Home/Enter switches root; Split/Outcome and item-aligned100-row page-size select pass; zero pageerrors. Initial acceptance script sent Home before selected-option focus settled; preserved timeout and repeated with explicit focus assertions, same product code passes. All before/after/native images opened/inspected.
+- Full frontend `select-menu-width-full-web-bfe285a3`:64 files/340 tests passed, rc0,4.37s. Installed `select-menu-width-install-febb0105`:tsc/Vite/colcon rc0,4.95s. Existing shared Sheet-ref/bundle/underlay warnings retained. Low-impact shared Select style correction only; Python/CTest/benchmark not rerun. Current source assets byte-match installed and served index, manual service3589065 preserved on Tailscale8000.
+- Inline review covered scoped icon sizing, full-width single-line options, Radix variable syntax, caller overrides, bounded mobile layout and unchanged accessibility/keyboard semantics; no unresolved finding. Full sample parent/package18607 entries unchanged by mode/size/mtime/hash. No backend, schema, sealed fixture or robot action; derived sample only, no original seven-root/full EXP-620 acceptance claim.
+- Retained entire registered root/batch, user image, before/after metrics, all browser profiles/screenshots/logs, full tests/build/provenance and read-only proof. Archived none; test scratch in retention.json are deletion candidates only, nothing deleted. Stopped only final owned GUI probe; manual service remains healthy. Ready for one Select width fix commit and normal authorized origin feature push.
