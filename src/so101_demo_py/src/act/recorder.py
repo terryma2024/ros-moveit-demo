@@ -96,13 +96,13 @@ def _decoded_pixel_sha256(path: Path) -> str:
     raw = zlib.decompress(b"".join(chunks))
     if len(raw) != 480 * (1 + 1920):
         raise ValueError("EPISODE_FRAME_INVALID")
-    rows = []
-    for row in range(480):
-        start = row * (1 + 1920)
-        if raw[start] != 0:
-            raise ValueError("EPISODE_FRAME_INVALID")
-        rows.append(raw[start + 1:start + 1 + 1920])
-    return hashlib.sha256(b"".join(rows)).hexdigest()
+    import numpy as np
+
+    # 480 rows of one filter byte (which must be 0) and 1920 RGB bytes: strip the filter column in one pass
+    scanlines = np.frombuffer(raw, dtype=np.uint8).reshape(480, 1 + 1920)
+    if scanlines[:, 0].any():
+        raise ValueError("EPISODE_FRAME_INVALID")
+    return hashlib.sha256(np.ascontiguousarray(scanlines[:, 1:])).hexdigest()
 
 
 def _regular_hash(path: Path) -> tuple[str, int]:

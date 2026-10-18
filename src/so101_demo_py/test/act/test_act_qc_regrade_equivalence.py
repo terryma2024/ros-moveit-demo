@@ -446,3 +446,113 @@ def test_source_model_checked_matches_the_reference_and_reuses_one_data(frozen_s
                 assert actual == expected, name
     assert native_endpoints._scratch_data(model) is native_endpoints._scratch_data(model)
     assert isinstance(native_endpoints._scratch_data(model), mujoco.MjData)
+
+
+# ---- (5) _decoded_pixel_sha256: the filter bytes are stripped in one pass -----------------------------------------------------
+
+import hashlib
+import struct
+import zlib
+
+def reference_decoded_pixel_sha256(path: Path) -> str:
+    """Decode a lossless RGB PNG and hash its pixels exactly as the acquisition did.
+
+    The writer stores filter-0 rows, so decoding needs only zlib; hashing the concatenated RGB bytes
+    reproduces the digest the camera boundary minted over the (480, 640, 3) uint8 array.
+    """
+
+    payload = path.read_bytes()
+    if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("EPISODE_FRAME_INVALID")
+    offset, chunks, header = 8, [], None
+    while offset + 8 <= len(payload):
+        length = struct.unpack(">I", payload[offset:offset + 4])[0]
+        kind = payload[offset + 4:offset + 8]
+        body = payload[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            chunks.append(body)
+        elif kind == b"IEND":
+            break
+    if header != (640, 480, 8, 2, 0, 0, 0) or not chunks:
+        raise ValueError("EPISODE_FRAME_INVALID")
+    raw = zlib.decompress(b"".join(chunks))
+    if len(raw) != 480 * (1 + 1920):
+        raise ValueError("EPISODE_FRAME_INVALID")
+    rows = []
+    for row in range(480):
+        start = row * (1 + 1920)
+        if raw[start] != 0:
+            raise ValueError("EPISODE_FRAME_INVALID")
+        rows.append(raw[start + 1:start + 1 + 1920])
+    return hashlib.sha256(b"".join(rows)).hexdigest()
+
+
+def _png(raw, *, header=(640, 480, 8, 2, 0, 0, 0), idat_parts=1, signature=b"\x89PNG\r\n\x1a\n", end=True, trailing=b""):
+    from so101_demo.act.recorder import _png_chunk
+    compressed = zlib.compress(raw, level=6)
+    size = max(1, len(compressed) // idat_parts)
+    parts = [compressed[i:i + size] for i in range(0, len(compressed), size)] if idat_parts > 1 else [compressed]
+    return (signature + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", *header))
+            + b"".join(_png_chunk(b"IDAT", part) for part in parts)
+            + (_png_chunk(b"IEND", b"") if end else b"") + trailing)
+
+
+def _scanlines(seed, filters=None):
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    pixels = rng.integers(0, 256, size=(480, 1920), dtype=np.uint8)
+    column = np.zeros((480, 1), dtype=np.uint8)
+    for row, value in (filters or {}).items():
+        column[row, 0] = value
+    return np.concatenate([column, pixels], axis=1).tobytes()
+
+
+def _png_cases():
+    valid = _scanlines(1)
+    flat = bytes(480 * 1921)
+    return {
+        "valid": _png(valid), "valid_many_idat": _png(valid, idat_parts=5), "flat": _png(flat),
+        "valid_trailing": _png(valid, trailing=b"junk"), "no_iend": _png(valid, end=False),
+        "filter_first_row": _png(_scanlines(2, {0: 1})), "filter_middle_row": _png(_scanlines(3, {240: 4})),
+        "filter_last_row": _png(_scanlines(4, {479: 255})), "filter_many_rows": _png(_scanlines(5, {7: 1, 99: 2, 300: 3})),
+        "signature": _png(valid, signature=b"\x89PNG\r\n\x1a\x0b"), "empty": b"",
+        "short_raw": _png(valid[:-1]), "long_raw": _png(valid + b"\x00"), "empty_raw": _png(b""),
+        "header_width": _png(valid, header=(641, 480, 8, 2, 0, 0, 0)), "header_depth": _png(valid, header=(640, 480, 16, 2, 0, 0, 0)),
+        "header_color": _png(valid, header=(640, 480, 8, 6, 0, 0, 0)), "header_interlace": _png(valid, header=(640, 480, 8, 2, 0, 0, 1)),
+        "no_idat": _png(valid)[:8] + _png(valid)[8:33] + _png(valid)[-12:],
+        "no_ihdr": _png(valid)[:8] + _png(valid)[33:],
+        "truncated_zlib": _png(valid)[:200],
+        "short_signature_only": b"\x89PNG\r\n\x1a\n",
+    }
+
+
+def test_decoded_pixel_digest_agrees_with_the_reference(tmp_path):
+    from so101_demo.act.recorder import _decoded_pixel_sha256
+    cases = _png_cases()
+    refused = []
+    for name, payload in cases.items():
+        path = tmp_path / f"{name}.png"
+        path.write_bytes(payload)
+        expected = outcome(reference_decoded_pixel_sha256, path)
+        assert outcome(_decoded_pixel_sha256, path) == expected, name
+        if expected[0] == "raised":
+            refused.append(name)
+    assert outcome(_decoded_pixel_sha256, tmp_path / "valid.png")[0] == "value"
+    assert outcome(_decoded_pixel_sha256, tmp_path / "valid_many_idat.png")[0] == "value"
+    assert outcome(_decoded_pixel_sha256, tmp_path / "missing.png") == outcome(reference_decoded_pixel_sha256, tmp_path / "missing.png")
+    assert {"filter_first_row", "filter_middle_row", "filter_last_row", "filter_many_rows", "signature", "short_raw", "long_raw",
+            "header_width", "no_idat", "truncated_zlib"} <= set(refused)
+    for name in ("filter_first_row", "filter_middle_row", "filter_last_row", "filter_many_rows"):
+        assert outcome(_decoded_pixel_sha256, tmp_path / f"{name}.png") == ("raised", "ValueError", "EPISODE_FRAME_INVALID")
+
+
+def test_decoded_pixel_digest_is_the_digest_of_the_original_array(tmp_path):
+    import numpy as np
+    from so101_demo.act.recorder import _decoded_pixel_sha256, _rgb_png
+    frame = np.random.default_rng(9).integers(0, 256, size=(480, 640, 3), dtype=np.uint8)
+    path = tmp_path / "frame.png"
+    path.write_bytes(_rgb_png(frame))
+    assert _decoded_pixel_sha256(path) == hashlib.sha256(frame.tobytes()).hexdigest() == reference_decoded_pixel_sha256(path)
