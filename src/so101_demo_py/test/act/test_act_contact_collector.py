@@ -67,3 +67,64 @@ def test_offline_collector_replays_same_physical_state_for_seed():
         for key in ("physics_step", "simulation_time_s", "left_contacts", "right_contacts",
                     "other_contacts", "cup_position_m", "cup_velocity_m_s", "model_qpos", "model_qvel"):
             assert a[key] == b[key]
+
+
+SIDE_WRIST_SCENE = PACKAGE / "assets/mujoco/act/scene_side_wrist.xml"
+SIDE_WRIST_PROFILE = PACKAGE / "config/act/rig-v2.yaml"
+
+
+@pytest.mark.parametrize("rig,scene", [("head-wrist", SCENE), ("side-wrist", SIDE_WRIST_SCENE)])
+def test_every_rig_pin_is_the_recompiled_identity(rig, scene):
+    mujoco = pytest.importorskip("mujoco")
+    from so101_demo.act.contact_collector import RIG_IDENTITIES, rig_identity
+    from so101_demo.adapters.act.physics import model_sha256
+    assert set(RIG_IDENTITIES) == {"head-wrist", "side-wrist"}
+    assert rig_identity(rig) == (hashlib.sha256(scene.read_bytes()).hexdigest(),
+                                 model_sha256(mujoco.MjModel.from_xml_path(str(scene))))
+
+
+def test_the_head_wrist_pins_are_unchanged_and_the_side_wrist_ones_are_its_own():
+    from so101_demo.act import contact_collector as c
+    assert c._SCENE_SHA256 == "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
+    assert c._MODEL_SHA256 == "17c415d9541be3c13ce43d8650a0879b5b2d7f62177cca7601500fd94d3d878e"
+    assert c.rig_identity(None) == c.rig_identity("head-wrist") == (c._SCENE_SHA256, c._MODEL_SHA256)
+    assert c.rig_identity("side-wrist") == (
+        "611ed1e4645248d6fa3620ad95194993fd09915351fbe34fae30074ddf35c383",
+        "9f16f382839c80fc2a0a26a59bf7723e6d920b730febd864f13a391d3179350c")
+    with pytest.raises(ValueError, match="RIG_PROFILE_UNKNOWN"):
+        c.rig_identity("no-such-rig")
+
+
+@pytest.mark.parametrize("regime", ["no_contact", "bilateral_touch", "stable_hold", "post_release"])
+def test_offline_collector_accepts_the_side_wrist_scene_under_its_rig(regime):
+    _pinned()
+    from so101_demo.act.contact_collector import collect_offline_sample, rig_identity
+    sample = collect_offline_sample(
+        SIDE_WRIST_SCENE, MOTION, regime=regime, seed=0, sample_id=f"offline-{regime}-000",
+        config_sha256="f" * 64, rig="side-wrist",
+    )
+    scene_pin, model_pin = rig_identity("side-wrist")
+    assert (sample["scene_sha256"], sample["model_sha256"]) == (scene_pin, model_pin)
+    assert sample["diagnostic_result"]["status"] == "PASS"
+
+
+@pytest.mark.parametrize("scene,rig", [(SCENE, "side-wrist"), (SIDE_WRIST_SCENE, "head-wrist"), (SIDE_WRIST_SCENE, None)])
+def test_offline_collector_refuses_a_scene_of_another_rig(scene, rig):
+    _pinned()
+    from so101_demo.act.contact_collector import collect_offline_sample
+    with pytest.raises(ValueError, match="hash mismatch"):
+        collect_offline_sample(scene, MOTION, regime="no_contact", seed=0, sample_id="offline-no_contact-000",
+                               config_sha256="f" * 64, rig=rig)
+
+
+def test_the_calibration_cli_takes_the_rig_and_refuses_another_rigs_scene(tmp_path):
+    _pinned()
+    from so101_demo.cli.act_collect_contact_calibration import main
+    root = tmp_path / "cohort"
+    with pytest.raises(ValueError, match="not the scene of rig side-wrist"):
+        main(["--mode", "offline", "--scene", str(SCENE), "--motion-policy", str(MOTION),
+              "--output-root", str(root), "--rig-profile", str(SIDE_WRIST_PROFILE)])
+    with pytest.raises(ValueError, match="not the scene of rig head-wrist"):
+        main(["--mode", "offline", "--scene", str(SIDE_WRIST_SCENE), "--motion-policy", str(MOTION),
+              "--output-root", str(root)])
+    assert not root.exists()

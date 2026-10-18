@@ -10,9 +10,9 @@ from pathlib import Path
 
 from so101_demo.act.contact_calibration import _canonical, _read_cohort, _write_exclusive, seal_cohort
 from so101_demo.act.contact_collector import (
-    _MODEL_SHA256, _MOTION_SHA256, _MUJOCO_VERSION, _SCENE_SHA256,
-    collect_offline_sample,
+    _MOTION_SHA256, _MUJOCO_VERSION, collect_offline_sample, rig_identity,
 )
+from so101_demo.act.rig_profile import DEFAULT_RIG, load_rig_profile
 
 _REGIMES = (
     "no_contact", "bilateral_touch", "over_compression", "micro_lift_slip", "stable_hold"
@@ -38,7 +38,14 @@ def main(arguments=None):
     parser.add_argument("--scene", type=Path, required=True)
     parser.add_argument("--motion-policy", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--rig-profile", type=Path, default=None,
+                        help="rig profile (config/act/rig-v*.yaml) whose scene and compiled-model identity the cohort is "
+                             "collected under; --scene must be that rig's scene. Default: the head+wrist rig")
     options = parser.parse_args(arguments)
+    rig = DEFAULT_RIG if options.rig_profile is None else load_rig_profile(options.rig_profile)
+    scene_pin, model_pin = rig_identity(rig)
+    if hashlib.sha256(options.scene.read_bytes()).hexdigest() != scene_pin:
+        raise ValueError("ACT scene is not the scene of rig " + rig.rig)
     root = options.output_root
     root.mkdir(mode=0o750)
     _fsync_directory(root.parent)
@@ -48,8 +55,8 @@ def main(arguments=None):
     config = {
         "schema_version": 1,
         "mujoco_version": _MUJOCO_VERSION,
-        "model_sha256": _MODEL_SHA256,
-        "scene_sha256": _SCENE_SHA256,
+        "model_sha256": model_pin,
+        "scene_sha256": scene_pin,
         "motion_policy_sha256": _MOTION_SHA256,
         "policy_id": "so101-act-contact-20260925",
         "allowed_other_contact_bodies": ["table"],
@@ -84,7 +91,7 @@ def main(arguments=None):
             sample_id = f"offline-{regime}-{seed:03d}"
             sample = collect_offline_sample(
                 options.scene, options.motion_policy, regime=regime,
-                seed=seed, sample_id=sample_id, config_sha256=config_hash,
+                seed=seed, sample_id=sample_id, config_sha256=config_hash, rig=rig,
             )
             _write_exclusive(samples_root / f"{sample_id}.json", _canonical(sample) + b"\n")
             samples.append(sample)

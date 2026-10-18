@@ -18,11 +18,20 @@ import numpy as np
 import yaml
 
 from so101_demo.act.contact_calibration import _canonical
+from so101_demo.act.rig_files import rig_name
 from so101_demo.adapters.act.physics import model_sha256
 
 _MUJOCO_VERSION = "3.12.0"
 _SCENE_SHA256 = "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
 _MODEL_SHA256 = "17c415d9541be3c13ce43d8650a0879b5b2d7f62177cca7601500fd94d3d878e"
+# side-wrist: scene_side_wrist.xml and the model compiled from it (no head body, neck joint or neck actuator)
+_SIDE_WRIST_SCENE_SHA256 = "611ed1e4645248d6fa3620ad95194993fd09915351fbe34fae30074ddf35c383"
+_SIDE_WRIST_MODEL_SHA256 = "9f16f382839c80fc2a0a26a59bf7723e6d920b730febd864f13a391d3179350c"
+#: rig name -> (scene sha256, compiled model sha256); the head-wrist pins are the long-standing constants above
+RIG_IDENTITIES = {
+    "head-wrist": (_SCENE_SHA256, _MODEL_SHA256),
+    "side-wrist": (_SIDE_WRIST_SCENE_SHA256, _SIDE_WRIST_MODEL_SHA256),
+}
 _MOTION_SHA256 = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 _MAX_FORCE_N = 11.6
 _MAX_DISPLACEMENT_M = .03
@@ -38,6 +47,14 @@ _SCENARIOS = {
     "stable_hold": ("hold", 11),
     "post_release": ("settle_after_release", 6),
 }
+
+
+def rig_identity(rig=None) -> tuple[str, str]:
+    """(scene sha256, compiled model sha256) of a rig (a profile, a name, or None for the default head-wrist rig)."""
+    try:
+        return RIG_IDENTITIES[rig_name(rig)]
+    except KeyError:
+        raise ValueError("RIG_PROFILE_UNKNOWN: " + rig_name(rig)) from None
 
 
 def _sha(path: Path) -> str:
@@ -116,19 +133,20 @@ def _qualifies(regime: str, phase: str, step: int, frame: dict, force: float) ->
 
 def collect_offline_sample(
     scene_path: Path, motion_policy_path: Path, *, regime: str, seed: int,
-    sample_id: str, config_sha256: str,
+    sample_id: str, config_sha256: str, rig=None,
 ) -> dict:
     """Run a fresh deterministic physical session and return its lossless window."""
 
     if regime not in _SCENARIOS or type(seed) is not int or seed < 0 or not sample_id:
         raise ValueError("offline scenario identity is invalid")
     scene_path, motion_policy_path = Path(scene_path), Path(motion_policy_path)
+    scene_pin, model_pin = rig_identity(rig)
     if mujoco.mj_versionString() != _MUJOCO_VERSION:
         raise ValueError("MuJoCo runtime version mismatch")
-    if _sha(scene_path) != _SCENE_SHA256 or _sha(motion_policy_path) != _MOTION_SHA256:
+    if _sha(scene_path) != scene_pin or _sha(motion_policy_path) != _MOTION_SHA256:
         raise ValueError("ACT scene or motion policy hash mismatch")
     model = mujoco.MjModel.from_xml_path(str(scene_path.resolve()))
-    if model_sha256(model) != _MODEL_SHA256 or model.opt.timestep != .002:
+    if model_sha256(model) != model_pin or model.opt.timestep != .002:
         raise ValueError("ACT compiled model or timestep mismatch")
     policy = yaml.safe_load(motion_policy_path.read_bytes())
     preopen = policy["gripper_actions"]["preopen_q6"]
@@ -223,8 +241,8 @@ def collect_offline_sample(
                         "simulation_session_id": f"offline-{sample_id}", "reset_epoch": 1,
                         "scenario": scenario,
                         "scenario_sha256": hashlib.sha256(_canonical(scenario)).hexdigest(),
-                        "model_sha256": _MODEL_SHA256,
-                        "scene_sha256": _SCENE_SHA256,
+                        "model_sha256": model_pin,
+                        "scene_sha256": scene_pin,
                         "motion_policy_sha256": _MOTION_SHA256,
                         "collector_sha256": _sha(Path(__file__)),
                         "config_sha256": config_sha256,
