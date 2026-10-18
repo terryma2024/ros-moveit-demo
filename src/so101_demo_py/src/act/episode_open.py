@@ -68,6 +68,8 @@ def open_recorder_episode(options, *, offline: bool = False):
         raise ValueError("EPISODE_ACTIVATION_ROOT_MISMATCH")
     config_binding = {"roles": {name: item["sha256"] for name, item in frozen["roles"].items()},
                       **{name: frozen[name] for name in POLICY_BINDINGS if name in frozen},
+                      # the episode's provenance names its rig (a set without a rig binding is rig v1 and keeps its hash)
+                      **({"rig_profile": frozen["rig_profile"]} if "rig_profile" in frozen else {}),
                       "runtime_policy": frozen["runtime_policy"],
                       "motion_policy_sha256": snapshot["files"][snapshot["motion_policy_path"]]["sha256"]}
     provenance = {"source_sha256": snapshot["source_sha256"],

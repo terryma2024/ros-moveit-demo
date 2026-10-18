@@ -59,9 +59,14 @@ _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source
 #: keeps its contract - so they are allowed, not required
 #: `scene_manifest` binds the scene list of a formal campaign: `{path, sha256, bytes, scene_count}` of the frozen copy at
 #: `SCENE_MANIFEST_PATH`. It is a key, not a role, so a set without it keeps the exact role table and hash it always had.
+#: `rig_profile` binds the camera rig of the collection (config/act/rig-v*.yaml, `act/rig_profile.py`) the same way a policy is bound:
+#: the file under `policies/rig_profile.yaml`, its digests and every effective value. It is a key, not a role, so a set sealed before
+#: rig profiles existed keeps its exact table and hash and is read as the default rig (v1); a newly frozen campaign set always has it.
 _MANIFEST_OPTIONAL = frozenset({"mode", "runtime_policy", "execution_snapshot",
                                 "teacher_endpoint", "teacher_execution_policy", "episode_recorder",
-                                "scene_manifest"})
+                                "scene_manifest", "rig_profile"})
+RIG_PROFILE_BINDING = "rig_profile"
+RIG_PROFILE_FILE = "rig_profile.yaml"
 SCENE_MANIFEST_PATH = "scene_manifest/scenes.json"
 _SCENE_MANIFEST_FIELDS = frozenset({"path", "sha256", "bytes", "scene_count"})
 #: The policy bindings (Phase A4c): binding name -> the file
@@ -358,6 +363,40 @@ def policy_binding(name: str, payload: bytes) -> dict:
             "values": {key: value for key, value in policy.items() if key != "policy_sha256"}}
 
 
+def rig_profile_binding(payload: bytes) -> dict:
+    """The manifest binding of one rig profile file: its bytes, its sha256, the profile digest and the validated document."""
+    from .rig_profile import load_rig_profile_bytes
+
+    profile = load_rig_profile_bytes(payload)
+    return {"path": "policies/" + RIG_PROFILE_FILE, "file_sha256": hashlib.sha256(payload).hexdigest(),
+            "bytes": len(payload), "policy_sha256": profile.profile_sha256, "values": profile.document}
+
+
+def verify_rig_profile_binding(document: dict, manifest_path: Path) -> None:
+    """Re-read the frozen rig profile file and compare it with its binding; a manifest without one is rig v1 and is not checked."""
+    from .rig_profile import load_rig_profile_bytes
+
+    if RIG_PROFILE_BINDING not in document:
+        return
+    code = "INPUTS_RIG_PROFILE_INVALID"
+    root = Path(manifest_path).parent.resolve()
+    binding = document[RIG_PROFILE_BINDING]
+    if not isinstance(binding, dict) or set(binding) != _POLICY_BINDING_FIELDS:
+        raise ValueError(code)
+    path = root / binding["path"]
+    if (binding["path"] != "policies/" + RIG_PROFILE_FILE or path.is_symlink() or not path.is_file()
+            or not path.resolve().is_relative_to(root)):
+        raise ValueError(code)
+    try:
+        payload = path.read_bytes()
+        profile = load_rig_profile_bytes(payload)
+    except (OSError, ValueError) as error:
+        raise ValueError(code) from error
+    if (len(payload) != binding["bytes"] or hashlib.sha256(payload).hexdigest() != binding["file_sha256"]
+            or profile.profile_sha256 != binding["policy_sha256"] or profile.document != binding["values"]):
+        raise ValueError(code)
+
+
 def verify_policy_bindings(document: dict, manifest_path: Path, snapshot: dict | None = None) -> dict:
     """Re-read each frozen policy file, re-load it through its closed loader and compare every bound value.
 
@@ -544,6 +583,7 @@ def verify_frozen_inputs(manifest_path: Path) -> dict:
                 or document["roles"]["scene_model"]["sha256"] != identity.get("scene_sha256")):
             raise ValueError("INPUTS_EXECUTION_SNAPSHOT_IDENTITY_MISMATCH")
     verify_policy_bindings(document, manifest_path, snapshot if "execution_snapshot" in document else None)
+    verify_rig_profile_binding(document, manifest_path)
     if "scene_manifest" in document:
         _bound_scene_rows(document, root)
     return document
@@ -688,7 +728,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
                   runtime_policy: Path | None = None,
                   execution_inputs: bool = False, teacher_endpoint: Path | None = None,
                   teacher_execution_policy: Path | None = None, episode_recorder_policy: Path | None = None,
-                  scene_manifest: Path | None = None) -> Path:
+                  scene_manifest: Path | None = None, rig_profile: Path | bytes | None = None) -> Path:
     """Copy the uniquely verified candidates into a new directory and bind their bytes.
 
     The output directory must not exist: a freeze is a new immutable input set, never a merge into
@@ -742,6 +782,17 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
             raise ValueError("INPUTS_POLICY_BINDING_INVALID: " + name)
         policy_payloads[name] = path.read_bytes()
         extra[name] = policy_binding(name, policy_payloads[name])
+    if rig_profile is not None:
+        # the rig of the collection: bound like a policy, and so part of the inputs hash chain every case scope names
+        if isinstance(rig_profile, bytes):
+            rig_payload = rig_profile
+        else:
+            path = Path(rig_profile)
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("INPUTS_RIG_PROFILE_INVALID")
+            rig_payload = path.read_bytes()
+        extra[RIG_PROFILE_BINDING] = rig_profile_binding(rig_payload)
+        policy_payloads[RIG_PROFILE_BINDING] = rig_payload
     if runtime_policy is not None:
         from .endpoint_pose_acceptance import load_development_runtime
         document = load_development_runtime(Path(runtime_policy))
