@@ -270,3 +270,179 @@ def test_world_source_result_is_shared_between_identities_that_differ_only_outsi
         for identity in ({}, {"reset_epoch": 1}, None):  # a refusal of the document comes before the identity is read
             assert outcome(validate_world_source, broken, identity=identity) == outcome(
                 reference_validate_world_source, broken, identity=identity)
+
+
+# ---- (4) source_model_data: vector comparisons and a reused MjData ------------------------------------------------------------
+
+def reference_source_model_data(model, world, scene):
+    """Check original World pose/twist against copied frozen-model coordinates."""
+    import mujoco
+    import math
+    import numpy as np
+    body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, world.object_state.body)
+    if world.object_state.body != "plastic_cup" or body < 0 or body != world.object_state.body_id:
+        raise ValueError("SOURCE_ALIGNMENT_PHYSICS_BODY_INVALID")
+    data = mujoco.MjData(model)
+    data.qpos[:] = scene["qpos"]
+    data.qvel[:] = scene["qvel"]
+    mujoco.mj_forward(model, data)
+    pose = [*map(float, data.xpos[body]), *map(float, data.xquat[body][[1, 2, 3, 0]])]
+    actual = [*world.object_state.position_world, *world.object_state.orientation_xyzw]
+    if (not all(math.isclose(a, b, abs_tol=1e-9, rel_tol=0) for a, b in zip(pose[:3], actual[:3]))
+            or not any(all(math.isclose(a, sign * b, abs_tol=1e-9, rel_tol=0)
+                          for a, b in zip(pose[3:], actual[3:])) for sign in (1, -1))):
+        raise ValueError("SOURCE_ALIGNMENT_SOURCE_POSE_INVALID")
+    velocity = np.zeros(6)
+    mujoco.mj_objectVelocity(model, data, mujoco.mjtObj.mjOBJ_BODY, body, velocity, 0)
+    if not all(math.isclose(a, b, abs_tol=1e-9, rel_tol=0) for a, b in zip(
+            velocity, (*world.object_state.angular_velocity_world, *world.object_state.linear_velocity_world))):
+        raise ValueError("SOURCE_ALIGNMENT_SOURCE_TWIST_INVALID")
+    return data
+
+
+
+
+def _source_inputs(frozen_scene):
+    from so101_demo.act.scene_association import _world
+    from test_act_scene_association import association
+    document, _raw = association(frozen_scene)
+    source = document["source"]
+    return _world(source["physics"]), copy.deepcopy(source["scene_state"])
+
+
+def _with_state(world, **changes):
+    """The world with changed object-state fields. `ObjectState` itself refuses non-finite or mis-sized vectors, so those cases are
+    stand-ins that carry the same attributes: `source_model_data` only reads them."""
+    from dataclasses import asdict, replace
+    from types import SimpleNamespace
+    try:
+        return replace(world, object_state=replace(world.object_state, **changes))
+    except (TypeError, ValueError):
+        return SimpleNamespace(object_state=SimpleNamespace(**{**asdict(world.object_state), **changes}))
+
+
+def _model_cases(world):
+    state = world.object_state
+    position, orientation = list(state.position_world), list(state.orientation_xyzw)
+    linear, angular = list(state.linear_velocity_world), list(state.angular_velocity_world)
+    nan, inf = float("nan"), float("inf")
+
+    def moved(index, delta):
+        return tuple(value + delta if i == index else value for i, value in enumerate(position))
+
+    cases = {"valid": world}
+    for index in range(3):
+        for name, delta in (("at_tolerance", 1e-9), ("just_inside", 0.9e-9), ("just_outside", 1.1e-9), ("far", 1e-3), ("negative_outside", -2e-9)):
+            cases[f"position{index}_{name}"] = _with_state(world, position_world=moved(index, delta))
+    cases["position_nan"] = _with_state(world, position_world=(nan, position[1], position[2]))
+    cases["position_inf"] = _with_state(world, position_world=(inf, position[1], position[2]))
+    cases["position_ints"] = _with_state(world, position_world=tuple(int(value) for value in position))
+    cases["position_short"] = _with_state(world, position_world=tuple(position[:2]))
+    cases["position_long"] = _with_state(world, position_world=(*position, 0.))
+    cases["orientation_flipped"] = _with_state(world, orientation_xyzw=tuple(-value for value in orientation))
+    cases["orientation_half_flipped"] = _with_state(world, orientation_xyzw=(-orientation[0], -orientation[1], orientation[2], orientation[3]))
+    cases["orientation_flipped_off"] = _with_state(world, orientation_xyzw=tuple(-value + (2e-9 if i == 3 else 0.) for i, value in enumerate(orientation)))
+    cases["orientation_flipped_edge"] = _with_state(world, orientation_xyzw=tuple(-value + (1e-9 if i == 3 else 0.) for i, value in enumerate(orientation)))
+    cases["orientation_off"] = _with_state(world, orientation_xyzw=(orientation[0] + 1e-6, *orientation[1:]))
+    cases["orientation_nan"] = _with_state(world, orientation_xyzw=(nan, *orientation[1:]))
+    cases["orientation_inf"] = _with_state(world, orientation_xyzw=(inf, *orientation[1:]))
+    cases["orientation_short"] = _with_state(world, orientation_xyzw=tuple(orientation[:3]))
+    cases["orientation_ints"] = _with_state(world, orientation_xyzw=(0, 0, 0, 1))
+    for index in range(3):
+        cases[f"linear{index}_far"] = _with_state(world, linear_velocity_world=tuple(v + (1e-3 if i == index else 0.) for i, v in enumerate(linear)))
+        cases[f"angular{index}_far"] = _with_state(world, angular_velocity_world=tuple(v + (1e-3 if i == index else 0.) for i, v in enumerate(angular)))
+        cases[f"linear{index}_edge"] = _with_state(world, linear_velocity_world=tuple(v + (1e-9 if i == index else 0.) for i, v in enumerate(linear)))
+        cases[f"angular{index}_outside"] = _with_state(world, angular_velocity_world=tuple(v + (1.1e-9 if i == index else 0.) for i, v in enumerate(angular)))
+    cases["linear_nan"] = _with_state(world, linear_velocity_world=(nan, 0., 0.))
+    cases["angular_inf"] = _with_state(world, angular_velocity_world=(inf, 0., 0.))
+    cases["linear_short"] = _with_state(world, linear_velocity_world=(0., 0.))
+    cases["linear_ints"] = _with_state(world, linear_velocity_world=(0, 0, 0))
+    cases["swapped_velocity"] = _with_state(world, linear_velocity_world=tuple(angular), angular_velocity_world=tuple(linear))
+    cases["body_name"] = _with_state(world, body="box")
+    cases["body_id"] = _with_state(world, body_id=state.body_id + 1)
+    cases["body_missing"] = _with_state(world, body="nothing", body_id=-1)
+    return cases
+
+
+def _snapshot(data):
+    import numpy as np
+    return tuple(np.array(getattr(data, name)).tobytes() for name in ("qpos", "qvel", "xpos", "xquat", "cvel", "qacc"))
+
+
+def test_source_model_data_agrees_with_the_reference_on_valid_and_corrupt_sources(frozen_scene):
+    import mujoco
+    from so101_demo.act.scene_association import source_model_data
+    model = frozen_scene[2]
+    world, scene = _source_inputs(frozen_scene)
+    cases = _model_cases(world)
+    scratch = mujoco.MjData(model)
+    refused = set()
+    for _ in range(2):  # the scratch data is reused across valid and refused sources, in order
+        for name, candidate in cases.items():
+            expected = outcome(reference_source_model_data, model, candidate, scene)
+            fresh = outcome(source_model_data, model, candidate, scene)
+            reused = outcome(source_model_data, model, candidate, scene, data=scratch)
+            if expected[0] == "raised":
+                refused.add(name)
+                assert fresh == expected == reused, name
+            else:
+                assert fresh[0] == reused[0] == "value", name
+                assert _snapshot(fresh[1]) == _snapshot(expected[1]) == _snapshot(reused[1]), name
+    assert "valid" not in refused and "orientation_flipped" not in refused
+    assert {"position0_just_outside", "position_nan", "orientation_half_flipped", "angular0_outside", "body_name", "body_id",
+            "linear_nan", "angular_inf", "position_inf", "orientation_inf"} <= refused
+    assert len(refused) > 20
+
+
+def test_source_model_data_refuses_with_the_reference_reason(frozen_scene):
+    from so101_demo.act.scene_association import source_model_data
+    model = frozen_scene[2]
+    world, scene = _source_inputs(frozen_scene)
+    reasons = {}
+    for name, candidate in _model_cases(world).items():
+        result = outcome(reference_source_model_data, model, candidate, scene)
+        if result[0] == "raised":
+            reasons.setdefault(result[2], []).append(name)
+            assert outcome(source_model_data, model, candidate, scene) == result
+    assert set(reasons) >= {"SOURCE_ALIGNMENT_SOURCE_POSE_INVALID", "SOURCE_ALIGNMENT_SOURCE_TWIST_INVALID",
+                            "SOURCE_ALIGNMENT_PHYSICS_BODY_INVALID"}
+
+
+def test_source_model_data_scene_state_errors_match_the_reference(frozen_scene):
+    import mujoco
+    from so101_demo.act.scene_association import source_model_data
+    model = frozen_scene[2]
+    world, scene = _source_inputs(frozen_scene)
+    scratch = mujoco.MjData(model)
+    broken = {"short_qpos": {**scene, "qpos": scene["qpos"][:3]}, "missing_qvel": {k: v for k, v in scene.items() if k != "qvel"},
+              "shifted": {**scene, "qpos": [value + .5 for value in scene["qpos"]]},
+              "nan_qvel": {**scene, "qvel": [float("nan"), *scene["qvel"][1:]]}}
+    for name, value in broken.items():
+        expected = outcome(reference_source_model_data, model, world, value)
+        for keywords in ({}, {"data": scratch}):
+            actual = outcome(source_model_data, model, world, value, **keywords)
+            assert actual[0] == expected[0], name
+            if expected[0] == "raised":
+                assert actual == expected, name
+            else:
+                assert _snapshot(actual[1]) == _snapshot(expected[1]), name
+    # the reused data is not poisoned by the refusals above
+    assert _snapshot(source_model_data(model, world, scene, data=scratch)) == _snapshot(reference_source_model_data(model, world, scene))
+
+
+def test_source_model_checked_matches_the_reference_and_reuses_one_data(frozen_scene):
+    import mujoco
+    from so101_demo.act import native_endpoints
+    model = frozen_scene[2]
+    world, scene = _source_inputs(frozen_scene)
+    cases = _model_cases(world)
+    from so101_demo.act.qc_session import qc_session
+    with qc_session("readback:qc"):
+        for name, candidate in cases.items():
+            expected = outcome(reference_source_model_data, model, candidate, scene)
+            actual = outcome(native_endpoints._source_model_checked, model, candidate, scene)
+            assert actual[0] == expected[0], name
+            if expected[0] == "raised":
+                assert actual == expected, name
+    assert native_endpoints._scratch_data(model) is native_endpoints._scratch_data(model)
+    assert isinstance(native_endpoints._scratch_data(model), mujoco.MjData)

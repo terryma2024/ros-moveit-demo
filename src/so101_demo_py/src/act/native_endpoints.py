@@ -154,10 +154,25 @@ def _raw_steps_at(raw_steps, step):
     return _RAW_INDEX["index"].get(step, [])
 
 
+_SCRATCH_DATA = {}
+
+
+def _scratch_data(model):
+    """One `MjData` per model for the verdict-only `source_model_data` checks (it is reset before every use; nothing keeps it). The
+    entry holds the model, so the model's identity cannot be reused by another while it is cached."""
+    import mujoco
+    entry = _SCRATCH_DATA.get(id(model))
+    if entry is None or entry[0] is not model:
+        if len(_SCRATCH_DATA) > 8:
+            _SCRATCH_DATA.clear()
+        entry = _SCRATCH_DATA[id(model)] = (model, mujoco.MjData(model))
+    return entry[1]
+
+
 @session_memo(lambda model, world, scene: (Identity(model), Identity(world), Identity(scene)), copy_result=False)
 def _source_model_checked(model, world, scene):
     """`source_model_data` for its verdict only (the data it builds is not used here); once per source inside a QC session."""
-    source_model_data(model, world, scene)
+    source_model_data(model, world, scene, data=_scratch_data(model))
     return True
 
 

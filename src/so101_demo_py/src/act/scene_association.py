@@ -318,27 +318,62 @@ def _raw_source_matches(sample, world, scene):
     return True
 
 
-def source_model_data(model, world, scene):
-    """Check original World pose/twist against copied frozen-model coordinates."""
+_ABS_TOL = 1e-9
+
+
+def _all_close(measured, stated):
+    """`all(math.isclose(a, b, abs_tol=1e-9, rel_tol=0) for a, b in zip(measured, stated))` for two equal-length vectors of floats.
+
+    With rel_tol=0 `math.isclose` is `a == b or abs(b - a) <= abs_tol`: equal infinities are close, a NaN or a finite value against
+    an infinity is not, and a difference that overflows to infinity is not."""
+    import numpy as np
+    with np.errstate(all="ignore"):
+        return bool(np.all((measured == stated) | (np.abs(measured - stated) <= _ABS_TOL)))
+
+
+def _plain_floats(values, count):
+    # the vector form of the comparison needs exactly `count` Python floats; anything else keeps the element-wise loop
+    return len(values) == count and all(type(value) is float for value in values)
+
+
+def source_model_data(model, world, scene, *, data=None):
+    """Check original World pose/twist against copied frozen-model coordinates.
+
+    `data` is an optional scratch `MjData` of `model` that the caller owns and does not keep the result of: it is reset to the
+    state `MjData(model)` starts in, so the checks see exactly what a fresh one gives, without allocating one per source."""
     import mujoco
     import numpy as np
     body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, world.object_state.body)
     if world.object_state.body != "plastic_cup" or body < 0 or body != world.object_state.body_id:
         raise ValueError("SOURCE_ALIGNMENT_PHYSICS_BODY_INVALID")
-    data = mujoco.MjData(model)
+    if data is None:
+        data = mujoco.MjData(model)
+    else:
+        mujoco.mj_resetData(model, data)
     data.qpos[:] = scene["qpos"]
     data.qvel[:] = scene["qvel"]
     mujoco.mj_forward(model, data)
-    pose = [*map(float, data.xpos[body]), *map(float, data.xquat[body][[1, 2, 3, 0]])]
     actual = [*world.object_state.position_world, *world.object_state.orientation_xyzw]
-    if (not all(math.isclose(a, b, abs_tol=1e-9, rel_tol=0) for a, b in zip(pose[:3], actual[:3]))
-            or not any(all(math.isclose(a, sign * b, abs_tol=1e-9, rel_tol=0)
-                          for a, b in zip(pose[3:], actual[3:])) for sign in (1, -1))):
-        raise ValueError("SOURCE_ALIGNMENT_SOURCE_POSE_INVALID")
+    if _plain_floats(actual, 7):
+        position, orientation = data.xpos[body], data.xquat[body][[1, 2, 3, 0]]
+        stated = np.array(actual)
+        if (not _all_close(position, stated[:3])
+                or not any(_all_close(orientation, sign * stated[3:]) for sign in (1, -1))):
+            raise ValueError("SOURCE_ALIGNMENT_SOURCE_POSE_INVALID")
+    else:
+        pose = [*map(float, data.xpos[body]), *map(float, data.xquat[body][[1, 2, 3, 0]])]
+        if (not all(math.isclose(a, b, abs_tol=1e-9, rel_tol=0) for a, b in zip(pose[:3], actual[:3]))
+                or not any(all(math.isclose(a, sign * b, abs_tol=1e-9, rel_tol=0)
+                              for a, b in zip(pose[3:], actual[3:])) for sign in (1, -1))):
+            raise ValueError("SOURCE_ALIGNMENT_SOURCE_POSE_INVALID")
     velocity = np.zeros(6)
     mujoco.mj_objectVelocity(model, data, mujoco.mjtObj.mjOBJ_BODY, body, velocity, 0)
-    if not all(math.isclose(a, b, abs_tol=1e-9, rel_tol=0) for a, b in zip(
-            velocity, (*world.object_state.angular_velocity_world, *world.object_state.linear_velocity_world))):
+    stated_velocity = (*world.object_state.angular_velocity_world, *world.object_state.linear_velocity_world)
+    if _plain_floats(stated_velocity, 6):
+        close = _all_close(velocity, np.array(stated_velocity))
+    else:
+        close = all(math.isclose(a, b, abs_tol=1e-9, rel_tol=0) for a, b in zip(velocity, stated_velocity))
+    if not close:
         raise ValueError("SOURCE_ALIGNMENT_SOURCE_TWIST_INVALID")
     return data
 
