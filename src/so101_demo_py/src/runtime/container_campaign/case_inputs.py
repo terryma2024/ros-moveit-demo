@@ -21,6 +21,22 @@ FROZEN_DIRECTORY = 'frozen'
 SCOPES_DIRECTORY = 'scopes'
 MANIFEST_NAME = 'inputs-manifest.json'
 _HEX64 = '0123456789abcdef'
+FORMAL_MODE = 'formal'
+SPOT_CHECK_MODE = 'preselected_target_diagnostic'
+#: plane -> (the frozen collection mode it needs, the refusal for another mode, the contact receipt kinds it accepts). The formal
+#: and qualification planes collect real data: formal mode and a user activation only. The spot-check plane re-derives a contact
+#: policy: diagnostic mode, and a plan-signed candidate receipt or a user activation (a harmless superset).
+PLANES = {
+    'formal': (FORMAL_MODE, 'CASE_INPUTS_NOT_FORMAL', ('user_activation',)),
+    'qualification': (FORMAL_MODE, 'CASE_INPUTS_NOT_FORMAL', ('user_activation',)),
+    'spot_check': (SPOT_CHECK_MODE, 'CASE_INPUTS_NOT_SPOT_CHECK', ('user_activation', 'spot_check_candidate')),
+}
+
+
+def _plane(plane):
+    if plane not in PLANES:
+        raise ValueError('CASE_INPUTS_PLANE_INVALID')
+    return PLANES[plane]
 
 
 def _ref(path):
@@ -50,7 +66,7 @@ def _sha(value, code):
 
 
 def freeze_campaign_inputs(run, *, candidates, scene_manifest, teacher_endpoint, teacher_execution_policy,
-                           episode_recorder_policy, runtime_policy, rig_profile=None):
+                           episode_recorder_policy, runtime_policy, rig_profile=None, plane='formal'):
     """Freeze the campaign's one formal input set into `<run>/inputs/frozen`; returns the ref of its manifest.
 
     `candidates` is the approved-candidate registry (`act_diagnostic_episode inspect`), `scene_manifest` the scene list to
@@ -61,12 +77,16 @@ def freeze_campaign_inputs(run, *, candidates, scene_manifest, teacher_endpoint,
     `rig_profile` is the rig profile file (`config/act/rig-v*.yaml`) the campaign collects under; a campaign always freezes one.
     None names the default rig (v1), written explicitly from `act.rig_profile.DEFAULT_RIG`, so the manifest never has to be read
     as "no profile".
+
+    `plane` names the campaign's plane (`PLANES`): `formal` and `qualification` freeze in formal mode; `spot_check` freezes in
+    diagnostic mode, which admits a candidate receipt and a scene list of exactly one row.
     """
     from so101_demo.act.rig_profile import DEFAULT_RIG, dump_rig_profile
 
+    mode = _plane(plane)[0]
     run = _run_root(run)
     target = run / INPUTS_DIRECTORY / FROZEN_DIRECTORY
-    manifest = freeze_inputs(Path(candidates), target, mode='formal', execution_inputs=True,
+    manifest = freeze_inputs(Path(candidates), target, mode=mode, execution_inputs=True,
                              scene_manifest=Path(scene_manifest), runtime_policy=Path(runtime_policy),
                              teacher_endpoint=Path(teacher_endpoint),
                              teacher_execution_policy=Path(teacher_execution_policy),
@@ -83,16 +103,19 @@ def _frozen(run, inputs_manifest):
     return path, verify_frozen_inputs(path)
 
 
-def write_case_scopes(run, *, inputs_manifest):
-    """Write one formal scope per row of the bound scene list under `<run>/inputs/scopes`; return the case-input mapping.
+def write_case_scopes(run, *, inputs_manifest, plane='formal'):
+    """Write one scope per row of the bound scene list under `<run>/inputs/scopes`; return the case-input mapping.
+
+    The scope's mode is the frozen set's, which must be the plane's mode (`PLANES`).
 
     The mapping is `{scene_id: {'scope': ref, 'inputs_manifest': ref}}`, the shape the coordinator and the wave verifier
     require. An existing scopes directory is refused: scopes are written once, never overwritten or merged.
     """
+    mode, mode_code, _ = _plane(plane)
     run = _run_root(run)
     path, frozen = _frozen(run, inputs_manifest)
-    if frozen['mode'] != 'formal' or 'scene_manifest' not in frozen:
-        raise ValueError('CASE_INPUTS_NOT_FORMAL')
+    if frozen['mode'] != mode or 'scene_manifest' not in frozen:
+        raise ValueError(mode_code)
     rows = frozen_scene_rows(frozen, path)
     directory = run / INPUTS_DIRECTORY / SCOPES_DIRECTORY
     try:
@@ -101,7 +124,7 @@ def write_case_scopes(run, *, inputs_manifest):
         raise ValueError('CASE_SCOPES_EXIST') from error
     cases = {}
     for row in rows:
-        scope = build_collection_scope('formal', scene_id=row['scene_id'], seed=row['seed'],
+        scope = build_collection_scope(mode, scene_id=row['scene_id'], seed=row['seed'],
                                        inputs_sha256=frozen['inputs_sha256'])
         require_scope_for_inputs(scope, frozen, path)
         target = directory / (row['scene_id'] + '.json')
@@ -110,20 +133,23 @@ def write_case_scopes(run, *, inputs_manifest):
     return cases
 
 
-def campaign_binding(inputs_manifest, *, campaign_config, collection_config_sha256, scene_manifest_sha256):
+def campaign_binding(inputs_manifest, *, campaign_config, collection_config_sha256, scene_manifest_sha256, plane='formal'):
     """The values the campaign takes from the frozen set; refuses a set that is not this campaign's.
 
     `campaign_config` is the loaded campaign config. Refused: a manifest that is not its file's bytes, a set that is not formal
     or binds no scene list, another scene list, runtime or collection config than the campaign's, a contact proposal or
-    receipt that is not an approved disabled proposal and user activation of one policy, a fingerprint that is not the proposal
-    payload's, and a set without the runtime policy that carries the disk floor.
+    receipt that is not an approved disabled proposal and, per `plane` (`PLANES`), a user activation of one policy (also a
+    spot-check candidate receipt in the spot-check plane), a fingerprint that is not the proposal payload's, and a set without
+    the runtime policy that carries the disk floor. The formal and qualification planes need a formal-mode set, the spot-check
+    plane a diagnostic one.
     """
+    mode, mode_code, receipts = _plane(plane)
     path = _manifest_path(inputs_manifest)
     _sha(collection_config_sha256, 'CASE_INPUTS_COLLECTION_CONFIG_MISMATCH')
     _sha(scene_manifest_sha256, 'CASE_INPUTS_SCENE_MANIFEST_MISMATCH')
     frozen = verify_frozen_inputs(path)
-    if frozen['mode'] != 'formal':
-        raise ValueError('CASE_INPUTS_NOT_FORMAL')
+    if frozen['mode'] != mode:
+        raise ValueError(mode_code)
     if 'scene_manifest' not in frozen:
         raise ValueError('CASE_INPUTS_SCENE_MANIFEST_UNBOUND')
     if frozen['scene_manifest']['sha256'] != scene_manifest_sha256:
@@ -134,7 +160,7 @@ def campaign_binding(inputs_manifest, *, campaign_config, collection_config_sha2
     if roles['collection_config']['sha256'] != collection_config_sha256:
         raise ValueError('CASE_INPUTS_COLLECTION_CONFIG_MISMATCH')
     if (roles['contact_proposal']['approval'] != 'disabled_proposal'
-            or roles['contact_activation']['approval'] != 'user_activation'):
+            or roles['contact_activation']['approval'] not in receipts):
         raise ValueError('CASE_INPUTS_CONTACT_APPROVAL_INVALID')
     root = path.parent
     proposal = read_document(root / roles['contact_proposal']['path'])

@@ -462,3 +462,108 @@ def test_the_campaign_config_may_name_a_rig_and_only_by_a_sha256(world, tmp_path
     for bad in ('F' * 64, 'f' * 63, 5):
         with pytest.raises(ValueError, match='CAMPAIGN_CONFIG_INVALID'):
             load_campaign_config(write_config(tmp_path, dict(world['campaign'], rig_profile_sha256=bad)))
+
+
+# ---- the spot-check plane: one diagnostic-mode scene row, a candidate or an activation receipt -----------------------------------
+
+@pytest.fixture(scope='module')
+def spot_world(world, tmp_path_factory):
+    """One real spot-check freeze (diagnostic mode, one scene row, a spot_check_candidate receipt), its scope and binding."""
+    from so101_demo.act import execution_snapshot
+
+    base = tmp_path_factory.mktemp('case-inputs-spot')
+    probe = execution_snapshot.freeze_execution_snapshot(REPOSITORY, base / 'probe')
+    scene_bytes = (base / 'probe' / probe['scene_path']).read_bytes()
+    registry = bound_registry(base, probe, scene_bytes)
+    activation = registry['roles']['contact_activation']
+    for entry in (activation['selected'], activation['candidates'][0]):
+        entry['approval'] = 'spot_check_candidate'
+    candidates = _write_registry(base, registry)
+    root = base / 'evidence'
+    root.mkdir()
+    run = make_campaign_paths(root, 'run-spot')['run']
+    original = execution_snapshot.freeze_execution_snapshot
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(execution_snapshot, 'freeze_execution_snapshot',
+                      lambda _source_root, output: original(REPOSITORY, output))
+        manifest = case_inputs.freeze_campaign_inputs(run, candidates=candidates, plane='spot_check',
+                                                      scene_manifest=scene_file(base, ROWS[:1]), **policies())
+    scopes = case_inputs.write_case_scopes(run, inputs_manifest=manifest, plane='spot_check')
+    frozen = verify_frozen_inputs(Path(manifest['path']))
+    runtime = ref(Path(manifest['path']).parent / frozen['roles']['runtime_config']['path'])
+    campaign_path = write_config(base, dict(world['campaign'], controlled_runtime=runtime))
+    args = dict(campaign_config=load_campaign_config(campaign_path),
+                collection_config_sha256=frozen['roles']['collection_config']['sha256'],
+                scene_manifest_sha256=frozen['scene_manifest']['sha256'])
+    return dict(base=base, root=root, run=run, manifest=manifest, scopes=scopes, frozen=frozen, args=args,
+                candidates=candidates, binding=case_inputs.campaign_binding(manifest, plane='spot_check', **args))
+
+
+def test_a_spot_check_freeze_is_diagnostic_one_row_and_its_scope_is_in_that_mode(spot_world):
+    frozen, scopes = spot_world['frozen'], spot_world['scopes']
+    assert frozen['mode'] == 'preselected_target_diagnostic' and frozen['scene_manifest']['scene_count'] == 1
+    assert frozen['roles']['contact_activation']['approval'] == 'spot_check_candidate'
+    assert set(scopes) == {'scene-a'}
+    scope = read_collection_scope(scopes['scene-a']['scope']['path'], expected_mode='preselected_target_diagnostic',
+                                  expected_inputs_sha256=frozen['inputs_sha256'])
+    assert scope == build_collection_scope('preselected_target_diagnostic', scene_id='scene-a', seed=ROWS[0]['seed'],
+                                           inputs_sha256=frozen['inputs_sha256'])
+    proposal = json.loads((Path(spot_world['manifest']['path']).parent
+                           / frozen['roles']['contact_proposal']['path']).read_bytes())
+    assert spot_world['binding']['contact_policy_fingerprint'] == policy_fingerprint(proposal['payload'])
+
+
+def test_planes_and_frozen_modes_must_agree(world, spot_world):
+    # the formal and qualification planes keep formal mode; the spot-check plane needs the diagnostic mode
+    for plane in ('formal', 'qualification'):
+        refused('CASE_INPUTS_NOT_FORMAL', case_inputs.campaign_binding, spot_world['manifest'], plane=plane,
+                **spot_world['args'])
+        assert case_inputs.campaign_binding(world['manifest'], plane=plane, **world['args']) == world['binding']
+    refused('CASE_INPUTS_NOT_FORMAL', case_inputs.campaign_binding, spot_world['manifest'], **spot_world['args'])
+    refused('CASE_INPUTS_NOT_SPOT_CHECK', case_inputs.campaign_binding, world['manifest'], plane='spot_check',
+            **world['args'])
+    refused('CASE_INPUTS_PLANE_INVALID', case_inputs.campaign_binding, world['manifest'], plane='diagnostic',
+            **world['args'])
+    # scopes: written once per row, in the frozen mode, and only for the plane that mode belongs to
+    fresh = make_campaign_paths(spot_world['root'], 'run-spot-other')['run']
+    refused('CASE_INPUTS_LOCATION_INVALID', case_inputs.write_case_scopes, fresh, inputs_manifest=spot_world['manifest'],
+            plane='spot_check')
+    refused('CASE_INPUTS_NOT_FORMAL', case_inputs.write_case_scopes, spot_world['run'],
+            inputs_manifest=spot_world['manifest'])
+    refused('CASE_INPUTS_NOT_SPOT_CHECK', case_inputs.write_case_scopes, world['run'], inputs_manifest=world['manifest'],
+            plane='spot_check')
+    refused('CASE_SCOPES_EXIST', case_inputs.write_case_scopes, spot_world['run'], inputs_manifest=spot_world['manifest'],
+            plane='spot_check')
+
+
+def test_a_candidate_receipt_is_accepted_only_by_the_spot_check_plane(world, spot_world, tmp_path):
+    # the formal planes refuse a candidate approval even in a self-consistent forged formal set
+    forged = forged_copy(world, tmp_path, lambda document, _: document['roles']['contact_activation'].update(
+        approval='spot_check_candidate'))
+    for plane in ('formal', 'qualification'):
+        refused('CASE_INPUTS_CONTACT_APPROVAL_INVALID', case_inputs.campaign_binding, forged, plane=plane,
+                **world['args'])
+    # the spot-check plane accepts the candidate and also a user activation (design Q5), and refuses any other approval
+    as_user = forged_copy(spot_world, tmp_path, lambda document, _: document['roles']['contact_activation'].update(
+        approval='user_activation'))
+    accepted = case_inputs.campaign_binding(as_user, plane='spot_check', **spot_world['args'])
+    assert accepted['contact_policy_fingerprint'] == spot_world['binding']['contact_policy_fingerprint']
+    other = forged_copy(spot_world, tmp_path, lambda document, _: document['roles']['contact_activation'].update(
+        approval='source_controlled'))
+    refused('CASE_INPUTS_CONTACT_APPROVAL_INVALID', case_inputs.campaign_binding, other, plane='spot_check',
+            **spot_world['args'])
+
+
+def test_a_spot_check_freeze_refuses_more_than_one_scene_and_the_formal_freeze_still_refuses_a_candidate(spot_world,
+                                                                                                         tmp_path):
+    root = tmp_path / 'evidence'
+    root.mkdir()
+    run = make_campaign_paths(root, 'run-two')['run']
+    refused('INPUT_SCENE_MANIFEST_INVALID', case_inputs.freeze_campaign_inputs, run, candidates=spot_world['candidates'],
+            plane='spot_check', scene_manifest=scene_file(tmp_path), **policies())
+    assert not (run / 'inputs' / 'frozen').exists()
+    one = scene_file(tmp_path, ROWS[:1], 'one.json')
+    refused('CASE_INPUTS_PLANE_INVALID', case_inputs.freeze_campaign_inputs, run, candidates=spot_world['candidates'],
+            plane='other', scene_manifest=one, **policies())
+    refused('INPUT_NOT_APPROVED', case_inputs.freeze_campaign_inputs, run, candidates=spot_world['candidates'],
+            scene_manifest=one, **policies())
