@@ -78,3 +78,30 @@ def test_scheduling_check_requires_each_workers_own_reserved_count():
         del missing[gone]
         with pytest.raises(ValueError):
             check_wave_scheduling(plan,missing,{worker:None for worker in WORKERS},True)
+
+
+# ---- the spot-check plane: one worker, one scene, no reservation, no two-tasks-per-instance owed count -------------------------
+
+def test_a_spot_check_campaign_is_one_unreserved_wave_marked_with_its_plane():
+    from so101_demo.act.parallel_collection import plan_campaign_waves
+    plans = plan_campaign_waves(('spot-00',), ('w00',), plane='spot_check')
+    assert plans == [dict(wave_index=0, scene_ids=['spot-00'], assignment=None, plane='spot_check')]
+    # the marker belongs to the spot-check plane only: every other plane's plans keep their exact keys
+    for plane, count in (('gate', 20), ('functional', 8), (None, 8)):
+        assert all('plane' not in plan for plan in plan_campaign_waves(scenes(count), WORKERS, plane=plane))
+    # eight workers never turn a spot check into a reserved wave
+    assert plan_campaign_waves(scenes(8), WORKERS, plane='spot_check')[0]['assignment'] is None
+    with pytest.raises(ValueError, match='CAMPAIGN_ROUND_INVALID'):
+        plan_campaign_waves(('spot-00',), ('w00',), plane='spot_check', recording_round=1)
+
+
+def test_the_two_tasks_per_instance_count_is_owed_by_every_plane_but_the_spot_check():
+    from so101_demo.act.parallel_collection import plan_campaign_waves
+    from so101_demo.runtime.container_campaign.result_verifier import check_wave_scheduling
+    by_scene = {'spot-00': dict(worker_id='w00', collected_monotonic_s=1.0, assigned_monotonic_s=0.0)}
+    spot = plan_campaign_waves(('spot-00',), ('w00',), plane='spot_check')[0]
+    check_wave_scheduling(spot, by_scene, {'w00': None}, True)
+    # the same one-scene wave on the functional plane (no plane marker) still owes two tasks to its instance
+    plain = plan_campaign_waves(('spot-00',), ('w00',), plane='functional')[0]
+    with pytest.raises(ValueError, match='INSTANCE_SHORT:w00'):
+        check_wave_scheduling(plain, by_scene, {'w00': None}, True)

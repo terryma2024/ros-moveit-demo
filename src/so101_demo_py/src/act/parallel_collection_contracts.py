@@ -24,6 +24,11 @@ FUNCTIONAL_KEYS = frozenset({'schema_version','kind','run_id','worker_count','sc
 #: evidence: a functional run has no gate contract, writes no qualification report and is refused by every qualification reader.
 FUNCTIONAL_WORKER_COUNTS = (1,2,8)
 FUNCTIONAL_SCENE_COUNTS = (8,16)
+#: A container contact-policy spot check (design 2026-10-18): one worker, one scene, the diagnostic collection mode. It is not
+#: evidence either: no gate contract, no qualification report, and every qualification reader refuses it.
+SPOT_CHECK_KINDS = ('nominal', 'over_squeeze')
+SPOT_CHECK_COLLECTION_MODE = 'preselected_target_diagnostic'
+SPOT_CHECK_KEYS = FUNCTIONAL_KEYS | {'collection_mode', 'spot_check'}
 QUALITY_RULE_KEYS = frozenset({'schema_version','kind','name','episode_rule','population','pass'})
 #: The populations a rule file may name. `ALL_FROZEN_SCENES` is every scene of the frozen list: FAILED, INVALID, no-pose and
 #: unevidenced scenes stay in the denominator. `QC_VALID_EPISODES` (human decision D2, 2026-10-14) is the scenes whose data is
@@ -99,8 +104,23 @@ def validate_functional_contract(document):
         raise ValueError('FUNCTIONAL_COLLECTION_CONTRACT_INVALID') from error
 
 
+def validate_spot_check_contract(document):
+    try:
+        _require(type(document) is dict and set(document) == SPOT_CHECK_KEYS)
+        _require(type(document['schema_version']) is int and document['schema_version'] == 1
+                 and document['kind'] == 'ACT_COLLECTION_SPOT_CHECK_RUN')
+        _require_id('run_id',document['run_id'])
+        _require(type(document['worker_count']) is int and document['worker_count'] == 1)
+        _require(document['collection_mode'] == SPOT_CHECK_COLLECTION_MODE and document['spot_check'] in SPOT_CHECK_KINDS)
+        validate_controlled_identity(document['controlled_identity'])
+        _require(len(scene_ids(document['scene_manifest'])) == 1)
+        return copy.deepcopy(document)
+    except (OSError,ValueError,TypeError,KeyError,UnicodeError) as error:
+        raise ValueError('SPOT_CHECK_COLLECTION_CONTRACT_INVALID') from error
+
+
 def validate_run_contract(document):
-    """`(plane, contract)` of a qualification-mode run document: 'gate' (W8, 40 scenes) or 'functional' (debug).
+    """`(plane, contract)` of a qualification-mode run document: 'gate' (W8, 40 scenes), 'functional' (debug) or 'spot_check'.
 
     The plane follows the document's own kind, never the worker count: eight workers may carry either contract."""
     kind = document.get('kind') if type(document) is dict else None
@@ -108,6 +128,8 @@ def validate_run_contract(document):
         return 'gate',validate_qualification_contract(document)
     if kind == 'ACT_COLLECTION_FUNCTIONAL_RUN':
         return 'functional',validate_functional_contract(document)
+    if kind == 'ACT_COLLECTION_SPOT_CHECK_RUN':
+        return 'spot_check',validate_spot_check_contract(document)
     raise ValueError('COLLECTION_RUN_CONTRACT_KIND_INVALID')
 
 

@@ -20,7 +20,7 @@ def check_wave_scheduling(plan, by_scene, roots, qualification, faulted_workers=
     Refusals carry a coded message (`INSTANCE_SHORT:<worker>`, `RESERVED_COLLECTED_ELSEWHERE:<scene>`,
     `SURPLUS_BEFORE_RESERVED:<scene>`) so a report can name the exact failure."""
     assignment = plan.get('assignment')
-    if qualification:
+    if qualification and plan.get('plane') != 'spot_check':
         counts = {worker: 0 for worker in roots}
         for collected in by_scene.values():
             counts[collected['worker_id']] += 1

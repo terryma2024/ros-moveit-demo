@@ -79,7 +79,8 @@ def wave_assignment_for(scene_ids: tuple, worker_ids: tuple) -> dict:
 
 def plan_campaign_waves(scene_ids, worker_ids, *, plane, max_wave_size: int = 20, first_wave_index: int = 0,
                         recording_round: int = 0) -> list:
-    """The wave plans of a campaign. `plane` is 'gate' (W8 qualification), 'functional' (debug) or None (formal).
+    """The wave plans of a campaign. `plane` is 'gate' (W8 qualification), 'functional' (debug), 'spot_check' (one contact-policy
+    spot check: one worker, one scene, no reservation) or None (formal).
 
     Only eight workers on the gate or functional plane carry reservations; every other run claims scenes dynamically.
 
@@ -88,10 +89,10 @@ def plan_campaign_waves(scene_ids, worker_ids, *, plane, max_wave_size: int = 20
     if (type(first_wave_index) is not int or first_wave_index < 0 or type(recording_round) is not int or recording_round < 0
             or (recording_round > 0 and plane is not None)):
         raise ValueError('CAMPAIGN_ROUND_INVALID')
-    if plane not in ('gate', 'functional', None):
+    if plane not in ('gate', 'functional', 'spot_check', None):
         raise ValueError('CAMPAIGN_PLANE_INVALID')
     worker_ids = tuple(worker_ids)
-    reserve = plane is not None and len(worker_ids) == 8
+    reserve = plane in ('gate', 'functional') and len(worker_ids) == 8
     reserver = reserve_qualification_scenes if plane == 'gate' else reserve_functional_scenes
     plans = [dict(wave_index=first_wave_index + index, scene_ids=list(wave),
                   assignment=reserver(wave, worker_ids) if reserve else None)
@@ -99,6 +100,10 @@ def plan_campaign_waves(scene_ids, worker_ids, *, plane, max_wave_size: int = 20
     if recording_round:
         for plan in plans:
             plan['recording_round'] = recording_round
+    if plane == 'spot_check':
+        # marks the plan so the wave verifier does not owe the two-tasks-per-instance count of a qualification wave
+        for plan in plans:
+            plan['plane'] = 'spot_check'
     return plans
 
 

@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "run_id",
+    "worker_count",
+    "scene_manifest",
+    "controlled_identity",
+    "collection_mode",
+    "spot_check"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "const": "ACT_COLLECTION_SPOT_CHECK_RUN"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worker_count": {
+      "type": "integer",
+      "const": 1
+    },
+    "scene_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/[^\\u0000]*$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "controlled_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_sha256",
+        "runtime_config_sha256",
+        "collection_config_sha256",
+        "contact_policy_fingerprint",
+        "image_source_install",
+        "gpu_uuid"
+      ],
+      "properties": {
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "runtime_config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "collection_config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "contact_policy_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "image_source_install": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inference",
+            "shard"
+          ],
+          "properties": {
+            "inference": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "digest",
+                "package_source_sha256",
+                "install_sha256"
+              ],
+              "properties": {
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "package_source_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "install_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            },
+            "shard": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "digest",
+                "package_source_sha256",
+                "install_sha256"
+              ],
+              "properties": {
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "package_source_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "install_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          }
+        },
+        "gpu_uuid": {
+          "type": "string",
+          "pattern": "^GPU-[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "collection_mode": {
+      "const": "preselected_target_diagnostic"
+    },
+    "spot_check": {
+      "enum": [
+        "nominal",
+        "over_squeeze"
+      ]
+    }
+  }
+}

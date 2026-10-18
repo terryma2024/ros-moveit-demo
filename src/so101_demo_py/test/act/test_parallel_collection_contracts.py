@@ -277,3 +277,77 @@ def test_installed_rule_schema_accepts_a_rule_and_refuses_extra_fields():
                 synthetic_rule('qc_valid_rate',episode_rule='other')):
         with pytest.raises(ValidationError):
             Draft202012Validator(schema).validate(bad)
+
+
+# ---- the spot-check contract: one worker, one scene, diagnostic collection mode (a contact-policy spot check) -------------------
+
+
+def spot_check_document(tmp_path, scenes=1, spot='nominal', name='spot-run'):
+    document = functional_document(tmp_path, 1, scenes, name)
+    return dict(document, kind='ACT_COLLECTION_SPOT_CHECK_RUN', collection_mode='preselected_target_diagnostic',
+                spot_check=spot)
+
+
+@pytest.mark.parametrize('spot', ['nominal', 'over_squeeze'])
+def test_spot_check_contract_accepts_one_worker_one_scene_in_diagnostic_mode(tmp_path, spot):
+    document = spot_check_document(tmp_path, spot=spot)
+    assert module().validate_spot_check_contract(document) == document
+    assert module().validate_run_contract(document) == ('spot_check', document)
+
+
+@pytest.mark.parametrize('change', [
+    dict(worker_count=2), dict(worker_count=8), dict(worker_count=0), dict(worker_count=True),
+    dict(collection_mode='formal'), dict(collection_mode=None), dict(spot_check='other'), dict(spot_check=None),
+    dict(kind='ACT_COLLECTION_FUNCTIONAL_RUN'), dict(extra=1)])
+def test_spot_check_contract_refuses_anything_else(tmp_path, change):
+    document = dict(spot_check_document(tmp_path), **change)
+    with pytest.raises(ValueError, match='SPOT_CHECK_COLLECTION_CONTRACT_INVALID'):
+        module().validate_spot_check_contract(document)
+    with pytest.raises(ValueError):
+        module().validate_run_contract(document)
+
+
+@pytest.mark.parametrize('scenes', [2, 8, 16])
+def test_spot_check_contract_refuses_more_than_one_scene(tmp_path, scenes):
+    with pytest.raises(ValueError, match='SPOT_CHECK_COLLECTION_CONTRACT_INVALID'):
+        module().validate_spot_check_contract(spot_check_document(tmp_path, scenes))
+
+
+@pytest.mark.parametrize('missing', ['collection_mode', 'spot_check'])
+def test_spot_check_contract_needs_its_own_keys(tmp_path, missing):
+    document = spot_check_document(tmp_path)
+    document.pop(missing)
+    with pytest.raises(ValueError, match='SPOT_CHECK_COLLECTION_CONTRACT_INVALID'):
+        module().validate_spot_check_contract(document)
+
+
+def test_the_other_contracts_do_not_accept_a_spot_check_document(tmp_path):
+    document = spot_check_document(tmp_path)
+    with pytest.raises(ValueError, match='FUNCTIONAL_COLLECTION_CONTRACT_INVALID'):
+        module().validate_functional_contract(document)
+    with pytest.raises(ValueError, match='PARALLEL_QUALIFICATION_CONTRACT_INVALID'):
+        module().validate_qualification_contract(document)
+    # and a functional document with the spot-check keys but the functional kind is no spot check either
+    with pytest.raises(ValueError, match='FUNCTIONAL_COLLECTION_CONTRACT_INVALID'):
+        module().validate_functional_contract(dict(document, kind='ACT_COLLECTION_FUNCTIONAL_RUN'))
+
+
+def test_spot_check_run_is_never_a_qualification_report_input(tmp_path):
+    from so101_demo.act import collection_qualification_recompute as recompute
+    path = tmp_path / 'spot-check-run.json'
+    path.write_text(json.dumps(spot_check_document(tmp_path)))
+    with pytest.raises(ValueError, match='QUALIFICATION_CONTRACT_UNREADABLE'):
+        recompute.contract_documents(path)
+
+
+def test_installed_schema_accepts_the_spot_check_contract_and_refuses_extra_fields(tmp_path):
+    from pathlib import Path
+    from jsonschema import Draft202012Validator, ValidationError
+    schema = json.loads((Path(__file__).parents[2] / 'config/act/parallel-spot-check-contract-schema.json').read_text())
+    Draft202012Validator.check_schema(schema)
+    document = spot_check_document(tmp_path)
+    Draft202012Validator(schema).validate(document)
+    for bad in (document | {'status': 'QUALIFIED'}, document | {'worker_count': 2}, document | {'spot_check': 'x'},
+                document | {'collection_mode': 'formal'}):
+        with pytest.raises(ValidationError):
+            Draft202012Validator(schema).validate(bad)
