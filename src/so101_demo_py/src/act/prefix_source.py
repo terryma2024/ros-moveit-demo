@@ -13,9 +13,11 @@ from typing import Callable
 
 from .contracts import fields, finite, identifier, integer, sha256, validate_action_prefix
 from .execution import prefix_sha256
+from .rig_profile import DEFAULT_RIG, KNOWN_SOURCE_KEYS, source_keys_for
 
 
-SOURCE_KEYS = ("world", "scene", "contact", "head", "wrist", "arm", "neck")
+#: the sources of the default rig (head+wrist, neck); a receipt of another known rig carries that rig's keys (`KNOWN_SOURCE_KEYS`)
+SOURCE_KEYS = source_keys_for(DEFAULT_RIG)
 SOURCE_KINDS = frozenset(("EXPERT_ROUTE", "ACT_POLICY"))
 SOURCE_FIELDS = frozenset((
     "session_id", "attempt_id", "reset_epoch", "phase", "physics_step",
@@ -88,10 +90,11 @@ class PrefixSourceAuthority:
                 raise ValueError("scope")
             digest = sha256(source["observation_sha256"])
             times = source["source_received_wall_s"]
-            if type(times) is not dict or set(times) != set(SOURCE_KEYS):
+            keys = next((known for known in KNOWN_SOURCE_KEYS if type(times) is dict and set(times) == set(known)), None)
+            if keys is None:
                 raise ValueError("receipts")
             ordered = tuple((key, finite(times[key], nonnegative=True))
-                            for key in SOURCE_KEYS)
+                            for key in keys)
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError("PREFIX_SOURCE_SCOPE_INVALID") from error
         if any(received > now_wall_s for _, received in ordered):

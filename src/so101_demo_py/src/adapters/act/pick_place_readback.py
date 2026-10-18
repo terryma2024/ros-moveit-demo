@@ -12,7 +12,8 @@ import time
 
 from so101_demo.act.contracts import finite, identifier, sha256
 from so101_demo.act.execution import bounded_positions
-from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS
+from so101_demo.act.joints import ARM_JOINTS, act_joints_for
+from so101_demo.act.rig_profile import DEFAULT_RIG
 
 
 def _finite(value) -> bool:
@@ -25,12 +26,12 @@ class PickPlaceReadbackError(RuntimeError):
     """A required physical source is missing or disagrees with another."""
 
 
-def compiled_qpos_mapping(model, *, expected_model_sha256: str,
-                          expected_mujoco_version: str) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Resolve ACT joints from a verified compiled model, never numeric config."""
+def compiled_qpos_mapping(model, *, expected_model_sha256: str, expected_mujoco_version: str,
+                          rig=DEFAULT_RIG) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Resolve the ACT joints of a rig (the neck's only when it has one) from a verified compiled model, never numeric config."""
     import mujoco
-    from so101_demo.act.joints import ACT_JOINTS
     from .physics import model_sha256
+    act_joints = act_joints_for(rig)
 
     sha256(expected_model_sha256)
     if (not isinstance(model, mujoco.MjModel)
@@ -40,7 +41,7 @@ def compiled_qpos_mapping(model, *, expected_model_sha256: str,
     if model_sha256(model) != expected_model_sha256:
         raise ValueError("PICK_PLACE_VALIDATION_MODEL_HASH_MISMATCH")
     joints = []
-    for name in ACT_JOINTS:
+    for name in act_joints:
         joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
         if joint_id < 0 or model.jnt_type[joint_id] != mujoco.mjtJoint.mjJNT_HINGE:
             raise ValueError("PICK_PLACE_VALIDATION_MODEL_JOINT_INVALID")
@@ -50,7 +51,7 @@ def compiled_qpos_mapping(model, *, expected_model_sha256: str,
         raise ValueError("PICK_PLACE_VALIDATION_MODEL_CUP_INVALID")
     cup_start = int(model.jnt_qposadr[cup_joint_id])
     cup = tuple(range(cup_start, cup_start + 7))
-    if (len(set(joints)) != 7 or min(joints) < 0 or max(joints) >= model.nq
+    if (len(set(joints)) != len(act_joints) or min(joints) < 0 or max(joints) >= model.nq
             or cup_start < 0 or cup[-1] >= model.nq or set(joints) & set(cup)):
         raise ValueError("PICK_PLACE_VALIDATION_MODEL_QPOS_INVALID")
     return tuple(joints), cup
@@ -62,18 +63,19 @@ class PickPlacePhysicalReadback:
         expected_model_sha256, expected_mujoco_version,
         max_source_skew_s, max_wall_age_s,
         joint_tolerance_rad, cup_pose_tolerance_m, cup_orientation_tolerance,
-        monotonic=time.monotonic,
+        monotonic=time.monotonic, rig=DEFAULT_RIG,
     ) -> None:
+        self.rig = rig
         self.world, self.scene, self.contacts = world, scene, contacts
         self.rgb, self.broker, self.monotonic = rgb, broker, monotonic
         self.joints, self.cup = compiled_qpos_mapping(
             model, expected_model_sha256=expected_model_sha256,
-            expected_mujoco_version=expected_mujoco_version,
+            expected_mujoco_version=expected_mujoco_version, rig=rig,
         )
         import mujoco
         self.joint_dofs = tuple(int(model.jnt_dofadr[
             mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
-        ]) for name in ACT_JOINTS)
+        ]) for name in act_joints_for(rig))
         self.max_skew = finite(max_source_skew_s)
         self.max_wall_age = finite(max_wall_age_s)
         self.joint_tolerance = finite(joint_tolerance_rad)
@@ -176,7 +178,7 @@ class PickPlacePhysicalReadback:
             raise PickPlaceReadbackError("RGB_READBACK_UNAVAILABLE") from error
         try:
             source_received = dict(audit["source_received_wall_s"])
-            if set(source_received) != {"head", "wrist", "arm", "neck"}:
+            if set(source_received) != {*self.rig.camera_names, "arm", *(("neck",) if self.rig.has_neck else ())}:
                 raise ValueError("sensor receipt keys")
             source_received.update(world=world_entry.received_monotonic_s,
                                    scene=scene_received, contact=contact_received)
@@ -185,7 +187,7 @@ class PickPlacePhysicalReadback:
                 raise ValueError("source receipt stale")
         except (AttributeError, KeyError, TypeError, ValueError) as error:
             raise PickPlaceReadbackError("SOURCE_RECEIPT_INVALID") from error
-        measured = (*observation["state"][:6], audit["neck_yaw_rad"])
+        measured = (*observation["state"][:6], *((audit["neck_yaw_rad"],) if self.rig.has_neck else ()))
         if any(abs(measured[index] - qpos[address]) > self.joint_tolerance
                for index, address in enumerate(self.joints)):
             raise PickPlaceReadbackError("JOINT_QPOS_DIVERGED")

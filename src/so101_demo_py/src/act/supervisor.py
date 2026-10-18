@@ -5,9 +5,21 @@ import time
 from .contracts import fields,finite,identifier,integer,vector,sha256,validate_action_prefix
 from .deadline import Deadline
 from .execution import bounded_positions
+from .rig_profile import DEFAULT_RIG
 from .trajectory import controller_point
 
+#: the evidence sources of the default rig (head+wrist); `evidence_sources(rig)` is a rig's own (its cameras, no head for a side rig)
 EVIDENCE_SOURCES=frozenset(('joints','cup','contacts','head','wrist'))
+
+
+def evidence_sources(rig):
+    return frozenset(('joints','cup','contacts',*rig.camera_names))
+
+
+def snapshot_keys(rig):
+    """The closed snapshot keys of a rig: the neck yaw is part of the snapshot only for a rig with a neck."""
+    return SNAPSHOT_KEYS if rig.has_neck else SNAPSHOT_KEYS-{'neck_yaw_rad'}
+
 BOOL_FIELDS=frozenset(('target_visible','bilateral_contact','micro_lift_confirmed','cup_off_table',
     'cup_supported','robot_contacts_safe','released','placement_stable','retreat_stable','planning_attached'))
 SNAPSHOT_KEYS=frozenset(('session_id','attempt_id','reset_epoch','release_epoch','sim_time_s',
@@ -22,11 +34,12 @@ def release_allowed(holding,opening,supported,fresh):
     return not (holding and opening) or (supported and fresh)
 
 
-def validate_snapshot(snapshot):
-    fields(snapshot,SNAPSHOT_KEYS)
+def validate_snapshot(snapshot,rig=DEFAULT_RIG):
+    fields(snapshot,snapshot_keys(rig))
     for key in ('session_id','attempt_id'):identifier(snapshot[key])
     for key in ('reset_epoch','release_epoch'):integer(snapshot[key])
-    finite(snapshot['sim_time_s'],nonnegative=True);finite(snapshot['neck_yaw_rad'])
+    finite(snapshot['sim_time_s'],nonnegative=True)
+    if rig.has_neck:finite(snapshot['neck_yaw_rad'])
     bounded_positions(snapshot['arm_positions']);vector(snapshot['arm_velocities'],6)
     bounded_positions(snapshot['controller_start_positions'])
     vector(snapshot['controller_start_velocities'],6);sha256(snapshot['model_sha256'])
@@ -37,8 +50,9 @@ def validate_snapshot(snapshot):
     bounded_positions(bridge['positions'])
     if not before<=snapshot['sim_time_s'] or not before<snapshot['controller_start_time_s']:
         raise ValueError('SNAPSHOT_BRIDGE_INVALID')
-    fields(snapshot['source_times_s'],EVIDENCE_SOURCES);fields(snapshot['received_wall_s'],EVIDENCE_SOURCES)
-    for key in EVIDENCE_SOURCES:
+    sources=evidence_sources(rig)
+    fields(snapshot['source_times_s'],sources);fields(snapshot['received_wall_s'],sources)
+    for key in sources:
         finite(snapshot['source_times_s'][key],nonnegative=True)
         finite(snapshot['received_wall_s'][key],nonnegative=True)
     if any(type(snapshot[key]) is not bool for key in BOOL_FIELDS):raise ValueError('SNAPSHOT_BOOL_INVALID')
@@ -55,17 +69,22 @@ def validate_snapshot(snapshot):
 
 class ActSupervisor:
     def __init__(self,execution,physics,*,deadline,initial_snapshot,max_age_s,max_skew_s,
-                 max_neck_drift_rad,visibility_occlusion_s,opening_delta_rad,permit_port,
-                 monotonic=time.monotonic):
-        validate_snapshot(initial_snapshot)
+                 visibility_occlusion_s,opening_delta_rad,permit_port,max_neck_drift_rad=None,
+                 monotonic=time.monotonic,rig=DEFAULT_RIG):
+        self.rig=rig
+        validate_snapshot(initial_snapshot,rig)
         if not isinstance(deadline,Deadline) or not callable(permit_port):raise ValueError('SUPERVISOR_CONFIG_INVALID')
-        values=tuple(finite(v) for v in (max_age_s,max_skew_s,max_neck_drift_rad,visibility_occlusion_s,opening_delta_rad))
+        # a rig without a neck has no neck drift to bound: its supervisor takes no such limit and never reads a neck yaw
+        if (max_neck_drift_rad is None)==rig.has_neck:raise ValueError('SUPERVISOR_CONFIG_INVALID')
+        values=tuple(finite(v) for v in (max_age_s,max_skew_s,visibility_occlusion_s,opening_delta_rad,
+                                         *(() if max_neck_drift_rad is None else (max_neck_drift_rad,))))
         if min(values)<=0:raise ValueError('SUPERVISOR_CONFIG_INVALID')
-        self.max_age,self.max_skew,self.max_drift,self.occlusion,self.open_delta=values
+        self.max_age,self.max_skew,self.occlusion,self.open_delta,*drift=values
+        self.max_drift=drift[0] if drift else None
         self.execution,self.physics,self.deadline,self.permit_port=execution,physics,deadline,permit_port
         self.monotonic=monotonic;self._lock=threading.RLock()
         self.identity=(initial_snapshot['session_id'],initial_snapshot['attempt_id'],initial_snapshot['reset_epoch'])
-        self.neck=initial_snapshot['neck_yaw_rad'];self.initial_release=initial_snapshot['release_epoch']
+        self.neck=initial_snapshot['neck_yaw_rad'] if rig.has_neck else None;self.initial_release=initial_snapshot['release_epoch']
         self.release_epoch=None;self.release_time=None;self.last_sim=initial_snapshot['sim_time_s']
         self.last_visible_wall=deadline.started_wall_s if initial_snapshot['target_visible'] else None
         self.state='EMPTY';self.reason=None;self.ever_held=False
@@ -77,7 +96,7 @@ class ActSupervisor:
         return self.state
 
     def _verify(self,snapshot,now):
-        try:validate_snapshot(snapshot)
+        try:validate_snapshot(snapshot,self.rig)
         except (KeyError,TypeError,ValueError):return 'SUPERVISOR_SNAPSHOT_INVALID'
         if (snapshot['session_id'],snapshot['attempt_id'],snapshot['reset_epoch'])!=self.identity:
             return 'SUPERVISOR_SCOPE_INVALID'
@@ -88,7 +107,7 @@ class ActSupervisor:
         if any(not 0<=now-value<=self.max_age for value in snapshot['received_wall_s'].values()):return 'EVIDENCE_STALE'
         if any(not 0<=stamp-value<=self.max_skew for value in snapshot['source_times_s'].values()):return 'EVIDENCE_STALE'
         if snapshot['robot_contacts_safe'] is not True:return 'ROBOT_CONTACT_HAZARD'
-        if abs(snapshot['neck_yaw_rad']-self.neck)>self.max_drift:return 'NECK_DRIFT'
+        if self.rig.has_neck and abs(snapshot['neck_yaw_rad']-self.neck)>self.max_drift:return 'NECK_DRIFT'
         if snapshot['holding_state']=='UNKNOWN':return 'HOLDING_UNKNOWN'
         if snapshot['target_visible']:
             self.last_visible_wall=now

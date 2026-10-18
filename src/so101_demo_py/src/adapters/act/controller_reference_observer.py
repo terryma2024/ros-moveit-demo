@@ -35,19 +35,23 @@ class ControllerReferenceObserver:
     the Recorder seals `gap_report()` and QC refuses a gap inside the label window.
     """
 
-    def __init__(self, *, max_frames):
+    def __init__(self, *, max_frames, kinds=tuple(_NAMES)):
         integer(max_frames, minimum=51)
+        # the controllers observed: the arm and the gripper, and the neck only for a rig that has one
+        if not kinds or any(kind not in _NAMES for kind in kinds) or len(set(kinds)) != len(kinds):
+            raise ValueError("CONTROLLER_REFERENCE_KINDS_INVALID")
+        self._names = {kind: _NAMES[kind] for kind in kinds}
         # The receiver appends and the Recorder's loop reads: every access to a history takes this lock.
         self._lock = threading.RLock()
-        self._frames = {kind: deque(maxlen=max_frames) for kind in _NAMES}
+        self._frames = {kind: deque(maxlen=max_frames) for kind in self._names}
         # a publication counter per kind, independent of the bounded buffer: deriving the sequence
         # from the retained length would freeze it once the deque is full
-        self._sequences = {kind: 0 for kind in _NAMES}
+        self._sequences = {kind: 0 for kind in self._names}
         self._identity = None
         self._floor_ns = None
         self._hazard = None
-        self._gaps = {kind: {"frames": 0, "gaps": 0, "steps": []} for kind in _NAMES}
-        self._last_stamp = {kind: None for kind in _NAMES}
+        self._gaps = {kind: {"frames": 0, "gaps": 0, "steps": []} for kind in self._names}
+        self._last_stamp = {kind: None for kind in self._names}
 
     def gap_report(self):
         """The sealed continuity report of this epoch: frames, gap count and the first gap steps per controller."""
@@ -76,8 +80,8 @@ class ControllerReferenceObserver:
             self._sequences[kind] = 0
         for history in self._frames.values():
             history.clear()
-        self._gaps = {kind: {"frames": 0, "gaps": 0, "steps": []} for kind in _NAMES}
-        self._last_stamp = {kind: None for kind in _NAMES}
+        self._gaps = {kind: {"frames": 0, "gaps": 0, "steps": []} for kind in self._names}
+        self._last_stamp = {kind: None for kind in self._names}
 
     def invalidate(self):
         """Forget any pre-reset publications until a valid epoch arrives."""
@@ -98,10 +102,10 @@ class ControllerReferenceObserver:
         if self._hazard is not None:
             return False
         try:
-            if self._identity is None or kind not in _NAMES:
+            if self._identity is None or kind not in self._names:
                 raise ValueError("CONTROLLER_REFERENCE_SCOPE_INVALID")
             names = tuple(message.joint_names)
-            expected = _NAMES[kind]
+            expected = self._names[kind]
             stamp = (_ns(message.header.stamp.sec) * 1_000_000_000
                      + _ns(message.header.stamp.nanosec))
             if (names != expected or message.header.stamp.nanosec >= 1_000_000_000
@@ -160,7 +164,7 @@ class ControllerReferenceObserver:
         only the frames within `tolerance_ns` of `target_ns` that the window read would also have returned."""
         with self._lock:
             try:
-                if self._identity is None or kind not in _NAMES or self._hazard:
+                if self._identity is None or kind not in self._names or self._hazard:
                     raise ValueError("CONTROLLER_REFERENCE_HISTORY_INVALID")
                 now = _ns(now_sim_ns)
                 window = _ns(window_ns)
@@ -180,7 +184,7 @@ class ControllerReferenceObserver:
     def _recent_by_stamp(self, kind, *, now_sim_ns, window_ns):
         """Identity and the frames whose stamp is at most `window_ns` older than `now_sim_ns` (age from the stamp)."""
         try:
-            if self._identity is None or kind not in _NAMES or self._hazard:
+            if self._identity is None or kind not in self._names or self._hazard:
                 raise ValueError("CONTROLLER_REFERENCE_HISTORY_INVALID")
             now = _ns(now_sim_ns)
             window = _ns(window_ns)
@@ -198,7 +202,7 @@ class ControllerReferenceObserver:
 
     def _recent(self, kind, *, now_monotonic_s, max_wall_age_s):
         try:
-            if self._identity is None or kind not in _NAMES or self._hazard:
+            if self._identity is None or kind not in self._names or self._hazard:
                 raise ValueError("CONTROLLER_REFERENCE_HISTORY_INVALID")
             now = round(finite(now_monotonic_s, nonnegative=True) * 1_000_000_000)
             max_age = round(finite(max_wall_age_s) * 1_000_000_000)

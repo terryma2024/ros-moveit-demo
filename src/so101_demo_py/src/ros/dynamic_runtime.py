@@ -946,6 +946,8 @@ def run_dynamic_execute(
             execution.inject_failure_at = State(inject_failure_at)
         if execution_inputs is not None:
             execution._execution_snapshot_root = share_dir
+            # the scene of the frozen inputs' rig (the cup geometry is read from it)
+            execution._execution_scene_path = execution_inputs["scene_path"]
             # the freeze names the Teacher execution policy
             execution._select_execution_policy()
         if scene_source_binding is not None:

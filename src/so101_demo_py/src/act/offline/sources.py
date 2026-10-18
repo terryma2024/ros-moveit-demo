@@ -52,6 +52,11 @@ from .replay import InlineExecutor, ReplayNode
 _SEED_ACTIVATION_RESERVE_S = 0.05
 _CONTROLLER_KINDS = ("arm", "gripper", "neck")
 
+
+def controller_kinds_for(rig) -> tuple:
+    """The controllers whose `controller_state` a rig's episode reads: arm and gripper, and the neck's only for a rig with a neck."""
+    return _CONTROLLER_KINDS if rig.has_neck else _CONTROLLER_KINDS[:2]
+
 # controller_state is published at the controller update rate (500 Hz) with the update's sim stamp. The reader keeps
 # KEEP_LAST 1000 (2 s of frames) so a slow callback cannot lose a frame, and the buffer holds at least 2 s by stamp.
 STATE_QOS_DEPTH = 1000
@@ -76,7 +81,7 @@ class ControllerReferencePort:
     """
 
     def __init__(self, node, *, session_id, reset_epoch, window_s=STATE_WINDOW_S, monotonic=time.monotonic,
-                 observer=None):
+                 observer=None, kinds=_CONTROLLER_KINDS):
         from control_msgs.msg import JointTrajectoryControllerState
 
         from ...adapters.act.controller_reference_observer import ControllerReferenceObserver
@@ -84,7 +89,7 @@ class ControllerReferencePort:
         if window_s < STATE_WINDOW_S:
             raise ValueError("REFERENCE_WINDOW_TOO_SHORT")
         self.node, self.monotonic, self.window_s = node, monotonic, window_s
-        self.observer = observer or ControllerReferenceObserver(max_frames=STATE_FRAME_CAPACITY)
+        self.observer = observer or ControllerReferenceObserver(max_frames=STATE_FRAME_CAPACITY, kinds=kinds)
         self.identity = (session_id, reset_epoch)
         self.floor_ns = node.get_clock().now().nanoseconds
         self.observer.reset(session_id, reset_epoch, source_floor_ns=self.floor_ns)
@@ -93,7 +98,7 @@ class ControllerReferencePort:
                                      lambda message, kind=kind: self.observer.accept(
                                          kind, message, received_monotonic_s=self.monotonic()),
                                      controller_state_qos())
-            for kind in _CONTROLLER_KINDS]
+            for kind in kinds]
 
     def recent(self, kind):
         return self.observer.recent_by_stamp(
@@ -242,7 +247,8 @@ class OfflineRosSources:
         """A sequence gap is not a sticky hazard of the observer: the retained records are checked for gaps where they are read."""
 
     def _default_reference_factory(self, node, *, session_id, reset_epoch):
-        return ControllerReferencePort(node, session_id=session_id, reset_epoch=reset_epoch)
+        return ControllerReferencePort(node, session_id=session_id, reset_epoch=reset_epoch,
+                                       kinds=controller_kinds_for(self.rig))
 
     def _subscribe_joint_states(self) -> None:
         from rclpy.qos import qos_profile_sensor_data
@@ -255,13 +261,13 @@ class OfflineRosSources:
         """Count the message and keep the original measured state the rows join (same record the Teacher child kept)."""
         self._counts["joint_states"] += 1
         try:
-            from ...act.joints import ACT_JOINTS
+            from ...act.joints import act_joints_for
 
             if len(message.name) != len(message.position):
                 return
             positions = {name: float(value) for name, value in zip(message.name, message.position, strict=True)}
             stamp = getattr(getattr(message, "header", None), "stamp", None)
-            if not all(name in positions for name in ACT_JOINTS) or stamp is None:
+            if not all(name in positions for name in act_joints_for(self.rig)) or stamp is None:
                 return
             from rosidl_runtime_py.convert import message_to_ordereddict
 

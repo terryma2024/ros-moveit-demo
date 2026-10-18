@@ -11,7 +11,8 @@ from typing import Mapping
 from .contracts import finite, integer, sha256, validate_action_prefix, vector
 from .execution import prefix_sha256, split_positions
 from .joints import ARM_JOINTS
-from .prefix_source import PrefixSourceReceipt, SOURCE_KEYS, SOURCE_KINDS
+from .prefix_source import PrefixSourceReceipt, SOURCE_KINDS
+from .rig_profile import KNOWN_SOURCE_KEYS
 
 
 def _nanoseconds(value):
@@ -100,7 +101,7 @@ class RelativePathRequest:
         jitter = finite(jitter_s, nonnegative=True)
         received = receipt.source_received_wall_s
         if (observation_limit <= 0 or prefix_limit <= 0
-                or tuple(key for key, _ in received) != SOURCE_KEYS
+                or tuple(key for key, _ in received) not in KNOWN_SOURCE_KEYS
                 or any(finite(value, nonnegative=True) > receipt.prefix_issued_wall_s
                        for _, value in received)
                 or not receipt.prefix_issued_wall_s <= now):
@@ -148,7 +149,7 @@ class RelativePathRequest:
                 or receipt.owner_ticket[2:] != (
                     'act', checked['session_id'], checked['attempt_id'])
                 or tuple(key for key, _ in receipt.source_received_wall_s)
-                   != SOURCE_KEYS
+                   not in KNOWN_SOURCE_KEYS
                 or receipt.command_authority is not False):
             raise ValueError('PATH_SOURCE_RECEIPT_INVALID')
         try:
@@ -342,7 +343,7 @@ class PathProver:
                     or receipt.contact_policy_fingerprint != policy
                     or receipt.prefix_sha256 != request.source_prefix_sha256
                     or receipt.sequence != request.sequence
-                    or tuple(key for key, _ in received) != SOURCE_KEYS
+                    or tuple(key for key, _ in received) not in KNOWN_SOURCE_KEYS
                     or not max(value for _, value in received)
                         <= receipt.prefix_issued_wall_s <= started):
                 raise ValueError('PATH_PROOF_SOURCE_INVALID')
@@ -479,7 +480,7 @@ def require_commit_window(proof, *, state_received_wall_s, accepted_wall_s,
             received = receipt.source_received_wall_s
             if (max_observation <= 0
                     or max_prefix <= 0
-                    or tuple(key for key, _ in received) != SOURCE_KEYS
+                    or tuple(key for key, _ in received) not in KNOWN_SOURCE_KEYS
                     or not max(value for _, value in received)
                         <= receipt.prefix_issued_wall_s <= proof.started_wall_s):
                 raise ValueError('source clocks')

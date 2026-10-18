@@ -68,7 +68,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     from so101_demo.act.episode_audit.checks import _identity_ok
     from .execution_snapshot import verify_execution_snapshot
     from .diagnostic_episode_inputs import audit_execution_model_identity
-    from .joints import ACT_JOINTS
+    from .joints import act_joints_for
     from .native_endpoints import first_world_after_start, first_world_after_stop, verify_world_source
     from .raw_physics_chunks import verify_raw_chunk
     from .scene_association import canonical
@@ -210,7 +210,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
         raise ValueError('NATIVE_QC_FIRST_SOURCE_INVALID')
     last = stop_native_step(raw_steps, stop_clock)
     model = models[selected_final['execution_root']]
-    for name in ACT_JOINTS:
+    for name in act_joints_for(rig_from_frozen(inputs)):
         joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
         if joint < 0 or int(model.jnt_type[joint]) not in (
                 int(mujoco.mjtJoint.mjJNT_HINGE), int(mujoco.mjtJoint.mjJNT_SLIDE)):
@@ -220,7 +220,8 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     return copy.deepcopy(dict(initial_source=selected_initial, final_source=selected_final,
         normal_stop_step=last['physics_step'],
         goal_phase_begins=sum(1 for item in by_type.get('phase_begin', ()) if first_command_clock(item) is not None),
-        first_command_s=first_command['sim_time_ns'] / 1e9, reference_gaps=reference['neck_gaps']))
+        first_command_s=first_command['sim_time_ns'] / 1e9,
+        **({'reference_gaps': reference['neck_gaps']} if 'neck_gaps' in reference else {})))
 
 
 def stop_native_step(raw_steps, stop_clock):
@@ -295,7 +296,9 @@ def verify_reference_continuity(report, *, identity, window):
                 diagnostic += 1
     if touching:
         raise ValueError('REFERENCE_GAP_IN_LABEL_WINDOW')
-    return dict(gaps_in_window=touching, diagnostic_gaps=diagnostic, neck_gaps=report['kinds']['neck']['gaps'],
+    # the neck's gaps are counted only for a report that observed a neck
+    neck = {'neck_gaps': report['kinds']['neck']['gaps']} if 'neck' in report['kinds'] else {}
+    return dict(gaps_in_window=touching, diagnostic_gaps=diagnostic, **neck,
                 label_instants=len(label_instants_ns(window)), period_ns=CONTINUITY_PERIOD_NS)
 
 

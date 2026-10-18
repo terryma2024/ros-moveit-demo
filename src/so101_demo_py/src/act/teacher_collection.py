@@ -151,6 +151,8 @@ def validate_reset_complete_matches(document, reset_boundary) -> None:
 CONTINUITY_PERIOD_NS = 2_000_000          # one controller period at update_rate 500
 CONTINUITY_STEP_LIMIT = 256               # gap steps kept per controller; the count is always complete
 _CONTINUITY_KINDS = ("arm", "gripper", "neck")
+#: the controllers of a rig without a neck: no neck block is observed, sealed or counted
+_CONTINUITY_KINDS_NO_NECK = _CONTINUITY_KINDS[:2]
 
 
 def validate_reference_continuity(document):
@@ -162,7 +164,7 @@ def validate_reference_continuity(document):
         raise ValueError("REFERENCE_CONTINUITY_PERIOD_INVALID")
     identifier(document["session_id"])
     integer(document["reset_epoch"], minimum=1)
-    fields(document["kinds"], _CONTINUITY_KINDS)
+    fields(document["kinds"], _CONTINUITY_KINDS if "neck" in document["kinds"] else _CONTINUITY_KINDS_NO_NECK)
     for block in document["kinds"].values():
         fields(block, {"frames", "gaps", "steps"})
         integer(block["frames"])

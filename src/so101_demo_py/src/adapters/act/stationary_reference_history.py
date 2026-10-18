@@ -27,9 +27,9 @@ def _nanoseconds(value):
 
 def verify_stationary_reference_history(
     *, selected_sim_time_ns, reference_frames, expected_positions,
-    max_wall_age_s, stop_velocity_rad_s, monotonic_ns,
+    max_wall_age_s, stop_velocity_rad_s, monotonic_ns, kinds=tuple(_JOINT_NAMES),
 ):
-    """Require 51 exact 500 Hz frames from all three ACT controllers.
+    """Require 51 exact 500 Hz frames from all three ACT controllers (the arm and gripper only, for `kinds` without the neck).
 
     This result still needs a broker goal/ownership interval fence and the
     physical history for the same epoch before it may enter PathProof.
@@ -42,15 +42,16 @@ def verify_stationary_reference_history(
         if min(max_age, velocity_limit) <= 0 or selected < _SPAN_NS:
             raise ValueError("REFERENCE_WINDOW_CONFIG_INVALID")
         max_age_ns = round(max_age * 1_000_000_000)
+        joint_names = {kind: _JOINT_NAMES[kind] for kind in kinds}
         if (type(reference_frames) is not dict
-                or set(reference_frames) != set(_JOINT_NAMES)
+                or set(reference_frames) != set(joint_names)
                 or type(expected_positions) is not dict
-                or set(expected_positions) != set(_JOINT_NAMES)):
+                or set(expected_positions) != set(joint_names)):
             raise ValueError("REFERENCE_WINDOW_SCOPE_INVALID")
         bridge = selected - _SPAN_NS
         sealed = []
         endpoints = {}
-        for kind, names in _JOINT_NAMES.items():
+        for kind, names in joint_names.items():
             frames = reference_frames[kind]
             if not isinstance(frames, (tuple, list)) or len(frames) != _SAMPLES:
                 raise ValueError("REFERENCE_WINDOW_INCOMPLETE")
@@ -84,7 +85,7 @@ def verify_stationary_reference_history(
         return {
             "bridge_sim_time_ns": bridge,
             "selected_sim_time_ns": selected,
-            "sample_count_by_controller": {kind: _SAMPLES for kind in _JOINT_NAMES},
+            "sample_count_by_controller": {kind: _SAMPLES for kind in joint_names},
             "reference_window_sha256": digest,
             "bridge_arm_gripper_reference": {
                 "positions": arm_first[0] + gripper_first[0],

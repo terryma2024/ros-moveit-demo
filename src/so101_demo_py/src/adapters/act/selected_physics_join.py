@@ -10,6 +10,7 @@ import math
 import time
 
 from so101_demo.act.contracts import sha256
+from so101_demo.act.rig_profile import KNOWN_SOURCE_KEYS
 from so101_demo.core.simulation.types import SimulationEvidence
 
 from .contact_evidence import FRAME_KEYS, RobotContactObserver, contact_hazard
@@ -20,8 +21,8 @@ from .scene_state import SCENE_KEYS, SceneStateObserver
 _READBACK_KEYS = frozenset((
     "world", "scene", "contact", "observation", "reference",
     "source_stamps_s", "source_received_wall_s"))
-_RECEIPT_KEYS = frozenset((
-    "world", "scene", "contact", "head", "wrist", "arm", "neck"))
+#: the receipt sources of one known camera rig (head+wrist with a neck, or side+wrist without)
+_RECEIPT_KEY_SETS = tuple(frozenset(keys) for keys in KNOWN_SOURCE_KEYS)
 
 
 def _simulation_ns(value):
@@ -80,7 +81,7 @@ def join_selected_physics_sample(
         if (not isinstance(world, SimulationEvidence)
                 or type(scene) is not dict or set(scene) != SCENE_KEYS
                 or type(contact) is not dict or set(contact) != FRAME_KEYS
-                or type(receipts) is not dict or set(receipts) != _RECEIPT_KEYS
+                or type(receipts) is not dict or set(receipts) not in _RECEIPT_KEY_SETS
                 or world.paused is not False or world.truncated is not False
                 or world.simulation_step < 1 or world.reset_epoch < 1
                 or scene["paused"] is not False

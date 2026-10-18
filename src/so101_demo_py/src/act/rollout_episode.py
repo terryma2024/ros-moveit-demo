@@ -82,6 +82,8 @@ class _Loop:
         self.first_state = None
         self.arm_max = 0.0
         self.neck_max = 0.0
+        #: the observed states are the six arm joints only: no neck is measured, so no neck drift is reported
+        self.no_neck_state = False
         self.observation_keys = observation_keys
 
     def note_state(self, state):
@@ -90,6 +92,8 @@ class _Loop:
         self.arm_max = max(self.arm_max, max(abs(a - b) for a, b in zip(state[:6], self.first_state[:6])))
         if len(state) > 6:
             self.neck_max = max(self.neck_max, max(abs(a - b) for a, b in zip(state[6:], self.first_state[6:])))
+        else:
+            self.no_neck_state = True
 
 
 def _step_row(pending, **fields):
@@ -338,7 +342,7 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
         except Exception as error:
             retire_errors.append("RETIRE_UNCONFIRMED: " + _text(error))
     result["counts"] = dict(loop.counts)
-    result["motion"] = {"max_arm_displacement_rad": round(loop.arm_max, 9), "neck_deviation_max": round(loop.neck_max, 9),
+    result["motion"] = {"max_arm_displacement_rad": round(loop.arm_max, 9), **({} if loop.no_neck_state else {"neck_deviation_max": round(loop.neck_max, 9)}),
                         "no_motion_threshold_rad": settings.no_motion_threshold_rad}
     if loop.pending is not None:
         sink.step(_step_row(loop.pending, late=False, held=True, applied=False, reason="UNRESOLVED_AT_END"))

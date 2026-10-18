@@ -15,8 +15,13 @@ import re
 import stat
 from pathlib import Path
 
+from .rig_profile import DEFAULT_RIG, KNOWN_SOURCE_KEYS, source_keys_for
+
 SCHEMA_VERSION = 1
-_SOURCES = ("world", "scene", "contact", "head", "wrist", "arm", "neck")
+#: the sources of one sample of the default rig (head+wrist, neck); a sample of another known rig carries that rig's (`_SOURCE_SETS`)
+_SOURCES = source_keys_for(DEFAULT_RIG)
+#: the closed source sets of a sample: the sources of one known camera rig (head+wrist with a neck, or side+wrist without)
+_SOURCE_SETS = tuple(tuple(sorted(keys)) for keys in KNOWN_SOURCE_KEYS)
 _SAMPLE_KEYS = (
     "case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
     "sim_time_s", "phase", "source_stamps_s", "source_received_monotonic_s", "raw_records",
@@ -108,11 +113,11 @@ class PickPlaceLiveEvidenceRecorder:
             raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         for name in ("source_stamps_s", "source_received_monotonic_s"):
             stamps = sample[name]
-            if (type(stamps) is not dict or tuple(sorted(stamps)) != tuple(sorted(_SOURCES))
+            if (type(stamps) is not dict or tuple(sorted(stamps)) not in _SOURCE_SETS
                     or not all(_finite(value) for value in stamps.values())):
                 raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SOURCE_MISSING")
         records = sample["raw_records"]
-        if type(records) is not dict or tuple(sorted(records)) != tuple(sorted(_SOURCES)):
+        if type(records) is not dict or tuple(sorted(records)) not in _SOURCE_SETS:
             raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SOURCE_MISSING")
         for source, record in records.items():
             if type(record) is not dict or set(record) != {"relative_path", "sha256"}:

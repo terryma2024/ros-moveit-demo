@@ -5,7 +5,8 @@ import math
 
 from .contracts import identifier, integer
 from so101_demo.act.episode_audit.checks import _identity_ok
-from .joints import ACT_JOINTS, ordered_positions
+from .joints import act_joints_for, ordered_positions
+from .rig_profile import rig_from_frozen
 from .nonfinite import json_safe
 from .synchronizer import bracketed_age_ok_ns, source_age_ok_ns
 
@@ -21,6 +22,8 @@ class LivePhysicalAuditProvider:
                                                 planning_source, controller_source, lifecycle_source)):
             raise ValueError("LIVE_PHYSICAL_SOURCE_BINDING_INVALID")
         self._identity, self._inputs = copy.deepcopy(identity), copy.deepcopy(inputs)
+        #: the measured joints of the episode's rig (the neck yaw only when the rig has a neck)
+        self._joints = act_joints_for(rig_from_frozen(self._inputs))
         self.scene_association_source = scene_association_source
         self.physics_source, self.planning_source = physics_source, planning_source
         self.controller_source, self.lifecycle_source = controller_source, lifecycle_source
@@ -138,7 +141,7 @@ class LivePhysicalAuditProvider:
             return None
         integer(controller["source_stamp_ns"])
         integer(controller["generation"], minimum=1)
-        ordered_positions(controller["positions"], ACT_JOINTS)
+        ordered_positions(controller["positions"], self._joints)
         planning_stamp = planning["response_ros_clock"]["sim_time_ns"]
         next_read = None
         if apply_form or not source_age_ok_ns(grid_ns, planning_stamp):

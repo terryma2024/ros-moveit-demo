@@ -144,7 +144,8 @@ class PhaseSequencing:
 
         geometry = getattr(self, "_place_geometry_value", None)
         if geometry is None:
-            geometry = cup_geometry_from_scene(Path(self._execution_snapshot_root) / "assets/mujoco/act/scene.xml")
+            scene = getattr(self, "_execution_scene_path", "assets/mujoco/act/scene.xml")
+            geometry = cup_geometry_from_scene(Path(self._execution_snapshot_root) / scene)
             self._place_geometry_value = geometry
         return geometry
 
