@@ -461,6 +461,9 @@ class UnifiedWorkloadService:
             manifest = json.loads(manifest_bytes,object_pairs_hook=_pairs,
                 parse_constant=lambda name: (_ for _ in ()).throw(ValueError(name)))
             plane, contract = validate_run_contract(manifest)
+            if plane == 'spot_check' and payload['worker_count'] != 1:
+                # a contact-policy spot check is one worker on one scene; the contract says so too, this is the named refusal
+                raise ValueError('SPOT_CHECK_SINGLE_WORKER_REQUIRED')
             if (contract['worker_count'] != payload['worker_count']
                     or contract['controlled_identity'] != _collection_identity(payload, campaign_config)):
                 raise ValueError('COLLECTION_RUN_CONTRACT_BINDING_MISMATCH')

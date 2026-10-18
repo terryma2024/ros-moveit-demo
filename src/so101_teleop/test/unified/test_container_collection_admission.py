@@ -657,3 +657,89 @@ def test_legacy_pass_receipt_in_a_sibling_run_is_refused_as_invalid_evidence(qua
         assert_formal_refused(workload, store, spec, 'EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID')
     finally:
         store.close()
+
+
+# ---- the spot-check start: one worker, one scene, no gate contract --------------------------------------------------------------
+
+def spot_check_start(spec, *, scenes=1, spot='nominal', worker_count=1):
+    """The same spec as a container contact-policy spot check: the spot-check run contract over `scenes` scene rows."""
+    payload = dict(spec.payload)
+    path = Path(payload['manifest_path'])
+    document = json.loads(path.read_text())
+    scene_path = Path(document['scene_manifest']['path'])
+    scene_path.write_text(json.dumps({'scenarios': [{'scene_id': f'spot-{i:02d}', 'split': 'validation'}
+                                                    for i in range(scenes)]}))
+    document['scene_manifest']['sha256'] = hashlib.sha256(scene_path.read_bytes()).hexdigest()
+    document.update(kind='ACT_COLLECTION_SPOT_CHECK_RUN', run_id='spot-run', worker_count=worker_count,
+                    collection_mode='preselected_target_diagnostic', spot_check=spot)
+    path.write_text(json.dumps(document))
+    payload['manifest_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return replace(spec, payload=payload)
+
+
+@pytest.mark.parametrize('spot', ['nominal', 'over_squeeze'])
+def test_a_spot_check_start_admits_one_slot_without_a_gate_contract(tmp_path, spot):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        context = workload.start(spot_check_start(spec, spot=spot), allow_existing=False)
+        assert context.worker_count == 1
+        assert [item.worker_id for item in workload.slot_registry.slots()] == ['w00']
+    finally:
+        store.close()
+
+
+def test_a_spot_check_start_refuses_a_campaign_config_naming_a_contract(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        spec = spot_check_start(spec)
+        config_path = Path(spec.payload['campaign_config_path'])
+        config = json.loads(config_path.read_text())
+        config['qualification_contract'] = dict(path=spec.payload['manifest_path'], sha256=spec.payload['manifest_sha256'])
+        config_path.write_text(json.dumps(config))
+        payload = dict(spec.payload, campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
+        with pytest.raises(ValueError, match='COLLECTION_RUN_CONTRACT_BINDING_MISMATCH'):
+            workload.start(replace(spec, payload=payload), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()
+
+
+def test_a_spot_check_start_refuses_a_retrying_campaign_config(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        spec = spot_check_start(spec)
+        config_path = Path(spec.payload['campaign_config_path'])
+        config = json.loads(config_path.read_text())
+        config['retry_invalid_max_rounds'] = 1
+        config_path.write_text(json.dumps(config))
+        payload = dict(spec.payload, campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
+        with pytest.raises(ValueError):
+            workload.start(replace(spec, payload=payload), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('scenes', [2, 8])
+def test_a_spot_check_start_refuses_more_than_one_scene(tmp_path, scenes):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        with pytest.raises(ValueError):
+            workload.start(spot_check_start(spec, scenes=scenes), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()
+
+
+def test_a_spot_check_start_needs_exactly_one_worker(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        two = spot_check_start(spec)
+        payload = dict(two.payload, worker_count=2, worker_slots=[asdict(ActWorkerSlot(
+            campaign_id=two.payload['campaign_id'], worker_id=f'w{index:02d}', execution_generation=two.execution_generation))
+            for index in range(2)])
+        with pytest.raises(ValueError, match='SPOT_CHECK_SINGLE_WORKER_REQUIRED'):
+            workload.start(replace(two, payload=payload), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()

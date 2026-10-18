@@ -12,6 +12,12 @@ qualification report) or 8 (gate contract, 40 scenes), otherwise formal (8 worke
 a report built from another run of the registered evidence root, which formal admission recomputes and verifies in full). In the
 exact-eight qualification plane `--run-id` must be the gate contract's `qualification_run_id`.
 
+`--spot-check` is the contact-policy spot-check plane (one worker, exactly one scene, `--manifest` the spot-check run contract,
+`ACT_COLLECTION_SPOT_CHECK_RUN`). It runs in the diagnostic collection mode: the inputs are frozen in that mode with the scene
+list of one row, and the contact receipt may be a plan-signed spot-check candidate. It is a qualification-mode run (the payload
+schema is unchanged), has no retry and no qualification report, writes an index that lists no committed episode, and is never
+exported or trained on. `--qualification` and `--qualification-report` are refused with it.
+
 `--instance-launcher` chooses how an instance runs: `container` (default, one Docker container per worker) or `native` (one
 Host process group, exactly one worker). Both run the same instance program from the same spec; the Teacher service is a
 container either way. A native instance has no isolation, so admission refuses it unless it is the only ACT instance on the
@@ -92,6 +98,9 @@ def _parser():
     parser.add_argument('--run-id', required=True, help='name of the new run directory under the registered evidence root')
     parser.add_argument('--worker-count', type=int, required=True)
     parser.add_argument('--qualification', action='store_true')
+    parser.add_argument('--spot-check', action='store_true',
+                        help='the contact-policy spot-check plane: one worker, one scene, the spot-check run contract, '
+                             'diagnostic collection mode (refuses --qualification and --qualification-report)')
     parser.add_argument('--instance-launcher', choices=('container', 'native'), default='container',
                         help='how each instance runs: one Docker container per worker, or one native Host process group '
                              '(exactly one worker)')
@@ -142,13 +151,16 @@ def _preflight(args):
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
     if re.fullmatch(_ID, args.run_id) is None:
         raise ValueError('CAMPAIGN_RUN_ID_INVALID')
-    if args.worker_count not in ((1, 2, 8) if args.qualification else (8,)):
+    spot_check = bool(args.spot_check)
+    if spot_check and args.qualification:
+        raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
+    if args.worker_count not in ((1,) if spot_check else (1, 2, 8) if args.qualification else (8,)):
         raise ValueError('COLLECTION_WORKER_COUNT_INVALID')
     if args.instance_launcher == 'native' and args.worker_count != 1:
         raise ValueError('COLLECTION_NATIVE_SINGLE_WORKER_ONLY')
-    if args.qualification and args.qualification_report is not None:
+    if (args.qualification or spot_check) and args.qualification_report is not None:
         raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
-    if not args.qualification and args.qualification_report is None:
+    if not (args.qualification or spot_check) and args.qualification_report is None:
         raise ValueError('EIGHT_WORKER_QUALIFICATION_REQUIRED')
     resolved = {name: _regular(getattr(args, name)) for name in _PATH_OPTIONS}
     report = None if args.qualification_report is None else _regular(args.qualification_report)
@@ -156,9 +168,9 @@ def _preflight(args):
         document = read_document(resolved['manifest'])
     except (OSError, ValueError, UnicodeError) as error:
         raise ValueError('COLLECTION_MANIFEST_INVALID') from error
-    if args.qualification:
+    if args.qualification or spot_check:
         plane, contract = validate_run_contract(document)
-        if contract['worker_count'] != args.worker_count:
+        if (plane == 'spot_check') != spot_check or contract['worker_count'] != args.worker_count:
             raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
         if plane == 'gate' and args.run_id != contract['qualification_run_id']:
             raise ValueError('QUALIFICATION_RUN_ID_MISMATCH')
@@ -203,7 +215,8 @@ def _fail(message, code):
 def main(argv=None, *, edges=None) -> int:
     args = _parser().parse_args(argv)
     edges = CollectionEdges() if edges is None else edges
-    plane = 'qualification' if args.qualification else 'formal'
+    spot_check = bool(args.spot_check)
+    plane = 'spot_check' if spot_check else 'qualification' if args.qualification else 'formal'
     try:
         resolved, report, scenes, scenes_sha = _preflight(args)
         services = compose_services(edges.environment, act_inventory=edges.act_inventory, act_host_id=edges.act_host_id,
@@ -223,16 +236,18 @@ def main(argv=None, *, edges=None) -> int:
                 teacher_endpoint=resolved['teacher_endpoint'],
                 teacher_execution_policy=resolved['teacher_execution_policy'],
                 episode_recorder_policy=resolved['episode_recorder_policy'], runtime_policy=resolved['runtime_policy'],
-                rig_profile=None if getattr(args, 'rig_profile', None) is None else _regular(args.rig_profile))
+                rig_profile=None if getattr(args, 'rig_profile', None) is None else _regular(args.rig_profile),
+                plane=plane)
         except (OSError, ValueError, KeyError, TypeError) as error:
             raise ValueError('CASE_INPUTS_FREEZE_REFUSED: ' + str(error)) from error
-        case_inputs = write_case_scopes(run, inputs_manifest=inputs_manifest)
-        binding = campaign_binding(inputs_manifest, campaign_config=config,
+        case_inputs = write_case_scopes(run, inputs_manifest=inputs_manifest, plane=plane)
+        binding = campaign_binding(inputs_manifest, campaign_config=config, plane=plane,
             collection_config_sha256=_sha(resolved['collection_config']), scene_manifest_sha256=scenes_sha)
         arguments = SimpleNamespace(campaign_id=args.campaign_id, manifest=resolved['manifest'], source=resolved['source'],
             runtime_config=resolved['runtime_config'], collection_config=resolved['collection_config'],
-            campaign_config=resolved['campaign_config'], root=run, qualification=bool(args.qualification),
-            qualification_report=report, worker_count=args.worker_count, instance_launcher=args.instance_launcher)
+            campaign_config=resolved['campaign_config'], root=run, qualification=bool(args.qualification or spot_check),
+            spot_check=spot_check, qualification_report=report, worker_count=args.worker_count,
+            instance_launcher=args.instance_launcher)
         spec = prepare_collection_operation(arguments, services=services,
                                             contact_policy_fingerprint=binding['contact_policy_fingerprint'])
         parallel_runtime = collection_parallel_runtime(resolved['collection_config'])
@@ -248,7 +263,8 @@ def main(argv=None, *, edges=None) -> int:
         owner = build_container_campaign_owner(context, config=config, paths=paths,
             slots=tuple(ActWorkerSlot(**item) for item in spec.payload['worker_slots']),
             manifest_path=resolved['manifest'], scene_manifest=binding['scene_manifest'], case_inputs=case_inputs,
-            parallel_runtime=parallel_runtime, approved_inputs=approved, qualification=bool(args.qualification),
+            parallel_runtime=parallel_runtime, approved_inputs=approved, qualification=bool(args.qualification or spot_check),
+            collection_mode='preselected_target_diagnostic' if spot_check else 'formal',
             approved_disk_floor_bytes=binding['disk_floor_bytes'], docker_runner=edges.docker_runner,
             service_query=edges.service_query, namespace_reader=edges.namespace_reader,
             control_factory=edges.control_factory, instance_launcher=args.instance_launcher,

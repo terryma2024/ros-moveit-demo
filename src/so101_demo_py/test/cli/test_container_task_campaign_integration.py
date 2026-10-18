@@ -304,7 +304,7 @@ class World:
 
 
 def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, qualified=False):
-    """A synthetic campaign for `plane` in ('W1', 'W8', 'FORMAL'); returns everything the CLI is given and the doubles.
+    """A synthetic campaign for `plane` in ('W1', 'W8', 'FORMAL', 'SPOT'); returns everything the CLI is given and the doubles.
 
     `qualified` (FORMAL only) replaces the synthetic report file by a real report of a qualification run built under the same
     registered evidence root, with this world's controlled identity and this world's formal scene list as the gate's."""
@@ -313,7 +313,7 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
 
     world = World()
     root = tmp_path.resolve()
-    world.root, world.plane = root, plane
+    world.root, world.plane, world.spot_check = root, plane, plane == 'SPOT'
     original = packages.get_package_share_directory
     monkeypatch.setattr(packages, 'get_package_share_directory',
                         lambda name: str(PACKAGE_ROOT) if name == 'so101_demo_py' else original(name))
@@ -358,6 +358,12 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
             quality_rules=rules))
         qualification_contract = ref(world.manifest)
         world.worker_count, world.qualification, world.scene_ids = 8, True, [row['scene_id'] for row in scene_rows('load', 40, 200)]
+    elif plane == 'SPOT':
+        world.scenes = write_json(inputs / 'spot-scenes.json', dict(scenarios=scene_rows('spot', 1, 400)))
+        world.manifest = write_json(inputs / 'spot-run.json', dict(schema_version=1, kind='ACT_COLLECTION_SPOT_CHECK_RUN',
+            run_id='spot-run', worker_count=1, controlled_identity=identity, scene_manifest=ref(world.scenes),
+            collection_mode='preselected_target_diagnostic', spot_check='nominal'))
+        world.worker_count, world.qualification, world.scene_ids = 1, True, ['spot-00']
     else:
         world.scenes = world.manifest = write_json(inputs / 'formal-scenes.json', dict(scenarios=scene_rows('formal', 3, 300)))
         world.worker_count, world.qualification, world.scene_ids = 8, False, [row['scene_id'] for row in scene_rows('formal', 3, 300)]
@@ -429,6 +435,8 @@ def argv_for(world, **overrides):
     for name, value in values.items():
         if value is not None:
             argv += ['--' + name, value]
+    if world.spot_check:
+        return argv + ['--spot-check']
     return argv + (['--qualification'] if world.qualification else [])
 
 
@@ -792,3 +800,90 @@ def test_cli_has_no_resume_or_factory_seams(tmp_path, shared, monkeypatch):
         with pytest.raises(TypeError):
             main(argv_for(world), edges=world.edges, **{name: lambda *args: None})
     assert world.docker.calls == []
+
+
+# ---- the spot-check plane ---------------------------------------------------------------------------------------------------
+
+
+def test_real_cli_runs_a_spot_check_in_the_diagnostic_mode(tmp_path, shared, monkeypatch, capsys):
+    """`--spot-check`: one worker, one scene, the diagnostic frozen mode end to end. Real/controlled boundaries as in W1."""
+    world = make_world(tmp_path, shared, monkeypatch, plane='SPOT', polls_to_finish=2)
+    spies = Spies(monkeypatch)
+    verified = controlled_verifier(monkeypatch)
+    code, out, err = run(world, capsys)
+    assert code == 0, err
+    summary = json.loads(out.strip().splitlines()[-1])
+    assert summary['plane'] == 'spot_check' and summary['scene_count'] == 1 and summary['waves'] == 1
+    run_root = world.evidence / 'run-one'
+    frozen = json.loads((run_root / 'inputs/frozen/inputs-manifest.json').read_bytes())
+    assert frozen['mode'] == 'preselected_target_diagnostic' and frozen['scene_manifest']['scene_count'] == 1
+    scope = json.loads((run_root / 'inputs/scopes/spot-00.json').read_bytes())
+    assert scope['mode'] == 'preselected_target_diagnostic' and scope['scene_id'] == 'spot-00'
+    (owner,) = spies.owners
+    assert owner.qualification is True and owner.coordinator.collection_mode == 'preselected_target_diagnostic'
+    assert len(verified) == 1 and verified[0]['qualification'] is True
+    assert verified[0]['plan'] == dict(wave_index=0, scene_ids=['spot-00'], assignment=None, plane='spot_check')
+    documents = [entry[2] for entry in world.log if entry[1] == 'task_document']
+    assert [(item['scene_id'], item['collection_mode']) for item in documents] == [('spot-00', 'preselected_target_diagnostic')]
+    index = json.loads((run_root / 'collection-index.json').read_bytes())
+    assert index['qualification'] is True and index['committed_episodes'] == []
+    assert len(world.docker.runs(shard=False)) == 1 and len(world.docker.runs(shard=True)) == 1
+    assert len(spies.finishes) == 1 and spies.finishes[0][1] is True and spies.lease() is None and spies.active_slots() == ()
+
+
+def test_the_other_planes_write_the_formal_collection_mode(tmp_path, shared, monkeypatch, capsys):
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1', polls_to_finish=2)
+    spies = Spies(monkeypatch)
+    controlled_verifier(monkeypatch)
+    code, _out, err = run(world, capsys)
+    assert code == 0, err
+    assert spies.owners[0].coordinator.collection_mode == 'formal'
+    assert {entry[2]['collection_mode'] for entry in world.log if entry[1] == 'task_document'} == {'formal'}
+    assert json.loads((world.evidence / 'run-one/inputs/frozen/inputs-manifest.json').read_bytes())['mode'] == 'formal'
+
+
+SPOT_REFUSALS = [
+    ('spot_check_with_qualification', {}, lambda argv: argv + ['--qualification']),
+    ('spot_check_with_two_workers', {'worker_count': '2'}, lambda argv: argv),
+    ('spot_check_with_eight_workers', {'worker_count': '8'}, lambda argv: argv),
+    ('spot_check_with_a_report', {'qualification_report': 'REPORT'}, lambda argv: argv),
+]
+
+
+@pytest.mark.parametrize('name,overrides,edit', SPOT_REFUSALS, ids=[item[0] for item in SPOT_REFUSALS])
+def test_a_malformed_spot_check_invocation_is_refused_before_anything_is_written(tmp_path, shared, monkeypatch, capsys, name,
+                                                                                 overrides, edit):
+    world = make_world(tmp_path, shared, monkeypatch, plane='SPOT')
+    overrides = {key: str(world.report) if value == 'REPORT' else value for key, value in overrides.items()}
+    capsys.readouterr()
+    code = main(edit(argv_for(world, **overrides)), edges=world.edges)
+    assert code == 2 and 'REFUSED' in capsys.readouterr().err
+    assert not (world.evidence / 'run-one').exists()
+
+
+def test_the_qualification_flag_refuses_a_spot_check_contract_and_the_spot_check_flag_refuses_any_other(tmp_path, shared,
+                                                                                                         monkeypatch, capsys):
+    spot = make_world(tmp_path / 'spot', shared, monkeypatch, plane='SPOT') if (tmp_path / 'spot').mkdir() is None else None
+    capsys.readouterr()
+    argv = [item for item in argv_for(spot) if item != '--spot-check'] + ['--qualification']
+    assert main(argv, edges=spot.edges) == 2
+    assert 'COLLECTION_RUN_CONTRACT_MISMATCH' in capsys.readouterr().err
+    functional = make_world(tmp_path / 'functional', shared, monkeypatch, plane='W1') if (tmp_path / 'functional').mkdir() is None else None
+    argv = [item for item in argv_for(functional) if item != '--qualification'] + ['--spot-check']
+    assert main(argv, edges=functional.edges) == 2
+    assert 'COLLECTION_RUN_CONTRACT_MISMATCH' in capsys.readouterr().err
+    assert not (functional.evidence / 'run-one').exists() and not (spot.evidence / 'run-one').exists()
+
+
+def test_the_composition_refuses_a_spot_check_that_is_not_a_qualification_mode_single_worker_run(tmp_path, shared, monkeypatch):
+    world = make_world(tmp_path, shared, monkeypatch, plane='SPOT')
+    arguments = SimpleNamespace(campaign_id='campaign-one', manifest=world.manifest, source=world.source,
+        runtime_config=world.runtime, collection_config=world.collection, campaign_config=world.campaign_path, root=tmp_path,
+        qualification=False, spot_check=True, qualification_report=None, worker_count=1, instance_launcher='container')
+    with pytest.raises(ValueError, match='COLLECTION_RUN_CONTRACT_MISMATCH'):
+        composition.prepare_collection_operation(arguments, services=SimpleNamespace(act_workload=None),
+                                                 contact_policy_fingerprint='a' * 64)
+    arguments.qualification, arguments.worker_count = True, 2
+    with pytest.raises(ValueError, match='COLLECTION_WORKER_COUNT_INVALID'):
+        composition.prepare_collection_operation(arguments, services=SimpleNamespace(act_workload=None),
+                                                 contact_policy_fingerprint='a' * 64)

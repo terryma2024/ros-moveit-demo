@@ -59,8 +59,11 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     from so101_teleop.unified.contracts import Domain,OperationSpec
     from so101_teleop.unified.worker_slots import ActWorkerSlot
 
+    spot_check = getattr(arguments,'spot_check',False)
+    if type(spot_check) is not bool or (spot_check and arguments.qualification is not True):
+        raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
     if (type(arguments.qualification) is not bool or type(arguments.worker_count) is not int
-            or arguments.worker_count not in ((1,2,8) if arguments.qualification else (8,))):
+            or arguments.worker_count not in ((1,) if spot_check else (1,2,8) if arguments.qualification else (8,))):
         raise ValueError('COLLECTION_WORKER_COUNT_INVALID')
     workload = services.act_workload
     if workload is None:
@@ -98,8 +101,9 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
         raise ValueError('COLLECTION_POLICY_INVALID')
     manifest = read_document(arguments.manifest)
     if arguments.qualification:
-        _plane,contract = validate_run_contract(manifest)
-        if contract['worker_count'] != arguments.worker_count or arguments.qualification_report is not None:
+        plane,contract = validate_run_contract(manifest)
+        if ((plane == 'spot_check') != spot_check or contract['worker_count'] != arguments.worker_count
+                or arguments.qualification_report is not None):
             raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
     elif arguments.qualification_report is None:
         raise ValueError('EIGHT_WORKER_QUALIFICATION_REQUIRED')
@@ -139,7 +143,8 @@ def _digest(path) -> str:
 def build_container_campaign_owner(context, *, config, paths, slots, manifest_path, scene_manifest, case_inputs,
                                    parallel_runtime, approved_inputs, qualification, approved_disk_floor_bytes,
                                    docker_runner=None, service_query=None, namespace_reader=None, control_factory=None,
-                                   instance_launcher='container', native=None, admit_processor_slots=None):
+                                   instance_launcher='container', native=None, admit_processor_slots=None,
+                                   collection_mode='formal'):
     """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
 
     Order: the launch registry first (admission's `finish` opens it with `create=False`, so a construction failure below can
@@ -157,6 +162,9 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
     `instance_launcher` is `container` (one Docker container per slot) or `native` (one Host process group, one worker);
     admission has already refused `native` for anything else. Both run the same instance program, and the Teacher service
     is a container either way.
+
+    `collection_mode` is the plane's collection mode, written into every task document as a cross-check: `formal`, or
+    `preselected_target_diagnostic` for a contact-policy spot check.
 
     Phase 2 (processing): with an `admit_processor_slots(context, slots)` (the unified service's), the owner gets a `ProcessingScheduler`
     over `ContainerProcessorLauncher` (container launcher) or `NativeProcessorLauncher` (native launcher: one Host-process processor,
@@ -193,7 +201,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
         coordinator = ConcurrentCollectionCoordinator(context=context, config=runtime, case_inputs=case_inputs,
             scene_manifest=scene_manifest, max_recording_shards=config.get('max_concurrent_recordings'),
             max_tasks_in_flight=config.get('max_tasks_in_flight'), min_assignment_gap_s=config.get('min_assignment_gap_s'),
-            **given(control_factory=control_factory))
+            collection_mode=collection_mode, **given(control_factory=control_factory))
         verifier = ContainerWaveResultVerifier(root=paths['run'], registry=registry, case_inputs=case_inputs,
             qualification=qualification)
         processing = None
