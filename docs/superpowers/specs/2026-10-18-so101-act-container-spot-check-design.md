@@ -1,6 +1,6 @@
 # SO-101 ACT: contact-policy spot checks on the container path — design and plan
 
-Status: PROPOSED on 2026-10-18, awaiting human confirmation.
+Status: CONFIRMED by the human on 2026-10-18 ("确认"), with the recommended answers Q1–Q6; executing.
 
 ## Why
 
