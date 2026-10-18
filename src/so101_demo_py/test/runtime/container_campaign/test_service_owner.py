@@ -17,7 +17,7 @@ from so101_teleop.unified.contracts import AdmittedCampaignContext
 
 
 def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False, refuse_stop=False, ready_drift=False,
-            roles=None, descriptor_given=None, descriptor_sha=None):
+            roles=None, descriptor_given=None, descriptor_sha=None, rig_profile_sha256=None, head_weights_absent=False):
     """Collection (the default) launches Teacher only; `validation` launches Head and Teacher; `measurement` Head only.
 
     `roles`, `descriptor_given` and `descriptor_sha` override what the owner is built with, to probe its refusals."""
@@ -49,6 +49,11 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
             classes={'0':'plastic_cup'}, score_threshold=.25), instances=3, torch_threads=1,
             torch_interop_threads=1, max_inflight_requests=8, max_frame_bytes=8388608,
             max_image_height=480, max_image_width=640, queue_timeout_s=10., inference_timeout_s=20.)
+    if rig_profile_sha256 is not None:
+        config['rig_profile_sha256'] = rig_profile_sha256
+    if head_weights_absent:
+        # a rig without a head owns no head model: nothing of it is read
+        (tmp_path/'head.pt').unlink()
     if measurement:
         config['teacher_service']['model']['weights']['path'] = str(tmp_path/'unused-teacher.pt')
     config_path = paths['run']/'campaign.json'
@@ -143,6 +148,24 @@ def test_actual_service_exit_is_health_failure_before_any_new_dispatch(tmp_path)
         containers['2'*64]['State'].update(Running=False, Pid=0, Status='exited', ExitCode=1)
         with pytest.raises(ValueError, match='SERVICE_CONTAINER_NOT_RUNNING'):
             await owner.check_health()
+        assert (await owner.close())['terminated'] is True
+    asyncio.run(run())
+    registry.close()
+
+
+def test_a_side_wrist_collection_composes_no_head_service_and_reads_no_head_model(tmp_path):
+    from so101_demo.act.rig_profile import SIDE_WRIST_RIG, profile_sha256
+
+    owner, registry, calls, containers = fixture(
+        tmp_path, rig_profile_sha256=profile_sha256(SIDE_WRIST_RIG.document), head_weights_absent=True)
+    async def run():
+        endpoints = await owner.start()
+        assert owner.roles == ('teacher',) and set(endpoints) == {'teacher'}
+        runs = [argv for argv in calls if argv[:2] == ['docker','run']]
+        assert len(runs) == 1 and runs[0][runs[0].index('--role')+1] == 'teacher'
+        assert not any('head' in argument for argument in runs[0][runs[0].index('--role'):])
+        assert not list(owner.paths['host'].glob('head-*')) and not (owner.paths['run']/'head-service.json').exists()
+        assert [item['launch']['role'] for item in registry.records()] == ['teacher']
         assert (await owner.close())['terminated'] is True
     asyncio.run(run())
     registry.close()
