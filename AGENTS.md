@@ -60,6 +60,11 @@
 - Before starting a long-running service or test, resolve and verify the exact executable and
   environment paths with read-only checks such as `test -x`. Do not rely on a summarized or older
   virtual-environment path when the filesystem can provide the current path.
+- Linux only. Before a training run or a data-collection campaign on a host that runs NoteBook
+  FanControl (`nbfc_service`), set every fan to full speed with `nbfc set -s 100` and confirm it
+  with `nbfc status`. On such hosts the EC limits CPU power with PROCHOT, and the limit depends on
+  fan speed: at low fan speed the CPU can be held at about 0.8 GHz and about 21 W. When the last
+  run finishes, restore automatic control with `nbfc set -a`. This rule does not apply on macOS.
 - A fresh colcon `--build-base` or `--install-base` must have a complete dependency closure. Before
   treating a failed build as a source regression, distinguish missing package setup files,
   incomplete underlays, package-selection errors, and override errors from compiler or test
