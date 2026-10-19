@@ -74,6 +74,16 @@ A parameter moves from L to R only with a proof that results do not change, for 
    - The images stay L, bound by digest from the logic document. Changing code between the phases therefore needs a new image only if the processor image's code changes. That is a logic change, and the run refuses it unless the human starts a new run.
    - "Change code, then run phase 2" is only allowed for code outside the bound images and logic: host-side scheduling, logging, parallelism.
    - The default (no flag) stays the one-process flow.
+   - **Every stage can run on its own** (human, 2026-10-19: "也类似 Phase2 这种可以单独跑"), not only phase 2:
+     - Stages are phase 1, phase 2, and each retry round (re-record plus process). Each finished stage writes a completion
+       record bound to the run's logic document, frozen inputs and images.
+     - `act_process_parallel` continues from the last clean completion record. Its stages are `--phase2`,
+       `--retry-round` (next round) and `--finalize` (index).
+     - Each invocation takes a fresh runtime document: processor count, retry rounds, deadlines.
+     - A retry round skipped for time (`RETRY_ROUND_DOES_NOT_FIT_DEADLINE`) can be run later.
+     - Refused: a missing or partial completion record (an interrupted stage), a changed logic document or images, a stage
+       already done, and a retry round on a qualification run.
+     - A recovered episode passes the same rules, and the index records its round.
 3. **Templates.**
    - **Freeze only logic.** `sha256sums.txt` covers the logic files and is actually verified by `run-*.zsh` and by the formal author before use; today nothing checks it.
    - **Runtime tooling is not frozen.** This covers run, verify, build-report, summarize, readback and log savers. It is taken from the template at run time, with its hash logged.
@@ -104,7 +114,7 @@ A parameter moves from L to R only with a proof that results do not change, for 
    - DataLoader index batches with `num_workers` 8, 16 and 0;
    - export workers 1 vs 16.
 2. **Collection split.** Logic and runtime documents; split config files; RO envelope in the qualification report and formal admission; retry rounds in R, with the per-episode round recorded in the index; Teacher model in the identity; identity v2 alongside v1.
-3. **Phase boundary.** `--stop-after-phase1` and `act_process_parallel`, with tests for every refusal.
+3. **Stage boundaries.** `--stop-after-phase1`; `act_process_parallel --phase2 | --retry-round | --finalize`; completion records per stage; tests for every refusal.
 4. **Templates.** Logic-only freeze actually verified, unfrozen runtime tooling, behavioural tests replacing source-text checks, no restated constants, disk projection as an option, `*.orig*` excluded, versioned outputs.
 5. **Training.**
    - Runtime block (`num_workers` ≥ 1, log and validation intervals).
