@@ -25,7 +25,7 @@ TRAINING_OPTIONAL_DEFAULTS = {"log_interval_steps": 100, "validation_interval_st
                               "num_workers": 4}
 # optional keys that are NOT filled in when absent (an absent key keeps the config, and so its hash, as it was): the ACT backbone
 # learning rate (absent = learning_rate) and the training-view sample selection (absent = every row starts a chunk)
-_TRAINING_ABSENT_OK = frozenset({"learning_rate_backbone", "sample_selection", "compile", "cudnn_benchmark", "channels_last"})
+_TRAINING_ABSENT_OK = frozenset({"learning_rate_backbone", "sample_selection", "compile", "cudnn_benchmark", "channels_last", "precision"})
 SAMPLE_SELECTION_KEYS = frozenset({"trim_leading_idle", "idle_threshold_rad", "lead_in_rows"})
 # optional selection keys, only together: drop the start rows whose whole next chunk is static, except the last keep_tail_rows rows
 SAMPLE_SELECTION_INTERIOR_KEYS = frozenset({"trim_interior_idle", "keep_tail_rows"})
@@ -117,6 +117,9 @@ def load_training_config(path) -> dict:
     for key in ("cudnn_benchmark", "channels_last"):
         if key in training and type(training[key]) is not bool:
             raise ValueError(f"TRAINING_{key.upper()}_INVALID")
+
+    if "precision" in training and training["precision"] not in ("fp32", "bf16"):
+        raise ValueError("TRAINING_PRECISION_INVALID")
     if "sample_selection" in training:
         selection = training["sample_selection"]
         if (not isinstance(selection, dict) or not SAMPLE_SELECTION_KEYS <= set(selection)

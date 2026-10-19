@@ -669,6 +669,7 @@ def _prefetched(loader, depth: int = 2):
 def _run_training(config: dict, view: Path, target: Path, device: str, num_workers: int | None, backbone_weights=None) -> dict:
     """The LeRobot training loop; returns the normalisation block the bundle records."""
 
+    import contextlib
     import time
 
     import numpy as np
@@ -776,6 +777,16 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
             persistent_workers=False, drop_last=False, timeout=_LOADER_TIMEOUT_S if workers > 0 else 0)
         validation_used = int(len(picks))
 
+    def forward_precision():
+        """The training forward pass, and the loss `ACTPolicy.forward` computes inside it, under bf16 autocast when the config asks for it.
+
+        Only the activations and matmuls drop to bf16. The weights, the gradients and the AdamW state stay fp32 (autocast casts per op),
+        the sum/exp/pow/l1 reductions of the loss run in fp32 (autocast's fp32 op list), and bf16 needs no GradScaler. Validation does
+        not use it: the bundle is evaluated and deployed in fp32."""
+        if hyper.get("precision", "fp32") == "bf16":
+            return torch.autocast(device_type=str(device).split(":")[0], dtype=torch.bfloat16)
+        return contextlib.nullcontext()
+
     def to_device(batch):
         batch = {key: torch.from_numpy(value).to(device) for key, value in batch.items()}
         for camera in cameras:
@@ -834,7 +845,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
             # which includes `loss.item()`; that already synchronises the device every step, so neither span needs an extra sync.
             batch_ready = time.perf_counter()
             batch = to_device(batch)
-            loss, parts = policy(batch)
+            with forward_precision():
+                loss, parts = policy(batch)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(policy.parameters(), _GRAD_CLIP_NORM)

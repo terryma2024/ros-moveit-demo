@@ -636,3 +636,32 @@ def test_channels_last_converts_only_the_backbone_and_only_when_asked(tmp_path, 
     _, outcome, _ = _train(tmp_path / "on", monkeypatch, steps=1, channels_last=True)
     assert outcome["status"] == "COMPLETED"
     assert len(calls) == 1 and calls[0][1] == torch.channels_last and calls[0][0] != "ACTPolicy"
+
+def _record_autocast(monkeypatch):
+    from lerobot.policies.act.modeling_act import ACTPolicy
+    seen = []
+    forward = ACTPolicy.forward
+
+    def recording(self, batch):
+        seen.append((self.training, torch.is_autocast_enabled("cpu")))
+        return forward(self, batch)
+
+    monkeypatch.setattr(ACTPolicy, "forward", recording)
+    return seen
+
+
+def test_precision_defaults_to_fp32_without_autocast(tmp_path, monkeypatch):
+    seen = _record_autocast(monkeypatch)
+    _train(tmp_path, monkeypatch)
+    assert seen and not any(autocast for _, autocast in seen)
+
+
+def test_bf16_precision_autocasts_the_training_forward_only_and_keeps_fp32_weights(tmp_path, monkeypatch):
+    from safetensors import safe_open
+    seen = _record_autocast(monkeypatch)
+    _, outcome, root = _train(tmp_path, monkeypatch, precision="bf16")
+    assert outcome["status"] == "COMPLETED"
+    assert [autocast for training, autocast in seen if training] == [True] * 3          # the three training steps
+    assert not any(autocast for training, autocast in seen if not training)           # validation stays fp32
+    with safe_open(str(root / "policy.safetensors"), "pt") as stream:
+        assert {stream.get_tensor(key).dtype for key in stream.keys()} == {torch.float32}      # master weights are fp32

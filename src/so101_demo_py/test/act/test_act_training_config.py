@@ -273,3 +273,11 @@ def test_the_train_004_configuration_is_train_003_plus_the_interior_trim_and_the
     assert {key: new["training"][key] for key in added} == added
     assert new["training"]["sample_selection"] == {**old["training"]["sample_selection"], "trim_interior_idle": True, "keep_tail_rows": 20}
     assert (new["training"]["steps"], new["training"]["batch_size"], new["training"]["num_workers"]) == (60000, 16, 16)
+
+def test_the_precision_key_is_optional_fp32_or_bf16_and_not_filled_in(tmp_path):
+    assert "precision" not in load_training_config(CONFIG)["training"]          # absent keeps the config, and so its hash, as it was
+    for value in ("fp32", "bf16"):
+        assert _load(tmp_path, **{"training.precision": value})["training"]["precision"] == value
+    for value in ("fp16", "BF16", True, None):
+        with pytest.raises(ValueError, match="TRAINING_PRECISION_INVALID"):
+            _load(tmp_path, **{"training.precision": value})
