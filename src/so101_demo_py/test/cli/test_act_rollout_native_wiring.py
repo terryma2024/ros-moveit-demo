@@ -76,6 +76,9 @@ class FakeRuntime:
     def __init__(self):
         self.calls = []
 
+    def close_runtime(self):
+        self.calls.append("close_runtime")
+
     def reset_point(self, lease):
         self.calls.append("reset_point")
         return SimpleNamespace(reset_epoch_value=3, simulation_session_id="sim-1", simulation_time_s=0.5,
@@ -111,7 +114,7 @@ def test_the_episode_ports_translate_the_shard_runtime_receipts(tmp_path):
     assert receipt == {"reset_epoch": 3, "simulation_session_id": "sim-1", "simulation_time_s": 0.5,
                        "joint_positions": (0.0,) * 6}
     assert ports.initial_gate({"scene_id": "s"}, receipt) == {"canonical_joints": True, "no_controller_goal": True}
-    assert ports.runtime.calls == ["reset_point", ("initial_gate", 3)]
+    assert ports.runtime.calls == ["close_runtime", "reset_point", ("initial_gate", 3)]
     assert ports.resume_physics(receipt) is True
     assert ports.cancel_motion() is True and ports.confirm_no_controller_goal() is True
 
@@ -137,7 +140,7 @@ def test_a_model_call_still_running_blocks_the_next_session(tmp_path):
 def _composition_stub(tmp_path, rig_profile):
     return SimpleNamespace(environment={"ROS_DOMAIN_ID": "181"}, inputs=SimpleNamespace(
         recorder_policy={"ready_timeout_s": 30.0}, settings=SimpleNamespace(execution_deadline_s=180.0)),
-        launch=SimpleNamespace(rig_profile=rig_profile), options=SimpleNamespace(run_id="run-1"), attempts=0,
+        launch=SimpleNamespace(rig_profile=rig_profile), layout=SimpleNamespace(output_root=tmp_path / "output"), options=SimpleNamespace(run_id="run-1"), attempts=0,
         runtime=object(), binding=None, runner=None, inference=None, transport=None)
 
 
@@ -219,3 +222,62 @@ def test_the_model_is_warmed_up_on_the_bundle_shapes_and_reset_before_the_first_
     sample = policy.calls[0]
     assert set(sample) == {"sim_time_s", "state", "side", "wrist"} and len(sample["state"]) == 6
     assert sample["side"].shape == (480, 640, 3) and sample["side"].dtype.name == "uint8"
+
+
+def test_the_recorder_writes_under_the_owned_root_and_the_bag_is_moved_into_the_episode_evidence(tmp_path):
+    """The raw recorder refuses a bag outside the instance's owned root (CONTAINER_BAG_ROOT_MISMATCH, found live), so the
+    recording is made in <owned>/output/recordings/<attempt> and moved to <episode>/raw after the recorder closed it."""
+    profile = tmp_path / "rig-v2.yaml"
+    profile.write_text("kind: act_rig_profile\n")
+    stub = _composition_stub(tmp_path, profile)
+    stub.pilot_factory = lambda: native.NativeComposition.pilot_factory(stub)
+    ports = native.NativeComposition.new_ports(stub, {"scene_id": "s1"}, "s1-a1", tmp_path / "ep")
+    assert ports.recording_dir == tmp_path / "output" / "recordings" / "s1-a1"
+
+    class Pilot:
+        ready, failure = True, None
+
+        def __init__(self, directory):
+            self.root = Path(directory) / "raw"
+
+        def start(self):
+            (self.root / "bag").mkdir(parents=True)
+            (self.root / "ready.json").write_text("{}")
+
+        def finish(self):
+            return {"ready": True, "failure": None}
+
+    ports.pilot_factory = Pilot
+    (tmp_path / "ep").mkdir()
+    recording = ports.start_recorder({"scene_id": "s1"})
+    facts = recording.finish()
+    assert (tmp_path / "ep" / "raw" / "ready.json").is_file() and not (ports.recording_dir / "raw").exists()
+    assert facts["relocated_to"] == str(tmp_path / "ep" / "raw") and facts["failure"] is None
+
+
+def test_the_composition_releases_its_own_ros_participants_before_the_stack_graph_is_judged(tmp_path, monkeypatch):
+    """The retained pause control and the rollout binding are nodes of the instance domain: with them alive the stack's graph
+    never reads clear (found live: GRAPH_NOT_CLEARED after a clean run)."""
+    import asyncio
+
+    order = []
+
+    class Stack:
+        async def stop(self):
+            order.append("stack.stop")
+
+    stub = SimpleNamespace(
+        layout=SimpleNamespace(owned_root=tmp_path, stack_root=tmp_path), _closed=False, stack=Stack(),
+        inference=SimpleNamespace(close=lambda: order.append("inference.close")),
+        runtime=SimpleNamespace(close_runtime=lambda: order.append("runtime.close"),
+                                resume_physics=lambda lease, receipt: order.append("physics.resume") or True),
+        binding=SimpleNamespace(shutdown=lambda: order.append("binding.shutdown")),
+        graph_probe=lambda: order.append("graph_probe") or True)
+    stub.close = lambda: native.NativeComposition.close(stub)
+    monkeypatch.setattr("so101_demo.runtime.container_campaign.native_stop.marker_survivors", lambda *a, **k: [])
+    monkeypatch.setattr("so101_teleop.process_identity.read_identity", lambda pid: SimpleNamespace(start_marker=1))
+    proof = native.NativeComposition.stop(stub)
+    assert order == ["physics.resume", "inference.close", "runtime.close", "binding.shutdown", "stack.stop", "graph_probe"]
+    assert proof["confirmed"] is True and proof["graph_clear"] is True and proof["physics_resumed_before_stop"] is True
+    native.NativeComposition.close(stub)                       # the run's final close is a no-op
+    assert order.count("runtime.close") == 1

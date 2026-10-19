@@ -466,3 +466,16 @@ def test_a_session_that_never_sees_the_cup_is_refused_in_bounded_time():
     assert result["verdict"] == "INVALID" and result["reason"].startswith("SESSION_NOT_READY: cup_pose")
     assert result["counts"]["inferences"] == 0
     assert result["timing"]["wall_s"] <= SETTINGS.ready_wait_s + 0.5
+
+
+def test_a_fault_keeps_the_trace_of_its_cause():
+    ports = Ports(gate_error=RuntimeError("deep cause"))
+    result = _run(ports)
+    assert result["verdict"] == "INVALID" and "deep cause" in result["fault_trace"] and "GATE_FAILED" in result["fault_trace"]
+
+
+def test_an_unconfirmed_stop_carries_the_sessions_diagnostics(monkeypatch):
+    monkeypatch.setattr(Session, "stop_diagnostics", lambda self: {"arm": {"max_abs_velocity_rad_s": 0.01}}, raising=False)
+    result = _run(Ports(session_kwargs={"stop_confirms": False}))
+    assert result["reason"].startswith("STOP_UNCONFIRMED")
+    assert result["stop"]["diagnostics"]["arm"]["max_abs_velocity_rad_s"] == 0.01

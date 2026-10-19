@@ -354,9 +354,11 @@ class RolloutSession:
     submission fails after a goal exists, but a late prefix or an out-of-limit row is only a skipped command (design D2).
     """
 
-    def __init__(self, *, assembler, adapter, permit, world, spin, close, submit_lead_s) -> None:
+    def __init__(self, *, assembler, adapter, permit, world, spin, close, submit_lead_s, drain_timeout_s=1.0,
+                 monotonic=time.monotonic) -> None:
         self.assembler, self.adapter, self.permit, self.world = assembler, adapter, permit, world
         self._spin, self._close, self.submit_lead_s = spin, close, submit_lead_s
+        self.drain_timeout_s, self.monotonic = drain_timeout_s, monotonic
         self.closed = False
 
     def begin(self, session_id: str, attempt_id: str) -> None:
@@ -386,11 +388,59 @@ class RolloutSession:
             raise ValueError("PREFIX_LATE")
         return self.adapter.submit(prefix, self.permit.issue(prefix))
 
+    def drain_goals(self) -> bool:
+        """Wait (bounded, wall time) until every goal already sent has its outcome; True when none is left unfinished.
+
+        A rollout goal lasts one action step (0.1 s) and the horizon falls on an observation tick, so the last goal finishes at
+        the very moment the horizon is reached. A cancel that reaches the controller in that instant leaves the goal CANCELING
+        for good (the controller's success is refused in that state): it never gets a result and the stop can never be proven.
+        Nothing is sent after the horizon, so the goals are simply let finish before the stop."""
+
+        deadline = self.monotonic() + self.drain_timeout_s
+        while True:
+            unfinished = sum(getattr(getattr(self.adapter, name, None), "unfinished_goals", lambda: 0)()
+                             for name in ("arm", "gripper"))
+            if unfinished == 0:
+                return True
+            if self.monotonic() >= deadline:
+                return False
+            self._spin()
+
     def stop(self, reason: str) -> str:
+        if reason == "ROLLOUT_HORIZON":
+            self.drain_goals()
         return self.adapter.stop(reason)
 
     def stop_confirmed(self) -> bool:
         return self.adapter.poll_stop() == "STOPPED"
+
+    def stop_diagnostics(self) -> dict:
+        """Why a stop is not confirmed: per controller port the feedback age, the largest measured speed and the goals with no
+        terminal result (the three things `RosControllerPort.stopped` demands). Read-only; a port that cannot be read says so."""
+
+        report = {}
+        for name in ("arm", "gripper"):
+            port = getattr(self.adapter, name, None)
+            try:
+                with port._lock:
+                    velocity = port._velocity
+                    received = port._received
+                    goals = list(port._goals.values())
+                    age = None if received is None else round(port.monotonic() - received, 4)
+                    open_goals = [{"accepted": record["accepted"], "status": None if record["result"] is None
+                                   else record["result"].status, "cancel_requested": record["cancel_requested"],
+                                   "cancel_ack": record.get("cancel_ack"), "error": record.get("error"),
+                                   "has_handle": record.get("handle") is not None}
+                                  for record in goals if record["accepted"] is None
+                                  or (record["accepted"] is True and (record["result"] is None
+                                                                      or record["result"].status not in (4, 5, 6)))]
+                    report[name] = {"feedback_age_s": age, "max_abs_velocity_rad_s": None if velocity is None
+                                    else round(max(abs(value) for value in velocity), 6),
+                                    "stop_velocity_rad_s": port.stop_velocity, "max_age_s": port.max_age,
+                                    "goals": len(goals), "open_goals": open_goals[:5], "open_goal_count": len(open_goals)}
+            except Exception as error:      # noqa: BLE001 - diagnostics must never turn a stop problem into a crash
+                report[name] = {"unreadable": (str(error) or type(error).__name__)[:120]}
+        return report
 
     def cup_pose(self):
         return self.world.cup_pose()
@@ -429,6 +479,7 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
     assembler.reset(session_id, source_floor_s=source_floor_s)
     node = binding.create_node("act_rollout_executor")
     stop_spinning = None
+    clients = []
     try:
         height, width, _channels = assembler.image_shape
 
@@ -460,11 +511,14 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
         node.create_subscription(binding.message_types["JointState"], config["joint_state_topic"], on_joints,
                                  binding.sensor_qos)
         follow = binding.message_types["FollowJointTrajectory"]
-        arm = RosControllerPort(node, binding.action_client(node, follow, config["controller_actions"]["arm"]),
-                                ARM_JOINTS[:5], stop_velocity_rad_s=timing["stop_velocity_rad_s"],
+        # an action client outlives `destroy_node` and keeps the node in the ROS graph until it is destroyed itself
+        arm_client = binding.action_client(node, follow, config["controller_actions"]["arm"])
+        clients.append(arm_client)
+        gripper_client = binding.action_client(node, follow, config["controller_actions"]["gripper"])
+        clients.append(gripper_client)
+        arm = RosControllerPort(node, arm_client, ARM_JOINTS[:5], stop_velocity_rad_s=timing["stop_velocity_rad_s"],
                                 max_age_s=timing["max_age_s"])
-        gripper = RosControllerPort(node, binding.action_client(node, follow, config["controller_actions"]["gripper"]),
-                                    ARM_JOINTS[5:], stop_velocity_rad_s=timing["stop_velocity_rad_s"],
+        gripper = RosControllerPort(node, gripper_client, ARM_JOINTS[5:], stop_velocity_rad_s=timing["stop_velocity_rad_s"],
                                     max_age_s=timing["max_age_s"])
         permit = JointLimitPermit()
         holder = {}
@@ -479,7 +533,8 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
 
         def close():
             failures = []
-            for step in (stop_spinning, lambda: binding.destroy_node(node)):
+            for step in (stop_spinning, *(lambda client=client: binding.destroy_action_client(client) for client in clients),
+                         lambda: binding.destroy_node(node)):
                 try:
                     step()
                 except Exception as error:      # noqa: BLE001 - every step runs; the first failure is raised after
@@ -488,12 +543,15 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
                 raise failures[0]
 
         session = RolloutSession(assembler=assembler, adapter=adapter, permit=permit, world=world,
-                                 spin=lambda: time.sleep(0.001), close=close, submit_lead_s=timing["submit_lead_s"])
+                                 spin=lambda: time.sleep(0.001), close=close, submit_lead_s=timing["submit_lead_s"],
+                                 drain_timeout_s=timing["stop_timeout_s"])
         holder["session"] = session
         return session
     except BaseException:
         if stop_spinning is not None:
             stop_spinning()
+        for client in clients:
+            binding.destroy_action_client(client)
         binding.destroy_node(node)
         raise
 
@@ -513,17 +571,25 @@ class RclpyBinding:
         self.message_types = {"Image": Image, "JointState": JointState, "FollowJointTrajectory": FollowJointTrajectory}
         self.image_qos = QoSProfile(depth=CAMERA_RING, reliability=ReliabilityPolicy.RELIABLE)
         self.sensor_qos = qos_profile_sensor_data
-        if not rclpy.ok():
-            rclpy.init()
+        # A private context: other components of the rollout process (the scene reset) initialise and shut down the DEFAULT
+        # context themselves, and `rclpy.init()` on an initialised default context raises `Context.init() must only be called once`.
+        from so101_demo.ros.process_init import global_init_options
+
+        self._context = rclpy.context.Context()
+        rclpy.init(context=self._context, **global_init_options())
 
     def create_node(self, name: str):
-        return self._rclpy.create_node(name)
+        return self._rclpy.create_node(name, context=self._context)
+
+    def shutdown(self) -> None:
+        if self._context.ok():
+            self._context.shutdown()
 
     def action_client(self, node, action_type, name: str):
         return self._action_client(node, action_type, name)
 
     def start_spinning(self, node):
-        executor = self._executor_type()
+        executor = self._executor_type(context=self._context)
         executor.add_node(node)
         thread = threading.Thread(target=executor.spin, name="act-rollout-spin", daemon=True)
         thread.start()
@@ -534,6 +600,9 @@ class RclpyBinding:
             if thread.is_alive():
                 raise RuntimeError("ROLLOUT_SPIN_THREAD_STILL_RUNNING")
         return stop
+
+    def destroy_action_client(self, client) -> None:
+        client.destroy()
 
     def destroy_node(self, node) -> None:
         node.destroy_node()

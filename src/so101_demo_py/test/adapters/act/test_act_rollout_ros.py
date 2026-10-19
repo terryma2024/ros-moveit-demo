@@ -326,6 +326,11 @@ class FakeBinding:
         self.spinning.append(node)
         return lambda: self.stopped.append(node)
 
+    def destroy_action_client(self, client):
+        self.destroyed_clients = getattr(self, "destroyed_clients", [])
+        self.destroyed_clients.append(client.action)
+        self.destroyed.append(("client", client.action))
+
     def destroy_node(self, node):
         self.destroyed.append(node)
 
@@ -373,7 +378,7 @@ def test_the_session_subscribes_to_the_topics_of_the_cameras_the_bundle_names(ca
     observation, _audit = session.observe()
     assert set(observation) == {"sim_time_s", "state", *cameras} and observation["sim_time_s"] == 5.5
     session.close()
-    assert binding.stopped == [node] and binding.destroyed == [node]
+    assert binding.stopped == [node] and binding.destroyed[-1] == node and len(binding.destroyed) == 3
 
 
 def test_a_camera_without_a_topic_is_refused_before_any_node_exists():
@@ -395,4 +400,114 @@ def test_a_wiring_failure_stops_the_spinner_and_destroys_the_node():
     binding.action_client = broken
     with pytest.raises(RuntimeError, match="no such action"):
         _build(binding, ("head", "wrist"), 8)
-    assert binding.destroyed == binding.nodes and binding.spinning == []
+    assert binding.destroyed == [("client", CONFIG["controller_actions"]["arm"]), *binding.nodes] and binding.spinning == []
+
+
+def test_closing_the_session_destroys_its_action_clients_before_its_node():
+    """An action client keeps its node in the ROS graph after `destroy_node` (found live: the next episode's initial gate saw
+    `/act_rollout_executor` and refused), so every client is destroyed first."""
+    binding = FakeBinding()
+    session = _build(binding, ("side", "wrist"), 6)
+    session.close()
+    session.close()
+    assert binding.destroyed == [("client", CONFIG["controller_actions"]["arm"]),
+                                 ("client", CONFIG["controller_actions"]["gripper"]), binding.nodes[0]]
+    assert binding.stopped == binding.nodes
+
+
+def test_the_real_binding_leaves_the_default_ros_context_to_the_scene_reset():
+    """The reset (`execute_scene_operation`) calls `rclpy.init()` and `rclpy.shutdown()` on the default context of the process;
+    a binding that had initialised it would make every reset fail with `Context.init() must only be called once` (found live)."""
+    rclpy = pytest.importorskip("rclpy")
+    pytest.importorskip("control_msgs.action")
+    binding = rr.RclpyBinding()
+    try:
+        assert rclpy.ok() is False                          # the default context is untouched
+        node = binding.create_node("act_rollout_binding_test")
+        stop = binding.start_spinning(node)
+        stop()
+        binding.destroy_node(node)
+        rclpy.init()                                          # what the reset does
+        rclpy.shutdown()
+    finally:
+        binding.shutdown()
+    assert binding._context.ok() is False
+
+
+def test_stop_diagnostics_name_what_keeps_a_stop_unconfirmed():
+    import threading
+
+    class Port:
+        stop_velocity, max_age = 0.002, 0.5
+        monotonic = staticmethod(lambda: 10.0)
+
+        def __init__(self, velocity, goals):
+            self._lock, self._velocity, self._received, self._goals = threading.RLock(), velocity, 9.9, goals
+
+    done = {"accepted": True, "result": SimpleNamespace(status=4), "cancel_requested": True}
+    running = {"accepted": True, "result": None, "cancel_requested": True}
+    adapter = FakeAdapter()
+    adapter.arm, adapter.gripper = Port((0.0, 0.01), {"a": done, "b": running}), Port((0.0,), {"a": done})
+    session, _ = _session(adapter=adapter)
+    report = session.stop_diagnostics()
+    assert report["arm"]["max_abs_velocity_rad_s"] == 0.01 and report["arm"]["open_goal_count"] == 1
+    assert report["arm"]["feedback_age_s"] == pytest.approx(0.1) and report["gripper"]["open_goal_count"] == 0
+    bare, _ = _session()                                      # a port that cannot be read is reported, never raised
+    assert "unreadable" in bare.stop_diagnostics()["arm"]
+
+
+def test_the_horizon_stop_lets_the_goals_in_flight_finish_before_it_cancels_anything():
+    """Goals last one action step and the horizon is an observation tick, so the last goal finishes at the horizon; a cancel in
+    that instant leaves it CANCELING forever (found live: no result, the stop could never be proven)."""
+    order = []
+
+    class Port:
+        def __init__(self, left):
+            self.left = left
+
+        def unfinished_goals(self):
+            order.append(("poll", self.left))
+            value, self.left = self.left, max(0, self.left - 1)
+            return value
+
+    class Adapter(FakeAdapter):
+        def stop(self, reason):
+            order.append(("stop", reason))
+            return super().stop(reason)
+
+    adapter = Adapter()
+    adapter.arm, adapter.gripper = Port(2), Port(1)
+    session, _ = _session(adapter=adapter)
+    assert session.stop("ROLLOUT_HORIZON") == "STOPPED"
+    assert order[-1] == ("stop", "ROLLOUT_HORIZON") and [item for item in order if item[0] == "stop"] == [order[-1]]
+    assert all(item == ("poll", 0) for item in order[-3:-1])                    # nothing was left unfinished at the cancel
+    # a safety or fault stop is never delayed
+    order.clear()
+    adapter.arm, adapter.gripper = Port(5), Port(5)
+    session.stop("ROLLOUT_FAULT")
+    assert order == [("stop", "ROLLOUT_FAULT")]
+
+
+def test_the_drain_is_bounded():
+    class Stuck:
+        def unfinished_goals(self):
+            return 1
+
+    ticks = iter(x * 0.4 for x in range(100))
+    adapter = FakeAdapter()
+    adapter.arm, adapter.gripper = Stuck(), Stuck()
+    session, _ = _session(adapter=adapter)
+    session.monotonic = lambda: next(ticks)
+    assert session.drain_goals() is False
+
+
+def test_the_controller_port_counts_goals_without_an_outcome():
+    pytest.importorskip("control_msgs.action")
+    from so101_demo.adapters.act.ros_execution import RosControllerPort
+
+    node = SimpleNamespace(create_subscription=lambda *args, **kwargs: None)
+    port = RosControllerPort(node, None, ("1",), stop_velocity_rad_s=0.002, max_age_s=0.5)
+    assert port.unfinished_goals() == 0
+    port._goals = {"a": {"accepted": None, "result": None}, "b": {"accepted": True, "result": None},
+                   "c": {"accepted": True, "result": SimpleNamespace(status=4)}, "d": {"accepted": False, "result": None}}
+    assert port.unfinished_goals() == 2

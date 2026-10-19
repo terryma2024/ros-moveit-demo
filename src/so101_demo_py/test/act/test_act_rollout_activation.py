@@ -61,3 +61,21 @@ def test_a_missing_or_symlinked_file_is_refused(tmp_path):
     link.symlink_to(receipt_path)
     with pytest.raises(ValueError, match="ROLLOUT_ACTIVATION_FILE_INVALID"):
         contact_activation_substitution(link, proposal_path)
+
+
+def test_a_proposal_of_the_offline_spot_check_mode_is_verified_in_its_own_mode(tmp_path, monkeypatch):
+    """The side-wrist activation (receipt 93bd5108) is of the offline_fit_teacher_spot_check mode: the verification must use the
+    mode the proposal declares, as collection admission does (found when the first live rollout refused with
+    ROLLOUT_ACTIVATION_NOT_VERIFIED)."""
+    import test_contact_calibration_spot_check_mode as spot
+
+    offline = spot.offline_only(monkeypatch)
+    proposal = analyze_evidence(offline, None, spot.offline_metadata(), validation_mode=spot.MODE)
+    receipt = make_activation_receipt(proposal, proposal["policy_fingerprint"], approved_by="user",
+                                      approval_reference="test activation", evidence_root=tmp_path,
+                                      approved_at="2026-10-07T00:00:00+00:00")
+    proposal_path, receipt_path = tmp_path / "proposal.json", tmp_path / "activation-receipt.json"
+    proposal_path.write_text(json.dumps(proposal))
+    receipt_path.write_text(json.dumps(receipt))
+    block = contact_activation_substitution(receipt_path, proposal_path)
+    assert block["policy_fingerprint"] == proposal["policy_fingerprint"]

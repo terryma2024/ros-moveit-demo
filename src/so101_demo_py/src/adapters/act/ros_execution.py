@@ -553,6 +553,12 @@ class RosControllerPort:
         return {kind:worker.close(timeout_s=max(0.,deadline-time.monotonic()))
                 for kind,worker in self._head_io.items()}
 
+    def unfinished_goals(self):
+        """How many sent goals have no outcome yet (acceptance unknown, or accepted without a result). Read-only."""
+        with self._lock:
+            return sum(1 for record in self._goals.values()
+                       if record['accepted'] is None or (record['accepted'] is True and record['result'] is None))
+
     def stopped(self):
         if self._head_bootstrap and self.feedback_policy is None:return False
         if self.feedback_policy is not None:return self._head_stopped()

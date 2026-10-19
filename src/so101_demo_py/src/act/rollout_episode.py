@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import traceback
 
 from .policy import to_action_prefix
 from .rollout_targets import evaluate_rollout_endpoint, rollout_targets
@@ -230,6 +231,16 @@ def _await_stop(session, ports, settings, reason):
     return session.stop_confirmed()
 
 
+def _stop_diagnostics(session):
+    """What the session says about an unconfirmed stop (empty when it cannot say)."""
+
+    reader = getattr(session, "stop_diagnostics", None)
+    try:
+        return reader() if callable(reader) else None
+    except Exception as error:      # noqa: BLE001
+        return {"unreadable": _text(error)}
+
+
 def _settle(session, ports, settings):
     """Advance simulation time by `settle_s` after the confirmed stop, then take the one end observation."""
 
@@ -326,6 +337,8 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
         stop_confirmed = _await_stop(session, ports, settings,
                                      "STOPPED_SAFETY" if loop.outcome == "STOPPED_SAFETY" else "ROLLOUT_HORIZON")
         result["stop"] = {"confirmed": stop_confirmed, "sim_time_s": session.sim_time()}
+        if not stop_confirmed:
+            result["stop"]["diagnostics"] = _stop_diagnostics(session)
         result["phases"].append("stop")
         if stop_confirmed and loop.outcome != "STOPPED_SAFETY":
             end_observation = _settle(session, ports, settings)
@@ -333,6 +346,8 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
     except Exception as error:      # noqa: BLE001 - an _Abort names its reason; any other error is still an infrastructure fault
         fault = str(error) if isinstance(error, _Abort) else f"EPISODE_FAULT: {type(error).__name__}: {_text(error)}"
         result["status"] = "FAULT"
+        # the reason is capped; the trace of the error (and of the error that caused it) is kept whole for the evidence
+        result["fault_trace"] = "".join(traceback.format_exception(error))[-6000:]
         if session is not None and not stop_confirmed:
             try:
                 result["stop"] = {"confirmed": _await_stop(session, ports, settings, "ROLLOUT_FAULT"), "after_fault": True}
@@ -341,6 +356,7 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
             stop_confirmed = result["stop"]["confirmed"] is True
             if not stop_confirmed:
                 fault += " | STOP_UNCONFIRMED"
+                result["stop"]["diagnostics"] = _stop_diagnostics(session)
     finally:
         retire_errors = []
         if loop.pending is not None:

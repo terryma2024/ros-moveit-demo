@@ -28,14 +28,14 @@ def _regular(path) -> Path:
 def contact_activation_substitution(receipt_path, proposal_path) -> dict:
     """Verify the receipt against its proposal and return the `artifacts.calibration` substitution block."""
 
-    from .contact_calibration import verify_disabled_proposal
+    from .contact_calibration import proposal_validation_mode, verify_disabled_proposal
     from .contact_policy import verify_activation
 
     receipt_file, proposal_file = _regular(receipt_path), _regular(proposal_path)
     receipt_bytes, proposal_bytes = receipt_file.read_bytes(), proposal_file.read_bytes()
     try:
         receipt, proposal = json.loads(receipt_bytes), json.loads(proposal_bytes)
-        verify_disabled_proposal(proposal)
+        verify_disabled_proposal(proposal, validation_mode=proposal_validation_mode(proposal))
         verify_activation(proposal["payload"], receipt)
         if proposal["policy_fingerprint"] != receipt["policy_fingerprint"]:
             raise ValueError("fingerprint differs between the proposal and the receipt")

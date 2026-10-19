@@ -503,11 +503,44 @@ def load_inputs(args) -> RolloutInputs:
         recorder_policy=load_recorder_frozen_policy(manifest_path))
 
 
+class RelocatedRecording:
+    """A raw recording made where the recorder is allowed to write (under the instance's owned root: it refuses a bag anywhere
+    else, `CONTAINER_BAG_ROOT_MISMATCH`), moved into the episode's evidence directory once the recorder has closed the bag."""
+
+    def __init__(self, recording, *, target) -> None:
+        self.recording, self.target = recording, Path(target)
+
+    @property
+    def ready(self):
+        return self.recording.ready
+
+    @property
+    def failure(self):
+        return self.recording.failure
+
+    def start(self):
+        return self.recording.start()
+
+    def finish(self):
+        facts = self.recording.finish()
+        source = Path(self.recording.root)
+        try:
+            if source.is_dir():
+                if self.target.exists():
+                    raise FileExistsError(str(self.target))
+                os.rename(source, self.target)
+                facts = dict(facts, relocated_from=str(source), relocated_to=str(self.target))
+        except OSError as error:
+            facts = dict(facts, failure=f"RAW_RELOCATE_FAILED: {error}"[:300])
+        return facts
+
+
 class NativeEpisodePorts:
     """The ports `run_episode` drives, over the shard runtime's reset and gate (`ActRosRuntimePorts`) and the rollout session."""
 
     def __init__(self, *, runtime, lease, scene, directory, inputs, environment, binding, runner, inference, transport,
-                 pilot_factory, monotonic=time.monotonic) -> None:
+                 pilot_factory, recording_dir=None, monotonic=time.monotonic) -> None:
+        self.recording_dir = None if recording_dir is None else Path(recording_dir)
         self.runtime, self.lease, self.scene, self.directory = runtime, lease, scene, Path(directory)
         self.inputs, self.environment, self.binding = inputs, environment, binding
         self.runner, self.inference, self.transport = runner, inference, transport
@@ -515,6 +548,9 @@ class NativeEpisodePorts:
         self._receipt = None
 
     def reset(self, scene):
+        # The previous episode left the retained pause control (a node `/so101_live_runtime_pause_control`) alive; the initial
+        # gate's exact node inventory refuses it, so every episode starts with the runtime's retained ROS resources released.
+        self.runtime.close_runtime()
         self._receipt = self.runtime.reset_point(self.lease)
         receipt = self._receipt
         return {"reset_epoch": receipt.reset_epoch_value, "simulation_session_id": receipt.simulation_session_id,
@@ -527,7 +563,10 @@ class NativeEpisodePorts:
         return self.runtime.resume_physics(self.lease, self._receipt) is True
 
     def start_recorder(self, scene):
-        pilot = self.pilot_factory(self.directory)
+        if self.recording_dir is None:
+            pilot = self.pilot_factory(self.directory)
+        else:
+            pilot = RelocatedRecording(self.pilot_factory(self.recording_dir), target=self.directory / "raw")
         pilot.start()
         if not pilot.ready:
             facts = pilot.finish()
@@ -596,6 +635,7 @@ class NativeComposition:
                                           dependencies={"act_profile": True, "rig": self.rig})
         self.binding = RclpyBinding()
         self.attempts = 0
+        self._closed = False
 
     def _resources(self):
         from so101_demo.parallel_batch.resource_allocation.models import WorkerResources
@@ -646,7 +686,8 @@ class NativeComposition:
 
         return NativeEpisodePorts(runtime=self.runtime, lease=lease, scene=scene, directory=directory, inputs=self.inputs,
                                   environment=self.environment, binding=self.binding, runner=self.runner,
-                                  inference=self.inference, transport=self.transport, pilot_factory=pilot)
+                                  inference=self.inference, transport=self.transport, pilot_factory=pilot,
+                                  recording_dir=self.layout.output_root / "recordings" / attempt_id)
 
     def stop(self) -> dict:
         import asyncio
@@ -655,6 +696,19 @@ class NativeComposition:
         from so101_teleop.process_identity import read_identity
 
         errors = []
+        # A faulted episode can leave the simulation paused (the reset pauses it); the controllers answer no cancel while it is,
+        # so the stack's stop would never be proven. Releasing the pause is idempotent.
+        resumed = None
+        try:
+            resumed = self.runtime.resume_physics(None, None) is True
+        except Exception as error:      # noqa: BLE001
+            errors.append(f"resume_physics: {type(error).__name__}: {error}")
+        # this process's own ROS participants (the retained pause control, the rollout binding) must be gone before the stack's
+        # graph is judged clear: they are nodes of the same domain
+        try:
+            self.close()
+        except Exception as error:      # noqa: BLE001
+            errors.append(f"close_own_ros: {type(error).__name__}: {error}")
         try:
             asyncio.run(self.stack.stop())
         except Exception as error:      # noqa: BLE001
@@ -672,13 +726,22 @@ class NativeComposition:
             errors.append(f"graph_probe: {type(error).__name__}: {error}")
         receipt = self.layout.stack_root / "stack-retirement-receipt.json"
         return {"schema_version": 1, "kind": "ACT_ROLLOUT_STACK_STOP_PROOF", "stack_stop_errors": errors,
-                "marker_survivors": survivors, "graph_clear": graph_clear,
+                "marker_survivors": survivors, "graph_clear": graph_clear, "physics_resumed_before_stop": resumed,
                 "retirement_receipt": str(receipt) if receipt.exists() else None,
                 "confirmed": not errors and survivors == [] and graph_clear is True}
 
     def close(self):
-        self.inference.close()
-        self.runtime.close_runtime()
+        if self._closed:
+            return
+        self._closed = True
+        failures = []
+        for step in (self.inference.close, self.runtime.close_runtime, self.binding.shutdown):
+            try:
+                step()
+            except Exception as error:      # noqa: BLE001 - every step runs; the first failure is raised after
+                failures.append(error)
+        if failures:
+            raise failures[0]
 
 
 def build_native_composition(**kwargs):
