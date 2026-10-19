@@ -12,6 +12,13 @@ Last updated: 2026-10-19.
 | 2b | **Post-run collection verification** (`so101_demo.act.bundle._verified_collection_uncached`).<ul><li>On EXP-625 it ran 17+ min on one core (about 98.6% CPU).</li><li>Find out why the O1 parallel readback / verify-once path is not used.</li><li>Make it parallel (workers = runtime) or reuse the existing proofs.</li></ul> | Analysis (same subagent) | Same report |
 | 3 | **Finalize readback and merge.**<ul><li>EXP-625 retry-2 ended at 02:36:28Z, but the index and result were written at 02:45:15Z: about 8 min 47 s with no writes, about 200k files and 60–70 GB at about 120 MB/s.</li><li>Options: more `readback_workers` (runtime), verify once with reuse of the phase-2 proofs, batching, an incremental merge per round.</li></ul> | Analysis (same subagent) | Same report |
 | 4 | **Phase-2 `processor_count`.**<ul><li>Measured: 16 concurrent fit (2.59 GiB RSS, 2.9–3.07 GiB cgroup peak each, no OOM). Throughput is 187 scenes/h at 16 against 115 at 6; the knee is between 16 and 24.</li><li>Needs item 1 first, because processor_count must become a runtime parameter.</li></ul> | Waiting on item 1 | `R/phase2-profile-20261019/report.md` §4 |
+| 5 | **Gate scratch.** Each v4 gate leaves about 12 GB of pytest TMPDIR under `R/scratch`; let the gate prune it after readback. | Open | Batch h deleted 93.6 GiB (`R/evidence-deletion-20261019h`) |
+| 6 | Rollout O6 hardening, then a real rollout run. | Open | Native rollout design 2026-10-18 |
+| 7 | Load flakes: `test_owner_phase2`, `test_capture_runs_before_teacher_start` (real-rate replay), `so101_teleop` `test_process_identity` (UNKNOWN identity), C++ timing tests. | Open | Gates `d1815a322f89.run1-fail` and others |
+| 8 | Nsight Compute: SM Active and bubble ratio for training. | Open | — |
+| 9 | frm-044 refusal message specificity (`EPISODE_COLLECTION_IDENTITY_INVALID`). | Open | Differential readbacks 2026-10-18 |
+| 10 | Template defects found on side-wrist: verify-report fingerprint source (fixed in the template, CP-3740), stale source pattern (fixed, CP-3741). These are covered by item 1's template work. | Covered by item 1 | Ledger CP-3739..CP-3741 |
+| 11 | **Parallel hashing in the seal and readback tools.** `seal_roots.py` hashes serially: 97 GB and 319k files in 142 s. With 16 threads it would be about 30-50 s (SHA-NI gives about 1.8 GB/s per core), with the same manifest. Small gain; do it with item 1's tooling work. | Open | EXP-625 seal 2026-10-19 11:29:58-11:32:20 +0800 |
 
 **Profiling result (2026-10-19, `R/phase2-profile-20261019/report.md`).** One case takes 182 s even when it runs alone, so the
 cost is intrinsic, not contention. It is pure CPU on one core:
@@ -43,12 +50,10 @@ Planned follow-ups from the report, in order:
 The two policy decisions in 2f:
 - Trust the content-bound QC memo at readback (F4/P3): 0.6 s instead of 19.3 s per scene. Recommended only for intermediate passes, never the final one.
 - Drop the processor's duplicate in-process seal verification (option 9): −12 s per case. It removes one defence layer.
-| 5 | **Gate scratch.** Each v4 gate leaves about 12 GB of pytest TMPDIR under `R/scratch`; let the gate prune it after readback. | Open | Batch h deleted 93.6 GiB (`R/evidence-deletion-20261019h`) |
-| 6 | Rollout O6 hardening, then a real rollout run. | Open | Native rollout design 2026-10-18 |
-| 7 | Load flakes: `test_owner_phase2`, `test_capture_runs_before_teacher_start` (real-rate replay), `so101_teleop` `test_process_identity` (UNKNOWN identity), C++ timing tests. | Open | Gates `d1815a322f89.run1-fail` and others |
-| 8 | Nsight Compute: SM Active and bubble ratio for training. | Open | — |
-| 9 | frm-044 refusal message specificity (`EPISODE_COLLECTION_IDENTITY_INVALID`). | Open | Differential readbacks 2026-10-18 |
-| 10 | Template defects found on side-wrist: verify-report fingerprint source (fixed in the template, CP-3740), stale source pattern (fixed, CP-3741). These are covered by item 1's template work. | Covered by item 1 | Ledger CP-3739..CP-3741 |
+
+**Human decisions on 2f (2026-10-19, "ok", do later):**
+- F4/P3 approved: trust the content-bound QC memo at readback, as recommended. Intermediate finalize passes, the post-run gate and export use the memo (0.6 s per scene). The final finalize pass still recomputes QC in full.
+- Option 9 approved: drop the processor's duplicate in-process seal verification. The independent QC child still verifies the seal (−12 s per case).
 
 ## Done
 
