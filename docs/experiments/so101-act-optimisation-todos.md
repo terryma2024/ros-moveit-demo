@@ -11,7 +11,38 @@ Last updated: 2026-10-19.
 | 2 | **Phase-2 per-case processing.**<ul><li>About 183 s median, single-core (about 1.0–1.1 cores and 1.1–2.4 GiB per processor).</li><li>Find the hotspots and add parallelism within a case.</li></ul> | Profiling (subagent) | EXP-625 `host/processing-journal.jsonl`; report `R/phase2-profile-20261019/report.md` |
 | 2b | **Post-run collection verification** (`so101_demo.act.bundle._verified_collection_uncached`).<ul><li>On EXP-625 it ran 17+ min on one core (about 98.6% CPU).</li><li>Find out why the O1 parallel readback / verify-once path is not used.</li><li>Make it parallel (workers = runtime) or reuse the existing proofs.</li></ul> | Analysis (same subagent) | Same report |
 | 3 | **Finalize readback and merge.**<ul><li>EXP-625 retry-2 ended at 02:36:28Z, but the index and result were written at 02:45:15Z: about 8 min 47 s with no writes, about 200k files and 60–70 GB at about 120 MB/s.</li><li>Options: more `readback_workers` (runtime), verify once with reuse of the phase-2 proofs, batching, an incremental merge per round.</li></ul> | Analysis (same subagent) | Same report |
-| 4 | **Phase-2 `processor_count`.**<ul><li>About 14 at an 80% CPU and memory budget, or 16 if the per-processor peak stays at or below 2.5 GiB.</li><li>Needs item 1 first, because processor_count must become a runtime parameter.</li></ul> | Waiting on item 1 | Measured on EXP-625: 6 processors used about 7.6 of 32 threads and 16 of 62 GB |
+| 4 | **Phase-2 `processor_count`.**<ul><li>Measured: 16 concurrent fit (2.59 GiB RSS, 2.9–3.07 GiB cgroup peak each, no OOM). Throughput is 187 scenes/h at 16 against 115 at 6; the knee is between 16 and 24.</li><li>Needs item 1 first, because processor_count must become a runtime parameter.</li></ul> | Waiting on item 1 | `R/phase2-profile-20261019/report.md` §4 |
+
+**Profiling result (2026-10-19, `R/phase2-profile-20261019/report.md`).** One case takes 182 s even when it runs alone, so the
+cost is intrinsic, not contention. It is pure CPU on one core:
+
+| Stage | Time | Share |
+| --- | --- | --- |
+| Replay loop | 122 s | 67% |
+| QC child | 20 s | 11% |
+| Seal | 17 s | 10% |
+| Scan | 13 s | 7% |
+
+The hotspots are generic ROS-to-dict conversion, JSON round trips, `deepcopy`, and a row-readiness computation done twice.
+
+Finalize took 8 min 47 s: 109 full QC recomputations at 19.3 s each on 4 readback workers. `_retry_rounds` repeats that pass
+three times, about 25 min in all. The executor's post-run gate then ran it again serially (34 min), and export would run it a
+sixth time.
+
+Planned follow-ups from the report, in order:
+
+| # | Follow-up | Effect | Notes |
+| --- | --- | --- | --- |
+| 2a | Verify each round once (F1) | −17 min | Integrity-neutral. |
+| 2b | 16 readback workers (F2) | 526 s → about 222 s per pass | Integrity-neutral. |
+| 2c | Parallel post-run gate (P1) | 34 min → about 3 min | Integrity-neutral. |
+| 2d | Export workers set (P4) | Export about 5 min | Integrity-neutral. |
+| 2e | Processor single-core options 1–7 | 182 s → about 120 s per case | Output-neutral by construction. Needs a byte-identical differential with `association_id` (a random UUID) normalised. |
+| 2f | Two policy decisions for the human | | See below. |
+
+The two policy decisions in 2f:
+- Trust the content-bound QC memo at readback (F4/P3): 0.6 s instead of 19.3 s per scene. Recommended only for intermediate passes, never the final one.
+- Drop the processor's duplicate in-process seal verification (option 9): −12 s per case. It removes one defence layer.
 | 5 | **Gate scratch.** Each v4 gate leaves about 12 GB of pytest TMPDIR under `R/scratch`; let the gate prune it after readback. | Open | Batch h deleted 93.6 GiB (`R/evidence-deletion-20261019h`) |
 | 6 | Rollout O6 hardening, then a real rollout run. | Open | Native rollout design 2026-10-18 |
 | 7 | Load flakes: `test_owner_phase2`, `test_capture_runs_before_teacher_start` (real-rate replay), `so101_teleop` `test_process_identity` (UNKNOWN identity), C++ timing tests. | Open | Gates `d1815a322f89.run1-fail` and others |
