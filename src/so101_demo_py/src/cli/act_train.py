@@ -168,6 +168,9 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     parser.add_argument("--evidence-dir", type=Path, default=None,
                         help="evidence run directory: receives training-outputs.json (paths and sha256 of the dataset and the bundle), "
                              "a copy of the export manifest, and the owner lease under owner/ (default lease: <output>.run)")
+    parser.add_argument("--reuse-dataset", action="store_true",
+                        help="train on the existing export at --dataset-output instead of exporting again; its export manifest must "
+                             "name the sha256 of --manifest and --campaign-index, and the export is re-verified before training")
     parser.add_argument("--backbone-weights", type=Path, default=None,
                         help="local pretrained backbone file; its sha256 must equal training.pretrained_backbone.sha256")
     parser.add_argument("--workers", type=int, default=None,
@@ -183,21 +186,30 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     # the lock lives beside the installed config, so its path is supplied the way the repo's other
     # loaders supply a package share; the module constant is only the source-tree default
     requirements = require_resolved_requirements(requirements_path or REQUIREMENTS_LOCK)
-    manifest = json.loads(args.manifest.read_bytes())
-    committed = attach_episode_content(
-        resolve_committed_episodes(manifest=manifest, campaign_index=args.campaign_index, workers=workers),
-        root=args.campaign_index.parent, workers=workers)
+    committed = None
+    if not args.reuse_dataset:
+        committed = attach_episode_content(
+            resolve_committed_episodes(manifest=json.loads(args.manifest.read_bytes()), campaign_index=args.campaign_index, workers=workers),
+            root=args.campaign_index.parent, workers=workers)
     dataset = args.dataset_output or args.output.with_name(args.output.name + ".dataset")
-    if args.output.exists() or dataset.exists():
+    manifest_sha256 = hashlib.sha256(args.manifest.read_bytes()).hexdigest()
+    index_sha256 = hashlib.sha256(args.campaign_index.read_bytes()).hexdigest()
+    if args.reuse_dataset:
+        if args.dataset_output is None or not (dataset / "export-manifest.json").is_file() or args.output.exists():
+            raise ValueError("TRAINING_REUSED_DATASET_MISSING")
+        recorded = json.loads((dataset / "export-manifest.json").read_bytes())
+        if recorded.get("source_manifest_sha256") != manifest_sha256 or recorded.get("campaign_index_sha256") != index_sha256:
+            # the export must come from exactly these inputs; the episodes and frames are re-hashed by the training gate
+            raise ValueError("TRAINING_REUSED_DATASET_MISMATCH")
+    elif args.output.exists() or dataset.exists():
         raise ValueError("TRAINING_OUTPUT_EXISTS")
     evidence_dir = args.evidence_dir
     if evidence_dir is not None:
         if (evidence_dir / OUTPUTS_RECORD).exists():
             raise ValueError("TRAINING_EVIDENCE_EXISTS")
         evidence_dir.mkdir(parents=True, exist_ok=True)
-    export_dataset(committed, dataset,
-                   source_manifest_sha256=hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
-                   campaign_index_sha256=hashlib.sha256(args.campaign_index.read_bytes()).hexdigest(), workers=workers)
+    if not args.reuse_dataset:
+        export_dataset(committed, dataset, source_manifest_sha256=manifest_sha256, campaign_index_sha256=index_sha256, workers=workers)
     dataset_sha256 = hashlib.sha256((dataset / "export-manifest.json").read_bytes()).hexdigest()
     config_sha256 = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
     if evidence_dir is not None:

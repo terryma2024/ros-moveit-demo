@@ -318,3 +318,47 @@ def test_dataset_output_and_evidence_record_refuse_to_overwrite(tmp_path, monkey
                  trainer=lambda *_a: {"kind": "act_bundle"}, owner_factory=lambda **_: {"device": "cuda", "run_root": str(tmp_path)},
                  requirements_path=_resolved_lock(tmp_path))
     assert not (tmp_path / "bundle2.dataset").exists()          # refused before the export wrote anything
+
+
+def test_reuse_dataset_trains_on_the_existing_export_without_exporting_again(tmp_path, capsys, monkeypatch):
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    requirements_path = _resolved_lock(tmp_path)
+    owner = {"device": "cuda", "run_root": str(tmp_path)}
+    trainer = lambda config, dataset, out: {"schema_version": 1, "kind": "act_bundle"}      # noqa: E731
+    dataset = tmp_path / "export"
+    first = _argv(manifest, index, binding, config, tmp_path / "first.json") + ["--dataset-output", str(dataset)]
+    assert main(first, trainer=trainer, owner_factory=lambda **_: owner, requirements_path=requirements_path) == 0
+    before = {path.relative_to(dataset).as_posix(): path.read_bytes() for path in dataset.rglob("*") if path.is_file()}
+    capsys.readouterr()
+
+    # the same export serves a second run: nothing in it is rewritten, and it is not exported again (the exporter must not be called)
+    import so101_demo.cli.act_train as module
+    monkeypatch.setattr(module, "export_dataset", lambda *a, **k: pytest.fail("the export must be reused"))
+    second = _argv(manifest, index, binding, config, tmp_path / "second.json") + ["--dataset-output", str(dataset), "--reuse-dataset"]
+    assert main(second, trainer=trainer, owner_factory=lambda **_: owner, requirements_path=requirements_path) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "COMPLETED"
+    assert before == {path.relative_to(dataset).as_posix(): path.read_bytes() for path in dataset.rglob("*") if path.is_file()}
+
+    # without --reuse-dataset an existing export is still refused
+    with pytest.raises(ValueError, match="TRAINING_OUTPUT_EXISTS"):
+        main(_argv(manifest, index, binding, config, tmp_path / "third.json") + ["--dataset-output", str(dataset)],
+             trainer=trainer, owner_factory=lambda **_: owner, requirements_path=requirements_path)
+
+
+def test_reuse_dataset_refuses_a_missing_export_and_one_made_from_other_inputs(tmp_path, monkeypatch):
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    requirements_path = _resolved_lock(tmp_path)
+    owner = {"device": "cuda", "run_root": str(tmp_path)}
+    kwargs = {"trainer": lambda *_a: {"kind": "act_bundle"}, "owner_factory": lambda **_: owner, "requirements_path": requirements_path}
+    dataset = tmp_path / "export"
+    output = tmp_path / "bundle.json"
+    argv = _argv(manifest, index, binding, config, output) + ["--dataset-output", str(dataset), "--reuse-dataset"]
+    with pytest.raises(ValueError, match="TRAINING_REUSED_DATASET_MISSING"):
+        main(argv, **kwargs)
+    with pytest.raises(ValueError, match="TRAINING_REUSED_DATASET_MISSING"):                 # no --dataset-output at all
+        main(_argv(manifest, index, binding, config, output) + ["--reuse-dataset"], **kwargs)
+    assert main(_argv(manifest, index, binding, config, tmp_path / "made.json") + ["--dataset-output", str(dataset)], **kwargs) == 0
+    manifest.write_text(manifest.read_text() + " ")                                           # other bytes: a different input
+    with pytest.raises(ValueError, match="TRAINING_REUSED_DATASET_MISMATCH"):
+        main(argv, **kwargs)
+    assert not output.exists()

@@ -457,48 +457,97 @@ def first_motion_row(rows: list, threshold_rad: float) -> int | None:
     return None
 
 
-def sample_selection_report(samples: list, selection: dict | None) -> dict | None:
-    """Per episode first-motion row and first sampled start row for an enabled ``trim_leading_idle`` selection; None when disabled."""
+def _static_chunk_rows(rows: list, first: int, chunk_size: int, threshold_rad: float):
+    """Per start row ``t >= first``: True when the whole next chunk is static, that is max over the chunk's actions ``a[t+k]`` (as many as
+    the episode still has) and the six arm joints of ``|a[t+k] - s[t]|`` (RAW radians) is below ``threshold_rad``."""
 
-    if not selection or not selection.get("trim_leading_idle"):
+    import numpy as np
+
+    states = np.asarray([row["observation"]["state"][:6] for row in rows], dtype=np.float64)
+    actions = np.asarray([row["action"][:6] for row in rows], dtype=np.float64)
+    count = len(rows)
+    deviation = np.zeros(count)
+    for offset in range(chunk_size):
+        usable = count - offset
+        if usable > 0:
+            deviation[:usable] = np.maximum(deviation[:usable], np.abs(actions[offset:] - states[:usable]).max(axis=1))
+    return [bool(deviation[row] < threshold_rad) for row in range(first, count)]
+
+
+def _episode_start_rows(rows: list, selection: dict | None, chunk_size: int | None) -> dict:
+    """The selected start rows of one episode and how many each rule dropped.
+
+    ``trim_leading_idle`` drops the rows before ``max(0, first_motion_row - lead_in_rows)``. ``trim_interior_idle`` then drops every row
+    from there on whose next chunk is static, except the last ``keep_tail_rows`` rows of the episode. With ``trim_leading_idle`` an
+    episode that never moves is kept whole."""
+
+    moved, first = None, 0
+    if selection and selection.get("trim_leading_idle"):
+        moved = first_motion_row(rows, selection["idle_threshold_rad"])
+        first = 0 if moved is None else max(0, moved - selection["lead_in_rows"])
+    selected = list(range(first, len(rows)))
+    interior = 0
+    if selection and selection.get("trim_interior_idle") and (moved is not None or not selection.get("trim_leading_idle")):
+        if chunk_size is None:
+            raise ValueError("SAMPLE_SELECTION_CHUNK_SIZE_MISSING")
+        tail_from = max(0, len(rows) - selection["keep_tail_rows"])
+        static = _static_chunk_rows(rows, first, chunk_size, selection["idle_threshold_rad"])
+        selected = [row for row, is_static in zip(range(first, len(rows)), static) if row >= tail_from or not is_static]
+        interior = len(rows) - first - len(selected)
+    return {"first_motion_row": moved, "first_start_row": first, "leading_trimmed": first, "interior_trimmed": interior, "rows": selected}
+
+
+def sample_selection_report(samples: list, selection: dict | None, chunk_size: int | None = None) -> dict | None:
+    """Per episode first-motion row, first sampled start row and (with ``trim_interior_idle``) the interior rows dropped; None when no
+    selection rule is enabled."""
+
+    if not selection or not (selection.get("trim_leading_idle") or selection.get("trim_interior_idle")):
         return None
     episodes = []
     for sample in samples:
-        moved = first_motion_row(sample["rows"], selection["idle_threshold_rad"])
-        first = 0 if moved is None else max(0, moved - selection["lead_in_rows"])
-        episodes.append({"scene_id": sample.get("scene_id"), "rows": len(sample["rows"]), "first_motion_row": moved,
-                         "first_start_row": first, "trimmed": first})
+        result = _episode_start_rows(sample["rows"], selection, chunk_size)
+        entry = {"scene_id": sample.get("scene_id"), "rows": len(sample["rows"]), "first_motion_row": result["first_motion_row"],
+                 "first_start_row": result["first_start_row"], "trimmed": result["leading_trimmed"]}
+        if selection.get("trim_interior_idle"):
+            entry["interior_trimmed"] = result["interior_trimmed"]
+        episodes.append(entry)
     return {"episodes": episodes}
 
 
-def _chunk_samples(samples: list, selection: dict | None = None) -> list:
+def _chunk_samples(samples: list, selection: dict | None = None, chunk_size: int | None = None) -> list:
     """Every (episode index, row index) of the given episodes: a chunk never starts in, or reaches into, another episode.
 
-    With an enabled ``trim_leading_idle`` selection the start rows before ``max(0, first_motion_row - lead_in_rows)`` are dropped;
-    the dropped rows stay available as action-window targets. An episode that never moves is kept whole."""
+    With an enabled ``trim_leading_idle`` selection the start rows before ``max(0, first_motion_row - lead_in_rows)`` are dropped; with
+    ``trim_interior_idle`` (which needs ``chunk_size``) the later start rows whose next chunk is static are dropped too, except the last
+    ``keep_tail_rows``. The dropped rows stay available as action-window targets. An episode that never moves is kept whole."""
 
-    report = sample_selection_report(samples, selection)
-    firsts = [0] * len(samples) if report is None else [entry["first_start_row"] for entry in report["episodes"]]
-    return [(episode, row) for episode, sample in enumerate(samples) for row in range(firsts[episode], len(sample["rows"]))]
+    if sample_selection_report([], selection) is None:
+        return [(episode, row) for episode, sample in enumerate(samples) for row in range(len(sample["rows"]))]
+    return [(episode, row) for episode, sample in enumerate(samples)
+            for row in _episode_start_rows(sample["rows"], selection, chunk_size)["rows"]]
 
 
-def selection_summary(samples: list, selection: dict | None) -> dict:
+def selection_summary(samples: list, selection: dict | None, chunk_size: int | None = None) -> dict:
     """The selection settings and what they did to one split, for training-log.json and the metrics."""
 
     total = sum(len(sample["rows"]) for sample in samples)
-    report = sample_selection_report(samples, selection)
+    report = sample_selection_report(samples, selection, chunk_size)
     if report is None:
         return {"enabled": False, "samples_before": total, "samples_after": total}
     import statistics
     motion = [entry["first_motion_row"] for entry in report["episodes"] if entry["first_motion_row"] is not None]
     trimmed = sum(entry["trimmed"] for entry in report["episodes"])
-    return {"enabled": True, "trim_leading_idle": True, "idle_threshold_rad": selection["idle_threshold_rad"],
-            "lead_in_rows": selection["lead_in_rows"], "episodes": len(samples), "never_moving_episodes": len(samples) - len(motion),
-            "first_motion_row_min": min(motion) if motion else None,
-            "first_motion_row_median": statistics.median(motion) if motion else None,
-            "first_motion_row_max": max(motion) if motion else None,
-            "samples_before": total, "samples_after": total - trimmed,
-            "per_episode": report["episodes"]}
+    summary = {"enabled": True, "trim_leading_idle": bool(selection["trim_leading_idle"]), "idle_threshold_rad": selection["idle_threshold_rad"],
+               "lead_in_rows": selection["lead_in_rows"], "episodes": len(samples), "never_moving_episodes": len(samples) - len(motion),
+               "first_motion_row_min": min(motion) if motion else None,
+               "first_motion_row_median": statistics.median(motion) if motion else None,
+               "first_motion_row_max": max(motion) if motion else None,
+               "samples_before": total, "samples_after": total - trimmed, "per_episode": report["episodes"]}
+    if selection.get("trim_interior_idle"):
+        interior = sum(entry["interior_trimmed"] for entry in report["episodes"])
+        summary.update({"trim_interior_idle": True, "keep_tail_rows": selection["keep_tail_rows"], "leading_trimmed_rows": trimmed,
+                        "interior_trimmed_rows": interior, "samples_after": total - trimmed - interior})
+    return summary
 
 
 def _action_window(actions, start: int, chunk_size: int) -> tuple:
@@ -628,6 +677,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     from safetensors.torch import save_model
 
     started = time.monotonic()
+    if config["training"].get("cudnn_benchmark", False):
+        torch.backends.cudnn.benchmark = True                           # opt-in: autotune the conv algorithms (not bit-identical)
     rig = _config_rig(config)
     cameras = rig.camera_names
     samples, root = load_training_view(view)
@@ -652,8 +703,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     image_shape = (3, int(first.shape[0]), int(first.shape[1]))
 
     selection = hyper.get("sample_selection")
-    index = _chunk_samples(train, selection)
-    selection_report = {"train": selection_summary(train, selection)}
+    index = _chunk_samples(train, selection, chunk_size)
+    selection_report = {"train": selection_summary(train, selection, chunk_size)}
 
     def chunks_dataset(episode_list, chunk_index):
         class _Chunks(torch.utils.data.Dataset):
@@ -703,6 +754,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     if backbone is not None:
         _load_backbone(policy, backbone_weights, backbone["sha256"])
     policy.to(device).train()
+    if hyper.get("channels_last", False):
+        policy.model.backbone.to(memory_format=torch.channels_last)      # opt-in: no NCHW<->NHWC conversions; cuDNN picks other kernels (not bit-identical)
     if hyper.get("compile", False):
         policy.model.compile()          # opt-in torch.compile, in place: the state_dict keys (and so the saved weights) are unchanged
     optimizer = torch.optim.AdamW(policy.get_optim_params(), lr=hyper["learning_rate"], weight_decay=_WEIGHT_DECAY)
@@ -712,8 +765,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     validation = [sample for sample in samples if sample["split"] == "validation"]
     validation_loader, validation_used = None, 0
     if validation:
-        validation_index = _chunk_samples(validation, selection)
-        selection_report["validation"] = selection_summary(validation, selection)
+        validation_index = _chunk_samples(validation, selection, chunk_size)
+        selection_report["validation"] = selection_summary(validation, selection, chunk_size)
         picks = np.unique(np.linspace(0, len(validation_index) - 1, min(validation_count, len(validation_index))).astype(np.int64))
         validation_generator = torch.Generator()
         validation_generator.manual_seed(seed)
@@ -742,7 +795,9 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
             emit({"kind": "sample_selection", "split": split_name, **summary},
                  f"sample_selection {split_name} samples {item['samples_before']} -> {item['samples_after']} "
                  f"first_motion_row min/median/max={item.get('first_motion_row_min')}/{item.get('first_motion_row_median')}/"
-                 f"{item.get('first_motion_row_max')} never_moving={item.get('never_moving_episodes')}")
+                 f"{item.get('first_motion_row_max')} never_moving={item.get('never_moving_episodes')}"
+                 + (f" leading_trimmed={item['leading_trimmed_rows']} interior_trimmed={item['interior_trimmed_rows']} "
+                    f"keep_tail_rows={item['keep_tail_rows']}" if item.get("trim_interior_idle") else ""))
 
     def evaluate(at_step):
         """Mean loss over the fixed validation subset, in eval mode and without gradients; the training mode is restored."""

@@ -235,3 +235,41 @@ def test_the_compile_key_is_optional_boolean_and_not_filled_in(tmp_path):
     for value in (1, "true", None):
         with pytest.raises(ValueError, match="TRAINING_COMPILE_INVALID"):
             _load(tmp_path, **{"training.compile": value})
+
+
+
+def test_the_speed_flags_are_optional_boolean_and_not_filled_in(tmp_path):
+    training = load_training_config(CONFIG)["training"]
+    assert "cudnn_benchmark" not in training and "channels_last" not in training        # absent keeps the config, and so its hash, as it was
+    for key in ("cudnn_benchmark", "channels_last"):
+        assert _load(tmp_path, **{f"training.{key}": True})["training"][key] is True
+        assert _load(tmp_path, **{f"training.{key}": False})["training"][key] is False
+        for value in (1, "true", None):
+            with pytest.raises(ValueError, match=f"TRAINING_{key.upper()}_INVALID"):
+                _load(tmp_path, **{f"training.{key}": value})
+
+
+def test_the_interior_idle_selection_keys_come_together_and_are_validated(tmp_path):
+    base = {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 10}
+    selection = {**base, "trim_interior_idle": True, "keep_tail_rows": 20}
+    assert _load(tmp_path, **{"training.sample_selection": selection})["training"]["sample_selection"] == selection
+    off = {**base, "trim_interior_idle": False, "keep_tail_rows": 0}
+    assert _load(tmp_path, **{"training.sample_selection": off})["training"]["sample_selection"] == off
+    for bad in ({**base, "trim_interior_idle": True},                                     # one key without the other
+                {**base, "keep_tail_rows": 20},
+                {**selection, "keep_tail_rows": -1}, {**selection, "keep_tail_rows": 1.5}, {**selection, "keep_tail_rows": True},
+                {**selection, "trim_interior_idle": 1}, {**selection, "extra": 1}):
+        with pytest.raises(ValueError, match="TRAINING_SAMPLE_SELECTION_INVALID"):
+            _load(tmp_path, **{"training.sample_selection": bad})
+
+
+def test_the_train_004_configuration_is_train_003_plus_the_interior_trim_and_the_speed_flags():
+    new = load_training_config(PACKAGE / "config/act/training-side-wrist-004.yaml")
+    old = load_training_config(PACKAGE / "config/act/training-side-wrist.yaml")
+    assert {key: new[key] for key in new if key != "training"} == {key: old[key] for key in old if key != "training"}
+    added = {"cudnn_benchmark": True, "channels_last": True, "compile": True}
+    assert {key: value for key, value in new["training"].items() if key not in added and key != "sample_selection"} \
+        == {key: value for key, value in old["training"].items() if key != "sample_selection"}
+    assert {key: new["training"][key] for key in added} == added
+    assert new["training"]["sample_selection"] == {**old["training"]["sample_selection"], "trim_interior_idle": True, "keep_tail_rows": 20}
+    assert (new["training"]["steps"], new["training"]["batch_size"], new["training"]["num_workers"]) == (60000, 16, 16)

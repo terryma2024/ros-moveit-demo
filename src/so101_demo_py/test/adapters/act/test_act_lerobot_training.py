@@ -532,3 +532,107 @@ def test_torch_compile_compiles_the_act_model_in_place_and_the_bundle_still_load
     from safetensors import safe_open
     with safe_open(str(root / "policy.safetensors"), "pt") as stream:
         assert not [key for key in stream.keys() if "_orig_mod" in key]     # in-place compile leaves the state_dict keys alone
+
+
+# ---- interior idle trim, cudnn.benchmark and channels_last ---------------------------------------------------------------------------
+
+INTERIOR = {"trim_leading_idle": True, "idle_threshold_rad": 0.005, "lead_in_rows": 2, "trim_interior_idle": True, "keep_tail_rows": 2}
+
+
+def test_the_interior_trim_drops_start_rows_with_a_static_next_chunk_but_keeps_the_tail():
+    from so101_demo.adapters.act.lerobot import _chunk_samples, selection_summary
+    # r* = 5 so the leading trim starts at row 3; rows 7..13 have a static chunk; the last two rows (12, 13) are the kept tail
+    episode = {"scene_id": "m", "split": "train", "rows": _rows([0, 0, 0, 0, 0, 0.1, 0.1, 0, 0, 0, 0, 0, 0, 0])}
+    assert _chunk_samples([episode], INTERIOR, 3) == [(0, row) for row in (3, 4, 5, 6, 12, 13)]
+    summary = selection_summary([episode], INTERIOR, 3)
+    assert (summary["samples_before"], summary["leading_trimmed_rows"], summary["interior_trimmed_rows"], summary["samples_after"]) == (14, 3, 5, 6)
+    assert [(entry["trimmed"], entry["interior_trimmed"]) for entry in summary["per_episode"]] == [(3, 5)]
+    assert summary["keep_tail_rows"] == 2 and summary["trim_interior_idle"] is True
+
+
+def test_the_interior_trim_threshold_is_strict_and_looks_at_every_action_of_the_chunk_and_all_six_joints():
+    from so101_demo.adapters.act.lerobot import _chunk_samples
+    selection = {**INTERIOR, "lead_in_rows": 0, "keep_tail_rows": 0}
+    # moves at row 0 (0.1); then a deviation of exactly the threshold (kept: not below it) and one just under it (dropped)
+    at_threshold = {"scene_id": "a", "split": "train", "rows": _rows([0.1, 0, 0, 0, 0.005, 0, 0, 0, 0])}
+    assert _chunk_samples([at_threshold], selection, 2) == [(0, row) for row in (0, 3, 4)]       # row 3 reaches 0.005 at k=1; row 4 starts on it
+    just_under = {"scene_id": "b", "split": "train", "rows": _rows([0.1, 0, 0, 0, 0.0049, 0, 0, 0, 0])}
+    assert _chunk_samples([just_under], selection, 2) == [(0, 0)]
+    other_joint = {"scene_id": "c", "split": "train", "rows": _rows([0.1, 0, 0, [0, 0, 0, 0, 0, -0.02], 0, 0, 0])}
+    assert _chunk_samples([other_joint], selection, 2) == [(0, row) for row in (0, 2, 3)]        # the gripper counts, the sign does not
+
+
+def test_the_interior_trim_uses_the_shorter_chunk_at_the_end_of_the_episode():
+    from so101_demo.adapters.act.lerobot import _chunk_samples
+    selection = {**INTERIOR, "lead_in_rows": 0, "keep_tail_rows": 0}
+    episode = {"scene_id": "e", "split": "train", "rows": _rows([0.1, 0, 0, 0, 0, 0.1])}
+    # chunk 3: row 3 sees rows 3..5 (the last action moves) so it is kept; row 4 sees 4..5 and row 5 sees 5; row 2 sees 2..4 (static)
+    assert _chunk_samples([episode], selection, 3) == [(0, row) for row in (0, 3, 4, 5)]
+    short = {"scene_id": "s", "split": "train", "rows": _rows([0.1, 0, 0])}
+    assert _chunk_samples([short], {**selection, "keep_tail_rows": 50}, 3) == [(0, 0), (0, 1), (0, 2)]      # a tail longer than the episode keeps it whole
+
+
+def test_the_interior_trim_needs_the_chunk_size_and_keeps_a_never_moving_episode_whole():
+    from so101_demo.adapters.act.lerobot import _chunk_samples
+    still = {"scene_id": "s", "split": "train", "rows": _rows([0, 0, 0, 0])}
+    assert _chunk_samples([still], INTERIOR, 3) == [(0, row) for row in range(4)]
+    moving = {"scene_id": "m", "split": "train", "rows": _rows([0, 0.1, 0, 0])}
+    with pytest.raises(ValueError, match="SAMPLE_SELECTION_CHUNK_SIZE_MISSING"):
+        _chunk_samples([moving], INTERIOR)
+
+
+def test_the_leading_only_selection_is_unchanged_by_the_interior_code():
+    from so101_demo.adapters.act.lerobot import _chunk_samples, selection_summary
+    episode = {"scene_id": "m", "split": "train", "rows": _rows([0, 0, 0, 0, 0, 0.1, 0.2, 0.3])}
+    assert _chunk_samples([episode], SELECTION) == _chunk_samples([episode], SELECTION, 10) == [(0, row) for row in range(3, 8)]
+    summary = selection_summary([episode], SELECTION)
+    assert "trim_interior_idle" not in summary and "interior_trimmed" not in summary["per_episode"][0]
+
+
+def test_the_trainer_applies_the_interior_trim_to_train_and_validation(tmp_path, monkeypatch):
+    from so101_demo.adapters.act import lerobot
+    monkeypatch.setattr(lerobot, "first_motion_row", lambda rows, threshold: 3)
+    seen = []
+
+    def all_static(rows, first, chunk_size, threshold):
+        seen.append(chunk_size)
+        return [True] * (len(rows) - first)
+    monkeypatch.setattr(lerobot, "_static_chunk_rows", all_static)
+    _, _, root = _train(tmp_path, monkeypatch, steps=2, validation_interval_steps=1, validation_samples=100,
+                        sample_selection={**INTERIOR, "lead_in_rows": 1, "keep_tail_rows": 4})
+    log = json.loads((root / "training-log.json").read_text())
+    assert set(seen) == {10}                                                              # the config's chunk size
+    assert log["train_samples"] == 2 * 4                                                  # 12 rows each; only the 4 tail rows stay
+    train, validation = log["sample_selection"]["train"], log["sample_selection"]["validation"]
+    assert (train["leading_trimmed_rows"], train["interior_trimmed_rows"], train["samples_after"]) == (4, 12, 8)
+    assert (validation["samples_before"], validation["interior_trimmed_rows"], validation["samples_after"]) == (12, 6, 4)
+    assert [entry["interior_trimmed"] for entry in train["per_episode"]] == [6, 6]
+    assert all(row["samples"] == 4 for row in _metrics(root) if row["kind"] == "validation")
+
+
+def test_cudnn_benchmark_is_set_only_when_the_config_asks_for_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(torch.backends.cudnn, "benchmark", False)
+    (tmp_path / "off").mkdir()
+    (tmp_path / "on").mkdir()
+    _train(tmp_path / "off", monkeypatch, steps=1)
+    assert torch.backends.cudnn.benchmark is False
+    _train(tmp_path / "on", monkeypatch, steps=1, cudnn_benchmark=True)
+    assert torch.backends.cudnn.benchmark is True
+
+
+def test_channels_last_converts_only_the_backbone_and_only_when_asked(tmp_path, monkeypatch):
+    calls = []
+    real = torch.nn.Module.to
+
+    def spy(self, *args, **kwargs):
+        if kwargs.get("memory_format") is not None:
+            calls.append((type(self).__name__, kwargs["memory_format"]))
+        return real(self, *args, **kwargs)
+    monkeypatch.setattr(torch.nn.Module, "to", spy)
+    (tmp_path / "off").mkdir()
+    (tmp_path / "on").mkdir()
+    _train(tmp_path / "off", monkeypatch, steps=1)
+    assert calls == []
+    _, outcome, _ = _train(tmp_path / "on", monkeypatch, steps=1, channels_last=True)
+    assert outcome["status"] == "COMPLETED"
+    assert len(calls) == 1 and calls[0][1] == torch.channels_last and calls[0][0] != "ACTPolicy"
