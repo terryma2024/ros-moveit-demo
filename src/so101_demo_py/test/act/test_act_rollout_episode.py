@@ -12,7 +12,7 @@ from so101_demo.act.teacher_endpoint import load_teacher_endpoint_policy
 from test_act_rollout_targets import SNAPSHOT_TARGETS
 
 SETTINGS = RolloutSettings(execution_deadline_s=3.0, state_unavailable_stop_s=1.0, settle_s=0.5,
-                           no_motion_threshold_rad=0.01, stop_wait_s=1.0)
+                           no_motion_threshold_rad=0.01, stop_wait_s=1.0, ready_wait_s=2.0)
 SCENE = {"scene_id": "rollout-standard-right", "group": "rollout_standard", "xy": [0.07, -0.28],
          "cup_position_world_m": [0.07, -0.28, 0.165], "seed": None, "nearest_training_m": 0.05}
 START_POSE = tuple(SCENE["cup_position_world_m"])
@@ -91,7 +91,12 @@ class Recorder:
 
 class Session:
     def __init__(self, ports, clock, *, moves=True, places=True, stale_after=None, stop_confirms=True,
-                 submit_error=None, state0=(0.0, 0.1, -0.2, 0.3, 0.0, 0.5, 0.0, 1.0)):
+                 submit_error=None, state0=(0.0, 0.1, -0.2, 0.3, 0.0, 0.5, 0.0, 1.0), ready_after_spins=0,
+                 pose_after_spins=0, observe_error=None, observe_error_after=None, stop_error=None,
+                 sim_time_error_after=None):
+        self.ready_after_spins, self.pose_after_spins, self.spins = ready_after_spins, pose_after_spins, 0
+        self.observe_error, self.observe_error_after, self.stop_error = observe_error, observe_error_after, stop_error
+        self.sim_time_error_after, self.observations = sim_time_error_after, 0
         self.ports, self.clock = ports, clock
         self.moves, self.places, self.stale_after, self.stop_confirms = moves, places, stale_after, stop_confirms
         self.submit_error, self.state = submit_error, list(state0)
@@ -101,16 +106,27 @@ class Session:
     def begin(self, session_id, attempt_id):
         self.ports.calls.append("session.begin")
 
+    def ready(self):
+        return self.spins >= self.ready_after_spins
+
     def sim_time(self):
+        if self.sim_time_error_after is not None and self.clock.sim >= self.sim_time_error_after:
+            raise RuntimeError("ROLLOUT_SIM_CLOCK_UNAVAILABLE")
+        if not self.ready():
+            raise RuntimeError("ROLLOUT_SIM_CLOCK_UNAVAILABLE")
         return self.clock.sim
 
     def spin(self):
+        self.spins += 1
         self.clock.sim += 0.02
         self.clock.wall += 0.02
 
     def observe(self):
+        if self.observe_error is not None and self.observations >= self.observe_error_after:
+            raise self.observe_error
         if self.clock.sim < self.next_observation:
             return None
+        self.observations += 1
         self.next_observation += 0.1
         if self.stale_after is not None and self.clock.sim >= self.stale_after:
             return None
@@ -131,6 +147,8 @@ class Session:
 
     def stop(self, reason):
         self.stops.append(reason)
+        if self.stop_error is not None:
+            raise self.stop_error
         self.state_value = "STOPPED" if self.stop_confirms else "STOPPING"
         return self.state_value
 
@@ -138,6 +156,8 @@ class Session:
         return self.state_value == "STOPPED"
 
     def cup_pose(self):
+        if self.spins < self.pose_after_spins:
+            return None
         position = START_POSE
         if self.places and self.prefixes:
             position = tuple(SNAPSHOT_TARGETS["final_target"][:2]) + (START_POSE[2],)
@@ -366,9 +386,10 @@ def test_the_neck_is_never_commanded_and_its_drift_is_logged():
 
 
 def test_settings_are_validated():
-    for field in ("execution_deadline_s", "state_unavailable_stop_s", "settle_s", "no_motion_threshold_rad", "stop_wait_s"):
+    for field in ("execution_deadline_s", "state_unavailable_stop_s", "settle_s", "no_motion_threshold_rad", "stop_wait_s",
+                  "ready_wait_s"):
         kwargs = dict(execution_deadline_s=3.0, state_unavailable_stop_s=1.0, settle_s=0.5,
-                      no_motion_threshold_rad=0.01, stop_wait_s=1.0)
+                      no_motion_threshold_rad=0.01, stop_wait_s=1.0, ready_wait_s=2.0)
         kwargs[field] = float("nan")
         with pytest.raises(ValueError, match="ROLLOUT_SETTINGS_INVALID"):
             RolloutSettings(**kwargs)
@@ -378,3 +399,70 @@ def test_targets_are_unchanged_by_a_run():
     before = copy.deepcopy(SNAPSHOT_TARGETS)
     _run(Ports())
     assert SNAPSHOT_TARGETS == before and rollout_targets(before, cup_position_world_m=START_POSE)
+
+
+# ---- hardening (CP-3743): catch-all fault handling and the wait for the first inputs -------------------------------------
+
+
+def test_an_unexpected_error_in_the_loop_is_an_invalid_episode_and_the_stop_is_proven():
+    ports = Ports(session_kwargs={"observe_error": KeyError("camera ring vanished"), "observe_error_after": 3})
+    result = _run(ports)
+    assert result["verdict"] == "INVALID" and result["done"] is False
+    assert result["reason"].startswith("EPISODE_FAULT: KeyError") and "camera ring vanished" in result["reason"]
+    assert result["status"] == "FAULT" and result["stop"]["confirmed"] is True and result["stop"]["after_fault"] is True
+    assert ports.session.stops == ["ROLLOUT_FAULT"] and ports.session.closed
+    assert ports.calls[-2:] == ["cancel_motion", "confirm_no_controller_goal"]
+    assert "session.close" in ports.calls and "recorder.finish" in ports.calls
+    assert result["endpoint"] is None                       # a faulted run is never judged
+
+
+def test_a_fault_whose_stop_cannot_be_issued_says_so_in_the_reason():
+    ports = Ports(session_kwargs={"observe_error": ValueError("boom"), "observe_error_after": 2,
+                                  "stop_error": RuntimeError("controller port gone")})
+    result = _run(ports)
+    assert result["verdict"] == "INVALID" and result["stop"]["confirmed"] is False
+    assert "controller port gone" in result["stop"]["error"]
+    assert result["reason"].startswith("EPISODE_FAULT: ValueError") and result["reason"].endswith("STOP_UNCONFIRMED")
+    assert ports.calls[-2:] == ["cancel_motion", "confirm_no_controller_goal"]
+
+
+def test_a_fault_with_an_unconfirmed_stop_ack_says_so_in_the_reason():
+    ports = Ports(session_kwargs={"observe_error": ValueError("boom"), "observe_error_after": 2, "stop_confirms": False})
+    result = _run(ports)
+    assert result["verdict"] == "INVALID" and result["stop"]["confirmed"] is False
+    assert result["reason"].endswith("STOP_UNCONFIRMED")
+
+
+def test_a_clock_that_fails_while_the_loop_is_closing_does_not_hide_the_first_error():
+    ports = Ports(session_kwargs={"observe_error": KeyError("first"), "observe_error_after": 2,
+                                  "sim_time_error_after": 1.2})
+    result = _run(ports)
+    assert result["verdict"] == "INVALID" and "first" in result["reason"]
+    assert "session.close" in ports.calls and ports.calls[-2:] == ["cancel_motion", "confirm_no_controller_goal"]
+
+
+def test_the_loop_waits_for_the_first_joint_state_and_the_cup_pose_before_it_starts():
+    ports = Ports(session_kwargs={"ready_after_spins": 12, "pose_after_spins": 20})
+    sink = Sink()
+    result = _run(ports, sink)
+    assert result["verdict"] == "DONE" and result["phases"].count("nodes") == 1
+    assert result["timing"]["loop_start_sim_s"] >= 1.0 + 20 * 0.02 - 1e-9      # the loop began after both inputs existed
+    assert result["timing"]["loop_sim_s"] == pytest.approx(SETTINGS.execution_deadline_s, abs=0.1)
+    assert result["counts"]["observations"] > 5
+
+
+def test_a_session_that_never_gets_a_joint_state_is_refused_in_bounded_time():
+    ports = Ports(session_kwargs={"ready_after_spins": 10**9})
+    result = _run(ports)
+    assert result["verdict"] == "INVALID" and result["reason"].startswith("SESSION_NOT_READY: joint_state")
+    assert result["counts"]["inferences"] == 0 and ports.inference.submitted == []
+    assert result["timing"]["wall_s"] <= SETTINGS.ready_wait_s + 0.5
+    assert "session.close" in ports.calls and ports.calls[-2:] == ["cancel_motion", "confirm_no_controller_goal"]
+
+
+def test_a_session_that_never_sees_the_cup_is_refused_in_bounded_time():
+    ports = Ports(session_kwargs={"pose_after_spins": 10**9})
+    result = _run(ports)
+    assert result["verdict"] == "INVALID" and result["reason"].startswith("SESSION_NOT_READY: cup_pose")
+    assert result["counts"]["inferences"] == 0
+    assert result["timing"]["wall_s"] <= SETTINGS.ready_wait_s + 0.5

@@ -12,7 +12,7 @@ from so101_demo.act.rollout_episode import RolloutSettings
 from so101_demo.cli import act_rollout_native as native
 
 SETTINGS = RolloutSettings(execution_deadline_s=3.0, state_unavailable_stop_s=1.0, settle_s=0.5,
-                           no_motion_threshold_rad=0.005, stop_wait_s=1.0)
+                           no_motion_threshold_rad=0.005, stop_wait_s=1.0, ready_wait_s=2.0)
 SUBSTITUTION = {"substituted_by": "contact_activation_receipt", "path": "receipt.json", "sha256": "a" * 64,
                 "policy_fingerprint": "b" * 64, "ruling": "ruling text"}
 

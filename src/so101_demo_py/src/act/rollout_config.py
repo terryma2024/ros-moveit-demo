@@ -13,7 +13,8 @@ import yaml
 from .rollout_episode import RolloutSettings
 
 _KEYS = frozenset({"kind", "schema_version", "camera_topics", "joint_state_topic", "undeclared_bundle_cameras",
-                   "controller_actions", "control", "no_motion_threshold_rad", "world_max_age_s"})
+                   "controller_actions", "control", "no_motion_threshold_rad", "world_max_age_s",
+                   "session_ready_wait_s"})
 
 
 def _topic(value) -> bool:
@@ -51,7 +52,8 @@ def load_rollout_config(path) -> dict:
             or not isinstance(control, dict) or set(control) != {"submit_lead_s", "accept_timeout_s"}
             or not all(_positive(value) for value in control.values())
             or not control["accept_timeout_s"] < control["submit_lead_s"] < 0.1
-            or not _positive(document["no_motion_threshold_rad"]) or not _positive(document["world_max_age_s"])):
+            or not _positive(document["no_motion_threshold_rad"]) or not _positive(document["world_max_age_s"])
+            or not _positive(document["session_ready_wait_s"])):
         raise ValueError(code)
     return document
 
@@ -88,4 +90,5 @@ def rollout_settings(frozen: dict, config: dict) -> RolloutSettings:
         state_unavailable_stop_s=execution["state_unavailable_stop_s"],
         settle_s=endpoint["tolerances"]["settle_s"],
         no_motion_threshold_rad=config["no_motion_threshold_rad"],
-        stop_wait_s=execution["arm_stop_wait_s"])
+        stop_wait_s=execution["arm_stop_wait_s"],
+        ready_wait_s=config["session_ready_wait_s"])

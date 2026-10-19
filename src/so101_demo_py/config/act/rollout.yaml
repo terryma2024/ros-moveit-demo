@@ -37,3 +37,7 @@ no_motion_threshold_rad: 0.005
 
 # The most a world-state read may lag the simulation before the cup pose is treated as unavailable.
 world_max_age_s: 1.0
+
+# The longest wall time the executor waits, after its nodes exist, for the first joint state and then the cup pose before the
+# episode loop starts (DDS discovery of a node created after the stack came up). An episode that does not get both is INVALID.
+session_ready_wait_s: 10.0

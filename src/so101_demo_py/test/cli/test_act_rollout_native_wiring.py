@@ -132,3 +132,90 @@ def test_a_model_call_still_running_blocks_the_next_session(tmp_path):
         pilot_factory=None)
     with pytest.raises(RuntimeError, match="ROLLOUT_INFERENCE_NOT_IDLE"):
         ports.open_session({"scene_id": "s"}, {"simulation_session_id": "sim-1", "simulation_time_s": 0.5}, "a1")
+
+
+def _composition_stub(tmp_path, rig_profile):
+    return SimpleNamespace(environment={"ROS_DOMAIN_ID": "181"}, inputs=SimpleNamespace(
+        recorder_policy={"ready_timeout_s": 30.0}, settings=SimpleNamespace(execution_deadline_s=180.0)),
+        launch=SimpleNamespace(rig_profile=rig_profile), options=SimpleNamespace(run_id="run-1"), attempts=0,
+        runtime=object(), binding=None, runner=None, inference=None, transport=None)
+
+
+def test_the_recorder_records_the_rig_the_stack_composes_not_the_default_rig(tmp_path):
+    """A side+wrist stack has no head camera and no neck: a recorder started without the rig profile would wait for the
+    default rig's topics and every episode would end as a recorder fault."""
+    profile = tmp_path / "rig-v2.yaml"
+    profile.write_text("kind: act_rig_profile\n")
+    stub = _composition_stub(tmp_path, profile)
+    pilot = native.NativeComposition.pilot_factory(stub)(tmp_path / "episode")
+    assert pilot.rig_profile == profile and pilot.timeout_s == 30.0 and pilot.root == tmp_path / "episode" / "raw"
+    default = native.NativeComposition.pilot_factory(_composition_stub(tmp_path, None))(tmp_path / "episode-2")
+    assert default.rig_profile is None                                 # the default rig's recorder command is unchanged
+
+
+def test_each_episode_gets_a_recorder_factory_of_the_composition(tmp_path):
+    profile = tmp_path / "rig-v2.yaml"
+    profile.write_text("kind: act_rig_profile\n")
+    stub = _composition_stub(tmp_path, profile)
+    stub.pilot_factory = lambda: native.NativeComposition.pilot_factory(stub)
+    ports = native.NativeComposition.new_ports(stub, {"scene_id": "s1"}, "s1-a1", tmp_path / "ep")
+    assert ports.pilot_factory(tmp_path / "ep").rig_profile == profile and stub.attempts == 1
+
+
+def _launch_for(tmp_path, cameras, state_dim):
+    import os
+
+    from paths import PACKAGE_ROOT
+    from so101_demo.act.rig_profile import rig_from_observation
+    from so101_demo.runtime.act_instance.program import instance_stack_launch
+
+    ros2 = tmp_path / "ros2"
+    ros2.write_text("#!/bin/sh\n")
+    os.chmod(ros2, 0o755)
+    stack_root = tmp_path / "stack"
+    stack_root.mkdir()
+    rig = rig_from_observation(cameras, state_dim)       # the composition derives the rig from the bundle's observation
+    return instance_stack_launch({"simulation_session_id": "rollout-run-1"}, ros2=ros2, stack_root=stack_root,
+                                 environment={"ROS_DOMAIN_ID": "181"}, rig=rig, share=PACKAGE_ROOT), rig
+
+
+def test_a_side_wrist_bundle_launches_the_side_wrist_stack_and_observes_its_profile(tmp_path):
+    from paths import PACKAGE_ROOT
+
+    launch, rig = _launch_for(tmp_path, ["side", "wrist"], 6)
+    assert (rig.has_head, rig.has_neck) == (False, False)
+    assert launch.rig == "side-wrist" and launch.rig_profile == PACKAGE_ROOT / "config/act/rig-v2.yaml"
+    assert "rig:=side-wrist" in launch.argv() and "act_profile:=true" in launch.argv()
+    assert launch.readiness_arguments() == ["--rig-profile", str(PACKAGE_ROOT / "config/act/rig-v2.yaml")]
+    assert not any("neck" in item or "head_" in item or "head-" in item for item in launch.argv())
+
+
+def test_a_head_wrist_bundle_keeps_the_default_launch(tmp_path):
+    launch, rig = _launch_for(tmp_path, ["head", "wrist"], 8)
+    assert rig.has_neck and launch.rig == "head-wrist" and launch.rig_profile is None
+    assert not any(item.startswith("rig:=") for item in launch.argv()) and launch.readiness_arguments() == []
+
+
+class WarmPolicy:
+    def __init__(self):
+        self.calls, self.resets = [], 0
+
+    def infer(self, observation):
+        self.calls.append(observation)
+        return [[0.0] * 6] * 10
+
+    def reset(self):
+        self.resets += 1
+
+
+def test_the_model_is_warmed_up_on_the_bundle_shapes_and_reset_before_the_first_episode():
+    """The first CUDA call takes longer than the frozen max_reply_age_s (0.3 s): without a warm-up the first request of every
+    run is refused as stale (measured on the TRAIN-003 bundle: 0.306 s for the first call, 0.010 s after)."""
+    policy = WarmPolicy()
+    observation = {"cameras": ("side", "wrist"), "state_dim": 6, "image_shape": [480, 640, 3]}
+    ticks = iter(x * 0.25 for x in range(100))
+    latencies = native.warm_up_policy(policy, observation, calls=3, monotonic=lambda: next(ticks))
+    assert latencies == [0.25, 0.25, 0.25] and policy.resets == 1 and len(policy.calls) == 3
+    sample = policy.calls[0]
+    assert set(sample) == {"sim_time_s", "state", "side", "wrist"} and len(sample["state"]) == 6
+    assert sample["side"].shape == (480, 640, 3) and sample["side"].dtype.name == "uint8"

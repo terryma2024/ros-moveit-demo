@@ -287,6 +287,16 @@ def test_the_session_delegates_control_and_closes_once():
         empty.sim_time()
 
 
+def test_the_session_is_ready_only_after_the_first_joint_state_of_this_session():
+    session, _ = _session()
+    assert session.ready() is True
+    empty = rr.RolloutSession(assembler=_assembler(), adapter=FakeAdapter(), permit=rr.JointLimitPermit(),
+                              world=None, spin=lambda: None, close=lambda: None, submit_lead_s=0.03)
+    assert empty.ready() is False
+    empty.assembler.push_joints(0.5, _joints())
+    assert empty.ready() is True
+
+
 class FakeNode:
     def __init__(self):
         self.subscriptions = []

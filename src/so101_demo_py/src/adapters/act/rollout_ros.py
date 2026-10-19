@@ -362,6 +362,11 @@ class RolloutSession:
     def begin(self, session_id: str, attempt_id: str) -> None:
         self.adapter.begin_attempt(session_id, attempt_id)
 
+    def ready(self) -> bool:
+        """Whether the first joint state of this session has arrived (the simulation clock is readable)."""
+
+        return self.assembler.sim_time() is not None
+
     def sim_time(self):
         value = self.assembler.sim_time()
         if value is None:

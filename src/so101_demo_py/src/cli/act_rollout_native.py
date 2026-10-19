@@ -153,6 +153,28 @@ def import_preflight(*, importer=importlib.import_module) -> None:
         raise RuntimeError("ROLLOUT_IMPORT_PREFLIGHT_FAILED: torch.cuda is not available")
 
 
+def warm_up_policy(policy, observation: dict, *, calls: int = 3, monotonic=time.monotonic) -> list:
+    """Run the model on synthetic observations of the bundle's shapes before the first episode; returns the call latencies.
+
+    The first call of a CUDA model costs far more than the frozen `max_reply_age_s`, so without this the first request of a run
+    would always be refused as stale. Nothing of the result is used; the policy is reset afterwards, so no model state reaches
+    the first episode."""
+
+    import numpy as np
+
+    sample = {"sim_time_s": 0.0, "state": [0.0] * observation["state_dim"]}
+    height, width, _channels = observation["image_shape"]
+    for camera in observation["cameras"]:
+        sample[camera] = np.zeros((height, width, 3), dtype=np.uint8)
+    latencies = []
+    for _ in range(calls):
+        started = monotonic()
+        policy.infer(sample)
+        latencies.append(round(monotonic() - started, 6))
+    policy.reset()
+    return latencies
+
+
 # ---- the owned root and the environment ----------------------------------------------------------------------------------
 
 
@@ -356,7 +378,8 @@ def run_rollout(*, options, inputs, probes, composition_factory, episode_runner=
         "calibration": inputs.substitution, "preconditions": preconditions,
         "max_invalid_retries": options.max_invalid_retries})
     composition = composition_factory(layout=layout, environment=environment, inputs=inputs, options=options)
-    summary = {"exit_code": EXIT_OK, "done": 0, "verdicts": {}, "invalid_attempts": 0, "invalid_exhausted": [],
+    summary = {"inference_warm_up_s": getattr(composition, "warm_up_s", None), "exit_code": EXIT_OK, "done": 0,
+               "verdicts": {}, "invalid_attempts": 0, "invalid_exhausted": [],
                "fault": None, "stack_stop_confirmed": None, "scenes": len(scenes)}
     verdicts = Counter()
     try:
@@ -432,9 +455,10 @@ def load_inputs(args) -> RolloutInputs:
     from so101_demo.act.bundle import load_bundle
     from so101_demo.act.frozen_runtime_inputs import load_recorder_frozen_policy, load_teacher_frozen_inputs
     from so101_demo.act.policy import observation_spec
+    from so101_demo.act.rig_profile import rig_from_observation
     from so101_demo.act.rollout_activation import contact_activation_substitution
     from so101_demo.act.rollout_config import (
-        controller_timing, load_rollout_config, rollout_settings)
+        camera_topics_for, controller_timing, load_rollout_config, rollout_settings)
     from so101_demo.act.rollout_scenes import verify_scene_document
     from so101_demo.act.runtime_config import load_runtime_config
     from so101_demo.act.teacher_endpoint import load_teacher_endpoint_policy
@@ -446,6 +470,9 @@ def load_inputs(args) -> RolloutInputs:
     bundle = load_bundle(bundle_dir / "bundle.json")
     declared = bundle["normalization"].get("observation") is not None
     spec = observation_spec(bundle, legacy_cameras=config["undeclared_bundle_cameras"])
+    # the rig the stack must compose and the topics the executor subscribes to are decided here, before any process starts
+    camera_topics_for(config, spec["cameras"])
+    rig_from_observation(spec["cameras"], spec["state_dim"])
     image_shape = bundle["normalization"].get("image_shape")
     if not isinstance(image_shape, list) or len(image_shape) != 3 or image_shape[0] != 3:
         raise ValueError("ROLLOUT_BUNDLE_IMAGE_SHAPE_INVALID")
@@ -549,6 +576,7 @@ class NativeComposition:
         self.layout, self.environment, self.inputs, self.options = layout, environment, inputs, options
         self.session_id = session_id_for(options.run_id)
         policy = build_policy_from_bundle(inputs.bundle_dir, "cuda", bundle=inputs.bundle)
+        self.warm_up_s = warm_up_policy(policy, inputs.observation)
         self.transport = ThreadInferenceTransport(policy.infer)
         self.inference = ActInferenceProcess(config=inputs.runtime_config, transport=self.transport, clock=time.monotonic)
         self.runner = ActPolicyRunner(inputs.bundle, policy, observation={
@@ -587,11 +615,24 @@ class NativeComposition:
 
         asyncio.run(self.stack.start(timeout_s=self.options.stack_timeout_s))
 
-    def new_ports(self, scene, attempt_id, directory):
+    def pilot_factory(self):
+        """The recorder factory of this run: the raw recorder records the rig the stack composes (its profile file, the same one
+        the launch observes), so a side+wrist stack is recorded without head or neck topics."""
+
         from so101_demo.act.offline.pilot import PilotRecording
-        from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
         from so101_demo.runtime.parallel_worker_parts.process_tree import WorkerOwnedProcessTree
         from so101_demo.runtime.task_stack import StackProcessSpec
+
+        def pilot(directory):
+            return PilotRecording(
+                processes=WorkerOwnedProcessTree(manifest_path=Path(directory) / "owned-runtime-processes.json"),
+                root=Path(directory) / "raw", environment=dict(self.environment),
+                spec_factory=lambda argv: StackProcessSpec("act-raw-pilot", tuple(argv)),
+                timeout_s=float(self.inputs.recorder_policy["ready_timeout_s"]), rig_profile=self.launch.rig_profile)
+        return pilot
+
+    def new_ports(self, scene, attempt_id, directory):
+        from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
 
         self.attempts += 1
         issued = time.monotonic()
@@ -601,12 +642,7 @@ class NativeComposition:
             lease_issued_monotonic_s=issued,
             lease_deadline_monotonic_s=issued + self.inputs.settings.execution_deadline_s + 600.0)
 
-        def pilot(directory):
-            return PilotRecording(
-                processes=WorkerOwnedProcessTree(manifest_path=Path(directory) / "owned-runtime-processes.json"),
-                root=Path(directory) / "raw", environment=dict(self.environment),
-                spec_factory=lambda argv: StackProcessSpec("act-raw-pilot", tuple(argv)),
-                timeout_s=float(self.inputs.recorder_policy["ready_timeout_s"]))
+        pilot = self.pilot_factory()
 
         return NativeEpisodePorts(runtime=self.runtime, lease=lease, scene=scene, directory=directory, inputs=self.inputs,
                                   environment=self.environment, binding=self.binding, runner=self.runner,

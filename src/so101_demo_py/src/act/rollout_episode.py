@@ -46,6 +46,8 @@ class RolloutSettings:
     settle_s: float
     no_motion_threshold_rad: float
     stop_wait_s: float
+    #: the longest (wall) wait for the first joint state and the cup pose after the nodes exist, before the loop starts
+    ready_wait_s: float
 
     def __post_init__(self):
         for name in self.__dataclass_fields__:
@@ -197,6 +199,27 @@ def _drive(session, ports, settings, sink, loop):
         session.spin()
 
 
+def _await_ready(session, ports, settings):
+    """Wait, bounded in wall time, for the first joint state and then the cup pose; returns the start cup observation.
+
+    The nodes are created after the initial gate, so their subscriptions need a moment to discover the publishers. Starting the
+    loop without the first joint state would make the simulation clock unreadable, and starting without the cup pose would leave
+    the episode without its start observation: both refuse the episode as an infrastructure fault instead."""
+
+    deadline = ports.monotonic() + settings.ready_wait_s
+    while not session.ready():
+        if ports.monotonic() >= deadline:
+            raise _Abort(f"SESSION_NOT_READY: joint_state not received within {settings.ready_wait_s} s")
+        session.spin()
+    while True:
+        pose = session.cup_pose()
+        if pose is not None:
+            return pose
+        if ports.monotonic() >= deadline:
+            raise _Abort(f"SESSION_NOT_READY: cup_pose not received within {settings.ready_wait_s} s")
+        session.spin()
+
+
 def _await_stop(session, ports, settings, reason):
     """Command the stop and wait, in wall time, for the terminal acknowledgement and zero-speed feedback."""
 
@@ -288,15 +311,16 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
         except Exception as error:
             raise _Abort(f"SESSION_OPEN_FAILED: {_text(error)}") from error
         result["phases"].append("nodes")
-        start_observation = session.cup_pose()
-        if start_observation is None:
-            raise _Abort("START_OBSERVATION_UNAVAILABLE")
+        start_observation = _await_ready(session, ports, settings)
         loop_start_sim = session.sim_time()
         result["timing"]["loop_start_sim_s"] = loop_start_sim
         try:
             _drive(session, ports, settings, sink, loop)
         finally:
-            result["timing"]["loop_sim_s"] = round(session.sim_time() - loop_start_sim, 6)
+            try:
+                result["timing"]["loop_sim_s"] = round(session.sim_time() - loop_start_sim, 6)
+            except Exception:       # noqa: BLE001 - the clock failing here must not hide the error that ended the loop
+                result["timing"]["loop_sim_s"] = None
         result["phases"].append("loop")
         result["status"] = "STOPPED_SAFETY" if loop.outcome == "STOPPED_SAFETY" else "COMPLETED"
         stop_confirmed = _await_stop(session, ports, settings,
@@ -306,14 +330,17 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
         if stop_confirmed and loop.outcome != "STOPPED_SAFETY":
             end_observation = _settle(session, ports, settings)
             result["phases"].append("settle")
-    except _Abort as error:
-        fault = str(error)
-        result["status"] = result["status"] or "FAULT"
+    except Exception as error:      # noqa: BLE001 - an _Abort names its reason; any other error is still an infrastructure fault
+        fault = str(error) if isinstance(error, _Abort) else f"EPISODE_FAULT: {type(error).__name__}: {_text(error)}"
+        result["status"] = "FAULT"
         if session is not None and not stop_confirmed:
             try:
                 result["stop"] = {"confirmed": _await_stop(session, ports, settings, "ROLLOUT_FAULT"), "after_fault": True}
-            except Exception as stop_error:
-                result["stop"] = {"confirmed": False, "error": _text(stop_error)}
+            except Exception as stop_error:     # noqa: BLE001
+                result["stop"] = {"confirmed": False, "after_fault": True, "error": _text(stop_error)}
+            stop_confirmed = result["stop"]["confirmed"] is True
+            if not stop_confirmed:
+                fault += " | STOP_UNCONFIRMED"
     finally:
         retire_errors = []
         if loop.pending is not None:
