@@ -1,7 +1,7 @@
 # SO-101 ACT: logic parameters vs runtime parameters — design and plan
 
-Status: DRAFT, waiting for the human's confirmation. Code changes start only after EXP-625 has finished (human, 2026-10-19:
-"那等phase 2完成再改代码").
+Status: CONFIRMED by the human on 2026-10-19 ("重录轮数算R。其他都是“是”"): Q1, Q3, Q4 and Q5 as recommended; Q2 answered as R
+(see below). Code changes start only after EXP-625 has finished (human, 2026-10-19: "那等phase 2完成再改代码").
 
 ## The principle (human, 2026-10-19)
 
@@ -38,7 +38,7 @@ A parameter moves from L to R only with a proof that results do not change, for 
 | --- | --- | --- |
 | `processor_count`, `processing_max_attempts`, `processing_task_timeout_s`, `processing_reserve_s`, `collect_timeout_s`, `process_timeout_s`, `verification_reserve_s`, `batch_hard_timeout_s` | campaign-config (whole-file sha, one run only) | **R**. A phase-2 deadline or attempt limit only turns a scene into FAULT or MISSING (coverage), never VALID ↔ INVALID. Proof for `processor_count`: reprocess the same phase-1 recordings with 1 and 6 processors and require identical `processed_result_sha256` per scene. |
 | `max_concurrent_recordings`, `max_tasks_in_flight`, `min_assignment_gap_s`, `--worker-count` | campaign-config / CLI; worker count fixed at 8 for formal | **RO**. They go into the qualification report. A formal run requires cap ≤ qualified cap, in-flight ≤ qualified, gap ≥ qualified gap, and the worker count equal to the plane's (8). |
-| `retry_invalid_max_rounds` | campaign-config, treated as scheduling | **L**. It changes which episodes are committed and biases the data toward success. Bound into the formal run's index and contract and reported with the dataset. Qualification keeps no retry. |
+| `retry_invalid_max_rounds` | campaign-config, treated as scheduling | **R** (human decision). Only a scene with Teacher PASSED and data INVALID is re-recorded (`retry_candidate`), so a retry recovers data lost to recording noise. It does not turn a physical failure into a success. Every committed episode passes the same rules. Like the phase-2 deadlines, it affects coverage only. For audit, the index still records the round each committed episode came from, but this is never compared. Qualification keeps no retry. |
 | Teacher `model.{weights, score_threshold, classes, model_id}` | campaign-config only; **not in the identity** | **L**, added to the controlled identity. This closes a gap. |
 | Teacher `{instances, torch_threads, torch_interop_threads, max_inflight_requests, queue_timeout_s, inference_timeout_s, max_frame_bytes}` | campaign-config, must equal qualification | **RO** (throughput, and timeouts can fail an episode). Envelope rule: timeouts ≥ qualified and in-flight ≤ qualified. |
 | `parallel_batch_act_offline.yaml` | whole file in the identity | **Split.** Perception and sync acceptance stay L: `max_frame_age_s`, `max_rgbd_skew_s`, `max_tf_skew_s`, yolo model and imgsz, grounding/SAM thresholds, device, cpu fallback, clock windows. The rest becomes an R file: heartbeat, lease, ack, phase and recovery timeouts, broker queue and inflight, yolo/SAM queue timeouts, `start_guard`. `executing_hard_timeout_s` is RO. |
@@ -92,7 +92,7 @@ A parameter moves from L to R only with a proof that results do not change, for 
 | # | Question | Recommendation |
 | --- | --- | --- |
 | Q1 | Treat RO as an envelope (formal ≤ qualified load) instead of hashing it? | Yes. |
-| Q2 | Move `retry_invalid_max_rounds` to L and report it with the dataset? | Yes. |
+| Q2 | Move `retry_invalid_max_rounds` to L and report it with the dataset? | Answered: **R** (human, 2026-10-19). The per-episode round stays recorded in the index for audit. |
 | Q3 | Add the Teacher model (weights, threshold, classes) to the qualification identity? | Yes. Existing qualifications stay valid under v1. |
 | Q4 | Forbid `num_workers = 0`? | Yes. |
 | Q5 | TRAIN-003: run it on the current code, right after the EXP-625 seal, without waiting for this refactor? | Yes. Its identity is v1 (`num_workers` 16 in the hash), which is harmless. The refactor lands for the next collection and training. |
@@ -103,7 +103,7 @@ A parameter moves from L to R only with a proof that results do not change, for 
    - processor count 1 vs 6 on EXP-625 phase-1 recordings: identical `processed_result_sha256`;
    - DataLoader index batches with `num_workers` 8, 16 and 0;
    - export workers 1 vs 16.
-2. **Collection split.** Logic and runtime documents; split config files; RO envelope in the qualification report and formal admission; retry rounds in L; Teacher model in the identity; identity v2 alongside v1.
+2. **Collection split.** Logic and runtime documents; split config files; RO envelope in the qualification report and formal admission; retry rounds in R, with the per-episode round recorded in the index; Teacher model in the identity; identity v2 alongside v1.
 3. **Phase boundary.** `--stop-after-phase1` and `act_process_parallel`, with tests for every refusal.
 4. **Templates.** Logic-only freeze actually verified, unfrozen runtime tooling, behavioural tests replacing source-text checks, no restated constants, disk projection as an option, `*.orig*` excluded, versioned outputs.
 5. **Training.**
