@@ -703,6 +703,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     if backbone is not None:
         _load_backbone(policy, backbone_weights, backbone["sha256"])
     policy.to(device).train()
+    if hyper.get("compile", False):
+        policy.model.compile()          # opt-in torch.compile, in place: the state_dict keys (and so the saved weights) are unchanged
     optimizer = torch.optim.AdamW(policy.get_optim_params(), lr=hyper["learning_rate"], weight_decay=_WEIGHT_DECAY)
 
     # validation: the exported dataset's validation episodes (already digest-verified by load_training_view) over a fixed, evenly spaced

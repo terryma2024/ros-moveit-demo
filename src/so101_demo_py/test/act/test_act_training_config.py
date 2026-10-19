@@ -226,3 +226,12 @@ def test_the_side_wrist_configuration_is_the_o7_values_on_the_new_rig():
     assert {**document["training"], "num_workers": 8} == old["training"]
     assert document["action"] == old["action"] and document["normalization"] == old["normalization"]
     assert document["frozen"]["seed"] == old["frozen"]["seed"]
+
+
+def test_the_compile_key_is_optional_boolean_and_not_filled_in(tmp_path):
+    assert "compile" not in load_training_config(CONFIG)["training"]            # absent keeps the config, and so its hash, as it was
+    assert _load(tmp_path, **{"training.compile": True})["training"]["compile"] is True
+    assert _load(tmp_path, **{"training.compile": False})["training"]["compile"] is False
+    for value in (1, "true", None):
+        with pytest.raises(ValueError, match="TRAINING_COMPILE_INVALID"):
+            _load(tmp_path, **{"training.compile": value})

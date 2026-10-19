@@ -504,3 +504,31 @@ def test_prefetched_stops_its_thread_when_the_consumer_leaves_early():
     while threading.active_count() > before and time.monotonic() < deadline:
         time.sleep(0.05)
     assert threading.active_count() == before
+
+
+def _record_module_compile(monkeypatch):
+    calls = []
+
+    def compile_stub(self, *args, **kwargs):
+        calls.append(type(self).__name__)
+
+    monkeypatch.setattr(torch.nn.Module, "compile", compile_stub)
+    return calls
+
+
+def test_torch_compile_is_off_unless_the_config_asks_for_it(tmp_path, monkeypatch):
+    calls = _record_module_compile(monkeypatch)
+    _train(tmp_path, monkeypatch)
+    assert calls == []
+
+
+def test_torch_compile_compiles_the_act_model_in_place_and_the_bundle_still_loads(tmp_path, monkeypatch):
+    from so101_demo.act.bundle import load_bundle
+    calls = _record_module_compile(monkeypatch)
+    _, outcome, root = _train(tmp_path, monkeypatch, compile=True)
+    assert calls == ["ACT"]                                  # the inner model, once; not the policy wrapper
+    assert outcome["status"] == "COMPLETED"
+    assert load_bundle(root / "bundle.json") == outcome["bundle"]
+    from safetensors import safe_open
+    with safe_open(str(root / "policy.safetensors"), "pt") as stream:
+        assert not [key for key in stream.keys() if "_orig_mod" in key]     # in-place compile leaves the state_dict keys alone
