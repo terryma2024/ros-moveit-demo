@@ -5,6 +5,12 @@ the ledger checkpoint. Evidence and results belong in the ledger (`docs/experime
 
 Last updated: 2026-10-19.
 
+**Current goal (human, 2026-10-19): "4固定位点rollout成功".** All four standard points (task_start, forward_5cm, left_5cm,
+right_5cm) must succeed in closed-loop MuJoCo rollout. Plan:
+1. TRAIN-004 = TRAIN-003 config plus the interior idle trim (keep the last 20 rows), the prefetch thread, `cudnn.benchmark`, `channels_last` and torch.compile.
+2. Roll out with execution prefix 5.
+3. Re-collect only if training-side changes cannot get there. In that case, first do the collection and offline-processing optimisations in this list (items 1–5, 12).
+
 | # | Item | Status | Source / evidence |
 | --- | --- | --- | --- |
 | 1 | **Logic vs runtime parameters, and stage-by-stage collection.**<ul><li>L frozen and sha-bound, R free, RO within the qualified envelope.</li><li>`act_collect_parallel --stop-after-phase1`, and `act_process_parallel --phase2 \| --retry-round \| --finalize`, each with a fresh runtime document; skipped retry rounds can run later.</li><li>Templates freeze and check only logic files; source-text checks are replaced by behavioural tests.</li><li>Training: runtime block, `num_workers` ≥ 1, optimiser constants in the hash, source commit bound to the policy.</li></ul> | Confirmed design; implementation starts after the EXP-625 seal | `docs/superpowers/specs/2026-10-19-so101-act-logic-vs-runtime-params-design.md` |
