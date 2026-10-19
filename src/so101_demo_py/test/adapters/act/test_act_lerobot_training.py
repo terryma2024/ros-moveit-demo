@@ -446,3 +446,61 @@ def test_a_side_wrist_dataset_trains_a_bundle_that_declares_its_cameras_and_six_
     assert set(observation) == {"sim_time_s", "state", "side", "wrist"} and len(observation["state"]) == 6
     chunk = policy.infer(observation)
     assert len(chunk) == 10 and all(len(action) == 6 for action in chunk) and np.isfinite(np.asarray(chunk)).all()
+
+
+def test_prefetched_yields_every_batch_in_order():
+    from so101_demo.adapters.act.lerobot import _prefetched
+    assert list(_prefetched(iter(range(50)), depth=2)) == list(range(50))
+    assert list(_prefetched(iter([]), depth=2)) == []
+
+
+def test_prefetched_reads_ahead_of_the_consumer():
+    import time
+    from so101_demo.adapters.act.lerobot import _prefetched
+    pulled = []
+
+    def source():
+        for value in range(10):
+            pulled.append(value)
+            yield value
+
+    batches = _prefetched(source(), depth=2)
+    assert next(batches) == 0
+    deadline = time.monotonic() + 5
+    while len(pulled) < 3 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert len(pulled) >= 3                         # the batch handed out plus the ones waiting in the buffer
+    batches.close()
+
+
+def test_prefetched_reraises_the_loader_error_after_the_batches_before_it():
+    from so101_demo.adapters.act.lerobot import _prefetched
+
+    def source():
+        yield 1
+        yield 2
+        raise RuntimeError("DATALOADER_TIMEOUT")
+
+    batches = _prefetched(source(), depth=2)
+    assert [next(batches), next(batches)] == [1, 2]
+    with pytest.raises(RuntimeError, match="DATALOADER_TIMEOUT"):
+        next(batches)
+
+
+def test_prefetched_stops_its_thread_when_the_consumer_leaves_early():
+    import threading
+    import time
+    from so101_demo.adapters.act.lerobot import _prefetched
+    before = threading.active_count()
+
+    def endless():
+        while True:
+            yield 0
+
+    batches = _prefetched(endless(), depth=2)
+    next(batches)
+    batches.close()
+    deadline = time.monotonic() + 5
+    while threading.active_count() > before and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert threading.active_count() == before
