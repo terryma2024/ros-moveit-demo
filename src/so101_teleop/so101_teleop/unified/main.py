@@ -33,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--port", type=int, default=int(os.environ.get("SO101_UNIFIED_PORT", "8000"))
     )
+    parser.add_argument("--archive-root", type=Path, action="append", default=[])
     parser.add_argument("--static-dir", type=Path, default=None)
     parser.add_argument("--capture-dir", type=Path, default=None)
     parser.add_argument(
@@ -60,6 +61,7 @@ def build_app(args, environment: dict[str, str] | None = None):
         static_dir=static_dir,
         capture_dir=args.capture_dir,
         bind_address=args.host,
+        archive_roots=tuple(getattr(args, "archive_root", ())),
     )
 
 

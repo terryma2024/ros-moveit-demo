@@ -84,3 +84,10 @@ describe("AppShell", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 });
+
+test("Archives has an independent navigation entry", async () => {
+  const onNavigate = vi.fn();
+  render(<AppShell page="teleop" onNavigate={onNavigate}><div /></AppShell>);
+  await userEvent.click(screen.getByRole("button", { name: "Archives" }));
+  expect(onNavigate).toHaveBeenCalledWith("/archives");
+});

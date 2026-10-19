@@ -207,7 +207,7 @@ def test_web_entry_point_has_no_helper_or_driver_flags():
 
     parser = build_parser()
     options = {action.dest for action in parser._actions}
-    assert options == {"help", "host", "port", "static_dir", "capture_dir", "check"}, options
+    assert options == {"help", "host", "port", "static_dir", "archive_root", "capture_dir", "check"}, options
     for forbidden in ("driver", "helper", "execution_port", "budget_source"):
         assert forbidden not in options
 

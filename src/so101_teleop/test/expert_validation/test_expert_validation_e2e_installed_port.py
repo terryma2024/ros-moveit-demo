@@ -49,7 +49,7 @@ def _short_batch_root(batch_id: str) -> Path:
     base = os.environ.get("SO101_IPC_SOCKET_BASE") or (
         "/private/tmp" if sys.platform == "darwin" else "/tmp"
     )
-    return Path(tempfile.mkdtemp(prefix="so101-fh-", dir=base)) / batch_id
+    return Path(tempfile.mkdtemp(prefix="so101-fh-", dir=base)).resolve() / batch_id
 
 
 def _process_identity(pid: int):

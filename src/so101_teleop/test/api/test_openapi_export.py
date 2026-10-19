@@ -116,3 +116,15 @@ def test_unified_export_is_one_schema_and_the_views_are_projections(tmp_path):
 
     again = export_unified_openapi(tmp_path / "unified-again.json")
     assert unified_path.read_bytes() == again.read_bytes()
+
+
+def test_archive_contract_is_complete_offline_and_absent_from_compatibility(tmp_path):
+    from so101_teleop.openapi_export import unified_schema
+    schema=unified_schema()
+    archive={p:item for p,item in schema['paths'].items() if p.startswith('/api/archives')}
+    assert sum(len(item) for item in archive.values())==12
+    download=archive['/api/archives/packages/{package_id}/episodes/{scene_id}/files/{file_id}/download']['get']
+    assert download['responses']['200']['content']['image/png']['schema']['format']=='binary'
+    assert {'EpisodeDetail','EpisodeSeries','FileView','VerifyProgress'} <= set(schema['components']['schemas'])
+    compat=json.loads(export_openapi(tmp_path/'compat.json').read_text())
+    assert not any(p.startswith('/api/archives') for p in compat['paths'])

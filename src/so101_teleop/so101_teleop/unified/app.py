@@ -77,6 +77,7 @@ EXECUTION_GENERATION_HEADER = "X-SO101-Execution-Generation"
 
 #: Namespaces that must never be answered with the SPA fallback.
 API_NAMESPACES = (
+    "api",
     "tasks",
     "expert-validation",
     "control",
@@ -990,6 +991,7 @@ def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
         async def web_root():
             return FileResponse(root / "index.html")
 
+        @app.get("/archives", include_in_schema=False)
         @app.get("/tasks", include_in_schema=False)
         @app.get("/expert-validation", include_in_schema=False)
         async def compat_pages():
@@ -1005,6 +1007,7 @@ def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
     else:
 
         @app.get("/", include_in_schema=False)
+        @app.get("/archives", include_in_schema=False)
         @app.get("/tasks", include_in_schema=False)
         @app.get("/expert-validation", include_in_schema=False)
         async def web_assets_missing():
@@ -1023,9 +1026,14 @@ def create_unified_app(
     static_dir: str | Path | None = None,
     capture_dir: str | Path | None = None,
     bind_address: str = "127.0.0.1",
+    archive_roots: tuple[Path, ...] = (),
 ) -> FastAPI:
     validate_bind_address(bind_address)
     lifecycle = lifecycle_for(services)
+    from so101_teleop.archive_viewer.config import ArchiveConfig
+    from so101_teleop.archive_viewer.scan import ArchiveStore
+    from so101_teleop.archive_viewer.api import archive_router
+    archives = ArchiveStore(ArchiveConfig(archive_roots))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -1033,10 +1041,20 @@ def create_unified_app(
         try:
             yield
         finally:
-            await lifecycle.shutdown()
+            try:
+                await lifecycle.shutdown()
+            finally:
+                await asyncio.to_thread(archives.verifier.close)
 
     app = FastAPI(title="SO-101 Unified", version="1.0.0", lifespan=lifespan)
     app.state.services = services
+    app.state.archives = archives
+
+    @app.middleware("http")
+    async def archive_availability(request: Request, call_next):
+        if (request.url.path == "/api/archives" or request.url.path.startswith("/api/archives/")) and not archives.roots:
+            return JSONResponse(status_code=404, content={"code": "ARCHIVES_DISABLED", "message": "no archive root configured"})
+        return await call_next(request)
 
     @app.exception_handler(HTTPException)
     async def structured_http_error(request: Request, error: HTTPException):
@@ -1057,6 +1075,7 @@ def create_unified_app(
     app.include_router(tasks_router(services))
     app.include_router(validation_router(services))
     app.include_router(head_camera_router(services))
+    app.include_router(archive_router(archives))
     _mount_static(app, static_dir, capture_dir)
     return app
 

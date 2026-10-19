@@ -151,3 +151,7 @@ test("the provider starts the runtime heartbeat once and a page switch does not 
     vi.useRealTimers();
   }
 });
+
+test("archives pathname opens the archive page", () => {
+  expect(pageFromPath("/archives")).toBe("archives");
+});
