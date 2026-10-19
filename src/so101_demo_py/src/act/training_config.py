@@ -29,6 +29,8 @@ _TRAINING_ABSENT_OK = frozenset({"learning_rate_backbone", "sample_selection", "
 SAMPLE_SELECTION_KEYS = frozenset({"trim_leading_idle", "idle_threshold_rad", "lead_in_rows"})
 # optional selection keys, only together: drop the start rows whose whole next chunk is static, except the last keep_tail_rows rows
 SAMPLE_SELECTION_INTERIOR_KEYS = frozenset({"trim_interior_idle", "keep_tail_rows"})
+# alternative optional pair: remove the dwell rows from the episode timeline itself (observations and action targets), keep the last keep_tail_rows
+SAMPLE_SELECTION_COMPRESS_KEYS = frozenset({"compress_dwell", "keep_tail_rows"})
 _MAX_NUM_WORKERS = 64
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _OBSERVATION_KEYS = frozenset({"cameras", "state_dim", "action_dim"})
@@ -123,13 +125,18 @@ def load_training_config(path) -> dict:
     if "sample_selection" in training:
         selection = training["sample_selection"]
         if (not isinstance(selection, dict) or not SAMPLE_SELECTION_KEYS <= set(selection)
-                or set(selection) - SAMPLE_SELECTION_KEYS not in (set(), set(SAMPLE_SELECTION_INTERIOR_KEYS))
+                or set(selection) - SAMPLE_SELECTION_KEYS not in (set(), set(SAMPLE_SELECTION_INTERIOR_KEYS),
+                                                                   set(SAMPLE_SELECTION_COMPRESS_KEYS))
                 or type(selection["trim_leading_idle"]) is not bool
                 or not _positive_float(selection["idle_threshold_rad"])
                 or type(selection["lead_in_rows"]) is not int or selection["lead_in_rows"] < 0
                 or ("trim_interior_idle" in selection
                     and (type(selection["trim_interior_idle"]) is not bool
-                         or type(selection["keep_tail_rows"]) is not int or selection["keep_tail_rows"] < 0))):
+                         or type(selection["keep_tail_rows"]) is not int or selection["keep_tail_rows"] < 0))
+                or ("compress_dwell" in selection
+                    and (type(selection["compress_dwell"]) is not bool
+                         or type(selection["keep_tail_rows"]) is not int or selection["keep_tail_rows"] < 0
+                         or (selection["compress_dwell"] and selection["trim_leading_idle"])))):
             raise ValueError("TRAINING_SAMPLE_SELECTION_INVALID")
     backbone = training["pretrained_backbone"]
     if backbone is not None and (

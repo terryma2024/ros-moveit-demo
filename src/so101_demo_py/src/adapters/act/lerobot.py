@@ -550,6 +550,54 @@ def selection_summary(samples: list, selection: dict | None, chunk_size: int | N
     return summary
 
 
+def dwell_compressed_rows(rows: list, threshold_rad: float, keep_tail_rows: int) -> list:
+    """Indices of the rows that stay on the timeline of ``compress_dwell``: every non-dwell row plus the last ``keep_tail_rows`` rows.
+
+    A row ``t`` before the tail is a dwell row when the robot does not move at it, that is (raw radians, the six arm joints)
+    ``max_j |a[t][j] - s[t][j]| < threshold_rad`` and ``max_j |s[t+1][j] - s[t][j]| < threshold_rad`` (both strict). The tail starts at
+    ``max(0, len(rows) - keep_tail_rows)`` and is never dropped, so the policy still learns to hold at the end of an episode."""
+
+    import numpy as np
+
+    count = len(rows)
+    if count == 0:
+        return []
+    states = np.asarray([row["observation"]["state"][:6] for row in rows], dtype=np.float64)
+    actions = np.asarray([row["action"][:6] for row in rows], dtype=np.float64)
+    commanded = np.abs(actions - states).max(axis=1) < threshold_rad
+    settled = np.ones(count, dtype=bool)                          # the last row has no successor: only the action test applies
+    if count > 1:
+        settled[:-1] = np.abs(states[1:] - states[:-1]).max(axis=1) < threshold_rad
+    tail_from = max(0, count - keep_tail_rows)
+    return [row for row in range(count) if row >= tail_from or not (commanded[row] and settled[row])]
+
+
+def compress_dwell_samples(samples: list, selection: dict | None) -> list:
+    """The episodes with their dwell rows removed from the timeline (observations and action targets alike) when ``compress_dwell`` is on.
+
+    The result is what the chunk index and the chunk targets are taken from, so a chunk that spans a removed plateau is one continuous
+    motion. Without ``compress_dwell`` the very same list is returned."""
+
+    if not selection or not selection.get("compress_dwell"):
+        return samples
+    compressed = []
+    for sample in samples:
+        kept = dwell_compressed_rows(sample["rows"], selection["idle_threshold_rad"], selection["keep_tail_rows"])
+        compressed.append({**sample, "rows": [sample["rows"][row] for row in kept]})
+    return compressed
+
+
+def dwell_compression_summary(before: list, after: list, selection: dict) -> dict:
+    """The compression settings and what they did to one split, for training-log.json and the metrics."""
+
+    rows_before, rows_after = sum(len(s["rows"]) for s in before), sum(len(s["rows"]) for s in after)
+    return {"enabled": True, "compress_dwell": True, "idle_threshold_rad": selection["idle_threshold_rad"],
+            "keep_tail_rows": selection["keep_tail_rows"], "episodes": len(before), "samples_before": rows_before,
+            "samples_after": rows_after, "dwell_rows_removed": rows_before - rows_after,
+            "per_episode": [{"scene_id": b.get("scene_id"), "rows": len(b["rows"]), "rows_after": len(a["rows"])}
+                            for b, a in zip(before, after)]}
+
+
 def _action_window(actions, start: int, chunk_size: int) -> tuple:
     """(chunk x action_dim, pad mask) for the window at ``start``: the tail is padded with this episode's last action and masked."""
 
@@ -704,8 +752,17 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     image_shape = (3, int(first.shape[0]), int(first.shape[1]))
 
     selection = hyper.get("sample_selection")
+    compress = bool(selection and selection.get("compress_dwell"))
+    if compress:
+        # the dwell rows leave the episode timeline itself: the compressed episodes are what the start rows and the chunk targets use
+        # (the normalisation statistics above stay those of the exported episodes)
+        compressed_train = compress_dwell_samples(train, selection)
+        selection_report = {"train": dwell_compression_summary(train, compressed_train, selection)}
+        train = compressed_train
+        episodes = build_episodes(train)
+    else:
+        selection_report = {"train": selection_summary(train, selection, chunk_size)}
     index = _chunk_samples(train, selection, chunk_size)
-    selection_report = {"train": selection_summary(train, selection, chunk_size)}
 
     def chunks_dataset(episode_list, chunk_index):
         class _Chunks(torch.utils.data.Dataset):
@@ -766,8 +823,13 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     validation = [sample for sample in samples if sample["split"] == "validation"]
     validation_loader, validation_used = None, 0
     if validation:
+        if compress:
+            compressed_validation = compress_dwell_samples(validation, selection)
+            selection_report["validation"] = dwell_compression_summary(validation, compressed_validation, selection)
+            validation = compressed_validation
+        else:
+            selection_report["validation"] = selection_summary(validation, selection, chunk_size)
         validation_index = _chunk_samples(validation, selection, chunk_size)
-        selection_report["validation"] = selection_summary(validation, selection, chunk_size)
         picks = np.unique(np.linspace(0, len(validation_index) - 1, min(validation_count, len(validation_index))).astype(np.int64))
         validation_generator = torch.Generator()
         validation_generator.manual_seed(seed)
@@ -808,7 +870,9 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
                  f"first_motion_row min/median/max={item.get('first_motion_row_min')}/{item.get('first_motion_row_median')}/"
                  f"{item.get('first_motion_row_max')} never_moving={item.get('never_moving_episodes')}"
                  + (f" leading_trimmed={item['leading_trimmed_rows']} interior_trimmed={item['interior_trimmed_rows']} "
-                    f"keep_tail_rows={item['keep_tail_rows']}" if item.get("trim_interior_idle") else ""))
+                    f"keep_tail_rows={item['keep_tail_rows']}" if item.get("trim_interior_idle") else "")
+                 + (f" compress_dwell dwell_rows_removed={item['dwell_rows_removed']} keep_tail_rows={item['keep_tail_rows']}"
+                    if item.get("compress_dwell") else ""))
 
     def evaluate(at_step):
         """Mean loss over the fixed validation subset, in eval mode and without gradients; the training mode is restored."""
