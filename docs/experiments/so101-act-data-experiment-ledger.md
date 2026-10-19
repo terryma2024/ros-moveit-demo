@@ -69,11 +69,27 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3746
-next_experiment: TRAIN-004 rollouts found 0 of 16 DONE (CP-3746): the policy holds at the rest/dwell pose. The coordinator decides the next change (see the CP-3746 diagnosis).
+latest_checkpoint: CP-3747
+next_experiment: TRAIN-005 (compress_dwell) training, then the 4-point rollout (CP-3747). Before that, TRAIN-004 rollouts found 0 of 16 DONE (CP-3746): the policy holds at the rest/dwell pose. The coordinator decides the next change (see the CP-3746 diagnosis).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3747 — TRAIN-005: dwell compression of the demonstrations (`sample_selection.compress_dwell`) and the bf16 option; offline proof; no training started
+
+- Executed by a Sonnet 5.5 subagent for the coordinator, following the human's standing "take the recommended option" rule (recorded). Goal: "4固定位点rollout成功". Cause addressed (CP-3746): the TRAIN-004 start-row trim removed static START rows, but the CHUNK TARGETS still contained the dwell plateaus, so the chunk at a dwell state is mostly "hold" and the closed loop has a fixed point there.
+- Change (commits `0733758bd`, `fe04132c5`; branch `codex/so101-act-data-0917a`):
+  - `training.sample_selection.compress_dwell: true` with `keep_tail_rows` (and `idle_threshold_rad`). A row t before the last `keep_tail_rows` rows is a dwell row when the max over the six arm joints of |a[t]-s[t]| < thr and of |s[t+1]-s[t]| < thr (strict; the last row has no successor, so only the first test applies). The compressed episode is all non-dwell rows plus the tail. Start rows AND the next `chunk_size` action targets (with the existing tail padding and mask) are taken on it, for train and validation alike. Leading idle is a dwell and goes too. The normalisation statistics stay those of the exported episodes. Refused with `TRAINING_SAMPLE_SELECTION_INVALID`: together with `trim_interior_idle`, or with `trim_leading_idle: true`. Absent = old behaviour and config hash (tested).
+  - `training.precision: bf16` = antzb's patch `c6a3f6f5d` (R/train-profile-20261019/0004-*.patch) applied with `git am --3way`; conflicts in the config and test files resolved by keeping both sides (`0733758bd`). bf16 autocast only around the training forward and loss; validation and weights fp32; absent/fp32 = unchanged hash.
+  - Configs `config/act/training-side-wrist-005.yaml` (TRAIN-004 with `compress_dwell`, `trim_leading_idle` false, `keep_tail_rows` 20; fp32, compile, cudnn_benchmark, channels_last; 60000 steps, batch 16, seed and learning rates unchanged) and `training-side-wrist-005-bf16.yaml` (+ `precision: bf16`).
+  - Tests (fixtures only): `test/adapters/act/test_act_dwell_compression.py` (plateau and leading-idle removal, tail kept, strict thresholds, six-joint rule, continuous chunk across a removed plateau, off by default, validation rule, a CPU training run) and `test/act/test_act_training_config_dwell.py` (key validation, refusals, absent = unchanged, TRAIN-005 configs vs TRAIN-004). Train-venv gate `traingate-dwell1`: 259 passed, 2 skipped (torch-free refusal tests), rc 0, 678 s, scratch R/scratch/traingate-dwell1 (deletion candidate).
+- Offline proof (READ-ONLY on the TRAIN-003 export /data/work/so101-datasets/side-wrist-103-20261019T0342Z, episode JSON only, no frames): REG/act-dataset-side-wrist-103-20261019/train005-prep/{offline_proof.py, run_offline_proof.zsh, offline-proof.json, offline-proof.log}. Start rows before -> after (displacement = max over six joints and the 10 chunk actions of |a[t+k]-s[t]|; static = below 0.03 rad):
+  - Rows: train 73437 -> 26461 (83 episodes), validation 8701 -> 3048 (10 episodes).
+  - Static start rows: train 41.9 % -> 2.2 % overall (the remaining 2.2 % are all in the kept tail; outside the tail 42.1 % -> 0.0 %); validation 42.7 % -> 2.2 % (outside the tail 42.9 % -> 0.0 %).
+  - Near the CP-3746 rest pose with the gripper open (state within 0.03 rad of [-0.004,-0.011,0.006,-0.021,-0.001,0.469]), train: 2097 start rows, 71.8 % static -> 142 rows, 0.0 % static. |chunk[9]-state| p10/p50/p90: 0.000003/0.0028/0.090 rad -> 0.108/0.117/0.122 rad.
+  - Near the second stuck pose ([-0.002,-0.167,0.192,0.201,-0.002,0.471]), train: 140 rows, 25 % static -> 34 rows, 0 % static. |chunk[9]-state| p10/p50/p90: 0.020/0.064/0.129 -> 0.118/0.126/0.138. Validation: rest pose 255 rows 71.4 % static -> 15 rows 0 %; second pose 39 rows 30.8 % -> 10 rows 0 %.
+  - OBSERVED: after compression no start row outside the tail has a static chunk, and at both stuck states the chunk end is about 0.12 rad from the state. The rollout effect is NOT yet measured.
+- Next: TRAIN-005 (fp32) and optionally TRAIN-005-bf16 training, then the 4-point rollout. No training was started and no running job was touched.
 
 ## CP-3746 — TRAIN-004 closed-loop rollouts: 16 standard-point episodes (prefix 5, prefix 1, ensembling m=0.01; 4 points each), 0 of 16 DONE; the arm stays at the start/dwell pose, no cup touched
 
