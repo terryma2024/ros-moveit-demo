@@ -27,7 +27,9 @@ from dataclasses import dataclass
 import math
 import traceback
 
+from .contracts import ContractError, validate_action_prefix
 from .policy import to_action_prefix
+from .rollout_execution import PREFIX_END_TOLERANCE_S, ChunkEnsembler, default_mode
 from .rollout_targets import evaluate_rollout_endpoint, rollout_targets
 
 #: Reply refusals of the inference boundary that mean "the answer came too late to describe the present".
@@ -76,9 +78,16 @@ def _noop_sink():
 class _Loop:
     """The mutable state of one loop, kept out of the verdict code."""
 
-    def __init__(self, observation_keys):
+    def __init__(self, observation_keys, execution=None):
         self.counts = {"observations": 0, "inferences": 0, "applied": 0, "late_replies": 0, "prefix_late": 0,
-                       "limit_refused": 0, "skipped_observations": 0}
+                       "limit_refused": 0, "skipped_observations": 0, "prefix_wait_observations": 0}
+        #: the execution mode (None: the bundle's own, one inference per observation); an open-loop prefix holds the next
+        #: inference until its last target time (`hold_until`), and an ensembling mode keeps the chunks (`ensembler`)
+        self.execution = execution
+        self.hold_until = None
+        self.ensembler = None
+        if execution is not None and execution.ensembling:
+            self.ensembler = ChunkEnsembler(execution.ensemble_m, execution.chunk_size)
         self.sequence = 0
         self.pending = None
         self.outcome = None
@@ -132,10 +141,20 @@ def _resolve(loop, ports, session, sink, settings):
         prefix = to_action_prefix(prediction)
     except ValueError as error:
         raise _Abort(f"INFERENCE_FAILED: {_text(error)}") from error
+    extra = {}
+    if loop.ensembler is not None:
+        # the chunk joins the ensemble before the late check: a late chunk is still a valid prediction for the later steps
+        try:
+            loop.ensembler.add(pending["observation"]["sim_time_s"], reply["actions"])
+            action, contributors = loop.ensembler.action_at(prefix["target_times_s"][0])
+            prefix = validate_action_prefix(dict(prefix, positions=(action,)))
+        except (ValueError, ContractError) as error:
+            raise _Abort(f"INFERENCE_FAILED: ENSEMBLE: {_text(error)}") from error
+        extra["ensemble"] = {"m": loop.execution.ensemble_m, "contributors": contributors}
     row = _step_row(pending, late=False, reply_sim_s=reply_sim, reply_wall_s=reply_wall,
                     latency_wall_s=round(reply_wall - pending["submit_wall_s"], 6),
                     reply_age_s=reply.get("age_s"), chunk=[list(map(float, step)) for step in reply["actions"]],
-                    prefix=prefix)
+                    prefix=prefix, **extra)
     try:
         goal = session.submit_prefix(prefix)
     except ValueError as error:
@@ -153,6 +172,9 @@ def _resolve(loop, ports, session, sink, settings):
         sink.step(dict(row, held=True, applied=False, reason=_text(error)))
         raise _Abort(f"CONTROLLER_PAIR_FAILED: {_text(error)}") from error
     loop.counts["applied"] += 1
+    if loop.execution is not None and loop.execution.open_loop:
+        # the prefix runs open-loop: the next inference starts from the first observation at its end
+        loop.hold_until = prefix["target_times_s"][-1]
     sink.step(dict(row, held=False, applied=True, goal_id=goal))
 
 
@@ -178,7 +200,14 @@ def _drive(session, ports, settings, sink, loop):
             pose = session.cup_pose()
             if pose is not None:
                 sink.world({"observation_sim_s": observation["sim_time_s"], **pose})
-            if loop.pending is None:
+            if loop.pending is None and loop.hold_until is not None \
+                    and observation["sim_time_s"] < loop.hold_until - PREFIX_END_TOLERANCE_S:
+                loop.counts["prefix_wait_observations"] += 1
+                sink.step({"sequence": None, "skipped": True, "observation_sim_s": observation["sim_time_s"],
+                           "state": list(observation["state"]), "audit": audit, "late": False, "held": True,
+                           "applied": False, "reason": "PREFIX_IN_PROGRESS"})
+            elif loop.pending is None:
+                loop.hold_until = None
                 sequence = loop.sequence
                 try:
                     ports.inference.submit(observation, sequence=sequence)
@@ -274,18 +303,32 @@ def _verdict(result, loop, stop_confirmed, endpoint, settings):
     return "FAILED", "; ".join(endpoint["reasons"])
 
 
-def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoint_policy, sink=None) -> dict:
-    """Run one episode on `scene` and return its result document (the caller writes it; nothing here touches the disk)."""
+def _check_runner(execution, runner) -> None:
+    """The policy runner must have been built for the mode: the open-loop prefix size, or one step for the ensemble."""
+
+    have = getattr(runner, "execution_prefix", None)
+    if execution.source == "cli" and have != execution.execution_prefix:
+        raise ValueError(f"EXECUTION_RUNNER_MISMATCH: runner prefix {have}, mode {execution.execution_prefix}")
+
+
+def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoint_policy, sink=None, execution=None) -> dict:
+    """Run one episode on `scene` and return its result document (the caller writes it; nothing here touches the disk).
+
+    `execution` is the run-time execution mode (`rollout_execution.ExecutionMode`); None keeps the bundle's frozen behaviour."""
 
     sink = sink or _noop_sink()
+    if execution is not None:
+        _check_runner(execution, ports.runner)
+    effective = execution if execution is not None else default_mode(getattr(ports.runner, "execution_prefix", None))
     wall_start = ports.monotonic()
     result = {"scene_id": scene["scene_id"], "group": scene.get("group"), "attempt_id": attempt_id,
               "verdict": None, "done": False, "reason": None, "status": None, "phases": [],
               "counts": None, "motion": None, "stop": {"confirmed": False}, "endpoint": None,
-              "timing": {}, "substitutions": dict(SUBSTITUTIONS), "receipt": None, "gate": None, "recorder": None}
+              "timing": {}, "substitutions": dict(SUBSTITUTIONS), "receipt": None, "gate": None, "recorder": None,
+              "execution": effective.document()}
     start_target, end_target = rollout_targets(snapshot_targets, cup_position_world_m=scene["cup_position_world_m"])
     result["targets"] = {"start_target": start_target, "end_target": end_target}
-    loop = _Loop(None)
+    loop = _Loop(None, execution)
     recorder = session = None
     fault = None
     start_observation = end_observation = None

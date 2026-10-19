@@ -1,5 +1,6 @@
 """The native rollout command: preconditions, owned-root layout, environment, and the sequential run, with fakes only."""
 
+import dataclasses
 import json
 import stat
 from pathlib import Path
@@ -225,12 +226,14 @@ def _result(scene, attempt_id, verdict="DONE", reason=None):
 
 
 def _runner(script, log):
-    def run(*, scene, attempt_id, ports, settings, snapshot_targets, endpoint_policy, sink=None):
+    def run(*, scene, attempt_id, ports, settings, snapshot_targets, endpoint_policy, sink=None, execution=None):
+        run.executions.append(execution)
         log.append((scene["scene_id"], attempt_id))
         verdict, reason = script.get(attempt_id, ("DONE", None))
         sink.step({"sequence": 0, "applied": True})
         sink.world({"observation_sim_s": 1.0})
         return _result(scene, attempt_id, verdict, reason)
+    run.executions = []
     return run
 
 
@@ -284,6 +287,31 @@ def test_episodes_run_one_at_a_time_in_scene_order_and_each_writes_its_evidence(
     assert (options.evidence_root / "rollout_validation" / "run.json").is_file()
     stop = json.loads((options.evidence_root / "owned" / "run-1" / "stack-stop-proof.json").read_text())
     assert stop["confirmed"] is True
+
+
+def test_the_effective_execution_mode_is_passed_to_every_episode_and_recorded_in_run_and_episode_json(tmp_path):
+    from so101_demo.act.rollout_execution import resolve_execution
+
+    mode = resolve_execution({"chunk_size": 10, "execution_prefix": 1}, prefix=5)
+    inputs = dataclasses.replace(_inputs(), execution=mode)
+    composition, runs = FakeComposition(tmp_path), []
+    options = _options(tmp_path)
+    runner = _runner({}, runs)
+    native.run_rollout(options=options, inputs=inputs, probes=_passing_probes(),
+                       composition_factory=lambda **kwargs: composition, episode_runner=runner, environ={})
+    assert runner.executions == [mode] * 3
+    group_root = options.evidence_root / "rollout_validation"
+    run = json.loads((group_root / "run.json").read_text())
+    assert run["execution"] == mode.document()
+    episode = json.loads(next((group_root / "episodes").iterdir()).joinpath("episode.json").read_text())
+    assert episode["execution"] == mode.document() and episode["execution"]["execution_prefix"] == 5
+
+
+def test_an_episode_without_a_resolved_mode_records_what_the_episode_reports(tmp_path):
+    summary, _composition, _runs, options = _run(tmp_path)
+    assert summary["exit_code"] == 0
+    run = json.loads((options.evidence_root / "rollout_validation" / "run.json").read_text())
+    assert run["execution"] is None
 
 
 def test_the_environment_is_applied_before_anything_is_composed(tmp_path):

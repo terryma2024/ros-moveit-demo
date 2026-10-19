@@ -5,6 +5,7 @@ that return the documents the real ones return; the rollout config, the runtime 
 package files. Nothing is read from the evidence root or from a host path.
 """
 
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -17,10 +18,11 @@ from paths import PACKAGE_ROOT
 
 from test_act_rollout_native import _scenes
 
-BUNDLE_SIDE_WRIST = {"policy_sha256": "9" * 64, "normalization": {
+BUNDLE_ACTION = {"chunk_size": 10, "execution_prefix": 1, "temporal_ensembling": False, "tail_padding_mask": True}
+BUNDLE_SIDE_WRIST = {"policy_sha256": "9" * 64, "action": BUNDLE_ACTION, "normalization": {
     "observation": {"cameras": ["side", "wrist"], "state_dim": 6}, "image_shape": [3, 480, 640],
     "state_mean": [0.0] * 6}}
-BUNDLE_LEGACY = {"policy_sha256": "8" * 64, "normalization": {"image_shape": [3, 480, 640], "state_mean": [0.0] * 8}}
+BUNDLE_LEGACY = {"policy_sha256": "8" * 64, "action": BUNDLE_ACTION, "normalization": {"image_shape": [3, 480, 640], "state_mean": [0.0] * 8}}
 SUBSTITUTION = {"substituted_by": "contact_activation_receipt", "path": "r", "sha256": "a" * 64,
                 "policy_fingerprint": "b" * 64, "ruling": "x"}
 
@@ -147,3 +149,57 @@ def test_a_bundle_whose_cameras_and_state_match_no_known_rig_is_refused_before_a
     bundle["normalization"]["state_mean"] = [0.0] * 8
     with pytest.raises(ValueError, match="RIG_PROFILE_UNKNOWN"):
         native.load_inputs(Fixture(tmp_path, monkeypatch, bundle=bundle).args())
+
+
+# ---- the execution mode (rollout-side override of the bundle's frozen prefix) -------------------------------------------------
+
+
+def test_without_an_override_the_mode_is_the_bundles_and_the_identity_is_unchanged(tmp_path, monkeypatch):
+    inputs = native.load_inputs(Fixture(tmp_path, monkeypatch).args())
+    assert inputs.execution.source == "bundle" and inputs.execution.execution_prefix == 1
+    assert "execution_mode" not in inputs.identity
+
+
+@pytest.mark.parametrize("changes, document", [
+    ({"execution_prefix": 5}, {"source": "cli", "scheme": "prefix", "execution_prefix": 5, "chunk_size": 10,
+                               "temporal_ensembling_m": None, "open_loop": True}),
+    ({"temporal_ensembling": 0.01}, {"source": "cli", "scheme": "ensemble", "execution_prefix": 1, "chunk_size": 10,
+                                     "temporal_ensembling_m": 0.01, "open_loop": False})])
+def test_an_override_is_bound_into_the_identity(tmp_path, monkeypatch, changes, document):
+    inputs = native.load_inputs(Fixture(tmp_path, monkeypatch).args(**changes))
+    assert inputs.execution.document() == document and inputs.identity["execution_mode"] == document
+
+
+@pytest.mark.parametrize("changes", [{"execution_prefix": 11}, {"execution_prefix": 0},
+                                     {"execution_prefix": 5, "temporal_ensembling": 0.01}, {"temporal_ensembling": -1.0}])
+def test_an_invalid_override_is_refused_before_any_process_starts(tmp_path, monkeypatch, changes):
+    with pytest.raises(ValueError, match="EXECUTION_"):
+        native.load_inputs(Fixture(tmp_path, monkeypatch).args(**changes))
+
+
+def test_the_command_line_takes_the_overrides_and_a_bare_ensembling_flag_means_the_act_default():
+    base = ["--evidence-root", "e", "--run-id", "r", "--group", "rollout_standard", "--scenes", "s", "--bundle-dir", "b",
+            "--inputs-manifest", "i", "--runtime-config", "rt", "--rollout-config", "ro", "--install-prefix", "p",
+            "--ros2", "ros2", "--gpu-uuid", "g", "--unified-state-root", "u"]
+    parser = native.build_parser()
+    assert parser.parse_args(base).execution_prefix is None and parser.parse_args(base).temporal_ensembling is None
+    assert parser.parse_args(base + ["--execution-prefix", "5"]).execution_prefix == 5
+    assert parser.parse_args(base + ["--temporal-ensembling"]).temporal_ensembling == 0.01
+    assert parser.parse_args(base + ["--temporal-ensembling", "0.5"]).temporal_ensembling == 0.5
+
+
+def test_the_policy_runner_is_built_for_the_mode(tmp_path, monkeypatch):
+    class Policy:
+        def infer(self, observation):
+            return [[0.0] * 6] * 10
+
+        def reset(self):
+            pass
+
+    fixture = Fixture(tmp_path, monkeypatch)
+    for changes, prefix in (({}, 1), ({"execution_prefix": 5}, 5), ({"temporal_ensembling": 0.01}, 1)):
+        inputs = native.load_inputs(fixture.args(**changes))
+        inputs = dataclasses.replace(inputs, bundle=BUNDLE_SIDE_WRIST)
+        runner = native.make_policy_runner(inputs, Policy())
+        assert runner.execution_prefix == prefix
+

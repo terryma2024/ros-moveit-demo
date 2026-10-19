@@ -105,13 +105,20 @@ def _actions(values, count: int) -> tuple:
 class ActPolicyRunner:
     """Applies a bundle's frozen prefix to a model's chunk and reports the action prefix."""
 
-    def __init__(self, bundle: dict, infer, *, observation: dict | None = None) -> None:
+    def __init__(self, bundle: dict, infer, *, observation: dict | None = None, execution_prefix: int | None = None) -> None:
         if not isinstance(bundle, dict) or not isinstance(bundle.get("action"), dict):
             raise ValueError("POLICY_BUNDLE_INVALID")
         action = bundle["action"]
         prefix = action.get("execution_prefix")
         if type(prefix) is not int or prefix < 1:
             raise ValueError("POLICY_BUNDLE_INVALID")
+        if execution_prefix is not None:
+            # a run-time override of the frozen prefix (the rollout's execution mode): never beyond the chunk the model predicts
+            chunk_size = action.get("chunk_size")
+            if (type(execution_prefix) is not int or execution_prefix < 1
+                    or (type(chunk_size) is int and execution_prefix > chunk_size)):
+                raise ValueError("POLICY_BUNDLE_INVALID")
+            prefix = execution_prefix
         if not callable(getattr(infer, "infer", None)) or not callable(getattr(infer, "reset", None)):
             raise ValueError("POLICY_INTERFACE_INVALID")
         spec = ({"cameras": _DEFAULT_CAMERAS, "state_dim": _DEFAULT_STATE_DIM}

@@ -105,3 +105,12 @@ No data rule or threshold changes; every value comes from the frozen inputs mani
 - **rclpy and torch in one interpreter (D1).** The import preflight decides; the fallback is the subprocess.
 - **A policy that stays still from the reset pose,** because training episodes may begin with an idle stretch. Measure the first-motion row in the exported episodes before the first rollout, and report NO_MOTION separately.
 - **The stop and settle definition for a policy (D6),** which replaces the Teacher's normal stop. It is recorded as a substitution.
+
+## Execution modes (added 2026-10-19, CP-3744)
+
+TRAIN-003 stalls at the start pose with the bundle's `execution_prefix` 1 (CP-3743). The rollout can therefore override how a chunk is executed, without retraining. The override is a LOGIC setting: it is recorded in `run.json`, in every `episode.json` (`execution`) and, when it is not the bundle's, in the run identity (`identity.execution_mode`), and invalid values are refused while the inputs load.
+
+- Default (no flag): the bundle's frozen values; nothing changes.
+- `--execution-prefix N` (1..chunk_size): infer, send the first N actions as one trajectory (targets at observation + 0.1 s * 1..N), and infer again only from the first observation taken at or after the last target (10 ms tolerance). Observations in between are logged as `PREFIX_IN_PROGRESS` and counted (`prefix_wait_observations`). A late reply, or a prefix that is late at submission, sends nothing (the previous goal holds), applies no wait, and the next observation infers at once. A late prefix is held whole: it is not trimmed, because the action-prefix contract anchors the target grid to the observation.
+- `--temporal-ensembling [M]` (ACT paper scheme, default M 0.01): infer at every observation. The action for the target time T = observation + 0.1 s averages the prediction for T of every earlier chunk that still covers it (chunk index `round((T - o) / 0.1) - 1`, within a quarter step), weighted by exp(-M * i) with i = 0 for the oldest contributing chunk. One step is applied per inference. A late chunk is added to the ensemble before the late check, so it still serves later steps; the step rows carry the contributors (`ensemble`).
+- The two flags are exclusive.

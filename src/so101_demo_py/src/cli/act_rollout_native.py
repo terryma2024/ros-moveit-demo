@@ -39,6 +39,7 @@ import sys
 import time
 
 from so101_demo.act.rollout_episode import run_episode
+from so101_demo.act.rollout_execution import DEFAULT_ENSEMBLING_M, resolve_execution
 
 PRECONDITIONS = ("no_container", "unified_store_idle", "ros_graph_empty", "no_instance_process", "no_gpu_process")
 INSTANCE_MARKER = b"SO101_ACT_INSTANCE_ROOT="
@@ -247,6 +248,8 @@ class RolloutInputs:
     frozen: dict | None = None
     manifest_path: Path | None = None
     recorder_policy: dict | None = None
+    #: the effective execution mode (`rollout_execution.ExecutionMode`); None is the bundle's frozen behaviour
+    execution: object | None = None
 
 
 def _plain(value):
@@ -312,11 +315,31 @@ class EpisodeFiles:
         return ["episode.json", "endpoint.json", "steps.jsonl", "world.jsonl", "stop-proof.json"]
 
 
+def _execution_document(inputs, result=None):
+    """The effective execution mode as recorded: the run's resolved mode, else what the episode itself reports."""
+
+    if inputs.execution is not None:
+        return inputs.execution.document()
+    return None if result is None else result.get("execution")
+
+
+def make_policy_runner(inputs, policy):
+    """The policy runner of a run: the bundle's frozen prefix, or the execution mode's override (one step for ensembling)."""
+
+    from so101_demo.act.policy import ActPolicyRunner
+
+    mode = inputs.execution
+    return ActPolicyRunner(inputs.bundle, policy, observation={
+        "cameras": inputs.observation["cameras"], "state_dim": inputs.observation["state_dim"]},
+        execution_prefix=None if mode is None else mode.runner_prefix)
+
+
 def episode_document(*, inputs, options, scene, attempt_id, result, preconditions) -> dict:
     observation = dict(inputs.observation)
     observation["cameras"] = list(observation["cameras"])
     return {"schema_version": 1, "kind": "ACT_ROLLOUT_EPISODE", "run_id": options.run_id, "attempt_id": attempt_id,
             "group": scene["group"], "scene": scene, "identity": dict(inputs.identity), "observation": observation,
+            "execution": _execution_document(inputs, result),
             "calibration": inputs.substitution, "preconditions": preconditions, "verdict": result["verdict"],
             "reason": result["reason"], "done": result["done"], "status": result["status"], "result": result}
 
@@ -374,6 +397,7 @@ def run_rollout(*, options, inputs, probes, composition_factory, episode_runner=
         "schema_version": 1, "kind": "ACT_ROLLOUT_RUN", "run_id": options.run_id, "group": group,
         "session_id": session_id, "scene_ids": [scene["scene_id"] for scene in scenes],
         "scenes_manifest_sha256": inputs.scenes.get("manifest_sha256"), "identity": dict(inputs.identity),
+        "execution": _execution_document(inputs),
         "observation": {**inputs.observation, "cameras": list(inputs.observation["cameras"])},
         "calibration": inputs.substitution, "preconditions": preconditions,
         "max_invalid_retries": options.max_invalid_retries})
@@ -416,7 +440,7 @@ def _run_scenes(options, inputs, scenes, composition, group_root, preconditions,
                 ports = composition.new_ports(scene, attempt_id, files.directory)
                 result = episode_runner(scene=scene, attempt_id=attempt_id, ports=ports, settings=inputs.settings,
                                         snapshot_targets=inputs.snapshot_targets, endpoint_policy=inputs.endpoint_policy,
-                                        sink=files)
+                                        sink=files, execution=inputs.execution)
             except Exception as error:      # noqa: BLE001 - the machine reports faults itself; anything else is still a fault
                 result = _invalid_result(scene, attempt_id, error)
             names = files.seal(episode_document(inputs=inputs, options=options, scene=scene, attempt_id=attempt_id,
@@ -495,12 +519,18 @@ def load_inputs(args) -> RolloutInputs:
                 "rollout_yaml_sha256": _sha256(args.rollout_config), "snapshot_sha256": snapshot["snapshot_sha256"],
                 "source_commit": frozen.get("source_commit"), "gate_install": str(args.install_prefix),
                 "scenes_sha256": scenes.get("manifest_sha256")}
+    # the execution mode is a LOGIC setting: refused here when invalid, and bound into the identity when it is an override, so
+    # runs of different modes can never be mixed (the default keeps the identity of every earlier run unchanged)
+    execution = resolve_execution(bundle["action"], prefix=getattr(args, "execution_prefix", None),
+                                  ensembling=getattr(args, "temporal_ensembling", None))
+    if execution.source != "bundle":
+        identity["execution_mode"] = execution.document()
     return RolloutInputs(
         settings=rollout_settings(frozen, config), snapshot_targets=snapshot["targets"], endpoint_policy=endpoint,
         timing=controller_timing(frozen, config), rollout_config=config, observation=observation, scenes=scenes,
         substitution=contact_activation_substitution(receipt, proposal), identity=identity, bundle=bundle,
         bundle_dir=bundle_dir, runtime_config=runtime, frozen=frozen, manifest_path=manifest_path,
-        recorder_policy=load_recorder_frozen_policy(manifest_path))
+        recorder_policy=load_recorder_frozen_policy(manifest_path), execution=execution)
 
 
 class RelocatedRecording:
@@ -602,7 +632,6 @@ class NativeComposition:
     """The real stack, runtime ports, policy and recorder of one run. Built after the environment is applied."""
 
     def __init__(self, *, layout, environment, inputs, options) -> None:
-        from so101_demo.act.policy import ActPolicyRunner
         from so101_demo.act.rig_profile import rig_from_observation
         from so101_demo.adapters.act.inference_process import ActInferenceProcess
         from so101_demo.adapters.act.lerobot import build_policy_from_bundle
@@ -618,8 +647,7 @@ class NativeComposition:
         self.warm_up_s = warm_up_policy(policy, inputs.observation)
         self.transport = ThreadInferenceTransport(policy.infer)
         self.inference = ActInferenceProcess(config=inputs.runtime_config, transport=self.transport, clock=time.monotonic)
-        self.runner = ActPolicyRunner(inputs.bundle, policy, observation={
-            "cameras": inputs.observation["cameras"], "state_dim": inputs.observation["state_dim"]})
+        self.runner = make_policy_runner(inputs, policy)
         # the rig the policy was trained on (its bundle's observation declaration) is the rig of the stack that runs it
         self.rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
         self.launch = instance_stack_launch({"simulation_session_id": self.session_id}, ros2=Path(options.ros2),
@@ -768,6 +796,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ros2", type=Path, required=True)
     parser.add_argument("--gpu-uuid", required=True)
     parser.add_argument("--unified-state-root", type=Path, required=True)
+    parser.add_argument("--execution-prefix", type=int, default=None, metavar="N",
+                        help="execute the first N actions of each chunk open-loop, then infer again (1..chunk_size); "
+                             "default: the bundle's frozen prefix")
+    parser.add_argument("--temporal-ensembling", type=float, nargs="?", const=DEFAULT_ENSEMBLING_M, default=None, metavar="M",
+                        help="ACT temporal ensembling with weights exp(-M*i), i=0 the oldest prediction (default M 0.01); "
+                             "exclusive with --execution-prefix")
     parser.add_argument("--max-invalid-retries", type=int, default=1)
     parser.add_argument("--stack-timeout-s", type=float, default=120.0)
     return parser
