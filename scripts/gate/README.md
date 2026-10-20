@@ -139,7 +139,7 @@ defects themselves (no `start_new_session=True`; `terminate_group` signals a gro
   stage has no failed test case to name.
 - A failed demo stage is rerun with only the failed test ids and one worker. A failed colcon stage is rerun in full, with the stage
   settings recorded in `stage-env.txt`.
-- `gate-verdict.txt` records the first run and the rerun. The exit code is 0 only when the rerun passed. The first run stays in
+- `gate-verdict.txt` records the first run and the rerun. The exit code is 0 only when the rerun passed. A gate that is green only after a known-flake rerun is recorded as such in `gate-verdict.txt` (`known_flake_rerun=passed` with a non-zero `first_run_rc`). The first run stays in
   `gates-result.txt`, and a gate whose colcon stage needed the rerun is not a skip-rule baseline.
 
 A red result on a listed test is not evidence of a regression until it fails again alone.
