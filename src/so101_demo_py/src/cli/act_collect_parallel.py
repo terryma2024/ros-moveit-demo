@@ -114,6 +114,8 @@ def _parser():
     parser.add_argument('--campaign-config', type=Path, required=True)
     parser.add_argument('--runtime-document', type=Path, default=None,
                         help='the run\'s runtime values (worker counts, time limits, retry rounds): not part of the campaign identity')
+    parser.add_argument('--stop-after-phase1', action='store_true',
+                        help='stop once phase 1 is proven stopped and durable; phase 2 and the rest run as later stages (act_process_parallel)')
     parser.add_argument('--input-candidates', type=Path, required=True)
     parser.add_argument('--teacher-endpoint', type=Path, required=True)
     parser.add_argument('--teacher-execution-policy', type=Path, required=True)
@@ -273,7 +275,7 @@ def main(argv=None, *, edges=None) -> int:
             service_query=edges.service_query, namespace_reader=edges.namespace_reader,
             control_factory=edges.control_factory, instance_launcher=args.instance_launcher,
             native=_native_edges(edges, args), admit_processor_slots=workload.admit_processor_slots,
-            runtime_document=runtime_document)
+            runtime_document=runtime_document, stop_after_phase1=args.stop_after_phase1)
     except Exception as error:  # noqa: BLE001 - admitted but not built: nothing was launched, so ask admission to settle
         return _settle_unbuilt(workload, context, run, error)
     cleanup = []
@@ -302,6 +304,8 @@ def main(argv=None, *, edges=None) -> int:
     retry = result.get('retry')
     if retry is not None:
         summary.update(retry_rounds=retry['rounds_run'], recovered=retry['recovered'])
+    if result.get('stop'):
+        summary['stop'] = result['stop']
     task_faults = result.get('task_faults')
     if task_faults:
         summary['task_faults'] = task_faults

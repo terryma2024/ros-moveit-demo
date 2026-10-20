@@ -16,6 +16,7 @@ from so101_demo.act.parallel_collection import plan_campaign_waves
 from so101_demo.act.parallel_collection_contracts import (
     read_document,scene_ids,validate_run_contract,
 )
+from so101_demo.runtime.container_campaign import stage_records
 from so101_demo.runtime.container_campaign.durability import sync_filesystem
 from so101_demo.runtime.container_campaign.processing_limits import (
     check_phase_limits,effective_limits,phase1_deadline_s,phase2_deadline_s,retry_invalid_max_rounds,retry_round_plan,
@@ -41,7 +42,7 @@ class ContainerCampaignOwner:
     def __init__(self,*,admitted_context,config,root,service_owner,slots,manifest_path,
                  qualification,launcher,coordinator,verifier,monotonic_ns=time.monotonic_ns,
                  approved_disk_floor_bytes=0,disk_reader=read_disk_free_bytes,syncfs=sync_filesystem,processing=None,
-                 campaign_total_s=None,runtime_document=None):
+                 campaign_total_s=None,runtime_document=None,stop_after_phase1=False):
         root=Path(root)
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind!='act_collection_start'
@@ -69,6 +70,8 @@ class ContainerCampaignOwner:
         #: the run's runtime document (or None): `limits` is the campaign config with it laid over, the one source of every time
         #: limit and count below
         self.runtime_document=runtime_document
+        #: stop once phase 1 is proven stopped and durable; phase 2, the retry rounds and the finalize are later stages (`stage_records`)
+        self.stop_after_phase1=stop_after_phase1
         self.services,self.registry,self.slots=service_owner,service_owner.registry,slots
         self.manifest_path=Path(manifest_path)
         self.qualification,self.launcher,self.coordinator,self.verifier=qualification,launcher,coordinator,verifier
@@ -222,6 +225,8 @@ class ContainerCampaignOwner:
                     campaign_id=self.context.campaign_id,stop_reason=self.stop_reason or PHASE1_DEADLINE_REASON,
                     phase1_deadline_s=self.phase1_deadline_s,recorded_scenes=len(recorded),missing_scenes=missing))
             await self._finish_phase1(ids,completed)
+            if self.stop_after_phase1:
+                return self._stop_after_phase1(ids,completed,missing)
             phase2=await self.start_phase_two(completed)
             result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed)
             task_faults=[item for wave in completed for item in wave.get('faults',())]
@@ -420,6 +425,26 @@ class ContainerCampaignOwner:
         retry=dict(max_rounds=maximum,rounds_run=len(rounds)-1,recovered=recovered,
                    status='ABORTED' if aborted is not None else 'COMPLETE',reason=aborted,decisions=decisions)
         return combined,retry,rounds
+
+    def _stop_after_phase1(self,ids,completed,missing):
+        """Leave the run at the end of phase 1: the phase-1 result (processing PENDING) and the stage record that phase 2 continues from."""
+        result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed,processing='PENDING',
+                    stop='PHASE1_ONLY')
+        task_faults=[item for wave in completed for item in wave.get('faults',())]
+        if task_faults:
+            result['task_faults']=[dict(scene_id=item['scene_id'],reason=item['reason']) for item in task_faults]
+        if missing:
+            result['missing_evidence']=missing
+        _write(self.root/'host/phase1-result.json',result)
+        host=self.root/'host'
+        stage_records.write_record(host,stage_records.PHASE1,dict(
+            campaign_id=self.context.campaign_id,qualification=self.qualification,scene_count=len(ids),waves=len(completed),
+            campaign_config=dict(path=self.context.campaign_config_path,sha256=self.context.campaign_config_sha256),
+            images=dict(head=self.config['head_service']['image'],teacher=self.config['teacher_service']['image'],
+                        shard=self.config['shard_image']),
+            phase1_result_sha256=hashlib.sha256((host/'phase1-result.json').read_bytes()).hexdigest(),
+            durability_sha256=hashlib.sha256((host/'phase1-durability.json').read_bytes()).hexdigest()))
+        return result
 
     async def _finish_phase1(self,ids,completed,*,round=0):
         """After the last phase-1 wave is verified: prove every shard stopped, then make the run root durable with one syncfs.

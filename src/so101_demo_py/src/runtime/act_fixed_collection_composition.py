@@ -148,7 +148,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
                                    parallel_runtime, approved_inputs, qualification, approved_disk_floor_bytes,
                                    docker_runner=None, service_query=None, namespace_reader=None, control_factory=None,
                                    instance_launcher='container', native=None, admit_processor_slots=None,
-                                   collection_mode='formal', runtime_document=None):
+                                   collection_mode='formal', runtime_document=None, stop_after_phase1=False):
     """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
 
     Order: the launch registry first (admission's `finish` opens it with `create=False`, so a construction failure below can
@@ -237,7 +237,8 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
         return ContainerCampaignOwner(admitted_context=context, config=config, root=paths['run'], service_owner=services,
             slots=slots, manifest_path=manifest_path, qualification=qualification, launcher=launcher,
             coordinator=coordinator, verifier=verifier, approved_disk_floor_bytes=approved_disk_floor_bytes,
-            processing=processing,campaign_total_s=campaign_total_s,runtime_document=runtime_document)
+            processing=processing,campaign_total_s=campaign_total_s,runtime_document=runtime_document,
+            stop_after_phase1=stop_after_phase1)
     except BaseException:
         registry.close()
         raise
