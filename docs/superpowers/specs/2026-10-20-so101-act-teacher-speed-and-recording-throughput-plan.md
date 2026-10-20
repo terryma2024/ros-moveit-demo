@@ -81,3 +81,8 @@ R1 (EXP-626) had Teacher 16/16 but 0/16 VALID (CP-3752).
 Decisions:
 1. **Fix D (chosen over reverting 18a).** For a schema ≥ 4 Teacher policy only, the reset boundary is the first retained ring record after the last paused one. It fails closed if no such record exists. The recorder, scan, audit and all limits are unchanged, and schema 3 is byte-identical. This needs a new gate and new images, then R1 and R2 are repeated.
 2. **R1 peak criterion: kept, with a control.** A same-scene schema-3 control run is added. Each EXP-626 per-phase peak (force and compression) must lie within the union range of {EXP-625, control} on the same 16 scenes, with no oracle flag and every value below the r10b limits.
+3. **R1 peak criterion, revised (human decision after EXP-627).** The two-run union rule cannot be met even by an unchanged schema 3 re-run: EXP-627 alone falls outside EXP-625's range in 29 of 38 pairs. The criterion becomes one-sided with a run-to-run tolerance. Per phase and metric (peak force and peak compression):
+
+       max(new) ≤ max(EXP-625 ∪ control) + max(|max(control) − max(EXP-625)|, floor)
+
+   The floor is 0.02 µm for compression and 0.002 N for force. Values below the reference are allowed. No oracle flag is allowed, and every value must be below the r10b limits.
