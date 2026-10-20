@@ -495,6 +495,53 @@ def solve_horizon(
     return HorizonResult(paths, tuple(all_receipts))
 
 
+def _run_inline(compute):
+    return compute()
+
+
+def solve_pick_prefix_horizon(
+    ik: PoseIk,
+    current: Sequence[float],
+    targets,
+    interpolate_pose,
+    *,
+    position_tolerance_m: float,
+    orientation_tolerance_rad: float,
+    beam_width: int = 3,
+    run=_run_inline,
+) -> HorizonResult:
+    """The Teacher's pick-prefix horizon from the joint state ``current``: MOVE_ABOVE_OBJECT (interpolated Cartesian waypoints),
+    DESCEND (six interpolated waypoints), MICRO_LIFT and LIFT, solved as one beam search.
+
+    Pure in its arguments: the same ``current``, targets and tolerances give the same result in whatever thread and at whatever time
+    it is computed. ``targets`` answers ``for_state(State)``; ``run`` wraps each long computation (the caller may spin ROS while a
+    worker computes it) and defaults to calling it inline."""
+
+    above = targets.for_state(State.MOVE_ABOVE_OBJECT)
+    descend = targets.for_state(State.DESCEND)
+    waypoints = list(run(lambda: interpolated_move_above_waypoints(ik, current, above)))
+    waypoints.extend(
+        HorizonWaypoint(State.DESCEND, index, interpolate_pose(above, descend, index / 6.0))
+        for index in range(1, 7)
+    )
+    waypoints.extend(
+        (
+            HorizonWaypoint(State.MICRO_LIFT, 0, targets.for_state(State.MICRO_LIFT)),
+            HorizonWaypoint(State.LIFT, 0, targets.for_state(State.LIFT)),
+        )
+    )
+    return run(
+        lambda: solve_horizon(
+            ik,
+            tuple(waypoints),
+            current,
+            position_tolerance_m=position_tolerance_m,
+            orientation_tolerance_rad=orientation_tolerance_rad,
+            beam_width=beam_width,
+        )
+    )
+
+
 def validate_cartesian_corridor(
     ik: PoseIk,
     trajectory: object,
