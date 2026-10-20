@@ -403,7 +403,7 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
     from .dynamic_mujoco_execution import RosDynamicMujocoExecution
     from .task_reachability import RosJointStateReader, RosMoveGroupReachabilityPlanner
 
-    def reachability_preflight(node, sample, template, scene_revision, progress=None):
+    def reachability_preflight(node, sample, template, scene_revision, progress=None, descend_final_distance_m=None):
         point = TaskPoint(
             id="perceived_cup",
             label="Perceived cup",
@@ -413,6 +413,8 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
         planner_options = {} if ik_backend is None else {"ik_backend": ik_backend}
         if progress is not None:
             planner_options["progress"] = progress
+        if descend_final_distance_m is not None:
+            planner_options["descend_final_distance_m"] = descend_final_distance_m
         planner = RosMoveGroupReachabilityPlanner(node, template, **planner_options)
         reader = RosJointStateReader(node, template.arm_joint_names)
         try:
@@ -567,6 +569,20 @@ def _frozen_teacher_schema(frozen) -> int:
     except (KeyError, TypeError):
         return 3
     return version if type(version) is int else 3
+
+
+def _frozen_descend_final_distance_m(frozen):
+    """The frozen schema 5 `descend_final_distance_m` (m), or None for a freeze that is not schema 5 (the reachability preflight then
+    checks the six interpolated DESCEND segments). A schema 5 freeze without the key is not a policy this build can run."""
+
+    if _frozen_teacher_schema(frozen) < 5:
+        return None
+    from ..act.teacher_endpoint import DESCEND_DISTANCE_FIELD
+
+    try:
+        return float(frozen["teacher_execution_policy"]["values"][DESCEND_DISTANCE_FIELD])
+    except (KeyError, TypeError, ValueError):
+        raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + DESCEND_DISTANCE_FIELD) from None
 
 
 def _frozen_policy_file(frozen, snapshot) -> str:
@@ -939,11 +955,14 @@ def run_dynamic_execute(
         targets = runtime.resolve_motion_targets(sample, loaded.template)
         mark("resolve_motion_targets.end")
         mark("reachability_preflight.begin")
+        # schema 5 Teacher: the preflight checks the two-stage DESCEND the execution will run (None for schema 3 and 4: no extra argument)
+        descend_distance = _frozen_descend_final_distance_m(frozen) if teacher_run else None
         reachability = runtime.reachability_preflight(
             node,
             sample,
             loaded.template,
             getattr(initial, "reset_epoch", None),
+            **({} if descend_distance is None else {"descend_final_distance_m": descend_distance}),
         )
         mark("reachability_preflight.end")
         stop_flags.raise_if_stopped()
