@@ -23,9 +23,9 @@ _PROCESSED_DATA_FIELDS=('act_data_status','act_data_reason','act_data_qc','expor
 _FROZEN_INDEX_KIND='act_collection_frozen_index'
 
 
-def _verify_collection_for_export(episode):
+def _verify_collection_for_export(episode, trust_memo=False):
     """The collection mode of a committed episode that may be exported (see `_verified_collection`)."""
-    return _verified_collection(episode)[0]
+    return _verified_collection(episode, trust_memo)[0]
 
 
 _WORKERS_ENV = 'SO101_ACT_EXPORT_WORKERS'
@@ -101,14 +101,18 @@ def _evidence_signature(episode) -> tuple:
             tuple(tree_signature(path) for path in trees if isinstance(path, str)))
 
 
-def _memo_lookup(episode):
-    """A deep copy of the remembered (mode, proof), or None: a changed file or an unknown identity is a miss."""
+def _memo_lookup(episode, trust_memo=False):
+    """A deep copy of the remembered (mode, proof), or None: a changed file or an unknown identity is a miss.
+
+    A pass that trusted the QC memo never answers a caller that did not ask to trust it; a full recomputation answers both."""
     import copy
     key = _memo_key(episode)
     if key is None or not _memo_enabled():
         return None
     held = _VERIFICATION_MEMO.get(key)
     if held is None:
+        return None
+    if held[3] and not trust_memo:
         return None
     if 'collection_mode' in episode and episode['collection_mode'] != held[0]:
         return None                                    # the verification itself refuses it
@@ -118,31 +122,35 @@ def _memo_lookup(episode):
     return copy.deepcopy((held[0], held[1]))
 
 
-def _memo_store(key, mode, proof, signature) -> None:
+def _memo_store(key, mode, proof, signature, trusted=False) -> None:
     import copy
     if key is not None and _memo_enabled():
-        _VERIFICATION_MEMO[key] = (mode, copy.deepcopy(proof), signature)
+        _VERIFICATION_MEMO[key] = (mode, copy.deepcopy(proof), signature, bool(trusted))
 
 
-def _verified_collection(episode):
+def _verified_collection(episode, trust_memo=False):
     """(mode, commit proof) of a committed episode that may be exported; see `_verified_collection_uncached`.
+
+    ``trust_memo`` lets a schema 4 episode's data grading accept the offline processor's content-bound QC memo where the memo covers
+    exactly the files on disk now (`qc_memo.memo_matches`); otherwise the QC is recomputed in full. Only the callers a human approved
+    pass it (export, the pre-training re-checks); the default recomputes.
 
     The only thing remembered is the result of that function, computed in this process or by `_verify_in_worker` (our own code),
     together with the signature of every file the verification reads: a hit re-checks the signature and any difference verifies
     again. The memo is filled here and by the pool only; no argument, episode field or proof a caller holds can enter it. A
     failure is never remembered."""
-    hit = _memo_lookup(episode)
+    hit = _memo_lookup(episode, trust_memo)
     if hit is not None:
         return hit
     key = _memo_key(episode) if _memo_enabled() else None
     before = _evidence_signature(episode) if key is not None else None
-    mode, proof = _verified_collection_uncached(episode)
+    mode, proof = _verified_collection_uncached(episode, trust_memo)
     if key is not None and _evidence_signature(episode) == before:
-        _memo_store(key, mode, proof, before)
+        _memo_store(key, mode, proof, before, trust_memo)
     return mode, proof
 
 
-def _verified_collection_uncached(episode):
+def _verified_collection_uncached(episode, trust_memo=False):
     """(mode, commit proof) of a committed episode that may be exported. Trace retained originals on every call; caller flags and cached proofs grant no eligibility.
 
     A readback entry point may hold a session that shares one QC *recomputation* between its calls (a computation, not a proof): the
@@ -153,7 +161,7 @@ def _verified_collection_uncached(episode):
     if episode.get('kind')=='ACT_COMMITTED_EPISODE' and episode.get('schema_version')==3:
         return _verified_container_collection(episode)
     if episode.get('kind')=='ACT_COMMITTED_EPISODE' and episode.get('schema_version')==4:
-        return _verified_processed_collection(episode)
+        return _verified_processed_collection(episode, trust_memo)
     if (episode.get('kind')!='ACT_COMMITTED_EPISODE' or type(episode.get('schema_version')) is not int
             or episode['schema_version']!=2 or type(evidence) is not dict or set(evidence)!=_COLLECTION_EVIDENCE_KEYS):
         raise ValueError('EPISODE_COLLECTION_EVIDENCE_REQUIRED')
@@ -206,7 +214,7 @@ def _verified_container_collection(episode):
     return _export_gates(scope,proof,evidence)
 
 
-def _verified_processed_collection(episode):
+def _verified_processed_collection(episode, trust_memo=False):
     """(mode, combined proof) of a schema 4 episode from the frozen index of a two-phase campaign.
 
     Both phases are read back afresh: the registered container task (the Teacher half, `PENDING` at phase 1) and the processed result
@@ -233,9 +241,10 @@ def _verified_processed_collection(episode):
                 or proof.get('processing')!='PENDING' or output.parent.name!=proof['scene_id']
                 or output.parent.parent.name!='processing'):
             raise ValueError('registration locator')
+        memo_trust={'trust_memo':True} if trust_memo else {}
         processed=processed_result.verify_processed_result(output,sealed=Path(proof['location']),scene_id=proof['scene_id'],
             result_sha256=proof['result_sha256'],receipt_sha256=proof['receipt_sha256'],scope=paths['scope_path'],
-            inputs_manifest=paths['inputs_manifest'])
+            inputs_manifest=paths['inputs_manifest'],**memo_trust)
         if (processed['status']!='PASS' or processed['output_dir']!=str(output) or processed['scene_id']!=proof['scene_id']
                 or processed['phase1_result_sha256']!=proof['result_sha256'] or processed['diagnostic_fault']!='none'):
             raise ValueError('processed readback')
@@ -306,25 +315,26 @@ def _map_in_pool(function, arguments, workers):
         return [future.result() for future in futures]
 
 
-def _verify_in_worker(episode):
+def _verify_in_worker(task):
     """Worker body: (key, mode, proof, signature) of one verified episode, or None when it does not verify (or its files moved).
 
     A failure is not reported from here: the parent verifies that episode again at its own position in manifest order, so the
     exception type and message, and which of several failures is raised, are those of the serial path."""
     from .qc_session import assert_export_path_allowed
     assert_export_path_allowed()
+    episode, trust_memo = task
     key = _memo_key(episode)
     if key is None:
         return None
     before = _evidence_signature(episode)
     try:
-        mode, proof = _verified_collection_uncached(episode)
+        mode, proof = _verified_collection_uncached(episode, trust_memo)
     except Exception:                                     # noqa: BLE001
         return None
-    return (key, mode, proof, before) if _evidence_signature(episode) == before else None
+    return (key, mode, proof, before, trust_memo) if _evidence_signature(episode) == before else None
 
 
-def _prime_verification_memo(episodes, workers) -> None:
+def _prime_verification_memo(episodes, workers, trust_memo=False) -> None:
     """Verify, across a process pool, the episodes that have no valid memo entry, and remember the passes in this process.
 
     Never raises for an episode: the serial code that follows asks `_verified_collection` for each episode in manifest order,
@@ -334,10 +344,10 @@ def _prime_verification_memo(episodes, workers) -> None:
     pending, seen = [], set()
     for episode in episodes:
         key = _memo_key(episode)
-        if key is None or key in seen or _memo_lookup(episode) is not None:
+        if key is None or key in seen or _memo_lookup(episode, trust_memo) is not None:
             continue
         seen.add(key)
-        pending.append({name: episode[name] for name in _MEMO_KEY_FIELDS if name in episode})
+        pending.append(({name: episode[name] for name in _MEMO_KEY_FIELDS if name in episode}, bool(trust_memo)))
     if len(pending) < 2:
         return
     for outcome in _map_in_pool(_verify_in_worker, pending, workers):
@@ -404,7 +414,7 @@ def _seal_digest(entry):
     return digest
 
 
-def sealed_episode_content(episode):
+def sealed_episode_content(episode, trust_memo=False):
     """The training content of a committed episode, read from its sealed recorder rows (design 2026-10-10 section 3.2).
 
     The commit is re-verified, the seal is the one the commit bound, and `records.jsonl` must hash to the seal `files` entry. The
@@ -412,7 +422,7 @@ def sealed_episode_content(episode):
     from .qc_session import assert_export_path_allowed
     from .result_store import _read_regular
     assert_export_path_allowed()
-    _,proof=_verified_collection(episode)
+    _,proof=_verified_collection(episode,trust_memo)
     root,seal=sealed_episode(episode['collection_evidence'],proof)
     try:
         raw=_read_regular(root/'records.jsonl')
@@ -623,11 +633,14 @@ def _committed_entry(episode, committed, campaign_index):
     return entry
 
 
-def resolve_committed_episodes(*, manifest: dict, campaign_index, workers=None) -> tuple:
+def resolve_committed_episodes(*, manifest: dict, campaign_index, workers=None, trust_qc_memo=False) -> tuple:
     """Episodes the coordinator committed, with a verifier receipt that agrees with the journal.
 
     ``workers`` > 1 verifies the episodes across a process pool first (`_prime_verification_memo`); the loop below is the serial
-    path in every case and decides the result, the order and the first refusal."""
+    path in every case and decides the result, the order and the first refusal.
+
+    ``trust_qc_memo`` (human-approved for the pre-training export, 2026-10-19) lets the data grading of a schema 4 episode accept the
+    offline processor's content-bound QC memo where it covers exactly the files on disk now; any other case recomputes in full."""
 
     from .qc_session import assert_export_path_allowed
 
@@ -645,13 +658,13 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index, workers=None) 
                 break
             if entry is not None:
                 entries.append(entry)
-        _prime_verification_memo(entries, workers)
+        _prime_verification_memo(entries, workers, trust_qc_memo)
     resolved = []
     for episode in manifest["episodes"]:
         entry = _committed_entry(episode, committed, campaign_index)
         if entry is None:
             continue
-        mode=_verify_collection_for_export(entry)
+        mode=_verify_collection_for_export(entry, trust_qc_memo)
         # carry the content locator through: a resolved episode that forgets where its content lives
         # forces the exporter to guess, and guessing is what this module exists to prevent
         if entry.get('schema_version')==4:
@@ -770,7 +783,7 @@ _NEWLINE = bytes((10,))
 
 
 def export_dataset(committed, output, *, source_manifest_sha256: str,
-                   campaign_index_sha256: str, workers=None) -> dict:
+                   campaign_index_sha256: str, workers=None, trust_qc_memo=False) -> dict:
     """Write the immutable export: one document per committed episode plus a digest manifest.
 
     The export is written once. An existing output directory is a refusal rather than a place to append,
@@ -781,6 +794,10 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     ``workers`` > 1 verifies the commits and hashes the frames across a process pool. The loop stays the serial path: a commit
     verification is a memo hit after the pool, and the frame digests are checked after the loop (or after the refusal that stops
     it), episodes in order, so the first refusal in manifest order is the serial one.
+
+    The frames are read once: the write threads hash the bytes they copy against the seal digest, and the first refusal in
+    manifest order is raised (a separate frame check runs only when an episode record is refused, to keep that order).
+    ``trust_qc_memo`` is `resolve_committed_episodes`'s.
     """
 
     from .qc_session import assert_export_path_allowed
@@ -801,18 +818,18 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
 
     if workers > 1:
         _prime_verification_memo([episode for episode in episodes
-                                  if isinstance(episode, dict) and episode.get('kind') == 'ACT_COMMITTED_EPISODE'], workers)
+                                  if isinstance(episode, dict) and episode.get('kind') == 'ACT_COMMITTED_EPISODE'], workers,
+                                 trust_qc_memo)
     records, seen, frame_jobs = [], set(), []
     try:
-        records = _export_records(episodes, seen, frame_jobs)
+        records = _export_records(episodes, seen, frame_jobs, trust_qc_memo)
     except Exception:
         # an earlier episode whose frames differ is the first refusal in manifest order
         _check_frames(frame_jobs, workers)
         raise
-    _check_frames(frame_jobs, workers)
 
     try:
-        _write_export(partial, records, source_manifest_sha256, campaign_index_sha256)
+        _write_export(partial, records, source_manifest_sha256, campaign_index_sha256, workers)
         partial.rename(target)
     except BaseException:
         shutil.rmtree(partial, ignore_errors=True)       # our own half-written export, never a finished one
@@ -823,7 +840,7 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     return {**document, "manifest_path": str(manifest_path), "export_sha256": digest}
 
 
-def _export_records(episodes, seen, frame_jobs):
+def _export_records(episodes, seen, frame_jobs, trust_qc_memo=False):
     """The export records of every episode, in order; the frame checks of each go to ``frame_jobs`` for `_check_frames`."""
     records = []
     for episode in episodes:
@@ -844,7 +861,7 @@ def _export_records(episodes, seen, frame_jobs):
             raise ValueError("EXPORT_STALE_DATASET_ID")
         proof = None
         if episode.get('kind')=='ACT_COMMITTED_EPISODE':
-            _, proof = _verified_collection(episode)
+            _, proof = _verified_collection(episode, trust_qc_memo)
         if episode.get("status", "PASSED") != "PASSED":
             raise ValueError("EXPORT_EPISODE_NOT_PASSED")
         content = episode.get("content")
@@ -854,7 +871,7 @@ def _export_records(episodes, seen, frame_jobs):
         rig = episode_rig(episode) if proof is not None else None
         content = training_content(content, rig)
         if proof is None:
-            _, proof = _verified_collection(episode)
+            _, proof = _verified_collection(episode, trust_qc_memo)
             rig = episode_rig(episode)
         _check_dimensions(content, rig)
         # the frames are bound by the seal the commit proof named, never by anything the caller passed in
@@ -903,36 +920,90 @@ def _with_frame_paths(content, relative, rig=None):
     return rewritten
 
 
-def _write_export(target, records, source_manifest_sha256, campaign_index_sha256):
+def _syncfs(path) -> bool:
+    """``syncfs(2)`` on the filesystem that holds ``path``; False when this platform has none (the caller then fsyncs each file)."""
+    import ctypes
+    import os
+    try:
+        call = ctypes.CDLL(None, use_errno=True).syncfs
+    except (AttributeError, OSError):
+        return False
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        if call(descriptor) != 0:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error), str(path))
+    finally:
+        os.close(descriptor)
+    return True
+
+
+def _read_frame(path, digest):
+    """The bytes of a regular, non-symlink frame whose sha256 is ``digest``; the refusals are `_file_sha256`'s."""
+    import os
+    import stat
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError("EXPORT_EPISODE_FRAME_MISSING")
+            data = stream.read()
+    except OSError as error:
+        raise ValueError("EXPORT_EPISODE_FRAME_MISSING") from error
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError("EXPORT_EPISODE_FRAME_DIGEST_MISMATCH")
+    return data
+
+
+def _write_episode(target, episodes_dir, record, fsync_each) -> None:
+    """One episode's document and frames. Each frame is read once: the bytes that are hashed are the bytes that are written."""
     import os
 
+    def durable(handle):
+        handle.flush()
+        if fsync_each:
+            os.fsync(handle.fileno())
+
+    path = episodes_dir / (record["scene_id"] + ".json")
+    temporary = path.with_name(path.name + ".partial")
+    with open(temporary, "wb") as handle:
+        handle.write(record["payload"])
+        durable(handle)
+    temporary.replace(path)
+    (episodes_dir / record["scene_id"] / "frames").mkdir(parents=True)
+    for destination, (name, digest) in record["frames"].items():
+        data = _read_frame(record["root"] / name, digest)
+        with open(target / destination, "xb") as handle:
+            handle.write(data)
+            durable(handle)
+
+
+def _write_export(target, records, source_manifest_sha256, campaign_index_sha256, workers=1):
+    """Write the export tree into ``target`` (the ``.partial`` directory), then make it durable.
+
+    The episodes are written by ``workers`` threads (file reads, writes and sha256 release the GIL). Nothing is fsynced per file where
+    ``syncfs`` exists: one ``syncfs`` of the filesystem before the caller renames ``.partial`` into place gives the same guarantee,
+    because the final name appears only after every byte is on disk. Elsewhere each file is fsynced as before. The first refusal in
+    record order is raised, whichever thread met a refusal first."""
+    import concurrent.futures
+    import os
+    import platform
+
+    fsync_each = platform.system() != "Linux"
     target.mkdir(parents=True)
     episodes_dir = target / "episodes"
     episodes_dir.mkdir()
-    manifest_episodes = []
-    for record in records:
-        path = episodes_dir / (record["scene_id"] + ".json")
-        temporary = path.with_name(path.name + ".partial")
-        with open(temporary, "wb") as handle:
-            handle.write(record["payload"])
-            handle.flush()
-            os.fsync(handle.fileno())
-        temporary.replace(path)
-        (episodes_dir / record["scene_id"] / "frames").mkdir(parents=True)
-        for destination, (name, digest) in record["frames"].items():
-            # read once: the bytes that are hashed are the bytes that are written
-            fd = os.open(record["root"] / name, os.O_RDONLY | os.O_NOFOLLOW)
-            with os.fdopen(fd, "rb") as stream:
-                data = stream.read()
-            if hashlib.sha256(data).hexdigest() != digest:
-                raise ValueError("EXPORT_EPISODE_FRAME_DIGEST_MISMATCH")
-            with open(target / destination, "xb") as handle:
-                handle.write(data)
-                handle.flush()
-                os.fsync(handle.fileno())
-        manifest_episodes.append({"scene_id": record["scene_id"], "split": record["split"],
-                                  "content_sha256": record["content_sha256"],
-                                  "frames": {destination: digest for destination, (_, digest) in sorted(record["frames"].items())}})
+    if workers > 1 and len(records) > 1:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, len(records))) as pool:
+            futures = [pool.submit(_write_episode, target, episodes_dir, record, fsync_each) for record in records]
+            for future in futures:
+                future.result()
+    else:
+        for record in records:
+            _write_episode(target, episodes_dir, record, fsync_each)
+    manifest_episodes = [{"scene_id": record["scene_id"], "split": record["split"], "content_sha256": record["content_sha256"],
+                          "frames": {destination: digest for destination, (_, digest) in sorted(record["frames"].items())}}
+                         for record in records]
     document = {"schema_version": 1, "kind": "act_dataset_export", "scene_count": len(records),
                 "source_manifest_sha256": source_manifest_sha256,
                 "campaign_index_sha256": campaign_index_sha256, "episodes": manifest_episodes}
@@ -940,4 +1011,7 @@ def _write_export(target, records, source_manifest_sha256, campaign_index_sha256
     with open(manifest_path, "w") as handle:
         handle.write(json.dumps(document, sort_keys=True, indent=2) + chr(10))
         handle.flush()
-        os.fsync(handle.fileno())
+        if fsync_each:
+            os.fsync(handle.fileno())
+    if not fsync_each and not _syncfs(target):
+        os.sync()                       # no syncfs(2) in this libc: the global sync is stronger and as late

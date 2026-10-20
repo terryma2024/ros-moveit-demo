@@ -158,7 +158,7 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
         temporary.replace(state_path)
 
 
-def attach_episode_content(committed, *, root, workers=None) -> tuple:
+def attach_episode_content(committed, *, root, workers=None, trust_qc_memo=False) -> tuple:
     """Read each committed episode's content, verifying what it claims. The content hash is always verified.
 
     The source is the sealed recorder rows of the committed episode (`bundle.sealed_episode_content`: the seal is the one the
@@ -177,7 +177,7 @@ def attach_episode_content(committed, *, root, workers=None) -> tuple:
         _prime_verification_memo(
             [episode for episode in committed if isinstance(episode, dict) and isinstance(episode.get("collection_evidence"), dict)
              and not (isinstance(episode.get("content"), dict) and episode["content"])
-             and not (isinstance(episode.get("content_path"), str) and episode["content_path"])], workers)
+             and not (isinstance(episode.get("content_path"), str) and episode["content_path"])], workers, trust_qc_memo)
     base = Path(root).resolve()
     resolved = []
     for episode in committed:
@@ -195,7 +195,7 @@ def attach_episode_content(committed, *, root, workers=None) -> tuple:
         name = episode.get("content_path")
         if not isinstance(name, str) or not name:
             if isinstance(episode.get("collection_evidence"), dict):
-                resolved.append({**episode, "content": sealed_episode_content(episode)})
+                resolved.append({**episode, "content": sealed_episode_content(episode, trust_qc_memo)})
                 continue
             raise ValueError("TRAINING_EPISODE_CONTENT_MISSING")
         path = Path(name)
