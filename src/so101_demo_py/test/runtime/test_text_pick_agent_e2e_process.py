@@ -58,7 +58,9 @@ def _event_process(
 
 
 def _sleep_process(*, ignore_term: bool = False) -> ExecuteProcess:
-    setup = ""
+    # A child started from a background job inherits SIGINT as ignored, and Python then installs no KeyboardInterrupt handler: the
+    # supervisor's SIGINT would wait out its whole timeout. The child states the disposition the test means.
+    setup = "signal.signal(signal.SIGINT,signal.default_int_handler);"
     if ignore_term:
         setup = (
             "signal.signal(signal.SIGINT,signal.SIG_IGN);"

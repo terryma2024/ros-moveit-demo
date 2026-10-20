@@ -86,6 +86,37 @@ def write_json(path, document):
     return path
 
 
+_ASYNCIO_SLEEP = asyncio.sleep
+
+
+async def _short_poll_sleep(delay, result=None):
+    """The campaign's poll and monitor loops wait one production second between looks at scripted instances that answer at once.
+    Polling more often changes no outcome (deadlines run on the real clock, and the frozen runtime file keeps its interval), so a
+    wait of a second or more is shortened here; shorter waits are untouched."""
+
+    return await _ASYNCIO_SLEEP(delay / 20 if delay >= 1 else delay, result)
+
+
+@pytest.fixture(autouse=True)
+def _short_polls(monkeypatch):
+    from so101_demo.runtime.container_campaign import coordinator
+
+    monkeypatch.setattr(asyncio, 'sleep', _short_poll_sleep)
+    # `sleep=asyncio.sleep` is bound as a default at class definition, so each default that holds the real one is replaced as well
+    for cls in (coordinator.InstanceDispatch, coordinator.ConcurrentCollectionCoordinator):
+        init = cls.__init__
+        for table in (init.__kwdefaults__ or {},):
+            if table.get('sleep') is _ASYNCIO_SLEEP:
+                monkeypatch.setitem(table, 'sleep', _short_poll_sleep)
+        names = init.__code__.co_varnames[:init.__code__.co_argcount]
+        defaults = list(init.__defaults__ or ())
+        if defaults and 'sleep' in names[len(names) - len(defaults):]:
+            at = names[len(names) - len(defaults):].index('sleep')
+            if defaults[at] is _ASYNCIO_SLEEP:
+                defaults[at] = _short_poll_sleep
+                monkeypatch.setattr(init, '__defaults__', tuple(defaults))
+
+
 @pytest.fixture(scope='module')
 def shared(tmp_path_factory):
     """Module-wide synthetic inputs: one candidate registry (real execution snapshot probe) and one image freeze."""
