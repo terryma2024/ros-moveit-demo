@@ -38,6 +38,11 @@ from .dynamic_planner import RosDynamicPlanner
 
 _PHASE_TIMING_PREFIX = "DYNAMIC_EXECUTE_PHASE_TIMING "
 _PHASE_TIMING_MAX_BYTES = 8000
+# Round-2 S3 measurement: the place-side planning marks have their own line, capacity and size cap, so they can never push a real
+# phase out of the phase-timing line above (which keeps exactly its earlier content).
+_PLACE_SIDE_TIMING_PREFIX = "DYNAMIC_EXECUTE_PLACE_SIDE_TIMING "
+_PLACE_SIDE_TIMING_MAX_BYTES = 8000
+_PLACE_SIDE_MARKS_MAX = 512
 _CENSUS_MAX_TOPICS = 32
 _STALL_PREFIX = "DYNAMIC_MAIN_STALL "
 _STALL_THRESHOLD_NS = 300_000_000
@@ -55,6 +60,8 @@ class _PhaseTimer:
     def __init__(self):
         self.start_ns = time.monotonic_ns()
         self.phases = []
+        self.place_side = []
+        self.place_side_dropped = 0
         self.census = None
         self.node = None
         self.last_progress_ns = self.start_ns
@@ -70,6 +77,17 @@ class _PhaseTimer:
             self.last_progress_ns = now
             if len(self.phases) < 256:
                 self.phases.append([name, now - self.start_ns])
+        except Exception:
+            pass
+
+    def mark_place_side(self, name):
+        """Observation only: a place-side planning mark for the separate place-side timing line. It neither takes a slot of
+        `phases` nor counts as progress for the stall sampler."""
+        try:
+            if len(self.place_side) < _PLACE_SIDE_MARKS_MAX:
+                self.place_side.append([name, time.monotonic_ns() - self.start_ns])
+            else:
+                self.place_side_dropped += 1
         except Exception:
             pass
 
@@ -143,12 +161,37 @@ class _PhaseTimer:
             print(_PHASE_TIMING_PREFIX + line, file=sys.stderr, flush=True)
         except Exception:
             pass
+        self._emit_place_side()
+
+    def _emit_place_side(self):
+        try:
+            if not self.place_side and not self.place_side_dropped:
+                return
+            marks = list(self.place_side)
+            truncated = self.place_side_dropped
+            while True:
+                line = json.dumps({"marks": marks, "truncated": truncated}, sort_keys=True, separators=(",", ":"))
+                if len(line) <= _PLACE_SIDE_TIMING_MAX_BYTES or not marks:
+                    break
+                cut = max(1, len(marks) // 2)
+                keep = len(marks) - cut
+                marks = marks[:keep // 2] + marks[len(marks) - (keep - keep // 2):] if keep else []
+                truncated += cut
+            print(_PLACE_SIDE_TIMING_PREFIX + line, file=sys.stderr, flush=True)
+        except Exception:
+            pass
 
 
 def _mark_active_phase(name):
     timer = _ACTIVE_PHASE_TIMER
     if timer is not None:
         timer.mark(name)
+
+
+def _mark_active_place_side(name):
+    timer = _ACTIVE_PHASE_TIMER
+    if timer is not None:
+        timer.mark_place_side(name)
 
 
 def _record_callback_lag(node, entry, callback_args):

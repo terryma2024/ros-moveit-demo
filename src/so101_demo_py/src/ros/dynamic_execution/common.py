@@ -86,9 +86,14 @@ _PLACE_SIDE_STATES = frozenset({State.LIFT, State.MOVE_ABOVE_PLACE, State.DESCEN
 
 
 def _mark_place_side(state, name):
-    """Phase mark ``place_side.<STATE>.<name>`` for a place-side state, nothing for any other; observation only, never raises."""
+    """Place-side mark ``place_side.<STATE>.<name>`` for a place-side state, nothing for any other. It goes to the timer's separate
+    place-side line (`DYNAMIC_EXECUTE_PLACE_SIDE_TIMING`), never to the phase-timing line; observation only, never raises."""
     if state in _PLACE_SIDE_STATES:
-        _mark_phase(f"place_side.{state.value}.{name}")
+        try:
+            from so101_demo.ros.dynamic_runtime import _mark_active_place_side
+            _mark_active_place_side(f"place_side.{state.value}.{name}")
+        except Exception:
+            pass
 
 
 # Burst-spin budget (S3). `rclpy.spin_once` runs at most one callback, while evidence, scene, joint-state, chunk and
