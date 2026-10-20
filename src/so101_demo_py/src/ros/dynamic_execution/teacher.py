@@ -217,12 +217,29 @@ class TeacherRun:
             retained = self.observer.retained_with_receipts()
         except Exception:
             return None
-        for record in retained:
-            value = record.evidence
-            if value.simulation_session_id == self._session_id and value.reset_epoch == self._expected_reset_epoch:
-                return {**self._teacher_observation(value),
-                        "received_monotonic_ns": round(record.received_monotonic_s * 1e9)}
+        matching = [record for record in retained
+                    if record.evidence.simulation_session_id == self._session_id
+                    and record.evidence.reset_epoch == self._expected_reset_epoch]
+        if self._reset_boundary_follows_pause() and any(record.evidence.paused for record in matching):
+            # Schema >= 4: the worker's perception pause ends inside the observer ring, so the first retained record
+            # precedes it and the offline scan could not clip the window. The boundary is the first record after the
+            # last paused one; a ring with no such record fails closed instead of announcing a paused boundary.
+            last_paused = max(index for index, record in enumerate(matching) if record.evidence.paused)
+            matching = matching[last_paused + 1:]
+            if not matching:
+                raise RuntimeError("TEACHER_RESET_BOUNDARY_PAUSED_RING")
+        for record in matching[:1]:
+            return {**self._teacher_observation(record.evidence),
+                    "received_monotonic_ns": round(record.received_monotonic_s * 1e9)}
         return None
+
+    def _reset_boundary_follows_pause(self) -> bool:
+        """True for a Teacher execution policy of schema 4 (EXECUTION_SCHEMA_SPEED) or later."""
+
+        from so101_demo.act.teacher_endpoint import EXECUTION_SCHEMA_SPEED
+
+        version = (getattr(self, "_execution_policy", None) or {}).get("schema_version")
+        return type(version) is int and version >= EXECUTION_SCHEMA_SPEED
 
     def _controllers_stopped_at(self, execution_policy):
         """Receipt time (the observer's monotonic clock) of the fresh joint state that showed every arm and gripper
