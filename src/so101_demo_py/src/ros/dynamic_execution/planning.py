@@ -7,12 +7,20 @@ import threading
 import time
 from types import SimpleNamespace
 
-from so101_demo.act.teacher_endpoint import EXECUTION_SCHEMA_SPEED, speed_policy_value
+from so101_demo.act.teacher_endpoint import (
+    DESCEND_DISTANCE_FIELD,
+    DESCEND_SCALING_FIELDS,
+    EXECUTION_SCHEMA_DESCEND,
+    EXECUTION_KIND,
+    EXECUTION_SCHEMA_SPEED,
+    speed_policy_value,
+)
 from so101_demo.control.moveit.deterministic_horizon import (
     MOVE_ABOVE_PLAN_CANDIDATE_COUNT,
     HorizonStep,
     HorizonWaypoint,
     cartesian_candidate_score,
+    descend_waypoints,
     solve_horizon,
     solve_pick_prefix_horizon,
     validate_cartesian_corridor,
@@ -50,6 +58,17 @@ class MotionPlanning:
             and policy["schema_version"] >= EXECUTION_SCHEMA_SPEED
         )
 
+    def _descend_final_distance_m(self):
+        """Schema 5, frozen inputs: the distance above the grasp pose at which the DESCEND approach stage ends, else None (the six
+        interpolated DESCEND segments of schema 3 and 4, and of every run without frozen inputs)."""
+
+        policy = getattr(self, "_execution_policy", None)
+        if (getattr(self, "_execution_snapshot_root", None) is None or policy is None
+                or policy.get("kind") != EXECUTION_KIND
+                or type(policy.get("schema_version")) is not int or policy["schema_version"] < EXECUTION_SCHEMA_DESCEND):
+            return None
+        return speed_policy_value(policy, DESCEND_DISTANCE_FIELD, 0.0, since_schema=EXECUTION_SCHEMA_DESCEND)
+
     def _start_pick_horizon_precompute(self) -> None:
         """Item 18b: compute the pick-prefix IK horizon in a worker thread from the joint state of now (PREPARE_OPEN_GRIPPER), so the
         first MOVE_ABOVE_OBJECT goal does not wait for it. Never raises: a precompute that cannot start leaves today's behaviour.
@@ -64,6 +83,7 @@ class MotionPlanning:
             ik, targets, interpolate = self._ik, self._targets, self._interpolate_pose
             position_tolerance_m = self._template.position_tolerance_m
             orientation_tolerance_rad = max(self._template.orientation_tolerance_rad)
+            descend_final_distance_m = self._descend_final_distance_m()
         except Exception as error:  # noqa: BLE001 - an optimisation, never a Teacher failure
             self._document["pick_prefix_precompute"] = {"status": "NOT_STARTED", "error": f"{type(error).__name__}: {error}"}
             return
@@ -73,7 +93,8 @@ class MotionPlanning:
             try:
                 result = solve_pick_prefix_horizon(
                     ik, start, targets, interpolate, position_tolerance_m=position_tolerance_m,
-                    orientation_tolerance_rad=orientation_tolerance_rad, beam_width=3)
+                    orientation_tolerance_rad=orientation_tolerance_rad, beam_width=3,
+                    descend_final_distance_m=descend_final_distance_m)
                 job.outcome.append((True, result, time.monotonic()))
             except BaseException as error:  # noqa: BLE001 - reported, then the goal computes it itself
                 job.outcome.append((False, error, time.monotonic()))
@@ -148,6 +169,7 @@ class MotionPlanning:
                     orientation_tolerance_rad=orientation_tolerance_rad,
                     beam_width=3,
                     run=while_progressing,
+                    descend_final_distance_m=self._descend_final_distance_m(),
                 )
         else:
             waypoints = [
@@ -201,7 +223,7 @@ class MotionPlanning:
         candidates = []
         corridor_receipts: list[dict[str, object]] = []
         last_failure = "CUP_POSE_PLAN_FAILED"
-        scaling = self._planning_scaling(state)
+        scaling = self._planning_scaling(state, step)
         for candidate_index in range(candidate_count):
             planned = self._planning.plan_joint_path(
                 JointPlanRequest(
@@ -325,10 +347,12 @@ class MotionPlanning:
     def _motion_planning_start(self):
         return self._joint_state()
 
-    def _planning_scaling(self, state: State) -> tuple[float, float]:
+    def _planning_scaling(self, state: State, step=None) -> tuple[float, float]:
         """(velocity, acceleration) MoveIt scaling with frozen inputs: the frozen carry values for the carry states, and the
-        schema 4 values for MOVE_ABOVE_OBJECT and RETREAT (a schema 3 policy has none: the template's). Every other state and
-        every run without frozen inputs plans with the template's."""
+        schema 4 values for MOVE_ABOVE_OBJECT and RETREAT (a schema 3 policy has none: the template's). With a schema 5 policy the
+        approach stage of DESCEND (``step`` is a waypoint farther than half the final distance from the grasp pose) takes the schema 5
+        approach values; the last stage keeps the template's. Every other state and every run without frozen inputs plans with the
+        template's."""
 
         template = (self._template.velocity_scaling, self._template.acceleration_scaling)
         if getattr(self, "_execution_snapshot_root", None) is None:
@@ -338,9 +362,22 @@ class MotionPlanning:
         if speed_keys is not None:
             return (speed_policy_value(policy, speed_keys[0], template[0]),
                     speed_policy_value(policy, speed_keys[1], template[1]))
+        if state is State.DESCEND and self._is_descend_approach_step(step):
+            return (speed_policy_value(policy, DESCEND_SCALING_FIELDS[0], template[0], since_schema=EXECUTION_SCHEMA_DESCEND),
+                    speed_policy_value(policy, DESCEND_SCALING_FIELDS[1], template[1], since_schema=EXECUTION_SCHEMA_DESCEND))
         if state not in self._CARRY_STATES:
             return template
         if (policy is None or "carry_max_velocity_scaling" not in policy
                 or "carry_max_acceleration_scaling" not in policy):
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: carry scaling")
         return float(policy["carry_max_velocity_scaling"]), float(policy["carry_max_acceleration_scaling"])
+
+    def _is_descend_approach_step(self, step) -> bool:
+        """True for the approach stage of a schema 5 DESCEND: its waypoint is the point ``descend_final_distance_m`` above the grasp
+        pose, the last stage's waypoint is the grasp pose itself (``_descend_grasp_target``, set by ``_motion``)."""
+
+        distance_m = self._descend_final_distance_m()
+        grasp = getattr(self, "_descend_grasp_target", None)
+        if distance_m is None or step is None or grasp is None:
+            return False
+        return math.dist(step.waypoint.target.position_m, grasp.position_m) > distance_m / 2.0

@@ -137,15 +137,16 @@ def test_the_descend_keys_scale_no_other_state(tmp_path, ik, template, targets, 
     value = teacher(tmp_path, ik, template, targets, policy_path=DESCEND010)
     seen = stage_scalings(value, state, [targets.for_state(State.MOVE_ABOVE_OBJECT)], grasp=targets.for_state(State.DESCEND))
     expected = (0.10, 0.10) if state in (State.MOVE_ABOVE_OBJECT, State.RETREAT) else TEMPLATE_SCALING
-    assert seen == [expected]
+    assert set(seen) == {expected}
 
 
 def test_a_schema_5_policy_without_the_approach_scaling_refuses(tmp_path, ik, template, targets):
     value = teacher(tmp_path, ik, template, targets, policy_path=DESCEND010)
     del value._execution_policy["descend_approach_velocity_scaling"]
-    grasp = targets.for_state(State.DESCEND)
+    value._descend_grasp_target = targets.for_state(State.DESCEND)
+    step = SimpleNamespace(waypoint=SimpleNamespace(segment_index=0, target=targets.for_state(State.MOVE_ABOVE_OBJECT)))
     with pytest.raises(RuntimeError, match="TEACHER_POLICY_UNAVAILABLE"):
-        stage_scalings(value, State.DESCEND, [targets.for_state(State.MOVE_ABOVE_OBJECT)], grasp=grasp)
+        value._planning_scaling(State.DESCEND, step)
 
 
 # ---- _motion issues one request per stage ---------------------------------------------------------------------------------
