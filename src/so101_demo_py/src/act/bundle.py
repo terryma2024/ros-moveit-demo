@@ -777,10 +777,13 @@ def load_bundle(path) -> dict:
             or document["schema_version"] != 1 or document["kind"] != "act_bundle"):
         raise ValueError("BUNDLE_INVALID")
     model_source = document["model_source"]
-    if (not isinstance(model_source, dict) or set(model_source) != {"name", "sha256"}
+    if (not isinstance(model_source, dict) or set(model_source) not in ({"name", "sha256"}, {"name", "sha256", "source_commit"})
             or not isinstance(model_source["name"], str) or not model_source["name"]):
         raise ValueError("BUNDLE_INVALID")
     _bundle_digest(model_source["sha256"], "BUNDLE_INVALID")
+    if "source_commit" in model_source and (not isinstance(model_source["source_commit"], str)
+                                            or re.fullmatch(r"[0-9a-f]{40}", model_source["source_commit"]) is None):
+        raise ValueError("BUNDLE_INVALID")
     _bundle_digest(document["dataset_sha256"], "BUNDLE_INVALID")
     _bundle_digest(document["config_sha256"], "BUNDLE_INVALID")
     normalization = document["normalization"]

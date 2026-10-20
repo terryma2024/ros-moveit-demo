@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_frame_keys, rig_from_observation
@@ -305,12 +306,14 @@ def _dataset_digest(dataset: Path) -> str:
 
 
 def train_with_lerobot(action: dict, dataset: Path, target: Path, *, requirement_sha256: str,
-                       train=None, config: dict | None = None) -> dict:
+                       train=None, config: dict | None = None, source_commit: str | None = None) -> dict:
     """Run the injected LeRobot training entry point and return the bundle document it leaves."""
 
     require_action_semantics(action)
     if not callable(train):
         raise ValueError("LEROBOT_TRAIN_REQUIRED")
+    if source_commit is not None and (type(source_commit) is not str or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None):
+        raise ValueError("LEROBOT_SOURCE_COMMIT_INVALID")
     action = dict(action)
     target = Path(target)
     target.mkdir(parents=True, exist_ok=True)
@@ -323,7 +326,9 @@ def train_with_lerobot(action: dict, dataset: Path, target: Path, *, requirement
         "kind": "act_bundle",
         # the bundle validator requires model_source to be {name, sha256}: the requirements digest is the
         # provenance of the interpreter that produced the weights
-        "model_source": {"name": _MODEL_SOURCE, "sha256": requirement_sha256},
+        "model_source": {"name": _MODEL_SOURCE, "sha256": requirement_sha256,
+                         # the commit of the code that trained the weights; absent in a bundle written before it was recorded
+                         **({"source_commit": source_commit} if source_commit is not None else {})},
         "dataset_sha256": _dataset_digest(dataset),
         "config_sha256": config_sha256(config) if config else canonical_sha256({"action": action}),
         "policy_path": _POLICY_FILE,
@@ -973,7 +978,7 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
 
 
 def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_sha256: str, device: str = "cuda",
-                     num_workers: int | None = None, backbone_weights=None) -> dict:
+                     num_workers: int | None = None, backbone_weights=None, source_commit: str | None = None) -> dict:
     """Train an ACT policy over a training view and leave a bundle in ``output`` (design 2026-10-10 section 3.3).
 
     ``dataset`` is the training view `train_act` hands to a trainer. ``output`` receives `policy.safetensors`, `bundle.json` and
@@ -994,7 +999,8 @@ def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_
     def train(cfg, view, target):
         return _run_training(cfg, view, target, device, num_workers, backbone_weights)
 
-    document = train_with_lerobot(config["action"], dataset, output, requirement_sha256=requirements_sha256, train=train, config=config)
+    document = train_with_lerobot(config["action"], dataset, output, requirement_sha256=requirements_sha256, train=train, config=config,
+                                  source_commit=source_commit)
     bundle_path = Path(output) / BUNDLE_FILE
     temporary = bundle_path.with_name(bundle_path.name + ".partial")
     import os
