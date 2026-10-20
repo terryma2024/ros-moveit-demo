@@ -1,6 +1,6 @@
 # SO-101 ACT: Teacher success boundary and uniform scene sampling — design and plan
 
-Status: DRAFT, waiting for the human's confirmation.
+Status: CONFIRMED by the human on 2026-10-20 ("中心的ok。可以按上面来。"), with Q1–Q6 as recommended. Queued: it runs after to-do items 18 (shorter Teacher dwells) and 19 (phase-1 recording throughput), which the human wants first ("在此之前，我希望能先执行…"), so the boundary is measured with the final Teacher policy.
 
 ## Why (human, 2026-10-20)
 
