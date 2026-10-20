@@ -1,6 +1,9 @@
 # SO-101 ACT: one-command host environment alignment and two-host collection with merge — design and plan
 
-Status: DRAFT, waiting for the human's confirmation.
+Status: CONFIRMED by the human on 2026-10-20, with two changes:
+- Q1 → "让远程机器对齐本地机器并锁定。如果远程版本更新，先升级版本到新版本，验证后，再锁定". ai-station is the reference. For any package where antzb has a newer version than ai-station, ai-station is upgraded to that newer version first and verified (Host gate). Then the ai-station manifest is captured, antzb is aligned to it exactly, and both hosts are locked (`apt-mark hold`, pinned venvs).
+- Q2 → "直接关闭teleop服务即可": stop the teleop web service on antzb; do not restart it.
+- Q3–Q5 as recommended.
 
 ## Human request (2026-10-20)
 
