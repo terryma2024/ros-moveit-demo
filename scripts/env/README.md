@@ -38,7 +38,7 @@ without a rosdep database.
 | apt packages with exact versions | see below |
 | `python3` version | `/usr/bin/python3 --version` |
 | Every venv under `<work-root>/venvs` | interpreter, `pip freeze --all --local`, freeze sha256, torch and CUDA versions |
-| `<work-root>/so101-tools` | sha256 of every file and the target of every symlink (`__pycache__` and `.pyc` skipped) |
+| `<work-root>/so101-tools` | sha256 of every file and the target of every symlink (`__pycache__` and `.pyc` skipped). Only the untracked helpers that remain there are covered: the frozen `deps/`, training launchers and one-off scripts. The gate, evidence and image tools are tracked under `scripts/` and are not hashed here. |
 | docker | `docker --version` |
 
 The apt package list is the union of:
@@ -61,7 +61,7 @@ outside the venvs, and apt packages that no rule above selects.
 
 | Class | Items | Effect |
 | --- | --- | --- |
-| must match | LTS codename, python3 minor version, every manifest apt package version, venv Python minor version and `pip freeze`, `so101-tools` hashes | `check` exits 1 |
+| must match | LTS codename, python3 minor version, every manifest apt package version, venv Python minor version and `pip freeze`, hashes of the untracked `so101-tools` helpers | `check` exits 1 |
 | should match | OS point release, NVIDIA driver, docker version, python3 patch version, torch and CUDA string, extra `ros-jazzy-*` packages, venvs not in the manifest | warning only |
 | host-specific | kernel, GPU model and UUID, CPU, memory, apt source files | reported only |
 

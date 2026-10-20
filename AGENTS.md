@@ -32,7 +32,10 @@
   - `W/so101-policies/<train-run>/`: trained policy bundles and checkpoints.
   - `W/so101-build/`: gate build and install trees (`gates/<id>/`), image build scratch, and
     ccache.
-  - `W/so101-tools/`: helper scripts not tracked in git, and pytest plugins.
+  - `W/so101-tools/`: only one-off or temporary helpers that are not tracked in git. The gate,
+    evidence and image tools live in the repository under `scripts/`.
+- Host gates run `scripts/gate/<entry>` from the worktree under test. A gate result is valid only if
+  `scripts/gate` is clean at that commit.
 - Things stored outside the evidence root are recorded in it by path and sha256. Exports, policies,
   and builds also need the manifest or command that reproduces them. Do not place a symlink inside
   the evidence root that points outside it. Sealed roots stay where they are and are never moved
