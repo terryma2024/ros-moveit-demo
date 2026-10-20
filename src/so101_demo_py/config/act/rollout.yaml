@@ -41,3 +41,11 @@ world_max_age_s: 1.0
 # The longest wall time the executor waits, after its nodes exist, for the first joint state and then the cup pose before the
 # episode loop starts (DDS discovery of a node created after the stack came up). An episode that does not get both is INVALID.
 session_ready_wait_s: 10.0
+
+# A joint-limit overshoot of at most this many rad is clamped to the limit instead of refusing the whole action prefix (the
+# controller never receives a position outside the limit; the step records `clamped`, the joint, the original and the clamped
+# value, and the run counts clamped steps). A larger overshoot on any joint of the prefix is refused as before. This is a LOGIC
+# parameter: it is recorded in run.json and every episode.json and bound into the run identity. Omit the key to refuse every
+# overshoot (the behaviour before it existed). Origin: TRAIN-005 forward_5cm, whose wrist_flex command overshoots 1.65806 rad by
+# at most 0.0013 rad and had 1472 of 1800 prefixes refused (CP-3750).
+joint_limit_clamp_tolerance_rad: 0.01

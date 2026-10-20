@@ -307,6 +307,38 @@ def test_the_effective_execution_mode_is_passed_to_every_episode_and_recorded_in
     assert episode["execution"] == mode.document() and episode["execution"]["execution_prefix"] == 5
 
 
+def test_the_clamp_tolerance_is_recorded_in_run_and_episode_json_and_clamped_steps_are_summed(tmp_path):
+    settings = dataclasses.replace(SETTINGS, joint_limit_clamp_tolerance_rad=0.01)
+    inputs = dataclasses.replace(_inputs(), settings=settings)
+    composition, runs = FakeComposition(tmp_path), []
+    options = _options(tmp_path)
+    base = _runner({}, runs)
+
+    def runner(**kwargs):
+        result = base(**kwargs)
+        result["counts"] = {"applied": 3, "clamped_steps": 2}
+        return result
+
+    runner.executions = base.executions
+    summary = native.run_rollout(options=options, inputs=inputs, probes=_passing_probes(),
+                                 composition_factory=lambda **kw: composition, episode_runner=runner, environ={})
+    assert summary["clamped_steps"] == 6                                   # 3 episodes x 2
+    group_root = options.evidence_root / "rollout_validation"
+    run = json.loads((group_root / "run.json").read_text())
+    assert run["joint_limit_clamp_tolerance_rad"] == 0.01
+    episode = json.loads(next((group_root / "episodes").iterdir()).joinpath("episode.json").read_text())
+    assert episode["joint_limit_clamp_tolerance_rad"] == 0.01
+
+
+def test_without_a_clamp_tolerance_run_and_episode_record_none_and_the_summary_counts_zero(tmp_path):
+    summary, _composition, _runs, options = _run(tmp_path)
+    assert summary["clamped_steps"] == 0
+    group_root = options.evidence_root / "rollout_validation"
+    assert json.loads((group_root / "run.json").read_text())["joint_limit_clamp_tolerance_rad"] is None
+    episode = json.loads(next((group_root / "episodes").iterdir()).joinpath("episode.json").read_text())
+    assert episode["joint_limit_clamp_tolerance_rad"] is None
+
+
 def test_an_episode_without_a_resolved_mode_records_what_the_episode_reports(tmp_path):
     summary, _composition, _runs, options = _run(tmp_path)
     assert summary["exit_code"] == 0

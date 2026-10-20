@@ -15,7 +15,9 @@ the phase-2 QC passed, and the frozen close target is not the over-squeeze value
 diagnostic hard-stop force flag is refused by the raw-physics sealer (`PHYSICS_RAW_SOURCE_HAZARD`), so phase 2 ends INVALID with
 `act_data_qc` NOT_RUN and no QC report. That outcome is accepted only when it is exactly the hazard one (`_hazard_outcome`), and the
 Teacher manifest is then bound to the index without QC: index `processed_result_sha256` -> processed result `receipt_sha256` ->
-`raw/recording-receipt.json` `documents.teacher_manifest.sha256`. A processed result that does carry a QC report keeps the QC-bound path
+`raw/recording-receipt.json` `documents.teacher_manifest.sha256`. A completed over-squeeze episode that phase 2 grades by the shared Teacher-oracle rule is the second accepted no-QC outcome
+(`_oracle_excluded_outcome`): INVALID with `TEACHER_ORACLE_EXCLUDED: ORACLE_CUP_OVERLOAD <phase>` for a phase in the overload window,
+`processor_rc` 0, no fault, bound through the same receipt chain. A processed result that does carry a QC report keeps the QC-bound path
 (the manifest must equal the QC binding and the receipt binding).
 
 `--spot-check over_squeeze` (the CP-3531 reading: under Teacher policy v3 the process summary never stops the run) passes when the
@@ -203,6 +205,28 @@ def _hazard_outcome(processed: Path, document: dict, task: dict) -> Path:
     return report
 
 
+#: `runtime.act_processor.processing`: a QC PASS episode that the shared Teacher-oracle rule excludes grades INVALID with this reason
+_ORACLE_EXCLUDED = re.compile(r'TEACHER_ORACLE_EXCLUDED: ' + re.escape(FLAG_OVERLOAD) + r' (?P<phase>[A-Z0-9_#]+)')
+
+
+def _oracle_excluded_outcome(document: dict, task: dict) -> None:
+    """Accept a processed result with no QC report when it is exactly the Teacher-oracle exclusion of an over-squeeze overload
+    (plan amendment 6): INVALID, QC NOT_RUN, `processor_rc` 0, no fault, no QC binding, not export eligible, the reason
+    `TEACHER_ORACLE_EXCLUDED: ORACLE_CUP_OVERLOAD <phase>` with the phase in the overload window, and the index task agreeing. The
+    recording receipt (checked by the caller) binds the Teacher manifest. Anything else is refused."""
+    code = 'SPOT_CHECK_BINDING_MISMATCH'
+    reason = document.get('act_data_reason')
+    match = _ORACLE_EXCLUDED.fullmatch(reason) if type(reason) is str else None
+    if (match is None or _phase_name(match['phase']) not in OVERLOAD_WINDOW
+            or document.get('act_data_status') != 'INVALID' or document.get('act_data_qc') != 'NOT_RUN'
+            or document.get('export_eligible') is not False or document.get('processor_rc') != 0
+            or document.get('diagnostic_fault') != 'none'
+            or any(document.get(name) is not None for name in ('qc_report_path', 'qc_report_sha256'))
+            or task.get('act_data_status') != 'INVALID' or task.get('act_data_qc') != 'NOT_RUN'
+            or task.get('act_data_reason') != reason or task.get('export_eligible') is not False):
+        raise ValueError(code)
+
+
 def _bound_files(run: Path, task: dict, spot_check: str) -> dict:
     """The task result, sealed result, phase-2 processed result, Teacher manifest and (QC route) QC report of the one task, each bound
     by sha256. Nominal needs the QC report. Over-squeeze binds the manifest through the recording receipt and takes the QC report only
@@ -225,7 +249,10 @@ def _bound_files(run: Path, task: dict, spot_check: str) -> dict:
         if spot_check == 'over_squeeze':
             receipt, _manifest_sha = _receipt_binding(sealed[0], document, manifest)
             extra['recording_receipt'] = receipt
-            if not has_qc:
+            if not has_qc and type(document.get('act_data_reason')) is str and document['act_data_reason'].startswith('TEACHER_ORACLE_EXCLUDED'):
+                _oracle_excluded_outcome(document, task)
+                extra['route'] = 'recording_receipt_oracle_excluded'
+            elif not has_qc:
                 extra['processor_report'] = _hazard_outcome(processed, document, task)
                 extra['route'] = 'recording_receipt_physics_hazard'
         if spot_check == 'nominal' or has_qc:

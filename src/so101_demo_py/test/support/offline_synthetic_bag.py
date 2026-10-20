@@ -70,7 +70,7 @@ def _chunk(sequence, first, count):
         last_simulation_time_s=samples[-1].simulation_time_s, samples=samples)
 
 
-def scripted_events():
+def scripted_events(*, reset_s=1.0):
     """[(sim_s, text)] for the Teacher's seven events, from the real stream so the envelope is the real one."""
     times = [1.0, 1.0, 1.05, 1.1, 1.3, 1.4, 1.5]
     clock = iter(round(t * 1e9) for t in times)
@@ -78,7 +78,7 @@ def scripted_events():
     stream = TeacherEventStream(StreamIdentity(SESSION, EPOCH, ATTEMPT), clock_ns=lambda: next(clock),
                                 publish=published.append, start=False)
     plan = [
-        ("reset_complete", {"session_id": SESSION, "reset_epoch": EPOCH, "simulation_time_s": 1.0,
+        ("reset_complete", {"session_id": SESSION, "reset_epoch": EPOCH, "simulation_time_s": reset_s,
                             "simulation_step": START_STEP, "publisher_sequence": START_STEP}),
         ("teacher_start_observation", {"observation": observation(START_STEP)}),
         ("phase_begin", {"state": "PREPARE_OPEN_GRIPPER", "sim_time_ns": 1_050_000_000, "monotonic_ns": 1,
@@ -96,7 +96,7 @@ def scripted_events():
     return list(zip(times, published))
 
 
-def messages(*, paused_worlds=(), rig=DEFAULT_RIG):
+def messages(*, paused_worlds=(), rig=DEFAULT_RIG, reset_s=1.0):
     """[(topic, type name, receipt system ns, message)] of the whole scenario, with the cameras (and the neck, if any) of `rig`."""
     from builtin_interfaces.msg import Time
     from control_msgs.msg import JointTrajectoryControllerState
@@ -171,20 +171,20 @@ def messages(*, paused_worlds=(), rig=DEFAULT_RIG):
     add(SCENE_READS_TOPIC, "std_msgs/msg/String", 0.95, "other",
         String(data=json.dumps({"recorded_monotonic_ns": mono, "recorded_system_ns": system_of(mono),
                                          "payload": {"response_ros_clock": {"sim_time_ns": 950_000_000}}})))
-    for sim_s, text in scripted_events():
+    for sim_s, text in scripted_events(reset_s=reset_s):
         add(EVENTS_TOPIC, "std_msgs/msg/String", sim_s, "event", String(data=text))
     return out
 
 
 def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=(), transport_lost=0, transport_lost_by_topic=None,
-                transport_lost_events=None, rig=DEFAULT_RIG) -> Path:
+                transport_lost_events=None, rig=DEFAULT_RIG, reset_s=1.0) -> Path:
     """Write `root/bag` (MCAP) and `root/record-stats.json`; returns the bag directory.
 
     `omit_topics`: topics left out entirely. `drop`: (topic, index) messages left out (index counts per topic from 0).
     """
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
-    plan = messages(paused_worlds=paused_worlds, rig=rig)
+    plan = messages(paused_worlds=paused_worlds, rig=rig, reset_s=reset_s)
     plan.sort(key=lambda item: item[2])
     bag = root / "bag"
     writer = BagWriter(bag)

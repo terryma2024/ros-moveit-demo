@@ -340,6 +340,7 @@ def episode_document(*, inputs, options, scene, attempt_id, result, precondition
     return {"schema_version": 1, "kind": "ACT_ROLLOUT_EPISODE", "run_id": options.run_id, "attempt_id": attempt_id,
             "group": scene["group"], "scene": scene, "identity": dict(inputs.identity), "observation": observation,
             "execution": _execution_document(inputs, result),
+            "joint_limit_clamp_tolerance_rad": inputs.settings.joint_limit_clamp_tolerance_rad,
             "calibration": inputs.substitution, "preconditions": preconditions, "verdict": result["verdict"],
             "reason": result["reason"], "done": result["done"], "status": result["status"], "result": result}
 
@@ -398,12 +399,13 @@ def run_rollout(*, options, inputs, probes, composition_factory, episode_runner=
         "session_id": session_id, "scene_ids": [scene["scene_id"] for scene in scenes],
         "scenes_manifest_sha256": inputs.scenes.get("manifest_sha256"), "identity": dict(inputs.identity),
         "execution": _execution_document(inputs),
+        "joint_limit_clamp_tolerance_rad": inputs.settings.joint_limit_clamp_tolerance_rad,
         "observation": {**inputs.observation, "cameras": list(inputs.observation["cameras"])},
         "calibration": inputs.substitution, "preconditions": preconditions,
         "max_invalid_retries": options.max_invalid_retries})
     composition = composition_factory(layout=layout, environment=environment, inputs=inputs, options=options)
     summary = {"inference_warm_up_s": getattr(composition, "warm_up_s", None), "exit_code": EXIT_OK, "done": 0,
-               "verdicts": {}, "invalid_attempts": 0, "invalid_exhausted": [],
+               "verdicts": {}, "invalid_attempts": 0, "invalid_exhausted": [], "clamped_steps": 0,
                "fault": None, "stack_stop_confirmed": None, "scenes": len(scenes)}
     verdicts = Counter()
     try:
@@ -445,6 +447,7 @@ def _run_scenes(options, inputs, scenes, composition, group_root, preconditions,
                 result = _invalid_result(scene, attempt_id, error)
             names = files.seal(episode_document(inputs=inputs, options=options, scene=scene, attempt_id=attempt_id,
                                                 result=result, preconditions=preconditions), result)
+            summary["clamped_steps"] += (result.get("counts") or {}).get("clamped_steps", 0)
             evidence = [f"episodes/{attempt_id}/{name}" for name in names]
             if result["verdict"] == "INVALID":
                 summary["invalid_attempts"] += 1
@@ -525,8 +528,13 @@ def load_inputs(args) -> RolloutInputs:
                                   ensembling=getattr(args, "temporal_ensembling", None))
     if execution.source != "bundle":
         identity["execution_mode"] = execution.document()
+    settings = rollout_settings(frozen, config)
+    # the clamp tolerance is a LOGIC setting too (it changes what reaches the controller): bound into the identity when set, so a
+    # run with it can never be mixed with one without; absent keeps the identity of every earlier run unchanged
+    if settings.joint_limit_clamp_tolerance_rad is not None:
+        identity["joint_limit_clamp_tolerance_rad"] = settings.joint_limit_clamp_tolerance_rad
     return RolloutInputs(
-        settings=rollout_settings(frozen, config), snapshot_targets=snapshot["targets"], endpoint_policy=endpoint,
+        settings=settings, snapshot_targets=snapshot["targets"], endpoint_policy=endpoint,
         timing=controller_timing(frozen, config), rollout_config=config, observation=observation, scenes=scenes,
         substitution=contact_activation_substitution(receipt, proposal), identity=identity, bundle=bundle,
         bundle_dir=bundle_dir, runtime_config=runtime, frozen=frozen, manifest_path=manifest_path,

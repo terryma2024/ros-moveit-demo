@@ -47,6 +47,7 @@ class Inference:
     def __init__(self, clock, script=(), polls_before_reply=2):
         self.clock, self.script, self.delay = clock, list(script), polls_before_reply
         self.pending, self.submitted, self.abandoned, self.waited = None, [], 0, 0
+        self.step_rad = 0.05          # the per-row increment of the scripted chunk
 
     def submit(self, observation, *, sequence):
         if self.pending is not None:
@@ -69,7 +70,7 @@ class Inference:
             raise ValueError("INFERENCE_REPLY_INVALID")
         self.pending = None
         state = request["observation"]["state"]
-        step = 0.05 if request["behaviour"] == "ok" else 0.0
+        step = self.step_rad if request["behaviour"] == "ok" else 0.0
         chunk = tuple(tuple(value + step * (row + 1) for value in state[:6]) for row in range(10))
         return {"sequence": request["sequence"], "actions": chunk, "age_s": 0.05}
 
@@ -93,7 +94,8 @@ class Session:
     def __init__(self, ports, clock, *, moves=True, places=True, stale_after=None, stop_confirms=True,
                  submit_error=None, state0=(0.0, 0.1, -0.2, 0.3, 0.0, 0.5, 0.0, 1.0), ready_after_spins=0,
                  pose_after_spins=0, observe_error=None, observe_error_after=None, stop_error=None,
-                 sim_time_error_after=None):
+                 sim_time_error_after=None, enforce_limits=False):
+        self.enforce_limits = enforce_limits
         self.ready_after_spins, self.pose_after_spins, self.spins = ready_after_spins, pose_after_spins, 0
         self.observe_error, self.observe_error_after, self.stop_error = observe_error, observe_error_after, stop_error
         self.sim_time_error_after, self.observations = sim_time_error_after, 0
@@ -139,6 +141,10 @@ class Session:
     def submit_prefix(self, prefix):
         if self.submit_error is not None:
             raise self.submit_error
+        if self.enforce_limits:                # what the real session does before anything is sent
+            from so101_demo.act.execution import bounded_positions
+            for row in prefix["positions"]:
+                bounded_positions(row)
         self.prefixes.append(prefix)
         if self.moves:
             self.state[:6] = list(prefix["positions"][-1])

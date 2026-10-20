@@ -559,7 +559,44 @@ def _finish_failed_execution(execution: Any, error: Exception) -> None:
     execution.finish(FailedResult())
 
 
-def _execution_state_max_age_s(share_dir, *, teacher_run: bool):
+def _frozen_teacher_schema(frozen) -> int:
+    """The schema of the frozen Teacher execution policy (3 for a freeze that does not say)."""
+
+    try:
+        version = frozen["teacher_execution_policy"]["values"]["schema_version"]
+    except (KeyError, TypeError):
+        return 3
+    return version if type(version) is int else 3
+
+
+def _frozen_policy_file(frozen, snapshot) -> str:
+    """The file name, under the snapshot's `config/act`, of the Teacher execution policy the freeze bound: the default file, or the
+    `teacher_execution_policy_*.yaml` variant whose bytes the freeze carries."""
+
+    from ..act.diagnostic_episode_inputs import snapshot_policy_path
+    from ..act.teacher_endpoint import EXECUTION_POLICY_FILE
+
+    try:
+        path = snapshot_policy_path(snapshot["files"], "teacher_execution_policy", frozen["teacher_execution_policy"]["file_sha256"])
+    except (KeyError, TypeError):
+        return EXECUTION_POLICY_FILE
+    return EXECUTION_POLICY_FILE if path is None else path.rsplit("/", 1)[-1]
+
+
+def _load_safety_inputs(teacher_safety, manifest_path: Path, mark):
+    """(inputs, error) of `teacher_safety.load_frozen_safety`, marked as the phase events `load_frozen_safety.begin/end`. The load is
+    telemetry only: a failure is returned, never raised."""
+
+    mark("load_frozen_safety.begin")
+    try:
+        return teacher_safety.load_frozen_safety(manifest_path), None
+    except Exception as error:  # noqa: BLE001 - non-gating
+        return None, error
+    finally:
+        mark("load_frozen_safety.end")
+
+
+def _execution_state_max_age_s(share_dir, *, teacher_run: bool, file_name: str | None = None):
     """The execution policy's state age (the Teacher policy of a Teacher run, else the general runtime policy), or None when it
     cannot be read.
 
@@ -569,7 +606,7 @@ def _execution_state_max_age_s(share_dir, *, teacher_run: bool):
     from ..act.general_runtime_policy import GENERAL_RUNTIME_FILE, load_general_runtime_policy
     from ..act.teacher_endpoint import EXECUTION_POLICY_FILE, load_teacher_execution_policy
 
-    loader, file_name = ((load_teacher_execution_policy, EXECUTION_POLICY_FILE) if teacher_run
+    loader, file_name = ((load_teacher_execution_policy, file_name or EXECUTION_POLICY_FILE) if teacher_run
                          else (load_general_runtime_policy, GENERAL_RUNTIME_FILE))
     try:
         return loader(Path(share_dir) / "config/act" / file_name)["state_max_age_s"]
@@ -847,7 +884,9 @@ def run_dynamic_execute(
         if binder is not None:
             model_path = (share_dir / execution_inputs["scene_path"] if execution_inputs is not None
                           else share_dir / "assets/mujoco/scene.xml")
-            scene_age = _execution_state_max_age_s(share_dir, teacher_run=teacher_run)
+            scene_age = _execution_state_max_age_s(
+                share_dir, teacher_run=teacher_run,
+                file_name=_frozen_policy_file(frozen, execution_inputs) if execution_inputs is not None else None)
             scene_source_binding = binder(node, session_id=options.session_id,
                 reset_epoch=options.expected_reset_epoch, model_path=model_path,
                 expected_model=execution_inputs, max_age_s=.1,
@@ -949,7 +988,7 @@ def run_dynamic_execute(
             # the scene of the frozen inputs' rig (the cup geometry is read from it)
             execution._execution_scene_path = execution_inputs["scene_path"]
             # the freeze names the Teacher execution policy
-            execution._select_execution_policy()
+            execution._select_execution_policy(_frozen_policy_file(frozen, execution_inputs))
         if scene_source_binding is not None:
             execution._scene_source_observer = scene_source_binding.observer
             execution._scene_source_binding = scene_source_binding
@@ -965,11 +1004,9 @@ def run_dynamic_execute(
             execution._perception_error = perception_error
             if perception_error_failed:
                 summary.note_incomplete("PERCEPTION_ERROR_UNAVAILABLE")
-            try:
-                safety = teacher_safety.load_frozen_safety(Path(manifest_option))
-            except Exception as error:  # noqa: BLE001 - non-gating
-                safety = None
-                execution._safety_limits_error = f"SAFETY_LOAD_FAILED:{_failure_code(error)}"
+            safety, safety_error = _load_safety_inputs(teacher_safety, Path(manifest_option), mark)
+            if safety_error is not None:
+                execution._safety_limits_error = f"SAFETY_LOAD_FAILED:{_failure_code(safety_error)}"
             if safety is not None:
                 execution._safety_limits = summary.limits = safety.limits
                 watch = teacher_safety.CollisionWatch(
