@@ -110,6 +110,22 @@ def write_hazard_processed(run, scene, *, number=1, reasons=None, **changes):
     return dump(run.processed_dir / 'processed-result.json', document)
 
 
+ORACLE_REASON = 'TEACHER_ORACLE_EXCLUDED: ORACLE_CUP_OVERLOAD '
+
+
+def write_oracle_processed(run, scene, *, number=1, phase='CLOSE_GRIPPER', reason=None, **changes):
+    """processed-result.json of a completed over-squeeze episode that phase 2 grades with the shared Teacher-oracle rule: INVALID,
+    NOT_RUN, processor_rc 0, no QC report, the episode sealed (as in EXP-7007)."""
+    document = dict(
+        kind='ACT_PROCESSED_RESULT', schema_version=1, task_id=f'{scene}-proc-{number}', scene_id=scene, proc_attempt=number,
+        phase1_result_sha256=sha(run.result), receipt_sha256=sha(run.receipt), diagnostic_fault='none', processor_rc=0,
+        act_data_status='INVALID', act_data_qc='NOT_RUN', act_data_reason=ORACLE_REASON + phase if reason is None else reason,
+        export_eligible=False, qc_report_path=None, qc_report_sha256=None, episode_seal_sha256='e' * 64,
+        artifacts=dict(processor_report=dict(path='offline-processor-report.json', sha256='f' * 64)))
+    document.update(changes)
+    return dump(run.processed_dir / 'processed-result.json', document)
+
+
 def write_receipt(run, manifest_sha=None):
     """raw/recording-receipt.json as `act.offline.recording_receipt` writes it (only the Teacher manifest document matters here)."""
     run.receipt = dump(run.sealed / 'raw/recording-receipt.json', dict(
@@ -120,7 +136,7 @@ def write_receipt(run, manifest_sha=None):
 
 
 def make_run(tmp_path, *, kind='nominal', summary_document=None, close=None, qc='PASS', status='COMPLETED',
-             endpoint='PASS', scene=SCENE, hazard=False):
+             endpoint='PASS', scene=SCENE, hazard=False, oracle=False):
     """A synthetic finished spot-check run root. Returns an object with the paths the tests damage."""
     run = Run()
     run.root = root = (tmp_path / 'act-w1s-run').resolve()
@@ -150,14 +166,16 @@ def make_run(tmp_path, *, kind='nominal', summary_document=None, close=None, qc=
     # never in the sealed directory (which holds result.json, dynamic/, numeric/, perception/ and raw/)
     run.processed_dir = root / 'processing' / scene / (scene + '-lease-1-proc-1')
     run.qc_path = dump(run.processed_dir / 'qc-report.json', dict(status=qc))
-    run.processed = write_hazard_processed(run, scene) if hazard else write_processed(run, scene, qc)
-    if hazard:
+    run.processed = (write_hazard_processed(run, scene) if hazard else write_oracle_processed(run, scene) if oracle
+                     else write_processed(run, scene, qc))
+    if hazard or oracle:
         run.qc_path.unlink()      # the sealer refused the physics hazard: there is no QC report
     run.task_result = dump(location / 'task-result.json', dict(result=dict(act_data_qc=qc)))
     task = dict(scene_id=scene, worker_id='w00', task_id=TASK, launch_id='wave-0-w00-g1', location=str(location),
                 result_status='PASSED', teacher_execution_status=status, teacher_task_result=endpoint,
-                act_data_status='INVALID' if hazard else 'VALID' if qc == 'PASS' else 'INVALID',
-                act_data_reason=hazard_reason(HAZARD_REASONS) if hazard else None, act_data_qc='NOT_RUN' if hazard else qc,
+                act_data_status='INVALID' if hazard or oracle else 'VALID' if qc == 'PASS' else 'INVALID',
+                act_data_reason=(hazard_reason(HAZARD_REASONS) if hazard else ORACLE_REASON + 'CLOSE_GRIPPER' if oracle else None),
+                act_data_qc='NOT_RUN' if hazard or oracle else qc,
                 export_eligible=False, result_sha256=sha(run.result), task_result_sha256=sha(run.task_result),
                 processed_result_sha256=sha(run.processed))
     run.index_document = dict(schema_version=1, kind='act_collection_frozen_index', campaign_id='spot-campaign',
@@ -522,6 +540,88 @@ def test_a_hazard_outcome_that_is_not_exactly_bound_or_not_exactly_the_hazard_is
         dump(run.index, index)
     else:
         rebind(run, export_eligible=True)
+    refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
+
+
+# ---- over-squeeze without a QC report: the Teacher-oracle exclusion outcome (plan amendment 6) -----------------------------------
+
+
+def oracle_run(tmp_path, **kwargs):
+    return make_run(tmp_path, kind='over_squeeze', summary_document=over_squeeze(), oracle=True, **kwargs)
+
+
+def rebind_oracle(run, **kwargs):
+    rebind(run, **json.loads(write_oracle_processed(run, SCENE, **kwargs).read_text()))
+
+
+@pytest.mark.parametrize('phase', ['CLOSE_GRIPPER', 'MICRO_LIFT', 'WAIT_MICRO_LIFT_STABLE', 'VERIFY_PHYSICAL_GRASP'])
+def test_an_oracle_excluded_over_squeeze_run_with_the_overload_in_the_window_passes_and_names_its_route(tmp_path, prepared, phase):
+    run = oracle_run(tmp_path)
+    rebind_oracle(run, phase=phase)
+    assert not run.qc_path.exists()
+    verdict = judged(prepared(run))
+    assert verdict['verdict'] == 'PASS' and verdict['reasons'] == []
+    assert verdict['binding_route'] == 'recording_receipt_oracle_excluded'
+    assert verdict['qc_report'] is None and verdict['processor_report'] is None
+    assert verdict['recording_receipt'] == dict(path=str(run.receipt), sha256=sha(run.receipt))
+    assert verdict['phase2_outcome'] == dict(act_data_status='INVALID', act_data_qc='NOT_RUN', processor_rc=0,
+                                             act_data_reason=ORACLE_REASON + phase)
+
+
+@pytest.mark.parametrize('damage', [
+    'phase_outside_window', 'phase_unknown', 'phase_missing', 'collision_flag', 'other_reason', 'trailing_text', 'qc_report_present',
+    'half_qc_binding', 'manifest_sha_mismatch', 'receipt_changed', 'receipt_sha_not_in_processed', 'receipt_missing', 'rc_not_0',
+    'fault_injected', 'valid_status', 'qc_run', 'export_eligible', 'index_reason_differs', 'index_says_valid'])
+def test_an_oracle_excluded_outcome_that_is_not_exactly_the_window_overload_or_not_bound_is_refused(tmp_path, prepared, damage):
+    run = prepared(oracle_run(tmp_path))
+    if damage == 'phase_outside_window':
+        rebind_oracle(run, phase='LIFT')
+    elif damage == 'phase_unknown':
+        rebind_oracle(run, phase='NOT_A_PHASE')
+    elif damage == 'phase_missing':
+        rebind_oracle(run, reason='TEACHER_ORACLE_EXCLUDED: ORACLE_CUP_OVERLOAD')
+    elif damage == 'collision_flag':
+        rebind_oracle(run, reason='TEACHER_ORACLE_EXCLUDED: ORACLE_COLLISION CLOSE_GRIPPER')
+    elif damage == 'other_reason':
+        rebind_oracle(run, reason='TEACHER_ORACLE_UNVERIFIABLE: x')
+    elif damage == 'trailing_text':
+        rebind_oracle(run, reason='TEACHER_ORACLE_EXCLUDED: ORACLE_CUP_OVERLOAD CLOSE_GRIPPER; RESULT_QC_NOT_RUN: x')
+    elif damage == 'qc_report_present':
+        rebind_oracle(run, qc_report_path='qc-report.json', qc_report_sha256='0' * 64)
+    elif damage == 'half_qc_binding':
+        rebind_oracle(run, qc_report_path='qc-report.json')
+    elif damage == 'manifest_sha_mismatch':
+        write_receipt(run, manifest_sha='0' * 64)
+        rebind_oracle(run, receipt_sha256=sha(run.receipt))
+    elif damage == 'receipt_changed':
+        run.receipt.write_text(run.receipt.read_text() + ' ')
+    elif damage == 'receipt_sha_not_in_processed':
+        rebind_oracle(run, receipt_sha256='0' * 64)
+    elif damage == 'receipt_missing':
+        run.receipt.unlink()
+    elif damage == 'rc_not_0':
+        rebind_oracle(run, processor_rc=3)
+    elif damage == 'fault_injected':
+        rebind_oracle(run, diagnostic_fault='SOME_FAULT')
+    elif damage == 'valid_status':
+        rebind_oracle(run, act_data_status='VALID')
+    elif damage == 'qc_run':
+        rebind_oracle(run, act_data_qc='FAIL')
+    elif damage == 'export_eligible':
+        rebind_oracle(run, export_eligible=True)
+    elif damage == 'index_reason_differs':
+        index = copy.deepcopy(run.index_document)
+        index['collected_tasks'][0]['act_data_reason'] = ORACLE_REASON + 'MICRO_LIFT'
+        dump(run.index, index)
+    else:
+        index = copy.deepcopy(run.index_document)
+        index['collected_tasks'][0]['act_data_status'] = 'VALID'
+        dump(run.index, index)
+    refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
+
+
+def test_an_oracle_excluded_outcome_does_not_make_a_nominal_run_acceptable(tmp_path, prepared):
+    run = prepared(make_run(tmp_path, kind='nominal', oracle=True))
     refused(run, 'SPOT_CHECK_BINDING_MISMATCH')
 
 
