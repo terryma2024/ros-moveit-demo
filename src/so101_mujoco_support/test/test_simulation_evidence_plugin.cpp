@@ -1161,15 +1161,20 @@ TEST_F(AtomicEvidenceTest, PluginRefusesAPublishRateThatIsNotAWholeNumberOfSteps
   ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
   EXPECT_EQ(plugin.publish_period_ns_, 10000000);
 
+  // The plugin never blocks: a step that finds the publisher busy publishes nothing and the grid message comes one step late.
+  // The test therefore waits until the publisher thread has taken the previous message (a condition, with a long backstop: under
+  // load that thread can be starved for seconds) and says so when it did not, instead of failing later on a spacing of six.
   const auto free_publisher = [&plugin]() {
-      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
       while (std::chrono::steady_clock::now() < deadline) {
         if (plugin.realtime_publisher_->trylock()) {
           plugin.realtime_publisher_->unlock();
-          return;
+          return true;
         }
         std::this_thread::sleep_for(std::chrono::microseconds(50));
       }
+      ADD_FAILURE() << "the publisher thread did not release the publisher within 30 s";
+      return false;
     };
   // run 600 steps of 2 ms from `start`; returns the steps (from the start) at which a message was published
   const auto run = [&](double start, int steps) {
@@ -1180,6 +1185,17 @@ TEST_F(AtomicEvidenceTest, PluginRefusesAPublishRateThatIsNotAWholeNumberOfSteps
         data_->time += 0.002;
         free_publisher();
         plugin.update(model_.get(), data_.get());
+        // The publisher thread polls its mutex, so even a publisher that was free a moment ago can be locked by it when update()
+        // tries: the plugin then publishes nothing for that step by design (it never blocks) and the grid message comes with the
+        // next one. This test is about the cadence of the messages, so a step that should have published and did not is offered again
+        // at the same time; a plugin that kept missing the grid would still fail below.
+        for (int again = 0; again < 200 &&
+          plugin.last_publish_grid_ != so101_mujoco_support::publish_grid_index(data_->time, plugin.publish_period_ns_) &&
+          plugin.last_publish_grid_ == seen; ++again)
+        {
+          free_publisher();
+          plugin.update(model_.get(), data_.get());
+        }
         if (plugin.last_publish_grid_ != seen) {
           seen = plugin.last_publish_grid_;
           published_at.push_back(step);
