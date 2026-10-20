@@ -253,6 +253,20 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
     return identity
 
 
+def _check_envelope(qualified: dict, campaign_config: dict) -> None:
+    """A formal run may not load the system harder than its qualification did (identity version 2). Absent means unlimited: the
+    cap and the in-flight count are bounded by the 8 slots, the gap by 0."""
+    def effective(source, name, unlimited):
+        value = source.get(name)
+        return unlimited if value is None else value
+    for name, unlimited, code, more_is_heavier in (
+            ('max_concurrent_recordings', 8, 'RECORDINGS', True), ('max_tasks_in_flight', 8, 'IN_FLIGHT', True),
+            ('min_assignment_gap_s', 0, 'GAP', False)):
+        formal, allowed = effective(campaign_config, name, unlimited), effective(qualified, name, unlimited)
+        if (formal > allowed) if more_is_heavier else (formal < allowed):
+            raise ValueError('EIGHT_WORKER_QUALIFICATION_ENVELOPE_EXCEEDED:' + code)
+
+
 _ACT_START_KINDS = frozenset({"pick_place_validation_phase", "pick_place_validation_full", "act_collection_start"})
 _ACT_PAYLOAD_KEYS = frozenset({
     "campaign_id", "backend", "worker_count", "source_path", "source_sha256",
@@ -547,6 +561,8 @@ class UnifiedWorkloadService:
                     gpu_uuid=campaign_config['gpu_uuid'], gpu_model=campaign_config.get('gpu_model')):
                 # identity version 2 leaves the GPU out of the identity: a formal run is admitted only on the GPU its qualification ran on
                 raise ValueError('EIGHT_WORKER_QUALIFICATION_ENVIRONMENT_MISMATCH')
+            if campaign_config.get('schema_version', 1) == 2:
+                _check_envelope(proof['envelope'], campaign_config)
             if (proof.get('status') != 'PASS' or proof['report_sha256'] != digest
                     or proof['formal_split_manifest_sha256'] != payload['manifest_sha256']):
                 raise ValueError('EIGHT_WORKER_QUALIFICATION_MISMATCH')

@@ -77,7 +77,8 @@ def _qualification_run(report_path, registered_root) -> Path:
 def _closed_report(document):
     from .collection_qualification_recompute import KIND
 
-    if (type(document) is not dict or set(document) - {"environment"} != _REPORT_KEYS or document["kind"] != KIND
+    if (type(document) is not dict or set(document) - {"environment", "envelope"} != _REPORT_KEYS or document["kind"] != KIND
+            or ("environment" in document) != ("envelope" in document)
             or ("environment" in document) != (type(document.get("controlled_identity")) is dict
                                                and "gpu_uuid" not in document["controlled_identity"])
             or type(document["schema_version"]) is not int or document["schema_version"] != 1
@@ -133,4 +134,5 @@ def verify_collection_qualification(report_path, *, registered_root, expected_id
                 formal_split_manifest_sha256=contract["formal_split_manifest"]["sha256"], task_count=40)
     if "environment" in recomputed:
         proof["environment"] = recomputed["environment"]            # identity version 2 only
+        proof["envelope"] = recomputed["envelope"]
     return proof

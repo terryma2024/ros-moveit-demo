@@ -199,6 +199,15 @@ class _Run:
             return self.identity['gpu_uuid']
         return None if self.config is None else self.config['gpu_uuid']
 
+    def envelope(self):
+        """Identity version 2: the load the campaign config allowed during the qualification (None = no such limit), which a formal
+        run may not exceed."""
+        if 'gpu_uuid' in self.identity:
+            return None
+        config = self.config or {}
+        return dict(max_concurrent_recordings=config.get('max_concurrent_recordings'),
+                    max_tasks_in_flight=config.get('max_tasks_in_flight'), min_assignment_gap_s=config.get('min_assignment_gap_s'))
+
     def environment(self):
         if 'gpu_uuid' in self.identity:
             return None
@@ -617,4 +626,5 @@ def recompute(run_root, contract_path, *, readback_workers=None, readback_timeou
         waves=state.wave_refs, quality=quality, resource_logs=logs, reasons=reasons)
     if state.environment() is not None:
         report['environment'] = state.environment()                # identity version 2: the GPU this host qualified on
+        report['envelope'] = state.envelope()                      # and the load it qualified under
     return report

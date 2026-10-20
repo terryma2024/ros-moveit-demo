@@ -46,6 +46,7 @@ def test_the_report_of_a_version_2_run_records_the_gpu_as_its_environment(v2):
     report = json.loads(path.read_bytes())
     assert report['status'] == 'QUALIFIED' and report['reasons'] == []
     assert report['environment'] == {'gpu_uuid': GPU, 'gpu_model': None}
+    assert report['envelope'] == {'max_concurrent_recordings': None, 'max_tasks_in_flight': None, 'min_assignment_gap_s': None}
     assert 'gpu_uuid' not in report['controlled_identity']
     proof = verify(v2)
     assert proof['status'] == 'PASS' and proof['environment'] == {'gpu_uuid': GPU, 'gpu_model': None}

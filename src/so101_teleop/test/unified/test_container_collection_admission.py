@@ -474,6 +474,23 @@ def qualified_world_v2(tmp_path_factory):
     return world
 
 
+@pytest.fixture(scope='module')
+def qualified_world_capped(tmp_path_factory):
+    """Identity version 2 qualified under a cap of 4 recordings, 6 tasks in flight and a 1.0 s assignment gap."""
+    from collection_qualification_world import build_world, install_controlled_world
+    from so101_demo.act.parallel_qualification_verifier import build_collection_qualification_report
+
+    patch = pytest.MonkeyPatch()
+    install_controlled_world(patch)
+    try:
+        world = build_world(tmp_path_factory.mktemp('qualification-world-capped'), identity_version=2,
+                            campaign_extra=dict(max_concurrent_recordings=4, max_tasks_in_flight=6, min_assignment_gap_s=1.0))
+        build_collection_qualification_report(world.run, contract=world.contract_path)
+    finally:
+        patch.undo()
+    return world
+
+
 def sha_of(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -776,5 +793,33 @@ def test_formal_refuses_a_version_2_qualification_of_another_gpu_model(qualified
     try:
         with pytest.raises(ValueError, match='EIGHT_WORKER_QUALIFICATION_ENVIRONMENT_MISMATCH'):
             workload.start(spec, allow_existing=False)
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('edit,code', [
+    (dict(max_concurrent_recordings=5), 'RECORDINGS'), (dict(max_tasks_in_flight=7), 'IN_FLIGHT'),
+    (dict(min_assignment_gap_s=0.5), 'GAP'), ({}, 'RECORDINGS')])
+def test_formal_may_not_load_harder_than_the_qualification_did(qualified_world_capped, tmp_path, monkeypatch, edit, code):
+    def change(campaign, inputs):
+        for name in ('max_concurrent_recordings', 'max_tasks_in_flight', 'min_assignment_gap_s'):
+            campaign.pop(name, None)
+        campaign.update(dict(max_concurrent_recordings=4, max_tasks_in_flight=6, min_assignment_gap_s=1.0) if edit else {})
+        campaign.update(edit)
+    paths, spec, store, workload = formal_start(qualified_world_capped, tmp_path, monkeypatch, config_edit=change)
+    try:
+        with pytest.raises(ValueError, match='EIGHT_WORKER_QUALIFICATION_ENVELOPE_EXCEEDED:' + code):
+            workload.start(spec, allow_existing=False)
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('edit', [dict(max_concurrent_recordings=4, max_tasks_in_flight=6, min_assignment_gap_s=1.0),
+                                  dict(max_concurrent_recordings=2, max_tasks_in_flight=3, min_assignment_gap_s=2.0)])
+def test_formal_at_or_below_the_qualified_load_is_admitted(qualified_world_capped, tmp_path, monkeypatch, edit):
+    paths, spec, store, workload = formal_start(qualified_world_capped, tmp_path, monkeypatch,
+                                                config_edit=lambda campaign, inputs: campaign.update(edit))
+    try:
+        assert workload.start(spec, allow_existing=False).workload_kind == 'act_collection_start'
     finally:
         store.close()
