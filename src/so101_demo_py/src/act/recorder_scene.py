@@ -306,8 +306,10 @@ class SceneAssociations:
     def admit(self, bound: dict) -> None:
         self.history.append(copy.deepcopy(bound))
 
-    def at(self, at_s: float, tracker: SceneOperationTracker | None = None, unbuilt_sim_times=()):
+    def at(self, at_s: float, tracker: SceneOperationTracker | None = None, unbuilt_sim_times=(), *, detach: bool = True):
         """The latest admitted association at `at_s`, or None while one is still owed (rows wait, they never guess).
+
+        ``detach=False`` returns the admitted record itself (an admitted record is never changed) for a reader that only reads it.
 
         Owed: an apply whose read-back was not seen (tracker), a job issued and not built yet (`unbuilt_sim_times`, the
         sim times of their anchors), or one built and being verified (pending)."""
@@ -325,7 +327,7 @@ class SceneAssociations:
 
         for bound in reversed(self.history):
             if association_anchor(bound["association"])["response_ros_clock"]["sim_time_ns"] <= at_ns:
-                return copy.deepcopy(bound)
+                return copy.deepcopy(bound) if detach else bound
         return None
 
     def same(self, other_id: str, document: dict) -> bool:

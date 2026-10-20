@@ -335,6 +335,8 @@ class EpisodeAuditWriter:
                 from so101_demo.act.raw_physics_chunks import verify_raw_chunk
                 raw = item["payload"]["raw_chunk"]
                 verify_raw_chunk(raw, previous=self._raw_physics_previous,
+                    # the previous chunk was this call's `raw` one pass ago, with these very arguments: it is not checked again
+                    previous_verified=self._raw_physics_previous is not None,
                     session_id=self.identity["session_id"], reset_epoch=self.identity["reset_epoch"],
                     **({} if self._execution_model is None else {
                         "nq": self._execution_model["nq"], "nv": self._execution_model["nv"],
