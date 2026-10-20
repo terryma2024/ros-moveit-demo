@@ -459,7 +459,7 @@ def qualified_world(tmp_path_factory):
 
 
 @pytest.fixture(scope='module')
-def qualified_world_v2(tmp_path_factory):
+def qualified_world_environment(tmp_path_factory):
     """The same world under identity version 2: no GPU in the controlled identity, campaign config version 2."""
     from collection_qualification_world import build_world, install_controlled_world
     from so101_demo.act.parallel_qualification_verifier import build_collection_qualification_report
@@ -778,8 +778,8 @@ def test_a_spot_check_start_needs_exactly_one_worker(tmp_path):
         store.close()
 
 
-def test_formal_admits_on_the_gpu_a_version_2_qualification_ran_on(qualified_world_v2, tmp_path, monkeypatch):
-    paths, spec, store, workload = formal_start(qualified_world_v2, tmp_path, monkeypatch)
+def test_formal_admits_on_the_gpu_a_version_2_qualification_ran_on(qualified_world_environment, tmp_path, monkeypatch):
+    paths, spec, store, workload = formal_start(qualified_world_environment, tmp_path, monkeypatch)
     try:
         context = workload.start(spec, allow_existing=False)
         assert context.workload_kind == 'act_collection_start'
@@ -787,8 +787,8 @@ def test_formal_admits_on_the_gpu_a_version_2_qualification_ran_on(qualified_wor
         store.close()
 
 
-def test_formal_refuses_a_version_2_qualification_of_another_gpu_model(qualified_world_v2, tmp_path, monkeypatch):
-    paths, spec, store, workload = formal_start(qualified_world_v2, tmp_path, monkeypatch,
+def test_formal_refuses_a_version_2_qualification_of_another_gpu_model(qualified_world_environment, tmp_path, monkeypatch):
+    paths, spec, store, workload = formal_start(qualified_world_environment, tmp_path, monkeypatch,
                                                 config_edit=lambda campaign, inputs: campaign.update(gpu_model='another-model'))
     try:
         with pytest.raises(ValueError, match='EIGHT_WORKER_QUALIFICATION_ENVIRONMENT_MISMATCH'):

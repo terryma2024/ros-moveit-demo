@@ -1,4 +1,4 @@
-"""The v1 controlled identity of a container collection start: pinned before the v2 changes.
+"""The v1 controlled identity of a container collection start: pinned before the environment_world changes.
 
 A v1 campaign config keeps its identity after the logic/runtime split: the runtime-class keys are in the file hash but not in
 the controlled identity, `gpu_uuid` and the images are, and the rig profile is only when named.
@@ -23,7 +23,7 @@ RUNTIME_KEYS = dict(processor_count=6, processing_max_attempts=3, processing_res
                     max_tasks_in_flight=4, min_assignment_gap_s=1.0)
 
 
-def test_v1_identity_has_the_six_keys_with_the_gpu_and_the_images(tmp_path):
+def test_identity_has_the_six_keys_with_the_gpu_and_the_images(tmp_path):
     config = campaign_fixture(tmp_path)
     identity = _collection_identity(PAYLOAD, config)
     assert set(identity) == {*PAYLOAD, "gpu_uuid", "image_source_install"}
@@ -32,12 +32,12 @@ def test_v1_identity_has_the_six_keys_with_the_gpu_and_the_images(tmp_path):
                                                     shard=config["shard_image"])
 
 
-def test_v1_identity_ignores_every_runtime_class_key(tmp_path):
+def test_identity_ignores_every_runtime_class_key(tmp_path):
     config = campaign_fixture(tmp_path)
     assert _collection_identity(PAYLOAD, config | RUNTIME_KEYS) == _collection_identity(PAYLOAD, config)
 
 
-def test_v1_identity_names_the_rig_profile_only_when_the_config_does(tmp_path):
+def test_identity_names_the_rig_profile_only_when_the_config_does(tmp_path):
     config = campaign_fixture(tmp_path)
     assert "rig_profile_sha256" not in _collection_identity(PAYLOAD, config)
     assert _collection_identity(PAYLOAD, config | dict(rig_profile_sha256="5" * 64))["rig_profile_sha256"] == "5" * 64
