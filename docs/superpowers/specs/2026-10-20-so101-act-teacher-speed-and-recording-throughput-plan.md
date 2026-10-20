@@ -86,3 +86,8 @@ Decisions:
        max(new) ≤ max(EXP-625 ∪ control) + max(|max(control) − max(EXP-625)|, floor)
 
    The floor is 0.02 µm for compression and 0.002 N for force. Values below the reference are allowed. No oracle flag is allowed, and every value must be below the r10b limits.
+4. **Fallback A after EXP-628 (human decision).** Fix D did not take effect. The Teacher reads its transient-local observer ring 3–9 ms after the replay starts arriving, so in 11 of 12 scenes the paused records were not in it yet. The rule fired only in dbg-04.
+   - **Change:** 18a's safety preload is reverted for schema 4. The load returns to its schema 3 position after pose accept, and the phase marks are kept. The fix-D code stays: it is consistent when it fires.
+   - **Criterion change:** R1's "leading rows ≤ 2.2 s" criterion is dropped, because about 5 s is expected with A.
+   - **What remains of tier 1:** 18b (pick-prefix precompute) only.
+5. **Peak reference widened (human decision).** The one-sided rule of amendment 3 is unchanged. The reference max and the run-to-run tolerance are computed from every schema 3 run available on the same 16 scene positions: EXP-625 and EXP-627, plus EXP-623 and EXP-624 where they cover the same positions.
