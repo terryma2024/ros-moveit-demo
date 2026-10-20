@@ -856,14 +856,6 @@ def run_dynamic_execute(
             file=status_stream,
         )
         mark("ready")
-        # Tier 1 sequencing (item 18a, a schema 4 Teacher policy only): the telemetry-only safety inputs load here, while the physics
-        # is paused waiting for the cup pose, instead of after the pose is accepted. The result is consumed at the usual place.
-        safety_preloaded = None
-        from ..act.teacher_endpoint import EXECUTION_SCHEMA_SPEED
-        if teacher_run and _frozen_teacher_schema(frozen) >= EXECUTION_SCHEMA_SPEED:
-            from . import teacher_safety
-            safety_preloaded = _load_safety_inputs(teacher_safety, Path(manifest_option), mark)
-            stop_flags.raise_if_stopped()
         mark("get_one.begin")
         sample = source.get_one(options.cup_pose_timeout_s)
         mark("get_one.end")
@@ -1012,9 +1004,7 @@ def run_dynamic_execute(
             execution._perception_error = perception_error
             if perception_error_failed:
                 summary.note_incomplete("PERCEPTION_ERROR_UNAVAILABLE")
-            if safety_preloaded is None:
-                safety_preloaded = _load_safety_inputs(teacher_safety, Path(manifest_option), mark)
-            safety, safety_error = safety_preloaded
+            safety, safety_error = _load_safety_inputs(teacher_safety, Path(manifest_option), mark)
             if safety_error is not None:
                 execution._safety_limits_error = f"SAFETY_LOAD_FAILED:{_failure_code(safety_error)}"
             if safety is not None:

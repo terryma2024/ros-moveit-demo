@@ -1,6 +1,6 @@
 """Tier 1 sequencing (plan 2026-10-20 item 18a): `teacher_safety.load_frozen_safety` is a telemetry-only block of about 3 s that used to run
-after the cup pose was accepted. With a schema 4 Teacher policy it runs while the physics is paused waiting for the cup pose; a schema 3
-freeze keeps its position. Both are marked as phase events so a run can show where the time goes."""
+after the cup pose was accepted. The early load of a schema 4 policy was reverted (fallback A): every schema loads it after the pose is
+accepted. It is marked as phase events so a run can show where the time goes."""
 
 import json
 
@@ -27,13 +27,14 @@ def test_a_schema_3_freeze_loads_the_safety_inputs_after_the_pose_exactly_where_
         "load_frozen_safety.end") < phases.index("build_actions.begin")
 
 
-def test_a_schema_4_freeze_loads_the_safety_inputs_before_the_pose_wait(tmp_path, monkeypatch, capsys):
+def test_a_schema_4_freeze_loads_the_safety_inputs_after_the_pose_like_schema_3(tmp_path, monkeypatch, capsys):
+    # Fallback A (plan amendment 4): the early load put the paused world inside the Teacher's observer ring, so it is reverted.
     code, execution, watches, events = teacher_run(tmp_path, monkeypatch, schema=4)
     assert code == 0 and events.count("safety.load") == 1
-    assert events.index("safety.load") < events.index("sample.acquire")
+    assert events.index("sample.acquire") < events.index("safety.load")
     phases = marks(capsys.readouterr().err)
-    assert phases.index("ready") < phases.index("load_frozen_safety.begin") < phases.index(
-        "load_frozen_safety.end") < phases.index("get_one.begin")
+    assert phases.index("ready") < phases.index("get_one.begin") < phases.index("get_one.end") < phases.index(
+        "load_frozen_safety.begin") < phases.index("load_frozen_safety.end") < phases.index("build_actions.begin")
     assert phases.count("load_frozen_safety.begin") == 1 and phases.count("load_frozen_safety.end") == 1
 
 
