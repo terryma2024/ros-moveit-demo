@@ -172,7 +172,9 @@ class TeacherRun:
         """Refuse an invalid config, then read the one start observation before any arm or gripper motion.
 
         Returns the snapshot, or None when the object was built without the Teacher policies (legacy partial
-        construction). The pre-motion config checks are the only reason this raises.
+        construction). It raises for a pre-motion config check that fails, and, under a schema 4 Teacher policy, with
+        TEACHER_RESET_BOUNDARY_PAUSED_RING (recorded as `teacher_reset_boundary_error`) when the observer ring has no unpaused
+        record after its last paused one.
         """
 
         error = getattr(self, "_teacher_config_error", None)
@@ -227,6 +229,8 @@ class TeacherRun:
             last_paused = max(index for index, record in enumerate(matching) if record.evidence.paused)
             matching = matching[last_paused + 1:]
             if not matching:
+                self._document["teacher_reset_boundary_error"] = "TEACHER_RESET_BOUNDARY_PAUSED_RING"
+                self._write()
                 raise RuntimeError("TEACHER_RESET_BOUNDARY_PAUSED_RING")
         for record in matching[:1]:
             return {**self._teacher_observation(record.evidence),
