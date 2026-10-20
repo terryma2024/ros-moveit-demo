@@ -1211,10 +1211,12 @@ def test_exact_tree_rejects_unexpected_directory_before_traversal(
             raise AssertionError("UNEXPECTED_DIRECTORY_TRAVERSAL_SENTINEL")
         return original_scandir(path)
 
-    # Catches recursion before the expected-directories membership check.
-    monkeypatch.setattr(os, "scandir", guarded_scandir)
-    with pytest.raises(GroundingDinoDatasetError, match="MANIFEST_INVALID|SOURCE_PATH_INVALID"):
-        _validate_compact_tree(root, manifest)
+    # Catches recursion before the expected-directories membership check. The patch ends with the call under test, so the descriptor-based
+    # walk of shutil.rmtree in the tmp_path teardown (tmp_path_retention_policy = failed) runs with the real os.scandir.
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "scandir", guarded_scandir)
+        with pytest.raises(GroundingDinoDatasetError, match="MANIFEST_INVALID|SOURCE_PATH_INVALID"):
+            _validate_compact_tree(root, manifest)
 
 
 @pytest.mark.parametrize("entry_type", ["regular", "directory", "symlink", "fifo"])

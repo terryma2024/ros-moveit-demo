@@ -120,7 +120,7 @@ flowchart LR
     W --> DAT["so101-datasets/{name}<br/>exported datasets"]
     W --> POL["so101-policies/{train-run}<br/>bundles and checkpoints"]
     W --> BLD["so101-build/<br/>gates/{id}, ccache"]
-    W --> TLS["so101-tools/<br/>gate, training, images,<br/>run-tools, claude-tools"]
+    W --> TLS["so101-tools/<br/>training, deps,<br/>one-off helpers"]
     EVI --> REG["act-data/20260924-fbc25063-resume (REG)"]
     REG --> RR["container-campaign-20261012T003700Z-2130aaf1 (R)<br/>gates/, image-build-*, run-logs/, scratch/"]
     REG --> RUNS["act-w8*-{stamp} run roots, *-inputs-{stamp},<br/>act-templates/, SEALED-ROOTS.json,<br/>act-dataset-*/, act-rollout-*/"]
@@ -136,10 +136,10 @@ Figure 3. The `W/*` layout and the registered evidence root of this task.
 | `W/so101-datasets/` | Exports such as `side-wrist-103-20261019T0342Z` (8.0 GB) | Reproducible from a manifest. |
 | `W/so101-policies/` | One directory per training run holding `bundle/`, `bundle.state.json`, `bundle.training-view` | Recorded in `training-outputs.json`. |
 | `W/so101-build/` | `gates/<id>` build and install trees, ccache | Deletable after the gate and templates that use it are done. |
-| `W/so101-tools/` | Helper scripts that are not in git: the gate, training launchers, image build, samplers | Indexed in `W/so101-tools/README.md`. |
+| `W/so101-tools/` | Only one-off or temporary helpers that are not in git: training launchers, the frozen `deps/`, one-off scripts. The gate, evidence and image tools and the samplers are in the repository under `scripts/`. | Indexed in `W/so101-tools/README.md`. |
 
 Sealed gates `8f8123dcba86` and `a1d3b7b0bbb5` keep their install inside their evidence directory because sealed roots
-never move (record: gate README-v4).
+never move (record: `scripts/gate/README.md`).
 
 ### 1.4 Camera rigs
 
@@ -191,12 +191,12 @@ mobile base (an AGV with a mast camera), but nothing composes them.
 | Stage | Command or tool | Main output | Section |
 | --- | --- | --- | --- |
 | Scene lists | `act_sample`, evidence-side generators | `*.scenes.json` with splits | 3.1 |
-| Gate | `run-host-gates-fast-v4.zsh` | `R/gates/<id>/gates-result.txt`, install tree | 2.10 |
-| Images | `build_images.zsh` | shard and inference image digests | 3.5 |
+| Gate | `scripts/gate/run_host_gate.zsh` | `R/gates/<id>/gates-result.txt`, install tree | 2.10 |
+| Images | `scripts/images/build_images.zsh` | shard and inference image digests | 3.5 |
 | Contact policy | `act_collect_contact_calibration`, `act_analyze_contact_calibration`, `act_contact_spot_check`, `act_activate_contact_policy` | activation receipt | 2.9 |
 | Qualification | `act_collect_parallel --qualification`, `act_build_parallel_qualification_report`, `act_verify_parallel_qualification` | `host/qualification-report.json`, proof | 3.2 |
 | Formal collection | `act_collect_parallel` | run root, `collection-index.json`, `campaign-result.json` | 3.2 |
-| Seal | `seal_roots.py` | `SEALED.json`, seal manifest, `SEALED-ROOTS.json` | 5.3 |
+| Seal | `scripts/evidence/seal_roots.py` | `SEALED.json`, seal manifest, `SEALED-ROOTS.json` | 5.3 |
 | Export and training | `act_train` | dataset, bundle, `training-outputs.json` | 2.6 |
 | Offline evaluation | `act_offline_evaluate` | `offline-eval.json` | 2.7 |
 | Rollout | `act_rollout_native`, `act_evaluate` | per-episode evidence, `summary.json` | 2.8 |
@@ -761,14 +761,20 @@ Figure 18. From calibration to activation (design `2026-10-18-so101-act-containe
 
 ### 2.10 Gates and input templates
 
-**Host gate v4** (`W/so101-tools/gate/run-host-gates-fast-v4.zsh`, usage `--demo-workers 12`). Run it from the
-worktree with a clean `git status`. It builds the colcon workspace, runs the `so101_demo_py` pytest suite in parallel
-workers, and runs the colcon tests, with skip rules for the ros2_control and joint_trajectory_controller suites when
-the tree and apt hashes equal a green baseline.
+**Host gate** (`scripts/gate/run_host_gate.zsh`). Run it from the worktree under test, with a clean worktree. It builds
+the colcon workspace, runs the `so101_demo_py` pytest suite in parallel workers, and runs the colcon tests, with skip rules for
+the ros2_control and joint_trajectory_controller suites when the tree and apt hashes equal a green baseline.
+
+The gate tools are tracked in git, so every host runs one versioned copy. A gate result is valid only if `scripts/gate` is
+clean at the tested commit; each result directory records the tools commit (`gate-tools.txt`). Host-specific values (evidence
+root, build root, interpreters, demo workers, staged mode, memory scope) live in `scripts/gate/hosts/<host>.env`, and the
+entry point takes `--host <name>` or detects the host from `hostname`. The evidence tools (`scripts/evidence/`), the image
+build (`scripts/images/`) and the samplers (`scripts/run_tools/`) read the same host values. After a failed gate, one rerun of
+failures listed in `scripts/gate/known-flakes.txt` runs by default. See `scripts/gate/README.md`.
 
 | Item | Where |
 | --- | --- |
-| Build, install, log, test-run trees | `W/so101-build/gates/<id>/` |
+| Build, install, log, test-run trees | `BUILD_ROOT/gates/<id>/` (`W/so101-build/gates/<id>/` on ai-station) |
 | Results: `gates-result.txt`, `fast-gate-timing.txt`, `head.txt`, `*.rc`, decisions | `R/gates/<id>/` |
 | Pointer to the build root | `R/gates/<id>/build-root.txt` |
 | Per-run `TMPDIR` for pytest and colcon test | `R/scratch/gate-<id>/` (about 12 GiB each; deletion candidate after readback) |
@@ -859,7 +865,7 @@ a new contact policy restarts the ladder from the gate.
 ```mermaid
 flowchart TB
     SC["Scene generation<br/>sampler inside the anchor triangle,<br/>0.004 m apart, place exclusion,<br/>five-pose Teacher reachability"] --> LISTS["lists: debug-16, qualification-40,<br/>formal N with splits"]
-    GATE["Host gate v4 green"] --> IMG["build shard and inference images<br/>at the gated commit"]
+    GATE["Host gate green"] --> IMG["build shard and inference images<br/>at the gated commit"]
     IMG --> TPL
     LISTS --> TPL["templates: new-inputs.py + author.py<br/>validate-inputs"]
     CP["contact policy activated<br/>for this model and scene"] --> TPL
@@ -1008,7 +1014,7 @@ defect, CP-3730), EXP-7002 (nominal, PASS, CP-3735 after the judge fix of CP-373
 ```mermaid
 sequenceDiagram
     participant DEV as Writer (src change committed)
-    participant GATE as run-host-gates-fast-v4.zsh
+    participant GATE as run_host_gate.zsh
     participant BLD as W/so101-build/gates/ID
     participant EVD as R/gates/ID
     participant IMG as build_images.zsh
@@ -1199,6 +1205,7 @@ Teacher and recorder policies (frozen with the attempt inputs; the bound values 
 | `teacher_endpoint.yaml` | `initial_position_m` 0.010, `initial_axis_rad` 0.15, `final_xy_m` 0.020, `final_z_m` 0.010, `final_axis_rad` 0.15, `settle_s` 0.5 | L |
 | `teacher_execution_policy.yaml` (schema 3) | `state_max_age_s` 0.5, `state_unavailable_stop_s` 1.0, `execution_deadline_s` 180, `gripper_close_target_rad` -0.047608632840292, `carry_max_velocity_scaling` 0.03, `carry_max_acceleration_scaling` 0.0075, tilt-compensated place height keys, `grasp_stable_dwell_s` 0.25, `release_settle_dwell_s` 0.5, `arm_stop_wait_s` 1.0 | motion keys L; `execution_deadline_s` RO |
 | `teacher_execution_policy_side_wrist_fast.yaml` (schema 4) | the schema 3 values plus `move_above_object_velocity_scaling` and `move_above_object_acceleration_scaling` 0.10, `retreat_velocity_scaling` and `retreat_acceleration_scaling` 0.10, `prepare_open_gripper_duration_s` 1.0. A schema 4 policy also turns on one sequencing change with the same arm motion: the pick-prefix IK horizon is computed during PREPARE_OPEN_GRIPPER. `load_frozen_safety` stays after the cup pose is accepted for every schema (an early load put the paused world inside the Teacher's observer ring and was reverted); its `load_frozen_safety.begin/end` phase marks are kept. A freeze may bind any `teacher_execution_policy_<name>.yaml` that the execution snapshot carries. | L |
+| `teacher_execution_policy_side_wrist_fast_descend010.yaml`, `..._descend020.yaml` (schema 5) | the carry_b values (a schema 4 file; carry 0.08 / 0.03, round-2 plan amendment 1) plus four required keys: `descend_approach_velocity_scaling` and `descend_approach_acceleration_scaling` (0.10 and 0.20), `descend_final_distance_m` 0.02 (valid range above 0.005 through 0.05 m) and `open_gripper_duration_s` 1.0 (0.5 through 5.0 s). With frozen inputs DESCEND is planned and executed as two motions: an approach to the point `descend_final_distance_m` above the grasp pose on the straight line from the pregrasp pose, at the approach scaling, then the last part to the grasp pose at the template scaling (0.03 / 0.03). If the pregrasp pose is already within that distance, only the last motion runs. Both motions stay in the DESCEND phase and one motion monitor covers them. Schema 3 and 4 documents still load and hash as before and keep the six interpolated DESCEND segments. OPEN_GRIPPER takes `open_gripper_duration_s` with a schema 5 policy and 2.0 s otherwise; CLOSE_GRIPPER and RECOVER_OPEN_GRIPPER keep 2.0 s. The two files are carry_b copies; regenerate them by copying the chosen carry file, setting `schema_version: 5` and adding the four keys. The reachability preflight still checks the six-segment DESCEND. | L |
 | `episode_recorder.yaml` | `max_duration_s` 300; `finish_budget_s` 5; `event_inbox_capacity` 256; `physics_spool_backlog_frames_max` 64; `physics_receiver_lag_max_s` 5.0; orchestrator timeouts | `max_duration_s` L; backlog and lag RO; inbox, poll, timeouts R |
 | `endpoint_pose_development_runtime.yaml` | `disk_free_min_bytes` 53,687,091,200 | R |
 | Spot-check over-squeeze | only `gripper_close_target_rad` -0.049, in a source copy | L |
@@ -1607,7 +1614,7 @@ absent; pipelines need `set -o pipefail`; `status` is a read-only zsh parameter.
 | Evidence root | The registered directory that holds a task's evidence |
 | Formal plane | Collection that produces committed episodes for training |
 | Frozen inputs | Immutable copies of every input, with an inputs manifest of their hashes |
-| Gate | The Host gate v4 run: build, demo pytest, colcon tests |
+| Gate | The Host gate run: build, demo pytest, colcon tests |
 | L / R / RO | Logic, runtime, runtime with outcome risk (section 4.1) |
 | Lease | Durable ownership of the physical GPU for one campaign or training run |
 | NBFC | NoteBook FanControl, the fan service on ai-station |

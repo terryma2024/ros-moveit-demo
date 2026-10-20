@@ -98,3 +98,4 @@ Decisions:
 
    Before this, the judge accepted only the physics-hazard outcome (rc 3). The route needs a RED-to-GREEN test, a new gate and new images, then R2' is re-run and R3 follows.
 7. **"Endpoint not worse" (human decision).** The median xy and z errors must be no worse than EXP-625's. R1'' (EXP-629) passes under this rule.
+8. **Final tier 3 policy (coordinator decision, following the plan rule).** Both DOE levels passed the rule (0 oracle flags, p100 compression at most 115.5 um: EXP-630 at 0.011 gave 113.281 um, EXP-631 at 0.015 gave 113.199 um), so the faster level is taken. The final round-1 Teacher execution policy is `src/so101_demo_py/config/act/teacher_execution_policy_side_wrist_fast_carry015.yaml`: the schema 4 FAST file with `carry_max_acceleration_scaling` 0.015. Round 2 (`docs/superpowers/specs/2026-10-21-so101-act-teacher-speed-round2-plan.md`) continues from it, and item 19 qualifies the final Teacher after round 2.

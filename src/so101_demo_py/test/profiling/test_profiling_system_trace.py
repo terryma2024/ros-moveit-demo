@@ -41,6 +41,17 @@ class _ExecuteSuccessfulTrace(Action):
         return []
 
 
+@pytest.fixture(autouse=True)
+def _fresh_launch_logging():
+    """launch keeps process-global log handlers on the ROS_LOG_DIR of the first launch in the process. pytest removes the tmp_path of a
+    passed test (tmp_path_retention_policy = failed), so a handler left by an earlier test would reopen a deleted directory."""
+    import launch.logging
+
+    launch.logging.reset()
+    yield
+    launch.logging.reset()
+
+
 def _unexpected(*_args, **_kwargs):
     raise AssertionError("dependency discovery must stay lazy")
 

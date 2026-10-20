@@ -155,7 +155,9 @@ def local_start_guard(monkeypatch, tmp_path_factory):
 
 def resource_root(tmp_path, suffix='batch'):
     """Keep UDS paths short while giving every test case its own root."""
-    key = os.fsencode(tmp_path / suffix)
+    # tmp_path directories of passed tests are removed (tmp_path_retention_policy = failed) and pytest reuses their names, while this root
+    # lives outside tmp_path, so the key also names the test case
+    key = os.fsencode(tmp_path / suffix) + b'\0' + os.environ.get('PYTEST_CURRENT_TEST', 'standalone').split(' (', 1)[0].encode()
     return Path(os.environ['TMPDIR']).parent / f'rr-{hashlib.sha256(key).hexdigest()[:16]}'
 
 

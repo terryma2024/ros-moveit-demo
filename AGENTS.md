@@ -32,7 +32,10 @@
   - `W/so101-policies/<train-run>/`: trained policy bundles and checkpoints.
   - `W/so101-build/`: gate build and install trees (`gates/<id>/`), image build scratch, and
     ccache.
-  - `W/so101-tools/`: helper scripts not tracked in git, and pytest plugins.
+  - `W/so101-tools/`: only one-off or temporary helpers that are not tracked in git. The gate,
+    evidence and image tools live in the repository under `scripts/`.
+- Host gates run `scripts/gate/<entry>` from the worktree under test. A gate result is valid only if
+  `scripts/gate` is clean at that commit.
 - Things stored outside the evidence root are recorded in it by path and sha256. Exports, policies,
   and builds also need the manifest or command that reproduces them. Do not place a symlink inside
   the evidence root that points outside it. Sealed roots stay where they are and are never moved
@@ -43,9 +46,11 @@
   `/data/work/so101-evidence/<task-family>/<run-id>/scratch/<test-run-id>/tmp`. Before starting
   `pytest` or `colcon test`, set `TMPDIR`, `TMP`, and `TEMP` to that directory and use the exact test
   Python executable to verify that `tempfile.gettempdir()` resolves inside it; fail closed if it
-  does not. Record the scratch path and elapsed time with the test evidence, classify the scratch
-  tree as a deletion candidate after readback, and do not delete it without explicit user
-  authorization. Do not apply this `/data` path rule on macOS or other hosts, and do not disable
+  does not. The pytest configs set `tmp_path_retention_policy = "failed"` (human-approved
+  2026-10-20), so pytest keeps only the `tmp_path` directories of failed tests. Record the scratch
+  path and elapsed time with the test evidence, classify the remaining scratch tree as a deletion
+  candidate after readback, and do not delete it without explicit user authorization. Do not apply
+  this `/data` path rule on macOS or other hosts, and do not disable
   `fsync`, filesystem journaling, or integrity checks or substitute `tmpfs` to make the test faster.
 - The default interactive shell in this workspace is `zsh`. Do not assign to zsh special or
   read-only parameters such as `status`; store an exit code in a task-specific name such as `rc` or

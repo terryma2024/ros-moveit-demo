@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 
-from so101_demo.core.domain import ActionResult
+from so101_demo.core.domain import ActionResult, State
 from so101_demo.core.place_height import PlaceHeightRefused
 
 #: The Teacher run's failure codes of the evidence and joint-state streams (the codes raised by the shared helpers are mapped to these
@@ -79,6 +79,21 @@ def _mark_phase(name):
         _mark_active_phase(name)
     except Exception:
         pass
+
+
+#: Round-2 plan S3, measurement only: the states whose planning and IK run between Teacher phases on the carry's critical path.
+_PLACE_SIDE_STATES = frozenset({State.LIFT, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE})
+
+
+def _mark_place_side(state, name):
+    """Place-side mark ``place_side.<STATE>.<name>`` for a place-side state, nothing for any other. It goes to the timer's separate
+    place-side line (`DYNAMIC_EXECUTE_PLACE_SIDE_TIMING`), never to the phase-timing line; observation only, never raises."""
+    if state in _PLACE_SIDE_STATES:
+        try:
+            from so101_demo.ros.dynamic_runtime import _mark_active_place_side
+            _mark_active_place_side(f"place_side.{state.value}.{name}")
+        except Exception:
+            pass
 
 
 # Burst-spin budget (S3). `rclpy.spin_once` runs at most one callback, while evidence, scene, joint-state, chunk and
