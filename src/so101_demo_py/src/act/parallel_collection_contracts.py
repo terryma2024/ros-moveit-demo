@@ -60,16 +60,23 @@ def read_document(path, *, limit=16*1024*1024):
 RIG_IDENTITY_KEY = 'rig_profile_sha256'
 
 
+#: Identity version 2 (multi-host design Q3) has no `gpu_uuid`: the GPU is the environment of a run, recorded in the qualification report
+#: and checked against the campaign config, not part of what two hosts must agree on. A version 1 identity still carries it.
+ENVIRONMENT_IDENTITY_KEYS = frozenset({'gpu_uuid'})
+
+
 def validate_controlled_identity(identity):
-    _require(type(identity) is dict and set(identity) - {RIG_IDENTITY_KEY} == IDENTITY_KEYS)
-    for name in (IDENTITY_KEYS | ({RIG_IDENTITY_KEY} & set(identity))) - {'image_source_install','gpu_uuid'}:
+    _require(type(identity) is dict)
+    version_keys = set(identity) - {RIG_IDENTITY_KEY}
+    _require(version_keys == IDENTITY_KEYS or version_keys == IDENTITY_KEYS - ENVIRONMENT_IDENTITY_KEYS)
+    for name in (version_keys | ({RIG_IDENTITY_KEY} & set(identity))) - {'image_source_install','gpu_uuid'}:
         _require(type(identity[name]) is str and re.fullmatch(r'[0-9a-f]{64}',identity[name]) is not None)
     images = identity['image_source_install']
     _require(type(images) is dict and set(images) == {'inference','shard'})
     for image in images.values():
         _image(image)
-    _require(type(identity['gpu_uuid']) is str and re.fullmatch(
-        r'GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}',identity['gpu_uuid']) is not None)
+    _require('gpu_uuid' not in identity or (type(identity['gpu_uuid']) is str and re.fullmatch(
+        r'GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}',identity['gpu_uuid']) is not None))
     return copy.deepcopy(identity)
 
 

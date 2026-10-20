@@ -391,6 +391,10 @@
       "type": "string",
       "pattern": "^GPU-.+$"
     },
+    "gpu_model": {
+      "type": "string",
+      "minLength": 1
+    },
     "max_concurrent_recordings": {
       "type": "integer",
       "minimum": 1,

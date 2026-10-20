@@ -129,7 +129,9 @@ RETRY_INVALID_MAX_ROUNDS_LIMITS = (0, 3)
 # (`unified.admission._collection_identity`, present only when named here), and the frozen inputs of the campaign must bind the same
 # profile (`case_inputs.campaign_binding`), so data of different rigs cannot be mixed under one qualification.
 _RIG_PROFILE_SHA256 = "rig_profile_sha256"
-_OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
+# The GPU model the campaign declares (environment class: recorded in the qualification report, not part of the identity).
+_GPU_MODEL = "gpu_model"
+_OPTIONAL_LIMITS = (_GPU_MODEL, _RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
                     _RIG_PROFILE_SHA256, *_INT_LIMITS)
 
 
@@ -218,6 +220,8 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
         _image(document["shard_image"])
         _text(document["gpu_uuid"])
         _require(document["gpu_uuid"].startswith("GPU-"))
+        if "gpu_model" in document:
+            _text(document["gpu_model"])
         if document["qualification_contract"] is not None:
             validate_file_ref(document["qualification_contract"])
     except (OSError, ValueError, KeyError, TypeError, UnicodeError, RuntimeError) as error:

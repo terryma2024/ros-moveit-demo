@@ -241,8 +241,11 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
     plane with its run contract, the formal plane with the qualification report's contract."""
     identity = {name: payload[name] for name in ('source_sha256', 'runtime_config_sha256',
                                                  'collection_config_sha256', 'contact_policy_fingerprint')}
-    identity.update(gpu_uuid=campaign_config['gpu_uuid'], image_source_install=dict(
+    identity.update(image_source_install=dict(
         inference=campaign_config['teacher_service']['image'], shard=campaign_config['shard_image']))
+    if campaign_config.get('schema_version', 1) == 1:
+        # identity version 1 carries the GPU; version 2 (campaign config version 2) has it as the environment of the run
+        identity['gpu_uuid'] = campaign_config['gpu_uuid']
     if 'rig_profile_sha256' in campaign_config:
         # the camera rig is part of the controlled identity when the campaign names one; a config written before rig profiles
         # existed names none and its identity is the six keys it always had (rig v1)
@@ -540,6 +543,10 @@ class UnifiedWorkloadService:
                     expected_identity=_collection_identity(payload, campaign_config))
             except (OSError, KeyError, TypeError, ValueError) as error:
                 raise ValueError('EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID') from error
+            if campaign_config['schema_version'] == 2 and proof.get('environment') != dict(
+                    gpu_uuid=campaign_config['gpu_uuid'], gpu_model=campaign_config.get('gpu_model')):
+                # identity version 2 leaves the GPU out of the identity: a formal run is admitted only on the GPU its qualification ran on
+                raise ValueError('EIGHT_WORKER_QUALIFICATION_ENVIRONMENT_MISMATCH')
             if (proof.get('status') != 'PASS' or proof['report_sha256'] != digest
                     or proof['formal_split_manifest_sha256'] != payload['manifest_sha256']):
                 raise ValueError('EIGHT_WORKER_QUALIFICATION_MISMATCH')
