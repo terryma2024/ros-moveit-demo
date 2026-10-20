@@ -89,3 +89,7 @@ Each step is validated before the next one starts. All acceptance rules are the 
 
 - The Teacher span goes from about 66 s to about 50–55 s on the long-carry scenes.
 - The per-scene slot drops by the same amount.
+
+## Amendments
+
+1. **S1 result and the carry setting (coordinator decision, following the plan rule "the final carry setting is the fastest accepted level").** Levels A (0.05 / 0.02, EXP-632) and B (0.08 / 0.03, EXP-633) were both accepted, so the faster level B is taken. The S1 carry setting is `carry_max_velocity_scaling` 0.08 and `carry_max_acceleration_scaling` 0.03 (`teacher_execution_policy_side_wrist_fast_carry_b.yaml`). The schema 5 DESCEND files `..._r2_descend010.yaml` and `..._r2_descend020.yaml` are regenerated from this file (carry keys 0.08 / 0.03 instead of carry015's 0.03 / 0.015); nothing else in them changes.

@@ -1,5 +1,5 @@
-# Schema 5 variant of `teacher_execution_policy_side_wrist_fast_carry015.yaml` (round-2 plan S2, docs/guides/so101-act-data-collection-and-training-architecture.md).
-# GENERATED SOURCE: every value is the carry015 file's except `schema_version` and the four schema 5 keys below. To regenerate after the
+# Schema 5 variant of `teacher_execution_policy_side_wrist_fast_carry_b.yaml` (round-2 plan S2, docs/guides/so101-act-data-collection-and-training-architecture.md).
+# GENERATED SOURCE: every value is the carry_b file's (S1 level B, carry 0.08 / 0.03; round-2 plan amendment 1) except `schema_version` and the four schema 5 keys below. To regenerate after the
 # carry keys change (S1 result), copy the chosen carry file, set `schema_version: 5` and add the four keys; nothing else differs.
 # DESCEND approach scaling 0.10 / 0.10; `descend_final_distance_m: 0.02` and `open_gripper_duration_s: 1.0` are the plan's initial values.
 # SO-101 Teacher execution policy: the minimal runtime gates (design
@@ -41,8 +41,8 @@ execution_deadline_s: 180.0
 gripper_close_target_rad: -0.047608632840292
 # MoveIt scaling of the carry (LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE); the acceleration scaling is a quarter of the velocity's so
 # the base-yaw ramp does not run the cup compression away. Used only with frozen inputs.
-carry_max_velocity_scaling: 0.03
-carry_max_acceleration_scaling: 0.015
+carry_max_velocity_scaling: 0.08
+carry_max_acceleration_scaling: 0.03
 # Place height (a strategy): target = z_touch(theta) + k + tracking offset - guard. Outside the calibrated tilt range, the k band
 # or the deviation bound, or when the measurement fails, the Teacher uses the fallback target (hover + place_reference_offset_m)
 # and records the closed reason; it never refuses.
