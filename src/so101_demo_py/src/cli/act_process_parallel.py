@@ -156,7 +156,7 @@ def main(argv=None, *, edges=None) -> int:
     if not cleanup or cleanup[0].get('terminated') is not True:
         if failure is not None:
             print('act_process_parallel: STAGE_FAILED: ' + _describe(failure), file=sys.stderr)
-        return _fail_stage('CAMPAIGN_CLEANUP_UNCONFIRMED: lease and worker slots stay held; see host/campaign-cleanup.json', 1)
+        return _fail_stage('CAMPAIGN_CLEANUP_UNCONFIRMED: lease and worker slots stay held; see host/campaign-cleanup-<stage>.json', 1)
     try:
         workload.finish(context, cleanup_confirmed=True)
     except Exception as error:  # noqa: BLE001 - a refused settle leaves everything held

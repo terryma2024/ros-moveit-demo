@@ -77,7 +77,7 @@ class ContainerServiceOwner:
                    'pick_place_validation_full', 'pick_place_validation_phase'}
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind not in allowed or roles != required_roles
-                or type(registry) is not ContainerLaunchRegistry or registry.records()
+                or type(registry) is not ContainerLaunchRegistry or (stage is None and registry.records())
                 or any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
                        for value in (startup_timeout_s, receive_budget_s, stop_timeout_s))):
             raise ValueError('SERVICE_OWNER_CONFIG_INVALID')

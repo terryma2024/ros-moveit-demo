@@ -34,6 +34,7 @@ def process_argv(world, *stage, **overrides):
 
 
 OPENED = []
+STORE_ROOTS = []
 
 
 def close_stores():
@@ -52,6 +53,7 @@ def _service_store_released(monkeypatch):
         def compose(*args, _real=real, **kwargs):
             services = _real(*args, **kwargs)
             opened.append(services)
+            STORE_ROOTS.append(services.store.root)
             return services
         monkeypatch.setattr(module, 'compose_services', compose)
     yield
@@ -148,3 +150,49 @@ def test_a_run_that_does_not_exist_is_refused(stopped, capsys):
     code, _, err = process(stopped, capsys, '--phase2', **{'run_id': 'no-such-run'})
     assert code == 2 and 'CAMPAIGN_RUN_MISSING' in err
 
+
+
+# ---- end to end: a stage takes its own admission, runs, settles and leaves the GPU free ------------------------------------
+
+def contexts(stopped):
+    """(operation, generation) of every admission of the campaign, from the unified store."""
+    from so101_teleop.unified.intent_store import IntentStore
+    store = IntentStore.open(STORE_ROOTS[-1])
+    try:
+        return [(row['operation_id'], json.loads(row['context_json'])['execution_generation'])
+                for row in store._query_all('SELECT operation_id, context_json FROM act_campaign_contexts ORDER BY 1')], \
+            store._query_one('SELECT * FROM gpu_workload_leases'), \
+            store._query_all('SELECT * FROM act_worker_slots WHERE active=1')
+    finally:
+        store.close()
+
+
+def test_phase_two_is_admitted_on_its_own_and_settles_before_the_finalize(stopped, capsys):
+    code, out, err = process(stopped, capsys, '--phase2')
+    assert code == 0, err
+    assert stage_records.read_record(stopped.run_root / 'host', stage_records.PHASE2)['previous']['stage'] == 'phase1'
+    admissions, lease, active = contexts(stopped)
+    assert len(admissions) == 2 and sorted(generation for _, generation in admissions) == [1, 2]
+    assert lease is None and active == []
+    code, out, err = process(stopped, capsys, '--finalize')
+    assert code == 0, err
+    admissions, lease, active = contexts(stopped)
+    assert sorted(generation for _, generation in admissions) == [1, 2, 3] and lease is None and active == []
+
+
+def test_a_second_phase_one_of_the_same_campaign_id_is_refused_by_admission(stopped, capsys):
+    from so101_demo.cli.act_collect_parallel import main
+    capsys.readouterr()
+    code = main(argv_for(stopped, **{'run_id': 'run-two'}) + ['--stop-after-phase1'], edges=stopped.edges)
+    close_stores()
+    captured = capsys.readouterr()
+    assert code == 1 and 'ADMISSION_REFUSED' in captured.err      # the same command id with another run is not the first admission
+    admissions, lease, active = contexts(stopped)
+    assert len(admissions) == 1 and lease is None and active == []
+
+
+def test_a_stage_that_ran_is_refused_when_asked_again(stopped, capsys):
+    assert process(stopped, capsys, '--phase2')[0] == 0
+    code, _, err = process(stopped, capsys, '--phase2')
+    assert code == 2 and 'STAGE_ALREADY_COMPLETE' in err
+    assert len(contexts(stopped)[0]) == 2

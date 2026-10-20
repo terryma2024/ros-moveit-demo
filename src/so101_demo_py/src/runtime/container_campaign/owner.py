@@ -50,7 +50,7 @@ class ContainerCampaignOwner:
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind!='act_collection_start'
                 or type(service_owner) is not ContainerServiceOwner or service_owner.context!=admitted_context
-                or service_owner.roles!=('teacher',) or service_owner.registry.records()
+                or service_owner.roles!=('teacher',) or (service_owner.stage is None and service_owner.registry.records())
                 or root.resolve(strict=True)!=root or str(root)!=admitted_context.evidence_root
                 or service_owner.paths['run']!=root or type(qualification) is not bool
                 or type(slots) is not tuple or len(slots)!=admitted_context.worker_count
@@ -724,5 +724,7 @@ class ContainerCampaignOwner:
         if processors:
             result['processors']=[value if type(value) is dict else dict(error_type=type(value).__name__,reason=str(value))
                                   for value in processors]
-        _write(self.root/'host/campaign-cleanup.json',result)
+        # a later stage keeps its own cleanup record beside the first process's (written once, never replaced)
+        stage=getattr(self.services,'stage',None)
+        _write(self.root/'host'/('campaign-cleanup.json' if stage is None else f'campaign-cleanup-{stage}.json'),result)
         return result
