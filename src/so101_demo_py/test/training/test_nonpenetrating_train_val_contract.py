@@ -1205,7 +1205,9 @@ def test_exact_tree_rejects_unexpected_directory_before_traversal(
     (unexpected / "private-member.png").write_bytes(b"must-not-be-enumerated")
     original_scandir = os.scandir
 
-    def guarded_scandir(path: os.PathLike[str] | str):
+    def guarded_scandir(path: os.PathLike[str] | str | int):
+        if isinstance(path, int):  # shutil.rmtree of the fixture teardown walks by directory descriptor
+            return original_scandir(path)
         candidate = Path(path)
         if candidate == unexpected or unexpected in candidate.parents:
             raise AssertionError("UNEXPECTED_DIRECTORY_TRAVERSAL_SENTINEL")

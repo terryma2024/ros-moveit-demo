@@ -17,8 +17,8 @@ from test_teacher_moveit_execution import make_adapter
 from paths import PACKAGE_ROOT
 
 CONFIG = PACKAGE_ROOT / "config/act"
-DESCEND010 = CONFIG / "teacher_execution_policy_side_wrist_fast_r2_descend010.yaml"
-DESCEND020 = CONFIG / "teacher_execution_policy_side_wrist_fast_r2_descend020.yaml"
+DESCEND010 = CONFIG / "teacher_execution_policy_side_wrist_fast_descend010.yaml"
+DESCEND020 = CONFIG / "teacher_execution_policy_side_wrist_fast_descend020.yaml"
 CARRY015 = CONFIG / "teacher_execution_policy_side_wrist_fast_carry015.yaml"
 TEMPLATE_SCALING = (0.03, 0.03)
 

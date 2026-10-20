@@ -115,9 +115,9 @@ def test_schema_3_and_4_files_load_and_hash_as_before():
 
 
 @pytest.mark.parametrize("name,approach", [("descend010", 0.10), ("descend020", 0.20)])
-def test_the_r2_policy_files_are_carry_b_at_schema_5_with_only_the_new_keys(name, approach):
+def test_the_descend_policy_files_are_carry_b_at_schema_5_with_only_the_new_keys(name, approach):
     document4 = yaml.safe_load(CARRY_B_PATH.read_bytes())
-    path = CONFIG / f"teacher_execution_policy_side_wrist_fast_r2_{name}.yaml"
+    path = CONFIG / f"teacher_execution_policy_side_wrist_fast_{name}.yaml"
     document = yaml.safe_load(path.read_bytes())
     assert document == {**document4, "schema_version": 5, "descend_approach_velocity_scaling": approach,
                         "descend_approach_acceleration_scaling": approach, "descend_final_distance_m": 0.02,
