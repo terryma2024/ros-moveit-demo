@@ -8,7 +8,7 @@ import time
 
 from so101_demo.core.domain import ActionResult, ActionStatus, Failure, FailureCategory, State
 from so101_demo.ports.evidence import PoseEvidence
-from so101_demo.ros.dynamic_execution.common import _WINDOW_TOLERANCE_S, _mark_phase
+from so101_demo.ros.dynamic_execution.common import _WINDOW_TOLERANCE_S, _mark_phase, _mark_place_side
 
 
 class PhaseSequencing:
@@ -207,7 +207,9 @@ class PhaseSequencing:
         try:
             self._check_stop()  # the state machine never starts a new state, hence a new goal, after a stop
             self._safety_state = state
+            _mark_place_side(state, "place_target.begin")
             target = self._place_target(state, target)
+            _mark_place_side(state, "place_target.end")
             if getattr(self, "_initial", None) is None and not getattr(self, "_teacher_start_attempted", False):
                 # The Teacher's own start observation: read from its world observer after reset and before the first
                 # arm or gripper command, independent of the recorder, the capture and the data side.

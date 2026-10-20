@@ -499,6 +499,23 @@ def _run_inline(compute):
     return compute()
 
 
+def descend_waypoints(interpolate_pose, above, descend, final_distance_m=None) -> list:
+    """The DESCEND waypoints from the pregrasp pose ``above`` to the grasp pose ``descend``.
+
+    Without ``final_distance_m`` (schema 3 and 4): six interpolated poses, exactly as before. With it (schema 5): two stages, the
+    approach pose ``final_distance_m`` above the grasp pose on the straight line from ``above`` to ``descend`` (pose interpolated
+    like every other waypoint), then the grasp pose itself. When ``above`` is not farther from the grasp pose than
+    ``final_distance_m`` only the grasp pose is left."""
+
+    if final_distance_m is None:
+        return [HorizonWaypoint(State.DESCEND, index, interpolate_pose(above, descend, index / 6.0)) for index in range(1, 7)]
+    length = math.dist(above.position_m, descend.position_m)
+    if length <= final_distance_m:
+        return [HorizonWaypoint(State.DESCEND, 1, descend)]
+    approach = interpolate_pose(above, descend, 1.0 - final_distance_m / length)
+    return [HorizonWaypoint(State.DESCEND, 1, approach), HorizonWaypoint(State.DESCEND, 2, descend)]
+
+
 def solve_pick_prefix_horizon(
     ik: PoseIk,
     current: Sequence[float],
@@ -509,6 +526,7 @@ def solve_pick_prefix_horizon(
     orientation_tolerance_rad: float,
     beam_width: int = 3,
     run=_run_inline,
+    descend_final_distance_m: float | None = None,
 ) -> HorizonResult:
     """The Teacher's pick-prefix horizon from the joint state ``current``: MOVE_ABOVE_OBJECT (interpolated Cartesian waypoints),
     DESCEND (six interpolated waypoints), MICRO_LIFT and LIFT, solved as one beam search.
@@ -520,10 +538,7 @@ def solve_pick_prefix_horizon(
     above = targets.for_state(State.MOVE_ABOVE_OBJECT)
     descend = targets.for_state(State.DESCEND)
     waypoints = list(run(lambda: interpolated_move_above_waypoints(ik, current, above)))
-    waypoints.extend(
-        HorizonWaypoint(State.DESCEND, index, interpolate_pose(above, descend, index / 6.0))
-        for index in range(1, 7)
-    )
+    waypoints.extend(descend_waypoints(interpolate_pose, above, descend, descend_final_distance_m))
     waypoints.extend(
         (
             HorizonWaypoint(State.MICRO_LIFT, 0, targets.for_state(State.MICRO_LIFT)),

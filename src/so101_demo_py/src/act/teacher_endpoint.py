@@ -58,9 +58,21 @@ SPEED_FIELDS = frozenset((*SPEED_SCALING_FIELDS, SPEED_DURATION_FIELD))
 #: the gripper trajectory duration every gripper command had before schema 4 (a hard-coded 2.0 s), and the closed range of the new key
 DEFAULT_GRIPPER_DURATION_S = 2.0
 PREPARE_OPEN_DURATION_RANGE_S = (0.5, 5.0)
+#: Schema 5 (round-2 plan 2026-10-21, S2) is schema 4 plus the two-stage DESCEND and the OPEN_GRIPPER duration: the free-space MoveIt
+#: scaling of the approach part of DESCEND, the distance above the grasp pose at which the approach ends (the last part keeps the
+#: template scaling), and the OPEN_GRIPPER trajectory duration. Schema 3 and 4 documents are closed without these keys and load and
+#: hash exactly as before. CLOSE_GRIPPER keeps its 2.0 s.
+EXECUTION_SCHEMA_DESCEND = 5
+DESCEND_SCALING_FIELDS = ("descend_approach_velocity_scaling", "descend_approach_acceleration_scaling")
+DESCEND_DISTANCE_FIELD = "descend_final_distance_m"
+OPEN_DURATION_FIELD = "open_gripper_duration_s"
+DESCEND_FIELDS = frozenset((*DESCEND_SCALING_FIELDS, DESCEND_DISTANCE_FIELD, OPEN_DURATION_FIELD))
+#: the open range (low, high] of the final distance (m)
+DESCEND_FINAL_DISTANCE_RANGE_M = (0.005, 0.05)
 TEACHER_EXECUTION_FIELDS_BY_SCHEMA = {
     EXECUTION_SCHEMA: TEACHER_EXECUTION_FIELDS,
     EXECUTION_SCHEMA_SPEED: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS,
+    EXECUTION_SCHEMA_DESCEND: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS | DESCEND_FIELDS,
 }
 QUATERNION_NORM_TOLERANCE = 1e-6
 WORLD_FRAME = "world"
@@ -87,16 +99,17 @@ def _sha256(document: dict) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def speed_policy_value(policy, key: str, default: float) -> float:
-    """The schema 4 speed value ``key`` of a loaded Teacher execution policy, or ``default`` for a policy that predates it.
+def speed_policy_value(policy, key: str, default: float, *, since_schema: int = EXECUTION_SCHEMA_SPEED) -> float:
+    """The speed value ``key`` of a loaded Teacher execution policy, or ``default`` for a policy that predates it.
 
-    A schema 4 policy that lacks the key is not a policy this build can run (``TEACHER_POLICY_UNAVAILABLE``); a schema 3 policy, the
-    general runtime policy and no policy at all keep today's behaviour."""
+    ``since_schema`` is the first schema that carries the key (4 for the original speed keys, 5 for the DESCEND and OPEN_GRIPPER
+    keys). A policy of that schema or later that lacks the key is not a policy this build can run (``TEACHER_POLICY_UNAVAILABLE``);
+    an older policy, the general runtime policy and no policy at all keep today's behaviour."""
 
     if policy is not None and key in policy:
         return float(policy[key])
     if (policy is not None and policy.get("kind") == EXECUTION_KIND
-            and type(policy.get("schema_version")) is int and policy["schema_version"] >= EXECUTION_SCHEMA_SPEED):
+            and type(policy.get("schema_version")) is int and policy["schema_version"] >= since_schema):
         raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + key)
     return default
 
@@ -126,7 +139,7 @@ def load_teacher_endpoint_policy(source) -> dict:
 
 
 def load_teacher_execution_policy(source) -> dict:
-    """Load and validate the Teacher execution policy (schema 3: tilt-compensated place height; schema 4: plus the speed keys)
+    """Load and validate the Teacher execution policy (schema 3: tilt-compensated place height; schema 4: plus the speed keys; schema 5: plus the DESCEND stage and OPEN_GRIPPER keys)
     from YAML bytes or a path, with its sha256. An unknown schema, an unknown place height mode, a missing or extra field is
     refused (``TEACHER_EXECUTION_POLICY_INVALID``)."""
 
@@ -149,21 +162,35 @@ def load_teacher_execution_policy(source) -> dict:
         raise ValueError(f"{code}: gripper_close_target_rad is not a finite angle within 0.1 rad of zero")
     policy["gripper_close_target_rad"] = float(target)
     scaling_keys = ("carry_max_velocity_scaling", "carry_max_acceleration_scaling")
-    if version == EXECUTION_SCHEMA_SPEED:
+    if version >= EXECUTION_SCHEMA_SPEED:
         scaling_keys += SPEED_SCALING_FIELDS
+    if version >= EXECUTION_SCHEMA_DESCEND:
+        scaling_keys += DESCEND_SCALING_FIELDS
     for key in scaling_keys:
         value = document[key]
         if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
                 or not 0 < value <= 1):
             raise ValueError(f"{code}: {key} is not a finite scaling in (0, 1]")
         policy[key] = float(value)
-    if version == EXECUTION_SCHEMA_SPEED:
-        duration = document[SPEED_DURATION_FIELD]
+    duration_keys = ()
+    if version >= EXECUTION_SCHEMA_SPEED:
+        duration_keys += (SPEED_DURATION_FIELD,)
+    if version >= EXECUTION_SCHEMA_DESCEND:
+        duration_keys += (OPEN_DURATION_FIELD,)
+    for key in duration_keys:
+        duration = document[key]
         low, high = PREPARE_OPEN_DURATION_RANGE_S
         if (isinstance(duration, bool) or not isinstance(duration, (int, float)) or not math.isfinite(duration)
                 or not low <= duration <= high):
-            raise ValueError(f"{code}: {SPEED_DURATION_FIELD} is not a finite duration within {low} to {high} s")
-        policy[SPEED_DURATION_FIELD] = float(duration)
+            raise ValueError(f"{code}: {key} is not a finite duration within {low} to {high} s")
+        policy[key] = float(duration)
+    if version >= EXECUTION_SCHEMA_DESCEND:
+        distance = document[DESCEND_DISTANCE_FIELD]
+        low, high = DESCEND_FINAL_DISTANCE_RANGE_M
+        if (isinstance(distance, bool) or not isinstance(distance, (int, float)) or not math.isfinite(distance)
+                or not low < distance <= high):
+            raise ValueError(f"{code}: {DESCEND_DISTANCE_FIELD} is not a finite distance above {low} m through {high} m")
+        policy[DESCEND_DISTANCE_FIELD] = float(distance)
     from ..core.place_height import MODE, PlaceHeightPolicy
 
     if document["place_height_mode"] != MODE:

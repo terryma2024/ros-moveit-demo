@@ -15,6 +15,7 @@ from ..control.moveit.deterministic_horizon import (
     HorizonStep,
     HorizonWaypoint,
     cartesian_candidate_score,
+    descend_waypoints,
     interpolated_move_above_waypoints,
     solve_horizon,
     validate_cartesian_corridor,
@@ -128,7 +129,10 @@ class RosMoveGroupReachabilityPlanner:
         ik_backend: str | None = None,
         progress: Callable[[], None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
+        descend_final_distance_m: float | None = None,
     ) -> None:
+        # schema 5 Teacher: the DESCEND waypoints the execution will use (two stages); None keeps the six interpolated segments
+        self._descend_final_distance_m = descend_final_distance_m
         self._node = node
         self._template = template
         self._monotonic = monotonic
@@ -217,14 +221,7 @@ class RosMoveGroupReachabilityPlanner:
                 self._progress,
             )
         )
-        waypoints.extend(
-            HorizonWaypoint(
-                State.DESCEND,
-                index,
-                self._interpolate_pose(above, descend, index / 6.0),
-            )
-            for index in range(1, 7)
-        )
+        waypoints.extend(descend_waypoints(self._interpolate_pose, above, descend, self._descend_final_distance_m))
         waypoints.extend(
             (
                 HorizonWaypoint(State.MICRO_LIFT, 0, targets.for_state(State.MICRO_LIFT)),

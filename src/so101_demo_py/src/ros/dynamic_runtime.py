@@ -38,6 +38,11 @@ from .dynamic_planner import RosDynamicPlanner
 
 _PHASE_TIMING_PREFIX = "DYNAMIC_EXECUTE_PHASE_TIMING "
 _PHASE_TIMING_MAX_BYTES = 8000
+# Round-2 S3 measurement: the place-side planning marks have their own line, capacity and size cap, so they can never push a real
+# phase out of the phase-timing line above (which keeps exactly its earlier content).
+_PLACE_SIDE_TIMING_PREFIX = "DYNAMIC_EXECUTE_PLACE_SIDE_TIMING "
+_PLACE_SIDE_TIMING_MAX_BYTES = 8000
+_PLACE_SIDE_MARKS_MAX = 512
 _CENSUS_MAX_TOPICS = 32
 _STALL_PREFIX = "DYNAMIC_MAIN_STALL "
 _STALL_THRESHOLD_NS = 300_000_000
@@ -55,6 +60,8 @@ class _PhaseTimer:
     def __init__(self):
         self.start_ns = time.monotonic_ns()
         self.phases = []
+        self.place_side = []
+        self.place_side_dropped = 0
         self.census = None
         self.node = None
         self.last_progress_ns = self.start_ns
@@ -70,6 +77,17 @@ class _PhaseTimer:
             self.last_progress_ns = now
             if len(self.phases) < 256:
                 self.phases.append([name, now - self.start_ns])
+        except Exception:
+            pass
+
+    def mark_place_side(self, name):
+        """Observation only: a place-side planning mark for the separate place-side timing line. It neither takes a slot of
+        `phases` nor counts as progress for the stall sampler."""
+        try:
+            if len(self.place_side) < _PLACE_SIDE_MARKS_MAX:
+                self.place_side.append([name, time.monotonic_ns() - self.start_ns])
+            else:
+                self.place_side_dropped += 1
         except Exception:
             pass
 
@@ -143,12 +161,37 @@ class _PhaseTimer:
             print(_PHASE_TIMING_PREFIX + line, file=sys.stderr, flush=True)
         except Exception:
             pass
+        self._emit_place_side()
+
+    def _emit_place_side(self):
+        try:
+            if not self.place_side and not self.place_side_dropped:
+                return
+            marks = list(self.place_side)
+            truncated = self.place_side_dropped
+            while True:
+                line = json.dumps({"marks": marks, "truncated": truncated}, sort_keys=True, separators=(",", ":"))
+                if len(line) <= _PLACE_SIDE_TIMING_MAX_BYTES or not marks:
+                    break
+                cut = max(1, len(marks) // 2)
+                keep = len(marks) - cut
+                marks = marks[:keep // 2] + marks[len(marks) - (keep - keep // 2):] if keep else []
+                truncated += cut
+            print(_PLACE_SIDE_TIMING_PREFIX + line, file=sys.stderr, flush=True)
+        except Exception:
+            pass
 
 
 def _mark_active_phase(name):
     timer = _ACTIVE_PHASE_TIMER
     if timer is not None:
         timer.mark(name)
+
+
+def _mark_active_place_side(name):
+    timer = _ACTIVE_PHASE_TIMER
+    if timer is not None:
+        timer.mark_place_side(name)
 
 
 def _record_callback_lag(node, entry, callback_args):
@@ -403,7 +446,7 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
     from .dynamic_mujoco_execution import RosDynamicMujocoExecution
     from .task_reachability import RosJointStateReader, RosMoveGroupReachabilityPlanner
 
-    def reachability_preflight(node, sample, template, scene_revision, progress=None):
+    def reachability_preflight(node, sample, template, scene_revision, progress=None, descend_final_distance_m=None):
         point = TaskPoint(
             id="perceived_cup",
             label="Perceived cup",
@@ -413,6 +456,8 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
         planner_options = {} if ik_backend is None else {"ik_backend": ik_backend}
         if progress is not None:
             planner_options["progress"] = progress
+        if descend_final_distance_m is not None:
+            planner_options["descend_final_distance_m"] = descend_final_distance_m
         planner = RosMoveGroupReachabilityPlanner(node, template, **planner_options)
         reader = RosJointStateReader(node, template.arm_joint_names)
         try:
@@ -567,6 +612,20 @@ def _frozen_teacher_schema(frozen) -> int:
     except (KeyError, TypeError):
         return 3
     return version if type(version) is int else 3
+
+
+def _frozen_descend_final_distance_m(frozen):
+    """The frozen schema 5 `descend_final_distance_m` (m), or None for a freeze that is not schema 5 (the reachability preflight then
+    checks the six interpolated DESCEND segments). A schema 5 freeze without the key is not a policy this build can run."""
+
+    if _frozen_teacher_schema(frozen) < 5:
+        return None
+    from ..act.teacher_endpoint import DESCEND_DISTANCE_FIELD
+
+    try:
+        return float(frozen["teacher_execution_policy"]["values"][DESCEND_DISTANCE_FIELD])
+    except (KeyError, TypeError, ValueError):
+        raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + DESCEND_DISTANCE_FIELD) from None
 
 
 def _frozen_policy_file(frozen, snapshot) -> str:
@@ -939,11 +998,14 @@ def run_dynamic_execute(
         targets = runtime.resolve_motion_targets(sample, loaded.template)
         mark("resolve_motion_targets.end")
         mark("reachability_preflight.begin")
+        # schema 5 Teacher: the preflight checks the two-stage DESCEND the execution will run (None for schema 3 and 4: no extra argument)
+        descend_distance = _frozen_descend_final_distance_m(frozen) if teacher_run else None
         reachability = runtime.reachability_preflight(
             node,
             sample,
             loaded.template,
             getattr(initial, "reset_epoch", None),
+            **({} if descend_distance is None else {"descend_final_distance_m": descend_distance}),
         )
         mark("reachability_preflight.end")
         stop_flags.raise_if_stopped()
