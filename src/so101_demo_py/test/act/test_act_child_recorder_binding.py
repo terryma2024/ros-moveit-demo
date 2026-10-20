@@ -36,18 +36,20 @@ def test_missing_frozen_manifest_refuses_before_creating_recorder(tmp_path):
     assert not options.evidence_root.exists()
 
 
-def frozen_child_inputs(tmp_path, *, mode="preselected_target_diagnostic", scene_manifest=None, scope_scene=("default", 0)):
+def frozen_child_inputs(tmp_path, *, mode="preselected_target_diagnostic", scene_manifest=None, scope_scene=("default", 0),
+                        teacher_policy_file="teacher_execution_policy.yaml"):
     """Synthetic approval/roles plus real frozen source/model for a Recorder boundary fixture.
 
     `scene_manifest` (a scenes file, formal `mode` only) is bound by the real `freeze_inputs`; `scope_scene` is the (scene_id, seed)
-    of the `scope.json` this writes. The default call is the unchanged diagnostic fixture."""
+    of the `scope.json` this writes; `teacher_policy_file` names the `config/act` file bound as the Teacher execution policy.
+    The default call is the unchanged diagnostic fixture."""
     from so101_demo.act.execution_snapshot import freeze_execution_snapshot
     from so101_demo.act.contact_policy import policy_fingerprint
     config = PACKAGE_ROOT / "config/act"
     manifest_path = freeze_inputs(_write_registry(tmp_path, _registry(tmp_path)), tmp_path / "inputs",
                                  mode=mode, scene_manifest=scene_manifest,
                                  teacher_endpoint=config / "teacher_endpoint.yaml",
-        teacher_execution_policy=config / "teacher_execution_policy.yaml",
+        teacher_execution_policy=config / teacher_policy_file,
         episode_recorder_policy=config / "episode_recorder.yaml",
                                  runtime_policy=config / "endpoint_pose_development_runtime.yaml")
     root = manifest_path.parent

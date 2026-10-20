@@ -80,6 +80,10 @@ POLICY_BINDINGS = {
 }
 #: the execution policy binding frozen with an attempt
 EXECUTION_POLICY_BINDING = "teacher_execution_policy"
+#: A policy binding may be satisfied by a variant of its file in the execution snapshot, which carries every `config/act` file:
+#: `config/act/teacher_execution_policy_<name>.yaml` for the Teacher execution policy (schema 4 speed policies). The frozen bytes
+#: stay under the one name in `policies/`; the variant only names which snapshot file the Teacher loads.
+_POLICY_VARIANT_PREFIX = {EXECUTION_POLICY_BINDING: "config/act/teacher_execution_policy_"}
 _POLICY_BINDING_FIELDS = frozenset({"path", "file_sha256", "bytes", "policy_sha256", "values"})
 _MANIFEST_FIELDS = _MANIFEST_REQUIRED | _MANIFEST_OPTIONAL
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})
@@ -400,6 +404,24 @@ def verify_rig_profile_binding(document: dict, manifest_path: Path) -> None:
         raise ValueError(code)
 
 
+def snapshot_policy_path(files: dict, name: str, file_sha256: str) -> str | None:
+    """The package-relative path of the execution snapshot file whose bytes are the policy ``name`` bound with ``file_sha256``.
+
+    The canonical config path wins; for the Teacher execution policy a direct `config/act/teacher_execution_policy_*.yaml` sibling
+    may carry the bytes instead. None when no snapshot file does."""
+
+    candidates = [POLICY_BINDINGS[name][1]]
+    prefix = _POLICY_VARIANT_PREFIX.get(name)
+    if prefix is not None:
+        candidates += sorted(path for path in files if path.startswith(prefix) and path.endswith(".yaml")
+                             and "/" not in path[len(prefix):])
+    for path in candidates:
+        copy = files.get(path)
+        if copy is not None and copy["sha256"] == file_sha256:
+            return path
+    return None
+
+
 def verify_policy_bindings(document: dict, manifest_path: Path, snapshot: dict | None = None) -> dict:
     """Re-read each frozen policy file, re-load it through its closed loader and compare every bound value.
 
@@ -435,7 +457,8 @@ def verify_policy_bindings(document: dict, manifest_path: Path, snapshot: dict |
             raise ValueError(code + ": values")
         if snapshot is not None:
             frozen_copy = snapshot["files"].get(config_path)
-            if frozen_copy is not None and frozen_copy["sha256"] != binding["file_sha256"]:
+            if (frozen_copy is not None and frozen_copy["sha256"] != binding["file_sha256"]
+                    and snapshot_policy_path(snapshot["files"], name, binding["file_sha256"]) is None):
                 raise ValueError(code + ": execution snapshot copy differs")
         loaded[name] = policy
     return loaded
