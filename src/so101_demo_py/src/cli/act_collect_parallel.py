@@ -149,7 +149,7 @@ def _inspector(docker_runner):
     return inspect
 
 
-def _preflight(args):
+def _preflight(args, path_options=_PATH_OPTIONS):
     """Pure checks of the arguments and the plane's contract; returns the resolved paths and the scene list to freeze."""
     if re.fullmatch(_ID, args.campaign_id) is None:
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
@@ -166,7 +166,7 @@ def _preflight(args):
         raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
     if not (args.qualification or spot_check) and args.qualification_report is None:
         raise ValueError('EIGHT_WORKER_QUALIFICATION_REQUIRED')
-    resolved = {name: _regular(getattr(args, name)) for name in _PATH_OPTIONS}
+    resolved = {name: _regular(getattr(args, name)) for name in path_options}
     report = None if args.qualification_report is None else _regular(args.qualification_report)
     try:
         document = read_document(resolved['manifest'])

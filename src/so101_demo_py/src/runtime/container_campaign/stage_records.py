@@ -94,6 +94,21 @@ def require_previous(host, stage, *, logic):
     return verify_chain(host, read_record(host, name), logic=logic)
 
 
+def check_before_admission(host, stage, *, logic):
+    """What a stage needs from the records before it takes any resource: the CLI refuses here, the owner checks again.
+
+    A retry round needs its predecessor (`STAGE_PREVIOUS_RECORD_MISSING`, `STAGE_PREVIOUS_RECORD_INVALID`, `STAGE_LOGIC_DOCUMENT_CHANGED`)
+    and the finalize the latest record after phase 1; a stage with a record is `STAGE_ALREADY_COMPLETE`."""
+    if stage != FINALIZE:
+        return require_previous(host, stage, logic=logic)
+    if record_path(host, stage).exists():
+        raise ValueError('STAGE_ALREADY_COMPLETE')
+    last = last_completed(host)
+    if last is None or last['stage'] == PHASE1:
+        raise ValueError('STAGE_PREVIOUS_RECORD_MISSING')
+    return verify_chain(host, last, logic=logic)
+
+
 def verify_chain(host, record, *, logic):
     """`record` (the latest the run holds) is bound to this logic document and every earlier record is the one its successor names."""
     if record.get('campaign_config', {}).get('sha256') != logic.get('sha256'):
