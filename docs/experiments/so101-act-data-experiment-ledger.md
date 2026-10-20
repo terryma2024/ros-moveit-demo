@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3747
+latest_checkpoint: CP-3748
 next_experiment: TRAIN-005 (compress_dwell) training, then the 4-point rollout (CP-3747). Before that, TRAIN-004 rollouts found 0 of 16 DONE (CP-3746): the policy holds at the rest/dwell pose. The coordinator decides the next change (see the CP-3746 diagnosis).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3748 — TRAIN-005-bf16 launched (compress_dwell + bf16 + compile); rows confirmed 26461 / 3048; about 69 samples/s
+
+- Executed by a Sonnet 5.5 subagent for the coordinator. REG=/data/work/so101-evidence/act-data/20260924-fbc25063-resume, D=REG/act-dataset-side-wrist-103-20261019. Launched exactly as TRAIN-004 (CP-3745): tool W/so101-tools/training/run_train_reuse.zsh with `--reuse-dataset` (script D/train005-prep/launch-train005b.zsh), tmux session `train005b` (window `train`, window `log` tails the log). Fans were already at 100 (`nbfc status`: target 100, auto off); GPU free before the start (327 MiB, no compute process). No src edits, no push.
+- Inputs: stamp 20261020T0010Z; head 75debaa680b8 (source = archive of 75debaa68 in the run dir, dirty_src 0); config src/so101_demo_py/config/act/training-side-wrist-005-bf16.yaml (file sha256 4999ace756fe790b317ddf111972c7fdd8b9c01f746aa25aaca91affe0189abf); dataset W/so101-datasets/side-wrist-103-20261019T0342Z reused (manifest and index sha256 checked by the trainer); ROS environment from gate a1d3b7b0bbb5 as in TRAIN-004; 60000 steps, batch 16.
+- OBSERVED rows (log, sample_selection report): train 73437 -> 26461 (dwell_rows_removed 46976), validation 8701 -> 3048 (5653 removed), keep_tail_rows 20. Both equal the CP-3747 offline proof.
+- OBSERVED early points: step 2000 window loss 0.1425 (l1 0.0752), validation L1 0.09816 on 512 samples; step 4000 validation L1 0.06498. Speed 69.0 to 69.2 samples/s after the compile window (TRAIN-004: 52.0 to 52.2), wait 0.2 to 0.5 %; ETA about 13000 s (about 3.6 h) at step 4100. The validation subsets differ from TRAIN-004 (dwell compression), so the numbers are not comparable. Not a result: the run is in progress.
+- Paths (W=/data/work): evidence dir D/train-run-20261020T0010Z (training-outputs.json, console.log, run-context.txt, tmp), log D/train-run-20261020T0010Z.log, policy bundle W/so101-policies/train-run-20261020T0010Z/bundle. Retained: all of these. Deletion candidates: none new (D/train-run-20261020T0010Z/tmp after readback; /tmp/so101-debug-train005b).
+- Next: wait for the end, then the 4-point rollout of this bundle.
 
 ## CP-3747 — TRAIN-005: dwell compression of the demonstrations (`sample_selection.compress_dwell`) and the bf16 option; offline proof; no training started
 
