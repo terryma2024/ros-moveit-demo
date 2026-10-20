@@ -13,6 +13,8 @@ import json
 import os
 from pathlib import Path
 
+from .training_config import config_sha256
+
 
 def _file_digest(path) -> str:
     digest = hashlib.sha256()
@@ -135,8 +137,7 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
     disposition = {"schema_version": 1, "kind": "act_training_state", "status": "FAILED",
                    "dataset_sha256": hashlib.sha256(
                        (Path(dataset) / "export-manifest.json").read_bytes()).hexdigest(),
-                   "config_sha256": hashlib.sha256(
-                       json.dumps(config, sort_keys=True).encode()).hexdigest(),
+                   "config_sha256": config_sha256(config),
                    "device": owner["device"], "run_root": owner["run_root"],
                    "episode_count": len(manifest["episodes"]), "error": None}
     try:

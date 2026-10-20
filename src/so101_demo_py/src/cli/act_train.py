@@ -17,7 +17,7 @@ from pathlib import Path
 
 from so101_demo.act.bundle import default_cli_workers, export_dataset, resolve_committed_episodes, resolve_workers
 from so101_demo.act.training import attach_episode_content, train_act
-from so101_demo.act.training_config import load_training_config
+from so101_demo.act.training_config import config_sha256 as training_config_sha256, load_training_config
 from so101_demo.act.training_requirements import require_resolved_requirements
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2]          # src/so101_demo_py in the source tree (config/ is its sibling of src/)
@@ -217,7 +217,7 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
         export_dataset(committed, dataset, source_manifest_sha256=manifest_sha256, campaign_index_sha256=index_sha256, workers=workers,
                        trust_qc_memo=trust_qc_memo)
     dataset_sha256 = hashlib.sha256((dataset / "export-manifest.json").read_bytes()).hexdigest()
-    config_sha256 = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
+    config_sha256 = training_config_sha256(config)
     if evidence_dir is not None:
         _write_outputs_record(evidence_dir, dataset=dataset, output=args.output)
     if owner_factory is None:

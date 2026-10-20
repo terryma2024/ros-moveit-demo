@@ -32,6 +32,44 @@ SAMPLE_SELECTION_INTERIOR_KEYS = frozenset({"trim_interior_idle", "keep_tail_row
 # alternative optional pair: remove the dwell rows from the episode timeline itself (observations and action targets), keep the last keep_tail_rows
 SAMPLE_SELECTION_COMPRESS_KEYS = frozenset({"compress_dwell", "keep_tail_rows"})
 _MAX_NUM_WORKERS = 64
+#: Training keys that change only speed, logging or the validation cadence, never the trained policy (human, 2026-10-19: runtime
+#: parameters are not hashed). `num_workers` must be at least 1: a non-persistent loader iterator (0 workers) takes an extra generator
+#: draw per epoch and so changes the sampling order from epoch 2. The sampler and the model RNG live in the main process and
+#: `__getitem__` is deterministic, so every value from 1 up gives the same batches.
+RUNTIME_TRAINING_KEYS = frozenset({"num_workers", "log_interval_steps", "validation_interval_steps", "validation_samples"})
+#: Values the trainer applies that no config key sets and that decide what is learned. They were hard-coded, and in no hash. They are
+#: passed to the trainer explicitly (so an upstream default cannot change them silently) and hashed with the config.
+OPTIMIZER_CONSTANTS = {"name": "AdamW", "weight_decay": 1e-4, "betas": [0.9, 0.999], "eps": 1e-8, "grad_clip_norm": 10.0}
+ACT_MODEL_CONSTANTS = {"n_obs_steps": 1, "use_amp": False, "vision_backbone": "resnet18", "replace_final_stride_with_dilation": False,
+                       "pre_norm": False, "dim_model": 512, "n_heads": 8, "dim_feedforward": 3200, "feedforward_activation": "relu",
+                       "n_encoder_layers": 4, "n_decoder_layers": 1, "use_vae": True, "latent_dim": 32, "n_vae_encoder_layers": 4,
+                       "dropout": 0.1, "kl_weight": 10.0}
+#: 1 = the whole config dict, serialised two different ways by the lease and by the bundle; 2 = `config_sha256`
+CONFIG_IDENTITY_VERSION = 2
+
+
+def logic_config(config: dict) -> dict:
+    """The part of a training config that decides the trained policy: the config without its runtime keys, with the constants the
+    trainer applies and the identity version."""
+    import copy
+
+    logic = copy.deepcopy(config)
+    training = logic.get("training")
+    if isinstance(training, dict):
+        for key in RUNTIME_TRAINING_KEYS:
+            training.pop(key, None)
+    logic["identity"] = {"config_identity_version": CONFIG_IDENTITY_VERSION, "optimizer": OPTIMIZER_CONSTANTS,
+                         "act_model": ACT_MODEL_CONSTANTS}
+    return logic
+
+
+def config_sha256(config: dict) -> str:
+    """The one `config_sha256` of a training run (lease, state and bundle): canonical JSON of `logic_config(config)`."""
+    import hashlib
+    import json
+
+    return hashlib.sha256(json.dumps(logic_config(config), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                                     allow_nan=False).encode()).hexdigest()
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _OBSERVATION_KEYS = frozenset({"cameras", "state_dim", "action_dim"})
 _FROZEN_KEYS = frozenset({"seed", "preprocessing_sha256"})
@@ -104,7 +142,7 @@ def load_training_config(path) -> dict:
     for key in ("log_interval_steps", "validation_interval_steps", "validation_samples"):
         if type(training[key]) is not int or training[key] < 1:
             raise ValueError(f"TRAINING_{key.upper()}_INVALID")
-    if type(training["num_workers"]) is not int or not 0 <= training["num_workers"] <= _MAX_NUM_WORKERS:
+    if type(training["num_workers"]) is not int or not 1 <= training["num_workers"] <= _MAX_NUM_WORKERS:
         raise ValueError("TRAINING_NUM_WORKERS_INVALID")
     if type(training["steps"]) is not int or training["steps"] < 1:
         raise ValueError("TRAINING_STEPS_INVALID")
