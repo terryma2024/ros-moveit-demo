@@ -375,6 +375,33 @@ def _prime_verification_memo(episodes, workers, trust_memo=False) -> None:
             _memo_store(*outcome)
 
 
+def _verification_report_worker(task):
+    """Worker body: (scene_id, None) when the episode verifies, else (scene_id, the refusal text). Always the uncached verification."""
+    from .qc_session import assert_export_path_allowed
+    assert_export_path_allowed()
+    episode, trust_memo = task
+    try:
+        _verified_collection_uncached(episode, trust_memo)
+    except Exception as error:                            # noqa: BLE001 - the report carries every refusal
+        return (episode.get('scene_id'), str(error) or type(error).__name__)
+    return (episode.get('scene_id'), None)
+
+
+def verification_report(episodes, *, workers=None, trust_qc_memo=False) -> list:
+    """``[(scene_id, None | refusal text)]`` in episode order: the committed-episode gate the post-run template runs, in parallel.
+
+    Every episode goes through `_verified_collection_uncached` (never the memo), in a process pool of ``workers`` (argument, else
+    `SO101_ACT_EXPORT_WORKERS`, else min(8, CPUs); 1 is the serial loop). The list equals the serial loop's, a failing episode is
+    reported with its own refusal and the others are still verified."""
+    from .qc_session import assert_export_path_allowed
+    assert_export_path_allowed()
+    workers = resolve_workers(workers, default=default_cli_workers())
+    tasks = [(dict(episode), bool(trust_qc_memo)) for episode in episodes]
+    if workers > 1 and len(tasks) > 1:
+        return _map_in_pool(_verification_report_worker, tasks, workers)
+    return [_verification_report_worker(task) for task in tasks]
+
+
 def _frame_failure(task):
     """Worker body: the refusal code for the first frame of (root, [(name, digest)]) that is missing or differs, else None."""
     root, pairs = task

@@ -154,3 +154,21 @@ def test_a_libc_without_syncfs_falls_back_to_the_global_sync(tmp_path, monkeypat
     monkeypatch.setattr("platform.system", lambda: "Linux")
     export_dataset(entries, tmp_path / "dataset", **KW)
     assert synced == [1]
+
+
+def test_the_verification_report_equals_the_serial_loop_and_names_each_failure(tmp_path, monkeypatch, fork_pool):
+    from test_act_bundle_parallel import IDENTITY_INVALID, RECEIPT_CONFLICT
+    entries, _ = workspace(tmp_path, monkeypatch, processed_overrides={'003': IDENTITY_INVALID, '004': RECEIPT_CONFLICT})
+    serial = bundle.verification_report(entries, workers=1)
+    pooled = bundle.verification_report(entries, workers=3)
+    assert serial == pooled and [scene for scene, _ in pooled] == ['001', '002', '003', '004']
+    assert pooled[0][1] is None and pooled[1][1] is None
+    assert 'EPISODE_COLLECTION_IDENTITY_INVALID' in pooled[2][1] and 'EPISODE_RECEIPT_CONFLICT' in pooled[3][1]
+
+
+def test_the_verification_report_never_uses_the_memo(tmp_path, monkeypatch):
+    entries, _ = workspace(tmp_path, monkeypatch, scenes=('001', '002'))
+    bundle._verified_collection(entries[0])                 # fills the memo
+    seen = record_readbacks(monkeypatch)
+    assert bundle.verification_report(entries, workers=1) == [('001', None), ('002', None)]
+    assert seen == [False, False]
