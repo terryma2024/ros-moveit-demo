@@ -83,3 +83,12 @@ def test_a_missing_document_is_refused(tmp_path):
     (scene.output / "processed-result.json").unlink()
     with pytest.raises(ValueError, match="PROCESSED_RESULT_INVALID"):
         scene.verify()
+
+
+def test_the_regrade_reason_is_in_the_cause_chain_but_the_refusal_text_is_unchanged(tmp_path):
+    scene = Processed(tmp_path)
+    reason = "TEACHER_ORACLE_EXCLUDED: INCOMPLETE WORLD_SEQUENCE_GAP"
+    with pytest.raises(ValueError) as refused:
+        scene.verify(regrade=scene.grader(status="INVALID", reason=reason, qc="NOT_RUN"))
+    assert str(refused.value) == "PROCESSED_RESULT_INVALID"
+    assert reason in str(refused.value.__cause__)

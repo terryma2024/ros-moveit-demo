@@ -214,6 +214,26 @@ def _verified_container_collection(episode):
     return _export_gates(scope,proof,evidence)
 
 
+_DETAIL_CHARS = 300
+_ORACLE_REASON = re.compile(r'TEACHER_ORACLE_EXCLUDED: (\S+ \S+)')
+
+
+def _identity_refusal(error) -> str:
+    """The refusal text of a schema 4 readback that failed: `EPISODE_COLLECTION_IDENTITY_INVALID` (the code every caller matches), then
+    the cause found in the exception chain. A Teacher oracle that the export rule excludes (the phase-2 regrade says
+    `TEACHER_ORACLE_EXCLUDED: <flag> <phase>`) is named with the export code `EXPORT_EPISODE_ORACLE_EXCLUDED`, as the export gate does."""
+    messages, cursor = [], error
+    while cursor is not None and len(messages) < 8:
+        messages.append(str(cursor) or type(cursor).__name__)
+        cursor = cursor.__cause__
+    for message in messages:
+        found = _ORACLE_REASON.search(message)
+        if found:
+            return f'EPISODE_COLLECTION_IDENTITY_INVALID: EXPORT_EPISODE_ORACLE_EXCLUDED: {found.group(1)}'
+    cause = next((message for message in reversed(messages) if message != 'EPISODE_COLLECTION_IDENTITY_INVALID'), None)
+    return 'EPISODE_COLLECTION_IDENTITY_INVALID' + ('' if cause is None else ': ' + cause[:_DETAIL_CHARS])
+
+
 def _verified_processed_collection(episode, trust_memo=False):
     """(mode, combined proof) of a schema 4 episode from the frozen index of a two-phase campaign.
 
@@ -249,7 +269,7 @@ def _verified_processed_collection(episode, trust_memo=False):
                 or processed['phase1_result_sha256']!=proof['result_sha256'] or processed['diagnostic_fault']!='none'):
             raise ValueError('processed readback')
     except (OSError,ValueError,TypeError,KeyError) as error:
-        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID') from error
+        raise ValueError(_identity_refusal(error)) from error
     if (episode.get('verifier_sha256')!=proof['result_sha256'] or episode.get('task_result_sha256')!=proof['task_result_sha256']
             or episode.get('processed_result_sha256')!=processed['processed_result']['sha256']):
         raise ValueError('EPISODE_RECEIPT_CONFLICT')
