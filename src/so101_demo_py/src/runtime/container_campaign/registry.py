@@ -146,10 +146,16 @@ class ContainerLaunchRegistry:
                 previous = record['launch']
                 if (previous['launch_id'] == launch.launch_id
                         or launch.container_name is not None and previous['container_name'] == launch.container_name
-                        or previous['owned_root'] == launch.owned_root):
+                        or previous['owned_root'] == launch.owned_root
+                        and not (launch.role == previous['role'] and launch.role not in ('shard', 'processor')
+                                 and record['exit_inspect'] is not None)):
                     raise ValueError('LAUNCH_COLLISION')
                 if launch.role not in ('shard', 'processor') and previous['role'] == launch.role:
-                    raise ValueError('LAUNCH_COLLISION: services start once per campaign')
+                    # A service starts once per process; a later stage of a run collected stage by stage starts it again, but only
+                    # after the earlier container is proven gone (and under its own name and owned root, checked above).
+                    if record['exit_inspect'] is None:
+                        raise ValueError('LAUNCH_COLLISION: services start once per campaign')
+                    self.prove_terminated(previous['launch_id'], record['exit_inspect'])
                 if launch.role == previous['role'] == 'processor' and previous['worker_id'] == launch.worker_id:
                     if record['exit_inspect'] is None or previous['launch_generation'] >= launch.launch_generation:
                         raise ValueError('LAUNCH_COLLISION: slot not retired')

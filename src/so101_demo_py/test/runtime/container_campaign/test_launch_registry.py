@@ -89,6 +89,26 @@ def test_duplicate_role_and_foreign_binding_refused_without_overwrite(tmp_path):
     registry.close()
 
 
+def test_a_service_starts_again_only_after_the_earlier_container_is_proven_gone(tmp_path):
+    mod = module()
+    registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')
+    first = launch(tmp_path)
+    registry.register(first)
+    registry.bind_container(first.launch_id, ContainerOwnerKey('a'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1))
+    again = mod.ContainerLaunch(launch_id='head-g1-retry-1', role='head', worker_id=None, wave_id=None, launch_generation=1,
+        container_name='so101-test-head-g1-retry-1', image_digest='sha256:'+'b'*64, owned_root=str(tmp_path))
+    with pytest.raises(ValueError, match='LAUNCH_COLLISION'):                # the first container is still the owner
+        registry.register(again)
+    registry.prove_terminated(first.launch_id, inspect_document())
+    registry.register(again)                                                 # gone: the same owned root may be used again
+    assert [record['launch']['launch_id'] for record in registry.records()] == ['head-g1', 'head-g1-retry-1']
+    with pytest.raises(ValueError, match='LAUNCH_COLLISION'):                # a third while the second is not settled
+        registry.register(mod.ContainerLaunch(launch_id='head-g1-retry-2', role='head', worker_id=None, wave_id=None,
+            launch_generation=1, container_name='so101-test-head-g1-retry-2', image_digest='sha256:'+'b'*64,
+            owned_root=str(tmp_path)))
+    registry.close()
+
+
 def test_shard_cannot_settle_from_docker_exit_without_inner_original_proof(tmp_path):
     mod = module()
     registry = mod.ContainerLaunchRegistry(tmp_path/'launches.sqlite3')

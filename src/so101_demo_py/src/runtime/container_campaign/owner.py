@@ -501,8 +501,106 @@ class ContainerCampaignOwner:
         stage_records.write_record(host,stage_records.PHASE2,dict(
             campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],
             processing_result_sha256=hashlib.sha256(result_path.read_bytes()).hexdigest() if result_path.exists() else None,
-            processors=None if summary is None else summary.get('processors')),previous=previous)
+            processors=None if summary is None else summary.get('processors'),
+            observed=previous['observed']),previous=previous)
         return dict(campaign_id=self.context.campaign_id,stage=stage_records.PHASE2,processing='PENDING_FINALIZE',phase2=summary)
+
+    def _stage_rounds(self,ids,first,upto):
+        """The recording rounds of the run so far: round 0 from phase 1, then every retry round that ran."""
+        rounds=[dict(recording_round=0,scene_ids=list(ids),waves=first['waves'])]
+        for number in range(1,upto+1):
+            path=self.root/'host'/f'retry-{number}-waves.json'
+            if path.exists():
+                rounds.append(json.loads(path.read_bytes()))
+        return rounds
+
+    async def stage_retry(self,manifest,number):
+        """One retry round: record the INVALID scenes with a passing Teacher again, process them, write the stage record.
+
+        The decision (a round may be skipped for time, disk or lack of candidates) is the all-in-one run's, written to the same
+        `host/retry-round-N.json`; a skipped or aborted round ends the retries: the next one is refused."""
+        stage=stage_records.retry_stage(number)
+        if self.qualification:
+            raise ValueError('STAGE_RETRY_ON_QUALIFICATION_RUN')
+        plane,ids,worker_ids=self._scene_plan(manifest)
+        maximum=retry_invalid_max_rounds(self.limits)
+        if type(number) is not int or not 1<=number<=maximum:
+            raise ValueError('STAGE_RETRY_ROUNDS_EXCEEDED')
+        if self.processing is None:
+            raise ValueError('STAGE_PROCESSING_UNAVAILABLE')
+        check_phase_limits(self.limits,self.context.deadline_monotonic_s-self.context.admitted_at_monotonic_s+1.)
+        previous,first=self._stage_begin(stage)
+        if previous.get('status','RUN')!='RUN':
+            raise ValueError('STAGE_RETRY_ROUND_OUT_OF_ORDER')           # the round before this one did not run
+        host=self.root/'host'
+        observed=previous['observed']
+        self._wave_wall_s,self._sync_s,self._next_wave_index=list(observed['wave_wall_s']),observed['sync_s'],observed['next_wave_index']
+        if hasattr(self.launcher,'_next_wave'):
+            self.launcher._next_wave=self._next_wave_index           # wave numbers continue where the earlier stages stopped
+        self.phase2=json.loads((host/'processing-result.json').read_bytes())
+        rounds=self._stage_rounds(ids,first,number-1)
+        provisional=getattr(self.verifier,'verify_rounds_provisional',None)
+        combine=provisional or self.verifier.verify_rounds
+        combined=await asyncio.to_thread(combine,rounds,list(ids))
+        monitor=None
+        status,reason_text=None,None
+        try:
+            candidates=[item['scene_id'] for item in combined['scenes'] if retry_candidate(item['recording_attempts'][-1])]
+            plans=plan_campaign_waves(candidates,worker_ids,plane=None,first_wave_index=self._next_wave_index,
+                                      recording_round=number) if candidates else []
+            reason=None
+            estimate=None
+            stop_reason=self.stop_reason or getattr(self.coordinator,'stop_reason',None)
+            if not candidates:
+                reason='NO_CANDIDATES'
+            elif stop_reason not in (None,PHASE1_DEADLINE_REASON):
+                reason='DISPATCH_STOPPED:'+stop_reason
+            else:
+                runtime=self.coordinator.config
+                runtime={name:getattr(runtime,name) for name in ('initializing_hard_timeout_s','executing_hard_timeout_s',
+                          'finalizing_hard_timeout_s','worker_recovery_timeout_s')}
+                admitted=getattr(self.processing,'_admitted',None)
+                processors=len(admitted) if admitted else self.phase2['processors']
+                estimate=retry_round_plan(self.limits,now_s=self.clock()/1e9,total_deadline_s=self.context.deadline_monotonic_s,
+                    scene_count=len(candidates),worker_count=len(worker_ids),processor_count=processors,
+                    observed=self._retry_observations(),runtime=runtime)
+                if not estimate['fits']:
+                    reason=estimate['reason']
+                largest=max((item['phase1'].get('recording_bytes',0) for item in combined['scenes'] if item['phase1']),default=0)
+                if reason is None and self.disk_reader(self.root)<self.approved_disk_floor_bytes+len(candidates)*largest:
+                    reason='RETRY_ROUND_DISK'
+            decision=dict(recording_round=number,candidates=candidates,plans=plans,estimate=estimate,
+                          status='RUN' if reason is None else 'SKIPPED',reason=reason)
+            _write(host/f'retry-round-{number}.json',decision)
+            status,reason_text=decision['status'],reason
+            if reason is None:
+                recording=dict(recording_round=number,scene_ids=candidates,waves=[])
+                self._recorded_waves=[]
+                monitor=asyncio.create_task(self._monitor())
+                try:
+                    endpoints=await self.services.start()
+                    self._reopen_recording(estimate['recording_deadline_s'])
+                    recording['waves']=await self._record_waves(plans,endpoints)
+                    await self._finish_phase1(candidates,recording['waves'],round=number)
+                    await self.start_phase_two(recording['waves'],round=number)
+                except Exception as error:
+                    cleanup=await asyncio.gather(*(shard.close() for shard in self.shards),return_exceptions=True)
+                    if (any(not isinstance(value,dict) or value.get('terminated') is not True for value in cleanup)
+                            or 'STOP_UNCONFIRMED' in str(error) or 'STOP_UNPROVEN' in str(error)
+                            or await asyncio.to_thread(self.registry.role_terminated,'shard',self.services.inspect_container) is not True):
+                        raise ValueError('CAMPAIGN_RETRY_STOP_UNCONFIRMED') from error
+                    recording['waves']=getattr(self,'_recorded_waves',[])
+                    status,reason_text='ABORTED',str(error)+('' if error.__cause__ is None else ': '+repr(error.__cause__))
+                _write(host/f'retry-{number}-waves.json',recording)
+        finally:
+            if monitor is not None:
+                monitor.cancel()
+                await asyncio.gather(monitor,return_exceptions=True)
+        stage_records.write_record(host,stage,dict(
+            campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],status=status,reason=reason_text,
+            observed=dict(wave_wall_s=list(self._wave_wall_s),sync_s=self._sync_s,next_wave_index=self._next_wave_index)),
+            previous=previous)
+        return dict(campaign_id=self.context.campaign_id,stage=stage,status=status,reason=reason_text)
 
     async def stage_finalize(self,manifest):
         """The campaign result and the frozen index from the combined per-scene proof, as the all-in-one run writes them."""
@@ -520,7 +618,26 @@ class ContainerCampaignOwner:
         task_faults=[item for wave in completed for item in wave.get('faults',())]
         if task_faults:
             result['task_faults']=[dict(scene_id=item['scene_id'],reason=item['reason']) for item in task_faults]
-        combined=await asyncio.to_thread(combine,completed,list(ids))
+        retried=[stage_records.read_record(host,stage_records.retry_stage(number)) for number in range(1,stage_records.MAX_RETRY_ROUNDS+1)
+                 if stage_records.record_path(host,stage_records.retry_stage(number)).exists()]
+        if retried:
+            rounds=self._stage_rounds(ids,first,len(retried))
+            provisional=getattr(self.verifier,'verify_rounds_provisional',None)
+            first_pass=await asyncio.to_thread(provisional or self.verifier.verify_rounds,rounds[:1],list(ids))
+            initially_invalid={item['scene_id'] for item in first_pass['scenes'] if retry_candidate(item)}
+            combined=await asyncio.to_thread(self.verifier.verify_rounds,rounds,list(ids))
+            aborted=next((item['reason'] for item in retried if item['status']=='ABORTED'),None)
+            decisions=[json.loads((host/f'retry-round-{number}.json').read_bytes()) for number in range(1,len(retried)+1)]
+            recovered=sum(item['scene_id'] in initially_invalid and item['verdict']['export_eligible'] is True
+                          for item in combined['scenes'])
+            retry=dict(max_rounds=retry_invalid_max_rounds(self.limits),rounds_run=len(rounds)-1,recovered=recovered,
+                       status='ABORTED' if aborted is not None else 'COMPLETE',reason=aborted,decisions=decisions)
+            combined['retry']=retry
+            result['retry']=retry
+            result['waves']=[wave for recording in rounds for wave in recording['waves']]
+            result.pop('task_faults',None)
+        else:
+            combined=await asyncio.to_thread(combine,completed,list(ids))
         known={item['scene_id'] for item in result.get('task_faults',())}
         unfinished=[dict(scene_id=item['scene_id'],reason=item.get('reason') or item['state'])
                     for item in combined['scenes'] if item['state'] in ('FAULT','MISSING') and item['scene_id'] not in known]

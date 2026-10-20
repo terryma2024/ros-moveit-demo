@@ -83,7 +83,9 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
             role = argv[argv.index('--role')+1]
             if role == 'teacher' and fail_teacher:
                 return SimpleNamespace(returncode=1, stdout='', stderr='injected Docker launch failure')
-            cid = ('1' if role == 'head' else '2')*64
+            digit = '1' if role == 'head' else '2'
+            starts = sum(1 for value in containers.values() if value['Name'].endswith(role+'-g1') or '-'+role+'-g1-' in value['Name'])
+            cid = digit*64 if starts == 0 else digit*63+format(starts, 'x')            # a later start is a new container
             containers[cid] = dict(Id=cid, Image=image['digest'], Name='/'+argv[argv.index('--name')+1],
                 State=dict(StartedAt='2026-10-12T01:02:03.123Z', Running=True, Restarting=False,
                            Pid=500, Status='running', ExitCode=0))

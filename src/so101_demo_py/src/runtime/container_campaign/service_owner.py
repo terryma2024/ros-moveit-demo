@@ -67,7 +67,7 @@ class ContainerServiceOwner:
     def __init__(self, *, admitted_context, config, paths, roles, registry,
                  startup_timeout_s, receive_budget_s, stop_timeout_s, head_descriptor=None,
                  head_descriptor_sha256=None, docker_runner=_docker, query=_query,
-                 monotonic_ns=time.monotonic_ns):
+                 monotonic_ns=time.monotonic_ns, stage=None):
         # Measurement launches Head only, a validation kind Head and Teacher, and collection Teacher only (CP-3608 ruling 2:
         # collection does not run Head Search). The Head descriptor exists only for a launched Head.
         kind = getattr(admitted_context, 'workload_kind', None)
@@ -109,6 +109,10 @@ class ContainerServiceOwner:
         self.startup_timeout_s, self.receive_budget_s, self.stop_timeout_s = (
             startup_timeout_s, receive_budget_s, stop_timeout_s)
         self.docker_runner, self.query, self.clock = docker_runner, query, monotonic_ns
+        # A later stage of a run collected stage by stage starts its own Teacher: every name it owns carries the stage, so it
+        # collides with nothing the earlier stages left (the first process keeps the plain names).
+        self.stage = stage
+        self._tail = '' if stage is None else '-'+stage
         self._launch_ids, self._endpoints = [], {}
         self._start_task = self._close_task = None
         self._startup_done = asyncio.Event()
@@ -143,11 +147,19 @@ class ContainerServiceOwner:
             prepared = []
             for role in self.roles:
                 settings = self.config[role+'_service']
-                config_path = self.paths['run']/(role+'-service.json')
+                config_path = self.paths['run']/(role+'-service'+self._tail+'.json')
                 _write(config_path, settings)
                 owned = self.paths['services'][role]
+                if self.stage is not None:
+                    # The earlier stage's private directory and socket stay beside the new ones as evidence; the layout checks
+                    # of the mounts need the new Teacher under the same names.
+                    owned.rename(owned.parent/(role+'-before'+self._tail))
+                    owned.mkdir(mode=0o700)
+                    socket = self.paths['socket_roots'][role]/'inference.sock'
+                    if socket.exists() or socket.is_symlink():
+                        socket.rename(socket.with_name('inference.sock-before'+self._tail))
                 (owned/'tmp').mkdir(mode=0o700)
-                generation = self.paths['run'].name+'-'+role+'-g1'
+                generation = self.paths['run'].name+'-'+role+'-g1'+self._tail
                 entry = InferenceLaunchArgs(config=config_path, generation=generation,
                     startup_deadline_monotonic_ns=deadline, receive_budget_s=self.receive_budget_s,
                     head_descriptor=self.head_descriptor if role == 'head' else None,
@@ -168,14 +180,14 @@ class ContainerServiceOwner:
                 if self._closing or self.clock() >= deadline:
                     raise ValueError('SERVICE_OWNER_START_FENCED')
                 settings = self.config[role+'_service']
-                launch = ContainerLaunch(launch_id=role+'-g1', role=role, worker_id=None, wave_id=None,
+                launch = ContainerLaunch(launch_id=role+'-g1'+self._tail, role=role, worker_id=None, wave_id=None,
                     launch_generation=1, container_name=argv[argv.index('--name')+1],
                     image_digest=settings['image']['digest'], owned_root=str(self.paths['services'][role]))
                 self.registry.register(launch)
                 self._launch_ids.append(launch.launch_id)
-                _write(self.paths['host']/(role+'-launch-argv.json'), argv)
+                _write(self.paths['host']/(role+'-launch-argv'+self._tail+'.json'), argv)
                 result = await asyncio.to_thread(self.docker_runner, argv)
-                _write(self.paths['host']/(role+'-launch-result.json'), dict(
+                _write(self.paths['host']/(role+'-launch-result'+self._tail+'.json'), dict(
                     exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr))
                 if result.returncode != 0 or re.fullmatch(r'[0-9a-f]{64}', result.stdout.strip()) is None:
                     raise ValueError('SERVICE_CONTAINER_LAUNCH_FAILED')
@@ -220,8 +232,8 @@ class ContainerServiceOwner:
                         actual['provenance'][name] != settings['image'][name]
                         for name in ('package_source_sha256','install_sha256'))):
                     raise ValueError('SERVICE_IMAGE_PROVENANCE_MISMATCH')
-                _write(self.paths['host']/(role+'-ready.json'), ready)
-                _write(self.paths['host']/(role+'-provenance.json'), actual)
+                _write(self.paths['host']/(role+'-ready'+self._tail+'.json'), ready)
+                _write(self.paths['host']/(role+'-provenance'+self._tail+'.json'), actual)
                 self._endpoints[role] = endpoint
             return self._endpoints.copy()
         finally:
@@ -233,7 +245,7 @@ class ContainerServiceOwner:
                 or set(self._endpoints) != set(self.roles)):
             raise ValueError('SERVICE_OWNER_NOT_AVAILABLE')
         for role in self.roles:
-            record = next(item for item in self.registry.records() if item['launch']['launch_id'] == role+'-g1')
+            record = next(item for item in self.registry.records() if item['launch']['launch_id'] == role+'-g1'+self._tail)
             cid = record['owner']['container_id']
             observed = await asyncio.to_thread(self.inspect_container, cid)
             if (container_key_from_inspect(observed, launch_generation=1) != ContainerOwnerKey(**record['owner'])
