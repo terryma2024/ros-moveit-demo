@@ -121,3 +121,11 @@ The manifest therefore records:
 `check` also runs a functional probe: a 64x64 headless render with the
 `so101-act-test` venv python, `MUJOCO_GL=egl` and no `DISPLAY`. A failing probe is a
 must-match difference (`gl.probe`). Use `--no-gl-probe` to skip it.
+
+## Apt mirror
+
+`capture` stores the full text of every apt source file in the manifest
+(`apt_sources`), so the effective ROS mirror is part of the reference. A host that
+pulls from a slow upstream can run `apply --use-reference-sources`: the ROS and
+Gazebo source files that differ are replaced by the reference text (the old file is
+kept as `<name>.pre-align-<stamp>`), then `apt-get update` runs before planning.

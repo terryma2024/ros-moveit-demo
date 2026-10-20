@@ -354,6 +354,19 @@ def snapshot_source_line(date: str, codename: str) -> str:
     )
 
 
+def reference_source_changes(manifest: dict, state: dict) -> dict[str, str]:
+    """ROS/Gazebo apt source files whose text differs from the reference host."""
+    changes: dict[str, str] = {}
+    for name, text in manifest.get("apt_sources", {}).items():
+        if name == "sources.list":
+            continue
+        if not any(tag in text for tag in ("ros-archive-keyring", "osrfoundation", "pkgs-osrf")):
+            continue
+        if state.get("apt_sources", {}).get(name) != text:
+            changes[name] = text
+    return changes
+
+
 def plan_apply(
     manifest: dict,
     state: dict,
@@ -767,6 +780,20 @@ def cmd_apply(args) -> int:
     state = collect_state(Path(args.repo), work_root, with_scope=False,
                           wanted=set(manifest["apt"]))
     stamp = _dt.datetime.now().strftime("%Y%m%dT%H%M%S")
+    if args.use_reference_sources:
+        changes = reference_source_changes(manifest, state)
+        for name, text in changes.items():
+            target = Path("/etc/apt/sources.list.d") / name
+            log.event(action="plan", kind="source_replace", detail={"file": name},
+                      new=text.strip())
+            if args.dry_run:
+                continue
+            if target.exists():
+                run(sudo(["cp", "-p", str(target), f"{target}.pre-align-{stamp}"]))
+            run(sudo(["tee", str(target)]), input_text=text)
+        if changes and not args.dry_run:
+            run(sudo(["apt-get", "update"]), timeout=1800)
+            log.event(action="sources_replaced", files=sorted(changes))
     snapshot = args.snapshot_date or (manifest.get("ros_snapshot") or {}).get("date")
     todo = [n for n, v in manifest["apt"].items() if state["apt"].get(n) != v]
     available = available_versions(todo) if todo and not snapshot else None
@@ -910,6 +937,10 @@ def build_parser() -> argparse.ArgumentParser:
     app.add_argument("--manifest", required=True)
     app.add_argument("--wheels", help="wheel cache dir from capture --export-wheels")
     app.add_argument("--tools-tar", help="tarball from capture --export-tools")
+    app.add_argument("--use-reference-sources", action="store_true",
+                     help="copy the reference host's ROS/Gazebo apt source files "
+                          "(mirror choice) before planning; old files are kept as "
+                          ".pre-align-<stamp>")
     app.add_argument("--snapshot-date",
                      help="ROS snapshot date (YYYY-MM-DD) to add if versions are missing")
     app.add_argument("--allow-remove", action="store_true",

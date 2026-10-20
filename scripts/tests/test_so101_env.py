@@ -326,3 +326,13 @@ def test_glvnd_vendor_file_missing_is_must_hash_differ_is_should():
 def test_gl_probe_fails_closed_without_venv(tmp_path):
     ok, detail = env.gl_probe(tmp_path)
     assert ok is False and "missing" in detail
+
+
+def test_reference_source_changes_only_ros_and_gazebo_files():
+    manifest = {"apt_sources": {
+        "ros2.list": "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://mirror/ros2 noble main\n",
+        "ubuntu.sources": "Types: deb\n", "sources.list": "x"}}
+    state = {"apt_sources": {"ros2.list": "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2 noble main\n", "ubuntu.sources": "other"}}
+    assert list(env.reference_source_changes(manifest, state)) == ["ros2.list"]
+    state["apt_sources"]["ros2.list"] = manifest["apt_sources"]["ros2.list"]
+    assert env.reference_source_changes(manifest, state) == {}
