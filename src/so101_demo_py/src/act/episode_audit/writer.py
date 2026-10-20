@@ -345,7 +345,17 @@ class EpisodeAuditWriter:
                 if (item["monotonic_ns"] < raw["received_monotonic_ns"]
                         or item["sim_time_s"] != raw["chunk"]["last_simulation_time_s"]):
                     raise ValueError("AUDIT_PHYSICS_RAW_EVENT_INVALID")
-                self._raw_physics_previous = json.loads(_canonical(raw))
+                # (The record's strict-JSON check is the canonical dump of the event line below.) Only what the next chunk's continuity
+                # check reads is kept: the chunk's identity and sequence, the receipt and the last
+                # sample's step, time and clock end. The previous chunk is never verified again (`previous_verified` above).
+                last = raw["chunk"]["samples"][-1]
+                self._raw_physics_previous = {
+                    "received_monotonic_ns": raw["received_monotonic_ns"],
+                    "chunk": {"chunk_sequence": raw["chunk"]["chunk_sequence"],
+                              "simulation_session_id": raw["chunk"]["simulation_session_id"],
+                              "reset_epoch": raw["chunk"]["reset_epoch"],
+                              "samples": [{name: last[name] for name in ("physics_step", "simulation_time_s",
+                                                                          "clock_interval_end_monotonic_ns")}]}}
             if item["kind"] == "source_alignment":
                 association = item["payload"]["association"]
                 source = association["source"]["physics"]
