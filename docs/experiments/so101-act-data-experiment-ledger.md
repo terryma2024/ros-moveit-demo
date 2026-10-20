@@ -69,11 +69,29 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3749
+latest_checkpoint: CP-3750
 next_experiment: TRAIN-005 (compress_dwell) training, then the 4-point rollout (CP-3747). Before that, TRAIN-004 rollouts found 0 of 16 DONE (CP-3746): the policy holds at the rest/dwell pose. The coordinator decides the next change (see the CP-3746 diagnosis).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3750 — TRAIN-005 fp32 (antzb) closed-loop rollouts, prefix 5, 4 standard points, GPU-SHARED with train005b (human-authorised override): 1 of 4 DONE (left_5cm)
+
+- Executed by a Sonnet 5.5 subagent for the coordinator. Human decision 2026-10-20 (relayed): "先尝试关闭这个gate，执行一次rollout。（不要跑代码gate）". Override without any source edit: REG/act-rollout-train005fp32-20261020T023800Z/scripts/run_skip_gpu_probe.py imports `so101_demo.cli.act_rollout_native` from the gate install, rebinds the module-level `PRECONDITIONS` tuple without `no_gpu_process` (the other four probes unchanged, preconditions recorded in run.json/episode.json accordingly) and calls `main(argv)`; script run_mode_gpushared.zsh = run_mode.zsh with that launcher. E/prefix5-gpushared/override.json records the words, the removed probe, the GPU compute apps at start (train005b python, pid 762540) and the label `gpu-shared`. Gate 75debaa680b8 (src, scripts and third_party unchanged versus HEAD); no host gate run. The all-zero `model_source.sha256` of the antzb bundle was NOT refused. Bundle /data/work/so101-policies/train005-fp32-antzb, policy sha a9018f7d...; rc 0, 892 s; the earlier refused attempt (CP-3749) is E/prefix5 (empty).
+- Results (summary.json; sim time from the first step; touched = cup moved over 5 mm, lifted = z over start+0.02 m, placed = inside the frozen tolerances):
+
+| point | verdict | touched / lifted / placed (s) | final cup xy err / z err | tilt (rad) | furthest phase |
+|---|---|---|---|---|---|
+| left_5cm | DONE | 18.9 / 20.5 / 24.1 | 0.0039 m / 0.00015 m | 1.3e-5 | release (and retreat to the open pose) |
+| forward_5cm | FAILED FINAL_XY | none | 0.1304 m / 0.00015 m | 1.2e-5 | pre-grasp/descend; gripper closed on the cup rim without lifting it |
+| right_5cm | FAILED FINAL_XY | none | 0.1539 m / 0.00015 m | 3.6e-6 | descend and grasp closure beside the cup (cup missed), then opened |
+| task_start | FAILED XY, Z, AXIS | 28.8 / 37.0 / none | 0.0939 m / 0.152 m | 1.485 | lift and carry; cup ended lying on its side on the base/arm, never placed |
+
+  Per-joint max displacement from the first state (rad; pan, lift, elbow, wrist_flex, roll, gripper): left 0.431, 0.565, 0.267, 1.390, 0.253, 0.760; forward 0.051, 1.112, 1.169, 1.658, 0.056, 0.477; right 0.431, 0.743, 0.622, 1.482, 0.039, 0.764; task_start 0.431, 0.501, 0.282, 1.381, 0.040, 0.764. Gripper (rad): about 0.47 open at 15 s, about -0.03 closed at 30 to 45 s, 0.76 (wide open = release) from 30 s (left) or 60 s (right, task_start); forward never opens again (closed for the rest of the horizon).
+- Behaviour (all four contact sheets viewed, E/videos/prefix5-gpushared/<episode>/{side,wrist}.mp4 and contact-sheet.png): left_5cm: the arm reaches over, the gripper takes the cup, lifts and sets it back on the target ring by 24 s, opens and retreats; the cup stands on the red ring for the remaining 150 s with the arm parked at the open pose. forward_5cm: the arm reaches the cup, wrist_flex 1.66 and the jaws straddle the cup rim from above (wrist view), the gripper closes on the rim but does not lift; 1472 of 1800 steps were `limit_refused` (the policy's commanded targets lie outside the joint limits) and the arm holds that pose to the end, cup standing on its start spot, 0.13 m from the target ring. right_5cm: the jaws close beside the cup (missed grasp), the arm then opens and returns to the parked open pose; the cup never moves. task_start: grasps and lifts the cup (touched 28.8 s, lifted 37 s), carries it to the arm base area, the cup ends on its side next to the base while the gripper opens; not placed on the ring.
+- Versus TRAIN-004 (CP-3746: 0 of 16, arm stalls at the dwell pose with the cup untouched): the dwell stall is gone; every point leaves the rest pose and reaches the cup, 3 of 4 touch or grasp, 2 of 4 lift and carry, one completes the full pick and place. Remaining failures are grasp quality (forward: rim, right: miss, task_start: carry/place) and, for forward, out-of-limit commands.
+- Load notes (train005b was training on the same GPU): inference latency median 0.035 s, p95 0.037 to 0.038 s, max 0.115 to 0.129 s (TRAIN-004: 0.011, 0.015 to 0.017, 0.09 to 0.13), late replies 0 in all four, prefix_late 1 to 4, wall 213 to 219 s per 180 s sim episode (TRAIN-004 prefix 5: 874 s for four episodes, the same), no INVALID, no goal-timeout, no timing fault in stderr. Held steps are the design (4 of 5 steps of a prefix; 1440 of 1800), except forward. Latency tripled under the shared GPU but stayed far below the reply-age limit, so no episode is marked LOAD-AFFECTED; the comparison with an unshared run is still open.
+- Not done: prefix 1 and ensembling m=0.01 (not needed to decide: prefix 5 got 1 of 4, so the coordinator's rule asks for them: pending), the bf16 bundle (train005b not finished at 11:20 CST), an unshared repeat. Fans untouched (still 100). Retained all of E; deletion candidates: E/scratch, E/prefix5 (refused), /tmp/so101-debug-o6-train005fp32.
 
 ## CP-3749 — TRAIN-005 (fp32) trained on antzb and handed back; concurrent rollouts REFUSED by the rollout tool's `no_gpu_process` precondition; no rollout ran
 
