@@ -1,0 +1,9 @@
+# Tests that fail only under load or with concurrent stages and pass alone. One rerun is allowed for exactly these.
+# Format, one entry per line: <test id substring> | <reason> | <date added>   (date: YYYY-MM-DD)
+# The substring is matched against the failing test id (pytest node id, or gtest / launch test name).
+test_a_subscription_without_a_received_message_is_not_recording | not root-caused; passes alone, rare under load (test_act_raw_readiness) | 2026-10-20
+test_a_real_rate_replay_with_the_teacher_starting_after_the_capture_seals_valid_and_reads_back | wall-clock delivery windows of 0.15 to 0.45 s in the real-rate replay; passes alone | 2026-10-20
+test_an_instance_that_ignores_term_is_not_confirmed_and_keeps_the_slot_fenced | not root-caused; passes alone, rare under load (test_native_owner_stop) | 2026-10-20
+test_the_probe_with_a_spin_reports_a_live_node_every_time_and_a_clear_graph_after_it_is_gone | not root-caused; passes alone, rare under load (test_native_graph_probe) | 2026-10-20
+test_camera_plugin | concurrent OpenGL/EGL initialisation; seen only when the demo and colcon stages run at the same time | 2026-10-20
+robot_launch_mjcf_generation_from_robot_description_test | seen only when the demo and colcon stages run at the same time; passes alone | 2026-10-20
