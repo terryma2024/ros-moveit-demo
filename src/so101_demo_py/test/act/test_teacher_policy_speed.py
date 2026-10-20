@@ -101,3 +101,16 @@ def test_the_fast_policy_changes_exactly_the_five_speed_keys_and_the_version():
     loaded = load_teacher_execution_policy(FAST_POLICY_PATH)
     assert loaded["carry_max_velocity_scaling"] == 0.03 and loaded["carry_max_acceleration_scaling"] == 0.0075
     assert (loaded["grasp_stable_dwell_s"], loaded["release_settle_dwell_s"]) == (0.25, 0.5)
+
+
+@pytest.mark.parametrize("name,accel", [("011", 0.011), ("015", 0.015)])
+def test_a_carry_doe_policy_differs_from_the_fast_policy_only_in_the_carry_acceleration(name, accel):
+    """R3 of the plan: each DOE level is a copy of the FAST file whose only difference is carry_max_acceleration_scaling."""
+    fast = yaml.safe_load(FAST_POLICY_PATH.read_bytes())
+    level_path = CONFIG / f"teacher_execution_policy_side_wrist_fast_carry{name}.yaml"
+    level = yaml.safe_load(level_path.read_bytes())
+    assert level == {**fast, "carry_max_acceleration_scaling": accel}
+    assert fast["carry_max_acceleration_scaling"] == 0.0075
+    loaded = load_teacher_execution_policy(level_path)
+    assert loaded["schema_version"] == 4 and loaded["carry_max_acceleration_scaling"] == accel
+    assert loaded["policy_sha256"] != load_teacher_execution_policy(FAST_POLICY_PATH)["policy_sha256"]
