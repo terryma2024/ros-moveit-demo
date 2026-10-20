@@ -22,6 +22,9 @@ from so101_demo.runtime.container_campaign.processing_limits import (
     check_phase_limits,effective_limits,phase1_deadline_s,phase2_deadline_s,retry_invalid_max_rounds,retry_round_plan,
 )
 from so101_demo.runtime.inference.config import RUNTIME_DOCUMENT_KEYS
+
+#: what a later stage's admission must equal in the phase-1 record: the inputs the run was admitted on
+STAGE_INPUTS=('source_sha256','manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint')
 from so101_demo.runtime.container_campaign.resource_log import (
     append_resource_log,check_disk_dispatch_guard,read_disk_free_bytes,
 )
@@ -158,6 +161,26 @@ class ContainerCampaignOwner:
     def limits(self):
         return effective_limits(self.config,self.runtime_document)
 
+    def _scene_plan(self,manifest):
+        """`(plane, scene ids, worker ids)` of the run, from the admitted manifest; the same for every stage of a run."""
+        actual=read_document(self.manifest_path)
+        if (hashlib.sha256(self.manifest_path.read_bytes()).hexdigest()!=self.context.manifest_sha256
+                or actual!=manifest):
+            raise ValueError('CAMPAIGN_MANIFEST_CHANGED')
+        if self.qualification:
+            plane,contract=validate_run_contract(actual)
+            if contract['worker_count']!=self.context.worker_count:
+                raise ValueError('CAMPAIGN_MANIFEST_INVALID')
+            # the gate plane is exactly 40 scenes; a functional contract was already closed to 8 or 16
+            ids=scene_ids(contract['scene_manifest'],count=40 if plane=='gate' else None)
+        else:
+            plane=None
+            rows=actual.get('scenarios')
+            if type(rows) is not list or not rows or any(type(row) is not dict for row in rows):
+                raise ValueError('CAMPAIGN_MANIFEST_INVALID')
+            ids=tuple(row['scene_id'] for row in rows)
+        return plane,ids,tuple(slot.worker_id for slot in self.slots)
+
     async def _run(self,manifest):
         monitor=None
         try:
@@ -166,28 +189,12 @@ class ContainerCampaignOwner:
                 raise ValueError('CAMPAIGN_RETRY_QUALIFICATION_FORBIDDEN')
             if retry_max and self.processing is None:
                 raise ValueError('CAMPAIGN_RETRY_REQUIRES_PROCESSING')
-            actual=read_document(self.manifest_path)
-            if (hashlib.sha256(self.manifest_path.read_bytes()).hexdigest()!=self.context.manifest_sha256
-                    or actual!=manifest):
-                raise ValueError('CAMPAIGN_MANIFEST_CHANGED')
-            if self.qualification:
-                plane,contract=validate_run_contract(actual)
-                if contract['worker_count']!=self.context.worker_count:
-                    raise ValueError('CAMPAIGN_MANIFEST_INVALID')
-                # the gate plane is exactly 40 scenes; a functional contract was already closed to 8 or 16
-                ids=scene_ids(contract['scene_manifest'],count=40 if plane=='gate' else None)
-            else:
-                plane=None
-                rows=actual.get('scenarios')
-                if type(rows) is not list or not rows or any(type(row) is not dict for row in rows):
-                    raise ValueError('CAMPAIGN_MANIFEST_INVALID')
-                ids=tuple(row['scene_id'] for row in rows)
+            plane,ids,worker_ids=self._scene_plan(manifest)
             # the coordinator writes its collection mode into every task document: a spot check is a diagnostic-mode run, every other
             # plane a formal one
             expected_mode='preselected_target_diagnostic' if plane=='spot_check' else 'formal'
             if getattr(self.coordinator,'collection_mode','formal')!=expected_mode:
                 raise ValueError('CAMPAIGN_COLLECTION_MODE_MISMATCH')
-            worker_ids=tuple(slot.worker_id for slot in self.slots)
             # The time limits are checked before anything is launched. The 1 s tolerance covers the nanosecond rounding of the
             # admitted deadline.
             context=self.context
@@ -440,10 +447,93 @@ class ContainerCampaignOwner:
         stage_records.write_record(host,stage_records.PHASE1,dict(
             campaign_id=self.context.campaign_id,qualification=self.qualification,scene_count=len(ids),waves=len(completed),
             campaign_config=dict(path=self.context.campaign_config_path,sha256=self.context.campaign_config_sha256),
+            inputs={name:getattr(self.context,name) for name in STAGE_INPUTS},worker_count=self.context.worker_count,
             images=dict(head=self.config['head_service']['image'],teacher=self.config['teacher_service']['image'],
                         shard=self.config['shard_image']),
+            observed=dict(wave_wall_s=list(self._wave_wall_s),sync_s=self._sync_s,next_wave_index=self._next_wave_index),
             phase1_result_sha256=hashlib.sha256((host/'phase1-result.json').read_bytes()).hexdigest(),
             durability_sha256=hashlib.sha256((host/'phase1-durability.json').read_bytes()).hexdigest()))
+        return result
+
+    # ---- the later stages of a run collected stage by stage (`act_process_parallel`) ---------------------------------------------
+
+    def _stage_begin(self,stage,*,after=None):
+        """The checks every later stage makes before it touches anything; returns `(previous record, phase-1 result)`.
+
+        The record chain, the logic document, the admitted inputs, the images and the plane must be the ones phase 1 left. `after` is the
+        record a stage continues from when that is not fixed by the stage name (the finalize). The runtime values this stage uses are
+        recorded beside its record and never compared with another stage's."""
+        host=self.root/'host'
+        if stage.startswith('retry-') and self.qualification:
+            raise ValueError('STAGE_RETRY_ON_QUALIFICATION_RUN')
+        logic=dict(path=self.context.campaign_config_path,sha256=self.context.campaign_config_sha256)
+        if after is None:
+            previous=stage_records.require_previous(host,stage,logic=logic)
+        else:
+            if stage_records.record_path(host,stage).exists():
+                raise ValueError('STAGE_ALREADY_COMPLETE')
+            previous=stage_records.verify_chain(host,after,logic=logic)
+        first=stage_records.read_record(host,stage_records.PHASE1)
+        if (first['qualification']!=self.qualification or first['worker_count']!=self.context.worker_count
+                or any(first['inputs'].get(name)!=getattr(self.context,name) for name in STAGE_INPUTS)):
+            raise ValueError('STAGE_INPUTS_CHANGED')
+        images=dict(head=self.config['head_service']['image'],teacher=self.config['teacher_service']['image'],
+                    shard=self.config['shard_image'])
+        if first['images']!=images:
+            raise ValueError('STAGE_IMAGES_CHANGED')
+        raw=(host/'phase1-result.json').read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=first['phase1_result_sha256']:
+            raise ValueError('STAGE_PREVIOUS_RECORD_INVALID')
+        _write(host/f'runtime-used-{stage}.json',dict(schema_version=1,kind='act_collection_runtime_used',stage=stage,
+            values={name:self.limits[name] for name in RUNTIME_DOCUMENT_KEYS if name in self.limits}))
+        return previous,json.loads(raw)
+
+    async def stage_phase2(self,manifest):
+        """Phase 2 over the recorded waves of phase 1: the processor scheduler, then the stage record."""
+        plane,ids,worker_ids=self._scene_plan(manifest)
+        if self.processing is None:
+            raise ValueError('STAGE_PROCESSING_UNAVAILABLE')
+        check_phase_limits(self.limits,self.context.deadline_monotonic_s-self.context.admitted_at_monotonic_s+1.)
+        previous,first=self._stage_begin(stage_records.PHASE2)
+        summary=await self.start_phase_two(first['waves'])
+        host=self.root/'host'
+        result_path=host/'processing-result.json'
+        stage_records.write_record(host,stage_records.PHASE2,dict(
+            campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],
+            processing_result_sha256=hashlib.sha256(result_path.read_bytes()).hexdigest() if result_path.exists() else None,
+            processors=None if summary is None else summary.get('processors')),previous=previous)
+        return dict(campaign_id=self.context.campaign_id,stage=stage_records.PHASE2,processing='PENDING_FINALIZE',phase2=summary)
+
+    async def stage_finalize(self,manifest):
+        """The campaign result and the frozen index from the combined per-scene proof, as the all-in-one run writes them."""
+        plane,ids,worker_ids=self._scene_plan(manifest)
+        combine=getattr(self.verifier,'verify_processing',None)
+        if self.processing is None or not callable(combine):
+            raise ValueError('STAGE_PROCESSING_UNAVAILABLE')
+        host=self.root/'host'
+        last=stage_records.last_completed(host)
+        if last is None or last['stage']==stage_records.PHASE1:
+            raise ValueError('STAGE_PREVIOUS_RECORD_MISSING')
+        previous,first=self._stage_begin(stage_records.FINALIZE,after=last)
+        completed=first['waves']
+        result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed)
+        task_faults=[item for wave in completed for item in wave.get('faults',())]
+        if task_faults:
+            result['task_faults']=[dict(scene_id=item['scene_id'],reason=item['reason']) for item in task_faults]
+        combined=await asyncio.to_thread(combine,completed,list(ids))
+        known={item['scene_id'] for item in result.get('task_faults',())}
+        unfinished=[dict(scene_id=item['scene_id'],reason=item.get('reason') or item['state'])
+                    for item in combined['scenes'] if item['state'] in ('FAULT','MISSING') and item['scene_id'] not in known]
+        if unfinished:
+            result['task_faults']=[*result.get('task_faults',()),*unfinished]
+        _write(host/'campaign-result.json',build_campaign_result(self.context.campaign_id,len(ids),combined))
+        _write(self.root/'collection-index.json',build_frozen_index(campaign_id=self.context.campaign_id,
+            qualification=self.qualification,scene_count=len(ids),combined=combined))
+        result['processing']='COMPLETE'
+        stage_records.write_record(host,stage_records.FINALIZE,dict(
+            campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],
+            campaign_result_sha256=hashlib.sha256((host/'campaign-result.json').read_bytes()).hexdigest(),
+            collection_index_sha256=hashlib.sha256((self.root/'collection-index.json').read_bytes()).hexdigest()),previous=last)
         return result
 
     async def _finish_phase1(self,ids,completed,*,round=0):

@@ -91,16 +91,20 @@ def require_previous(host, stage, *, logic):
     name = previous_stage(stage)
     if name is None:
         raise ValueError('STAGE_PREVIOUS_RECORD_MISSING')
-    previous = read_record(host, name)
-    if previous.get('campaign_config', {}).get('sha256') != logic.get('sha256'):
+    return verify_chain(host, read_record(host, name), logic=logic)
+
+
+def verify_chain(host, record, *, logic):
+    """`record` (the latest the run holds) is bound to this logic document and every earlier record is the one its successor names."""
+    if record.get('campaign_config', {}).get('sha256') != logic.get('sha256'):
         raise ValueError('STAGE_LOGIC_DOCUMENT_CHANGED')
-    link = previous
+    link = record
     while link['previous'] is not None:                      # every earlier record is the one its successor names
         earlier = read_record(host, link['previous']['stage'])
         if earlier['sha256'] != link['previous']['sha256']:
             raise ValueError('STAGE_PREVIOUS_RECORD_INVALID')
         link = earlier
-    return previous
+    return record
 
 
 def last_completed(host):
