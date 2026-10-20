@@ -160,3 +160,24 @@ def test_a_schema_3_retry_index_exports_the_final_attempt_once(tmp_path, monkeyp
     exported = export_dataset(attach_episode_content((resolved,), root=tmp_path), tmp_path / 'dataset',
                               source_manifest_sha256='a' * 64, campaign_index_sha256='b' * 64)
     assert exported['scene_count'] == 1
+
+
+def test_a_teacher_oracle_the_regrade_excludes_is_named_by_its_export_code(tmp_path, monkeypatch):
+    entries, _, documents = schema4_entries(tmp_path, monkeypatch)
+    cause = ValueError('data verdict differs from the files: TEACHER_ORACLE_EXCLUDED: INCOMPLETE WORLD_SEQUENCE_GAP')
+    refusal = ValueError('PROCESSED_RESULT_INVALID')
+    refusal.__cause__ = cause
+    documents[entries[0]['collection_evidence']['processing_output']] = refusal
+    index = frozen_index(tmp_path/'collection-index.json', entries)
+    with pytest.raises(ValueError) as refused:
+        resolve_committed_episodes(manifest=MANIFEST, campaign_index=index)
+    assert str(refused.value) == 'EPISODE_COLLECTION_IDENTITY_INVALID: EXPORT_EPISODE_ORACLE_EXCLUDED: INCOMPLETE WORLD_SEQUENCE_GAP'
+
+
+def test_any_other_processed_refusal_names_its_innermost_cause(tmp_path, monkeypatch):
+    entries, _, documents = schema4_entries(tmp_path, monkeypatch)
+    documents[entries[0]['collection_evidence']['processing_output']] = ValueError('PROCESSED_RESULT_INVALID')
+    index = frozen_index(tmp_path/'collection-index.json', entries)
+    with pytest.raises(ValueError) as refused:
+        resolve_committed_episodes(manifest=MANIFEST, campaign_index=index)
+    assert str(refused.value) == 'EPISODE_COLLECTION_IDENTITY_INVALID: PROCESSED_RESULT_INVALID'

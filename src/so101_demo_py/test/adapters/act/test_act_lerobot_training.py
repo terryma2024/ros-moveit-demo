@@ -24,9 +24,9 @@ SPLITS = {"act-1": "train", "act-2": "train", "act-3": "validation"}
 def _config(steps=3, batch_size=2, **training):
     from so101_demo.act.training_config import load_training_config
     config = load_training_config(CONFIG)
-    # the CPU tests load in-process (num_workers 0) unless a test asks for workers
+    # the CPU tests use one loader worker (0 is refused: it would change the sampling order) unless a test asks for more
     config["training"] = {**config["training"], "steps": steps, "batch_size": batch_size, "pretrained_backbone": None,
-                          "num_workers": 0, **training}
+                          "num_workers": 1, **training}
     return config
 
 
@@ -250,8 +250,8 @@ def test_the_loop_writes_progress_and_validation_records_at_the_configured_inter
     assert [row["step"] for row in validation] == [4, 5]             # the interval and the last step
     assert all(row["samples"] == 3 and row["loss"] == row["loss"] for row in validation)
     assert log["validations"] == validation and log["last_validation"] == validation[-1]
-    assert log["metrics_file"] == "metrics.jsonl" and log["num_workers"] == 0 and len(log["steps"]) == 5
-    assert load_bundle(root / "bundle.json")["normalization"]["last_validation"] == validation[-1]
+    assert log["metrics_file"] == "metrics.jsonl" and log["num_workers"] == 1 and len(log["steps"]) == 5
+    assert "last_validation" not in load_bundle(root / "bundle.json")["normalization"]      # the hashed bundle body holds no run record
     out = capsys.readouterr().out
     assert "step=2/5" in out and "step=5/5" in out and "validation step=4" in out
 
@@ -284,7 +284,7 @@ def test_num_workers_comes_from_the_config_and_an_argument_wins(tmp_path, monkey
         seen.append(kwargs["num_workers"])
         return real(*args, **kwargs)
     monkeypatch.setattr(torch.utils.data, "DataLoader", spy)
-    for name, config_workers, argument, expected in (("a", 1, None, 1), ("b", 1, 0, 0)):
+    for name, config_workers, argument, expected in (("a", 1, None, 1), ("b", 1, 2, 2)):
         outcome = train_act(config=_config(steps=1, num_workers=config_workers), requirements={"status": "RESOLVED"}, dataset=dataset,
                             owner={"device": "cuda", "run_root": str(tmp_path)}, output=tmp_path / name,
                             trainer=lambda cfg, view, out, argument=argument: train_act_bundle(
@@ -292,7 +292,7 @@ def test_num_workers_comes_from_the_config_and_an_argument_wins(tmp_path, monkey
         assert outcome["status"] == "COMPLETED"
         log = json.loads((tmp_path / name / "training-log.json").read_text())
         assert log["num_workers"] == expected
-    assert seen[0] == 1 and seen[2] == 0                              # training loaders; the validation loaders follow each
+    assert seen[0] == 1 and seen[2] == 2                              # training loaders; the validation loaders follow each
 
 
 # ---- O7: leading-idle sample selection and the separate backbone learning rate ---------------------------------------------------------
@@ -665,3 +665,20 @@ def test_bf16_precision_autocasts_the_training_forward_only_and_keeps_fp32_weigh
     assert not any(autocast for training, autocast in seen if not training)           # validation stays fp32
     with safe_open(str(root / "policy.safetensors"), "pt") as stream:
         assert {stream.get_tensor(key).dtype for key in stream.keys()} == {torch.float32}      # master weights are fp32
+
+
+def test_zero_workers_is_refused_and_the_bundle_and_state_carry_the_same_config_sha256(tmp_path, monkeypatch):
+    from so101_demo.act.training import train_act
+    from so101_demo.act.training_config import config_sha256
+    from so101_demo.adapters.act.lerobot import train_act_bundle
+    dataset = synthetic_dataset(tmp_path, monkeypatch, splits=SPLITS)
+    config = _config(steps=1)
+    with pytest.raises(ValueError, match="TRAINING_NUM_WORKERS_INVALID"):
+        train_act_bundle(config, dataset, tmp_path / "zero", requirements_sha256="a" * 64, device="cpu", num_workers=0)
+    outcome = train_act(config=config, requirements={"status": "RESOLVED"}, dataset=dataset,
+                        owner={"device": "cuda", "run_root": str(tmp_path)}, output=tmp_path / "one",
+                        trainer=lambda cfg, view, out: train_act_bundle(cfg, view, out, requirements_sha256="a" * 64, device="cpu"))
+    bundle = json.loads((tmp_path / "one" / "bundle.json").read_text())
+    assert outcome["config_sha256"] == bundle["config_sha256"] == bundle["normalization"]["config_sha256"] == config_sha256(config)
+    assert "last_validation" not in bundle["normalization"]                      # the validation record lives in training-log.json
+    assert json.loads((tmp_path / "one" / "training-log.json").read_text())["last_validation"] is not None

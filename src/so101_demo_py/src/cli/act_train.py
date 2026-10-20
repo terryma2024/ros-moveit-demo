@@ -17,7 +17,7 @@ from pathlib import Path
 
 from so101_demo.act.bundle import default_cli_workers, export_dataset, resolve_committed_episodes, resolve_workers
 from so101_demo.act.training import attach_episode_content, train_act
-from so101_demo.act.training_config import load_training_config
+from so101_demo.act.training_config import config_sha256 as training_config_sha256, load_training_config
 from so101_demo.act.training_requirements import require_resolved_requirements
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2]          # src/so101_demo_py in the source tree (config/ is its sibling of src/)
@@ -41,7 +41,21 @@ def default_requirements_lock() -> Path:
 REQUIREMENTS_LOCK = default_requirements_lock()
 
 
-def _trainer(_config, _dataset, _output, *, requirements_sha256=None, backbone_weights=None):
+def source_commit_of(checkout: Path) -> str:
+    """The HEAD commit of a checkout whose `src` tree is clean; a bundle names the code that trained its weights."""
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(checkout), *args], check=True, capture_output=True, text=True).stdout.strip()
+
+    try:
+        if git("status", "--short", "--untracked-files=all", "--", "src"):
+            raise ValueError("TRAINING_SOURCE_TREE_DIRTY")
+        return git("rev-parse", "HEAD")
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("TRAINING_SOURCE_CHECKOUT_UNREADABLE") from error
+
+
+def _trainer(_config, _dataset, _output, *, requirements_sha256=None, backbone_weights=None, source_commit=None):
     """Train in the training interpreter, where the pinned dependencies live.
 
     ``requirements_sha256`` is the digest of the resolved lock this run validated; it is the provenance of the weights."""
@@ -55,7 +69,7 @@ def _trainer(_config, _dataset, _output, *, requirements_sha256=None, backbone_w
     except ImportError as error:
         raise ValueError("TRAINING_ADAPTER_UNAVAILABLE") from error
     return train_act_bundle(_config, _dataset, _output, requirements_sha256=requirements_sha256,
-                            backbone_weights=backbone_weights)
+                            backbone_weights=backbone_weights, source_commit=source_commit)
 
 
 class ProcessTableArbiter:
@@ -173,10 +187,19 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
                              "name the sha256 of --manifest and --campaign-index, and the export is re-verified before training")
     parser.add_argument("--backbone-weights", type=Path, default=None,
                         help="local pretrained backbone file; its sha256 must equal training.pretrained_backbone.sha256")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--source-commit", default=None,
+                        help="the 40-hex commit of the code that trains; recorded in the bundle's model_source")
+    source.add_argument("--source-checkout", type=Path, default=None,
+                        help="a checkout of the code that trains: its HEAD is recorded, and a dirty src tree is refused")
     parser.add_argument("--workers", type=int, default=None,
                         help="processes for the pre-training evidence re-checks (default: SO101_ACT_EXPORT_WORKERS, else "
                              "min(8, CPU count)); 1 is the serial path")
+    parser.add_argument("--recompute-qc", action="store_true",
+                        help="recompute the QC of every episode in full before the export, instead of accepting the offline "
+                             "processor's content-bound QC memo where it covers exactly the files on disk now")
     args = parser.parse_args(argv)
+    trust_qc_memo = not args.recompute_qc
     workers = resolve_workers(args.workers, default=default_cli_workers())
 
     if args.device != "cuda":
@@ -189,8 +212,9 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     committed = None
     if not args.reuse_dataset:
         committed = attach_episode_content(
-            resolve_committed_episodes(manifest=json.loads(args.manifest.read_bytes()), campaign_index=args.campaign_index, workers=workers),
-            root=args.campaign_index.parent, workers=workers)
+            resolve_committed_episodes(manifest=json.loads(args.manifest.read_bytes()), campaign_index=args.campaign_index, workers=workers,
+                                       trust_qc_memo=trust_qc_memo),
+            root=args.campaign_index.parent, workers=workers, trust_qc_memo=trust_qc_memo)
     dataset = args.dataset_output or args.output.with_name(args.output.name + ".dataset")
     manifest_sha256 = hashlib.sha256(args.manifest.read_bytes()).hexdigest()
     index_sha256 = hashlib.sha256(args.campaign_index.read_bytes()).hexdigest()
@@ -209,9 +233,10 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
             raise ValueError("TRAINING_EVIDENCE_EXISTS")
         evidence_dir.mkdir(parents=True, exist_ok=True)
     if not args.reuse_dataset:
-        export_dataset(committed, dataset, source_manifest_sha256=manifest_sha256, campaign_index_sha256=index_sha256, workers=workers)
+        export_dataset(committed, dataset, source_manifest_sha256=manifest_sha256, campaign_index_sha256=index_sha256, workers=workers,
+                       trust_qc_memo=trust_qc_memo)
     dataset_sha256 = hashlib.sha256((dataset / "export-manifest.json").read_bytes()).hexdigest()
-    config_sha256 = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
+    config_sha256 = training_config_sha256(config)
     if evidence_dir is not None:
         _write_outputs_record(evidence_dir, dataset=dataset, output=args.output)
     if owner_factory is None:
@@ -220,7 +245,9 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     owner = _owner(args, dataset_sha256, config_sha256, args.gpu_binding, owner_factory)
     if trainer is None:
         lock_sha256 = hashlib.sha256(Path(requirements_path or REQUIREMENTS_LOCK).read_bytes()).hexdigest()
-        trainer = functools.partial(_trainer, requirements_sha256=lock_sha256, backbone_weights=args.backbone_weights)
+        source_commit = source_commit_of(args.source_checkout) if args.source_checkout is not None else args.source_commit
+        trainer = functools.partial(_trainer, requirements_sha256=lock_sha256, backbone_weights=args.backbone_weights,
+                                    source_commit=source_commit)
     try:
         outcome = train_act(config=config, requirements=requirements, dataset=dataset, owner=owner,
                             output=args.output, trainer=trainer)

@@ -108,8 +108,8 @@ def test_the_production_trainer_receives_the_requirements_lock_digest(tmp_path, 
     lock = _resolved_lock(tmp_path)
     seen = {}
 
-    def recorder(config_, dataset, output, *, requirements_sha256=None, backbone_weights=None):
-        seen.update(requirements_sha256=requirements_sha256, dataset=dataset, output=output)
+    def recorder(config_, dataset, output, *, requirements_sha256=None, backbone_weights=None, source_commit=None):
+        seen.update(requirements_sha256=requirements_sha256, dataset=dataset, output=output, source_commit=source_commit)
         return {"schema_version": 1, "kind": "act_bundle"}
     monkeypatch.setattr(cli, "_trainer", recorder)
     owner = {"device": "cuda", "run_root": str(tmp_path)}
@@ -117,6 +117,24 @@ def test_the_production_trainer_receives_the_requirements_lock_digest(tmp_path, 
                     requirements_path=lock) == 0
     assert seen["requirements_sha256"] == hashlib.sha256(lock.read_bytes()).hexdigest()
     assert seen["output"] == tmp_path / "bundle"
+    assert seen["source_commit"] is None                       # no flag: the bundle carries no source commit
+
+
+def test_the_source_commit_flag_reaches_the_trainer(tmp_path, monkeypatch):
+    import so101_demo.cli.act_train as cli
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    lock = _resolved_lock(tmp_path)
+    seen = {}
+
+    def recorder(config_, dataset, output, *, requirements_sha256=None, backbone_weights=None, source_commit=None):
+        seen["source_commit"] = source_commit
+        return {"schema_version": 1, "kind": "act_bundle"}
+    monkeypatch.setattr(cli, "_trainer", recorder)
+    owner = {"device": "cuda", "run_root": str(tmp_path)}
+    commit = "0123456789abcdef0123456789abcdef01234567"
+    assert cli.main([*_argv(manifest, index, binding, config, tmp_path / "bundle"), "--source-commit", commit],
+                    owner_factory=lambda **_: owner, requirements_path=lock) == 0
+    assert seen["source_commit"] == commit
 
 
 def test_the_production_trainer_refuses_to_run_without_the_requirements_digest(tmp_path):
@@ -230,7 +248,7 @@ def test_the_cli_hands_the_backbone_weights_path_to_the_trainer(tmp_path, monkey
     manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
     seen = {}
 
-    def recorder(config_, dataset, output, *, requirements_sha256=None, backbone_weights=None):
+    def recorder(config_, dataset, output, *, requirements_sha256=None, backbone_weights=None, source_commit=None):
         seen["weights"] = backbone_weights
         return {"schema_version": 1, "kind": "act_bundle"}
     monkeypatch.setattr(cli, "_trainer", recorder)

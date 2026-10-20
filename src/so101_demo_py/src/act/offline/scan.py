@@ -100,6 +100,20 @@ def _stamp_ns(stamp) -> int:
     return int(stamp.sec) * _NS + int(stamp.nanosec)
 
 
+def _starts_with_header(message_class) -> bool:
+    """True if the first member of the message is `std_msgs/Header header`."""
+    fields = message_class.get_fields_and_field_types()
+    return next(iter(fields.items()), None) == ("header", "std_msgs/Header")
+
+
+def _header_stamp_ns(data):
+    """`header.stamp` in ns of a CDR-serialised message whose first member is a header, or None when the body is not plain
+    little-endian XCDR1 (representation id 0x0001): the 4-byte encapsulation header, then int32 sec and uint32 nanosec."""
+    if len(data) < 12 or data[0] != 0 or data[1] != 1:
+        return None
+    return int.from_bytes(data[4:8], "little", signed=True) * _NS + int.from_bytes(data[8:12], "little")
+
+
 def _missing(first, second, period) -> int:
     """How many messages of a `period` grid are absent between two consecutive stamps that are not one period apart."""
     return max(round((second - first) / period) - 1, 0)
@@ -137,8 +151,22 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
     clock_marks = []        # (simulation ns, bag stamp ns) of every /clock message: the map between the two clocks
     read_counts: dict = defaultdict(int)
     read_stamps: list = []  # simulation time (ns) of every planning-scene read in the bag (None for one that cannot be read)
+    # Topics of which the scan keeps only `header.stamp`: the stamp is read from the first eight bytes of the CDR body (the header is the
+    # first member), without building the message. Anything that is not a little-endian XCDR1 body takes the full deserialization.
+    stamp_only = {topic: states for topic in controller_topics}
+    stamp_only.update({topic: cameras for topic in camera_info_topics})
+    stamp_only.update({topic: color_stamps for topic in color_topics})
+    stamp_only[JOINT_STATES_TOPIC] = None
+    header_first: dict = {}
     for topic, type_name, bag_stamp, data in read_messages(bag, topics=[t for t in _decoded_for(rig) if t in counts]):
         read_counts[topic] += 1
+        if topic in stamp_only:
+            if type_name not in header_first:
+                header_first[type_name] = _starts_with_header(get_message(type_name))
+            stamp = _header_stamp_ns(data) if header_first[type_name] else None
+            if stamp is not None:
+                (joint_stamps if topic == JOINT_STATES_TOPIC else stamp_only[topic][topic]).append(stamp)
+                continue
         if type_name not in types:
             types[type_name] = get_message(type_name)
         message = deserialize_message(data, types[type_name])

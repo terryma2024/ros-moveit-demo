@@ -110,7 +110,9 @@ def verify_processed_result(output_dir, *, sealed, scene_id, result_sha256, rece
             binding = graded["binding"] or {}
             if (graded["status"] != "VALID" or graded["qc"] != qc or graded["episode_sha256"] != episode
                     or any(binding.get(name) != document[name] for name in _BINDING)):
-                raise ValueError("data verdict differs from the files")
+                # the detail is for the exception chain only (the raised refusal below stays PROCESSED_RESULT_INVALID)
+                detail = f": {graded['reason']}" if graded["status"] != "VALID" and graded.get("reason") else ""
+                raise ValueError("data verdict differs from the files" + detail)
         return dict(kind=READBACK_KIND, schema_version=1, status="PASS", scene_id=scene_id, task_id=document["task_id"],
                     proc_attempt=number, output_dir=str(base), data_dir=str(out),
                     processed_result=dict(path=PROCESSED_NAME, sha256=hashlib.sha256(raw).hexdigest()),

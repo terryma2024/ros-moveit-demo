@@ -13,6 +13,8 @@ import json
 import os
 from pathlib import Path
 
+from .training_config import config_sha256
+
 
 def _file_digest(path) -> str:
     digest = hashlib.sha256()
@@ -135,8 +137,7 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
     disposition = {"schema_version": 1, "kind": "act_training_state", "status": "FAILED",
                    "dataset_sha256": hashlib.sha256(
                        (Path(dataset) / "export-manifest.json").read_bytes()).hexdigest(),
-                   "config_sha256": hashlib.sha256(
-                       json.dumps(config, sort_keys=True).encode()).hexdigest(),
+                   "config_sha256": config_sha256(config),
                    "device": owner["device"], "run_root": owner["run_root"],
                    "episode_count": len(manifest["episodes"]), "error": None}
     try:
@@ -158,7 +159,7 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
         temporary.replace(state_path)
 
 
-def attach_episode_content(committed, *, root, workers=None) -> tuple:
+def attach_episode_content(committed, *, root, workers=None, trust_qc_memo=False) -> tuple:
     """Read each committed episode's content, verifying what it claims. The content hash is always verified.
 
     The source is the sealed recorder rows of the committed episode (`bundle.sealed_episode_content`: the seal is the one the
@@ -170,14 +171,14 @@ def attach_episode_content(committed, *, root, workers=None) -> tuple:
     serial path in every case, so the digest checks run every time and the first refusal in order is the one raised.
     """
 
-    from .bundle import _prime_verification_memo, resolve_workers, sealed_episode_content
+    from .bundle import _prime_verification_memo, default_cli_workers, resolve_workers, sealed_episode_content
 
-    workers = resolve_workers(workers)
+    workers = resolve_workers(workers, default=default_cli_workers())
     if workers > 1:
         _prime_verification_memo(
             [episode for episode in committed if isinstance(episode, dict) and isinstance(episode.get("collection_evidence"), dict)
              and not (isinstance(episode.get("content"), dict) and episode["content"])
-             and not (isinstance(episode.get("content_path"), str) and episode["content_path"])], workers)
+             and not (isinstance(episode.get("content_path"), str) and episode["content_path"])], workers, trust_qc_memo)
     base = Path(root).resolve()
     resolved = []
     for episode in committed:
@@ -195,7 +196,7 @@ def attach_episode_content(committed, *, root, workers=None) -> tuple:
         name = episode.get("content_path")
         if not isinstance(name, str) or not name:
             if isinstance(episode.get("collection_evidence"), dict):
-                resolved.append({**episode, "content": sealed_episode_content(episode)})
+                resolved.append({**episode, "content": sealed_episode_content(episode, trust_qc_memo)})
                 continue
             raise ValueError("TRAINING_EPISODE_CONTENT_MISSING")
         path = Path(name)

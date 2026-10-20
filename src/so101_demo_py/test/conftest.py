@@ -44,6 +44,22 @@ def pytest_addoption(parser) -> None:
 import pytest  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _current_event_loop():
+    """A test that drives asyncio from the main thread through the policy's current loop (`LaunchService.run`) needs one to exist.
+
+    `asyncio.run()` in an earlier test of the same worker leaves none, so those tests passed or failed with the order the scheduler
+    gave them ("There is no current event loop in thread 'MainThread'"). A worker now always starts a test with a current loop.
+    """
+    import asyncio
+
+    try:
+        asyncio.get_event_loop_policy().get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    yield
+
+
 @pytest.fixture
 def isolated_ros_domain(monkeypatch):
     """A ROS domain of this test's own.

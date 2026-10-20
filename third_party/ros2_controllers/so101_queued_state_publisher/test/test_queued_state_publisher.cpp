@@ -107,6 +107,19 @@ struct OpenOnExit
 };
 }  // namespace
 
+// The receiver sees a message inside the sink, but the publisher counts it as published only after the sink returns: a test that
+// has just seen the last message must wait for the counter instead of reading it at once (under load the two differ by one).
+template<typename P>
+bool wait_for_published(P & publisher, uint64_t count, std::chrono::seconds timeout = std::chrono::seconds(20))
+{
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (publisher.stats().published < count) {
+    if (std::chrono::steady_clock::now() >= deadline) {return false;}
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return true;
+}
+
 TEST(QueuedStatePublisherTest, EveryMessageIsPublishedInOrderWhileThePublishingThreadIsBlocked)
 {
   Receiver receiver;
@@ -125,6 +138,7 @@ TEST(QueuedStatePublisherTest, EveryMessageIsPublishedInOrderWhileThePublishingT
   EXPECT_EQ(receiver.received().size(), 0U);
   receiver.open();
   ASSERT_TRUE(receiver.wait_for_count(700));
+  ASSERT_TRUE(wait_for_published(publisher, 700));
   EXPECT_EQ(receiver.received(), sent);
   const auto stats = publisher.stats();
   EXPECT_EQ(stats.enqueued, 700U);
@@ -199,6 +213,7 @@ TEST(QueuedStatePublisherTest, ASlowSinkLosesNothingAtTheControllerRate)
     if (i % 4 == 0) {std::this_thread::sleep_for(std::chrono::microseconds(100));}
   }
   ASSERT_TRUE(receiver.wait_for_count(2000, std::chrono::seconds(20)));
+  ASSERT_TRUE(wait_for_published(publisher, 2000));
   EXPECT_EQ(receiver.received(), sent);
   const auto stats = publisher.stats();
   EXPECT_EQ(stats.overflowed, 0U);
@@ -236,6 +251,7 @@ TEST(QueuedStatePublisherTest, AFailingSinkIsCountedAndTheStreamContinues)
   while (publisher.stats().sink_errors == 0 && std::chrono::steady_clock::now() < deadline) {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
+  ASSERT_TRUE(wait_for_published(publisher, 4));
   const auto stats = publisher.stats();
   EXPECT_EQ(stats.sink_errors, 1U);
   EXPECT_EQ(stats.published, 4U);

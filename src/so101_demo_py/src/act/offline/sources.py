@@ -338,7 +338,9 @@ class OfflineRosSources:
         return times
 
     def _association_at(self, at_s):
-        return self.associations.at(at_s, self.tracker, self._unbuilt_job_sim_times())
+        # every user of the answer (the row audit's scene checks and the planning reads below) only reads it, and an admitted
+        # association is never changed: the retained record is returned without a copy
+        return self.associations.at(at_s, self.tracker, self._unbuilt_job_sim_times(), detach=False)
 
     #: how long after a read the replay waits for the Teacher event of an apply that may have been concurrent with it (an apply
     #: takes 20 ms and its event follows within a few ms; this stays under the 100 ms age rule so that a true mismatch is still reported as such)

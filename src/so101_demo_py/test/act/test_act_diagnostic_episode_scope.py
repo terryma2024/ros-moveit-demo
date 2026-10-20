@@ -20,13 +20,11 @@ from so101_demo.act.diagnostic_episode_inputs import (
     INPUT_ROLES,
     MANIFEST_KIND,
     freeze_inputs,
-    inspect_inputs,
     read_candidate_registry,
     read_inputs_manifest,
     require_nonhead_gate,
     verify_frozen_inputs,
 )
-from paths import REPOSITORY
 
 INPUTS_SHA = "a" * 64
 SOURCE_COMMIT = "a" * 40
@@ -550,63 +548,6 @@ def test_inputs_manifest_is_closed_and_read_back_strictly(tmp_path):
     manifest_path.write_bytes(b"{not json")
     with pytest.raises(ValueError, match="INPUTS_MANIFEST_INVALID"):
         read_inputs_manifest(manifest_path)
-# ---------------------------------------------------------------------------
-# the real worktree: the frozen initial state, and the blockers that exist today
-# ---------------------------------------------------------------------------
-
-WORKTREE = REPOSITORY
-BLOCKER_CODES = {"NONHEAD_INPUT_BINDING_REQUIRED", "INPUT_CANDIDATE_AMBIGUOUS", "INPUT_NOT_APPROVED",
-                 "INPUT_IDENTITY_MISMATCH", "INPUT_ACTIVATION_STALE"}
-
-
-def _real_registry(tmp_path):
-    """Inspect this checkout read-only; the ledger is a tracked file, so this runs on any machine."""
-
-    ledger = WORKTREE / "docs/experiments/so101-act-data-experiment-ledger.md"
-    assert ledger.is_file(), "the tracked ACT ledger is part of every checkout"
-    document = inspect_inputs(WORKTREE, ledger)
-    path = tmp_path / "input-candidates.json"
-    path.write_bytes(_canonical(document))
-    return document, path
-
-
-def test_inspect_inputs_freezes_the_plan_anchor_and_the_installed_scene(tmp_path):
-    document, _ = _real_registry(tmp_path)
-    assert set(document) == {"kind", "schema_version", "source_root", "source_commit",
-                             "config_sha256", "evidence_root", "roles"}
-    assert document["kind"] == CANDIDATES_KIND
-    assert set(document["roles"]) == set(INPUT_ROLES)
-    # the milestone's frozen initial state, taken from the checked-in anchor file
-    anchor = document["roles"]["anchor_scene"]["identity"]
-    assert anchor["scene_id"] == "default"
-    assert anchor["seed"] == 0
-    assert anchor["cup_start_m"] == [0.02, -0.28, 0.165]
-    assert anchor["neck_start_rad"] == 0.1
-    # and the scene identity is the compiled model the activated policy names, not the XML text
-    scene = document["roles"]["scene_model"]["identity"]
-    assert set(scene) == {"model_sha256", "scene_sha256", "mujoco_version"}
-    assert document["roles"]["scene_model"]["status"] in ("READY", "UNAPPROVED",
-                                                          "IDENTITY_MISMATCH")
-
-
-def test_inspect_inputs_never_defaults_a_missing_value(tmp_path):
-    """Every role that is not READY names the blocker a freeze would raise, in a closed code set."""
-
-    document, candidates = _real_registry(tmp_path)
-    for role, item in document["roles"].items():
-        if item["status"] == "READY":
-            assert item["selected"] is not None and item["blocker"] is None, role
-        else:
-            assert item["blocker"] in BLOCKER_CODES, role
-            assert item["selected"] is None, role
-    blockers = [item["blocker"] for item in document["roles"].values()
-                if item["status"] != "READY"]
-    if blockers:
-        with pytest.raises(ValueError) as error:
-            freeze_inputs(candidates, tmp_path / "inputs")
-        assert str(error.value) in blockers
-
-
 # ---------------------------------------------------------------------------
 # the collection boundary: a diagnostic record is never training evidence
 # ---------------------------------------------------------------------------

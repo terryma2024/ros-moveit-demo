@@ -35,6 +35,8 @@ PEAK_BYTES_PER_READBACK = 2 * 1024**3
 #: at most this share of the memory the kernel reports available may be committed to concurrent readbacks
 MEMORY_SHARE = 0.6
 DEFAULT_WORKER_CAP = 4
+#: at the end of a campaign (shards and processors stopped, memory free) the default pool may be this large
+FINALIZE_WORKER_CAP = 16
 #: a readback that has not answered after this long is a refusal (a real one takes about half a minute)
 DEFAULT_TIMEOUT_S = 1200.0
 _PACKAGES = ('so101_demo', 'so101_teleop')
@@ -55,8 +57,10 @@ sys.exit(worker_main(request))
 '''
 
 
-def default_readback_workers(*, available_bytes=None, cpu_count=None):
-    """The pool size when the caller names none: bounded by the memory the kernel reports available and by the CPUs."""
+def default_readback_workers(*, available_bytes=None, cpu_count=None, finalize=False):
+    """The pool size when the caller names none: bounded by the memory the kernel reports available and by the CPUs.
+
+    ``finalize`` is the end-of-campaign readback (nothing else is running): the cap is `FINALIZE_WORKER_CAP` instead of 4."""
     if available_bytes is None:
         try:
             for line in Path('/proc/meminfo').read_text().splitlines():
@@ -68,13 +72,14 @@ def default_readback_workers(*, available_bytes=None, cpu_count=None):
         return 1
     cpus = cpu_count if cpu_count is not None else (os.cpu_count() or 1)
     by_memory = math.floor(available_bytes * MEMORY_SHARE / PEAK_BYTES_PER_READBACK)
-    return max(1, min(DEFAULT_WORKER_CAP, by_memory, max(1, cpus // 2)))
+    return max(1, min(FINALIZE_WORKER_CAP if finalize else DEFAULT_WORKER_CAP, by_memory, max(1, cpus // 2)))
 
 
-def resolve_readback_workers(value):
-    """`None` selects the default; otherwise a positive int, where 1 is the in-process serial path."""
+def resolve_readback_workers(value, *, finalize=False):
+    """`None` selects the default (the end-of-campaign default with ``finalize``); otherwise a positive int, where 1 is the in-process
+    serial path."""
     if value is None:
-        return default_readback_workers()
+        return default_readback_workers(finalize=finalize)
     if type(value) is not int or value < 1:
         raise ValueError('READBACK_WORKERS_INVALID')
     return value

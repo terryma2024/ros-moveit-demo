@@ -189,14 +189,18 @@ def verify_wave_records(root, plan, launch_records, case_inputs, qualification, 
 
 class ContainerWaveResultVerifier:
     def __init__(self, *, root, registry, case_inputs, qualification=False, readback_workers=None,
-                 readback_timeout_s=DEFAULT_TIMEOUT_S):
+                 readback_timeout_s=DEFAULT_TIMEOUT_S, finalize_readback_workers=None):
         root = Path(root)
         if (not root.is_absolute() or root.resolve(strict=True) != root or not root.is_dir()
                 or type(registry) is not ContainerLaunchRegistry or type(case_inputs) is not dict
                 or not case_inputs or type(qualification) is not bool):
             raise ValueError('CONTAINER_WAVE_VERIFIER_INVALID')
         resolve_readback_workers(readback_workers)
+        resolve_readback_workers(finalize_readback_workers)
         self.readback_workers, self.readback_timeout_s = readback_workers, readback_timeout_s
+        #: the pool of the end-of-campaign readbacks (`verify_processing`, `verify_rounds`): explicit, else the larger finalize default
+        self.finalize_readback_workers = finalize_readback_workers if finalize_readback_workers is not None else readback_workers
+        self._round_cache = {}
         inputs = {}
         for scene_id, refs in case_inputs.items():
             if (type(scene_id) is not str or not scene_id or type(refs) is not dict
@@ -242,15 +246,27 @@ class ContainerWaveResultVerifier:
         """The combined proof of both phases (`processing_verifier.verify_processing`) over the verified phase-1 waves."""
         from so101_demo.runtime.container_campaign.processing_verifier import verify_processing
 
-        return verify_processing(self.root, waves, scene_ids, readback_workers=self.readback_workers,
+        return verify_processing(self.root, waves, scene_ids, readback_workers=self._finalize_workers(),
                                  readback_timeout_s=self.readback_timeout_s)
+
+    def _finalize_workers(self):
+        return resolve_readback_workers(self.finalize_readback_workers, finalize=True)
 
     def verify_rounds(self, rounds, scene_ids):
         """Recompute every recording round and select one final verdict per scene."""
         from so101_demo.runtime.container_campaign.processing_verifier import verify_rounds
 
-        return verify_rounds(self.root, rounds, scene_ids, readback_workers=self.readback_workers,
+        return verify_rounds(self.root, rounds, scene_ids, readback_workers=self._finalize_workers(),
                              readback_timeout_s=self.readback_timeout_s)
+
+    def verify_rounds_provisional(self, rounds, scene_ids):
+        """`verify_rounds` for an intermediate pass that only selects the next retry candidates: it trusts the offline processor's
+        content-bound QC memo where the memo covers the files on disk now, and reads each round once (a round whose inputs and files are
+        unchanged is not read again). The result is never written to an index; the final pass is `verify_rounds`."""
+        from so101_demo.runtime.container_campaign.processing_verifier import verify_rounds
+
+        return verify_rounds(self.root, rounds, scene_ids, readback_workers=self._finalize_workers(),
+                             readback_timeout_s=self.readback_timeout_s, trust_memo=True, round_cache=self._round_cache)
 
     def _check_scheduling(self, plan, by_scene, roots):
         check_wave_scheduling(plan, by_scene, roots, self.qualification)

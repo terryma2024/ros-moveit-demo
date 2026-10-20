@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_frame_keys, rig_from_observation
+from so101_demo.act.training_config import OPTIMIZER_CONSTANTS, config_sha256
 
 _OBSERVATION_KEYS = frozenset({"sim_time_s", "state", *DEFAULT_RIG.camera_names})
 #: the image keys of a policy without a declared camera set: the default rig's (v1); a bundle declares its own cameras
@@ -215,7 +217,7 @@ def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str
     from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature
     from lerobot.policies.act.configuration_act import ACTConfig
 
-    from so101_demo.act.training_config import ACTION_DIM, CAMERAS, STATE_DIM
+    from so101_demo.act.training_config import ACT_MODEL_CONSTANTS, ACTION_DIM, CAMERAS, STATE_DIM
 
     if (not isinstance(image_shape, (list, tuple)) or len(image_shape) != 3 or image_shape[0] != 3
             or any(type(item) is not int or item < 1 for item in image_shape)):
@@ -230,7 +232,7 @@ def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str
     return ACTConfig(
         input_features=inputs, output_features={"action": PolicyFeature(FeatureType.ACTION, (ACTION_DIM,))},
         chunk_size=chunk_size, n_action_steps=execution_prefix, temporal_ensemble_coeff=None,
-        pretrained_backbone_weights=None, device=device,
+        pretrained_backbone_weights=None, device=device, **ACT_MODEL_CONSTANTS,
         normalization_mapping={"VISUAL": NormalizationMode.IDENTITY, "STATE": NormalizationMode.IDENTITY,
                                "ACTION": NormalizationMode.IDENTITY},
         **extra)
@@ -304,12 +306,14 @@ def _dataset_digest(dataset: Path) -> str:
 
 
 def train_with_lerobot(action: dict, dataset: Path, target: Path, *, requirement_sha256: str,
-                       train=None, config: dict | None = None) -> dict:
+                       train=None, config: dict | None = None, source_commit: str | None = None) -> dict:
     """Run the injected LeRobot training entry point and return the bundle document it leaves."""
 
     require_action_semantics(action)
     if not callable(train):
         raise ValueError("LEROBOT_TRAIN_REQUIRED")
+    if source_commit is not None and (type(source_commit) is not str or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None):
+        raise ValueError("LEROBOT_SOURCE_COMMIT_INVALID")
     action = dict(action)
     target = Path(target)
     target.mkdir(parents=True, exist_ok=True)
@@ -322,14 +326,16 @@ def train_with_lerobot(action: dict, dataset: Path, target: Path, *, requirement
         "kind": "act_bundle",
         # the bundle validator requires model_source to be {name, sha256}: the requirements digest is the
         # provenance of the interpreter that produced the weights
-        "model_source": {"name": _MODEL_SOURCE, "sha256": requirement_sha256},
+        "model_source": {"name": _MODEL_SOURCE, "sha256": requirement_sha256,
+                         # the commit of the code that trained the weights; absent in a bundle written before it was recorded
+                         **({"source_commit": source_commit} if source_commit is not None else {})},
         "dataset_sha256": _dataset_digest(dataset),
-        "config_sha256": canonical_sha256(config or {"action": action}),
+        "config_sha256": config_sha256(config) if config else canonical_sha256({"action": action}),
         "policy_path": _POLICY_FILE,
         "policy_sha256": sha256_file(policy),
         # whatever the train callable measured on the train split (statistics, floored dimensions, image shape) is the bundle's
         "normalization": {**(extra if isinstance(extra, dict) else {}), "split": "train",
-                          "config_sha256": canonical_sha256(config or {"action": action})},
+                          "config_sha256": config_sha256(config) if config else canonical_sha256({"action": action})},
         "action": action,
     }
     return document
@@ -614,9 +620,9 @@ def _action_window(actions, start: int, chunk_size: int) -> tuple:
 
 # ---- the trainer ---------------------------------------------------------------------------------------------------------------------
 
-_GRAD_CLIP_NORM = 10.0
+_GRAD_CLIP_NORM = OPTIMIZER_CONSTANTS["grad_clip_norm"]
 _LOADER_TIMEOUT_S = 600     # a worker that died raises after this long instead of hanging the run
-_WEIGHT_DECAY = 1e-4
+_WEIGHT_DECAY = OPTIMIZER_CONSTANTS["weight_decay"]
 
 
 def _config_rig(config: dict):
@@ -796,7 +802,11 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
     elif "num_workers" in hyper:
         workers = hyper["num_workers"]                          # the training.yaml key (default 4)
     else:
-        workers = 4 if str(device).startswith("cuda") else 0
+        workers = 4
+    if type(workers) is not int or workers < 1:
+        # 0 workers is not a runtime choice: a non-persistent loader iterator takes an extra generator draw per epoch, which changes the
+        # sampling order from epoch 2 (design 2026-10-19); every value from 1 up gives the same batches
+        raise ValueError("TRAINING_NUM_WORKERS_INVALID")
     log_interval = hyper.get("log_interval_steps", DEFAULT_LOG_INTERVAL_STEPS)
     validation_interval = hyper.get("validation_interval_steps", DEFAULT_VALIDATION_INTERVAL_STEPS)
     validation_count = hyper.get("validation_samples", DEFAULT_VALIDATION_SAMPLES)
@@ -816,7 +826,8 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
         policy.model.backbone.to(memory_format=torch.channels_last)      # opt-in: no NCHW<->NHWC conversions; cuDNN picks other kernels (not bit-identical)
     if hyper.get("compile", False):
         policy.model.compile()          # opt-in torch.compile, in place: the state_dict keys (and so the saved weights) are unchanged
-    optimizer = torch.optim.AdamW(policy.get_optim_params(), lr=hyper["learning_rate"], weight_decay=_WEIGHT_DECAY)
+    optimizer = torch.optim.AdamW(policy.get_optim_params(), lr=hyper["learning_rate"], weight_decay=_WEIGHT_DECAY,
+                                  betas=tuple(OPTIMIZER_CONSTANTS["betas"]), eps=OPTIMIZER_CONSTANTS["eps"])
 
     # validation: the exported dataset's validation episodes (already digest-verified by load_training_view) over a fixed, evenly spaced
     # subset of their chunks. The loader owns its generator, so evaluating never advances the global or the training RNG.
@@ -960,7 +971,6 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
          "metrics_file": METRICS_FILE, "num_workers": workers, "log_interval_steps": log_interval,
          "validation_interval_steps": validation_interval, "validation_samples": validation_used,
          "validations": validations, "last_validation": last_validation}, sort_keys=True, allow_nan=False) + chr(10))
-    stats = {**stats, "last_validation": last_validation}
     # the bundle declares the cameras and state width it was trained with (read back by `policy.observation_spec`, the rollout
     # executor and the policy loader); a bundle written before this key existed is the default rig
     return {**stats, "image_shape": list(image_shape), "pretrained_backbone": backbone,
@@ -968,7 +978,7 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
 
 
 def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_sha256: str, device: str = "cuda",
-                     num_workers: int | None = None, backbone_weights=None) -> dict:
+                     num_workers: int | None = None, backbone_weights=None, source_commit: str | None = None) -> dict:
     """Train an ACT policy over a training view and leave a bundle in ``output`` (design 2026-10-10 section 3.3).
 
     ``dataset`` is the training view `train_act` hands to a trainer. ``output`` receives `policy.safetensors`, `bundle.json` and
@@ -976,6 +986,8 @@ def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_
     the config pins by hash; it is verified here, before anything is written, and again when it is loaded."""
 
     _require_trainable_config(config, requirements_sha256)
+    if num_workers is not None and (type(num_workers) is not int or num_workers < 1):
+        raise ValueError("TRAINING_NUM_WORKERS_INVALID")                 # an explicit 0 is refused before anything is read
     pinned = config["training"]["pretrained_backbone"]
     if pinned is None and backbone_weights is not None:
         raise ValueError("TRAINING_BACKBONE_NOT_CONFIGURED")
@@ -987,7 +999,8 @@ def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_
     def train(cfg, view, target):
         return _run_training(cfg, view, target, device, num_workers, backbone_weights)
 
-    document = train_with_lerobot(config["action"], dataset, output, requirement_sha256=requirements_sha256, train=train, config=config)
+    document = train_with_lerobot(config["action"], dataset, output, requirement_sha256=requirements_sha256, train=train, config=config,
+                                  source_commit=source_commit)
     bundle_path = Path(output) / BUNDLE_FILE
     temporary = bundle_path.with_name(bundle_path.name + ".partial")
     import os

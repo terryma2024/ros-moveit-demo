@@ -161,12 +161,13 @@ def test_the_progress_validation_and_worker_keys_default_and_are_validated(tmp_p
     path = tmp_path / "old.yaml"
     path.write_text(yaml.safe_dump(raw))
     assert load_training_config(path)["training"]["num_workers"] == 4          # an older file without the keys still loads
-    assert _load(tmp_path, **{"training.num_workers": 0})["training"]["num_workers"] == 0
+    assert _load(tmp_path, **{"training.num_workers": 1})["training"]["num_workers"] == 1
     for key, value, code in (("log_interval_steps", 0, "TRAINING_LOG_INTERVAL_STEPS_INVALID"),
                              ("log_interval_steps", 1.5, "TRAINING_LOG_INTERVAL_STEPS_INVALID"),
                              ("validation_interval_steps", -1, "TRAINING_VALIDATION_INTERVAL_STEPS_INVALID"),
                              ("validation_samples", 0, "TRAINING_VALIDATION_SAMPLES_INVALID"),
                              ("validation_samples", True, "TRAINING_VALIDATION_SAMPLES_INVALID"),
+                             ("num_workers", 0, "TRAINING_NUM_WORKERS_INVALID"),      # 0 changes the sampling order from epoch 2
                              ("num_workers", -1, "TRAINING_NUM_WORKERS_INVALID"),
                              ("num_workers", 65, "TRAINING_NUM_WORKERS_INVALID"),
                              ("num_workers", "4", "TRAINING_NUM_WORKERS_INVALID"),
@@ -281,3 +282,38 @@ def test_the_precision_key_is_optional_fp32_or_bf16_and_not_filled_in(tmp_path):
     for value in ("fp16", "BF16", True, None):
         with pytest.raises(ValueError, match="TRAINING_PRECISION_INVALID"):
             _load(tmp_path, **{"training.precision": value})
+
+
+def test_the_config_identity_ignores_runtime_keys_and_follows_every_logic_value(tmp_path):
+    from so101_demo.act.training_config import config_sha256, logic_config
+    base = load_training_config(CONFIG)
+    digest = config_sha256(base)
+    for key, value in (("num_workers", 7), ("log_interval_steps", 50), ("validation_interval_steps", 500), ("validation_samples", 64)):
+        other = {**base, "training": {**base["training"], key: value}}
+        assert config_sha256(other) == digest, key                    # runtime: not hashed
+    for key, value in (("steps", base["training"]["steps"] + 1), ("learning_rate", 3.0e-4), ("batch_size", base["training"]["batch_size"] + 8)):
+        other = {**base, "training": {**base["training"], key: value}}
+        assert config_sha256(other) != digest, key                    # logic: hashed
+    assert config_sha256({**base, "frozen": {**base["frozen"], "seed": 1}}) != digest
+    assert "num_workers" not in logic_config(base)["training"] and base["training"]["num_workers"] > 0     # the input is not changed
+    assert logic_config(base)["identity"]["optimizer"]["grad_clip_norm"] == 10.0
+    assert len(digest) == 64 and digest == config_sha256(load_training_config(CONFIG))
+
+
+def test_the_pinned_trainer_constants_equal_the_installed_lerobot_defaults():
+    """The constants are passed to ACTConfig explicitly, so an upstream default can no longer change the trained model silently; this
+    test says when the pin and the installed version disagree."""
+    pytest.importorskip("lerobot")
+    import dataclasses
+    from lerobot.configs import FeatureType, PolicyFeature
+    from lerobot.policies.act.configuration_act import ACTConfig
+    from so101_demo.act.training_config import ACT_MODEL_CONSTANTS, OPTIMIZER_CONSTANTS
+    default = ACTConfig(input_features={"observation.state": PolicyFeature(FeatureType.STATE, (6,))},
+                        output_features={"action": PolicyFeature(FeatureType.ACTION, (6,))})
+    for name, value in ACT_MODEL_CONSTANTS.items():
+        assert getattr(default, name) == value, name
+    assert default.optimizer_weight_decay == OPTIMIZER_CONSTANTS["weight_decay"]
+    import torch
+    assert torch.optim.AdamW([torch.nn.Parameter(torch.zeros(1))]).defaults["betas"] == tuple(OPTIMIZER_CONSTANTS["betas"])
+    assert torch.optim.AdamW([torch.nn.Parameter(torch.zeros(1))]).defaults["eps"] == OPTIMIZER_CONSTANTS["eps"]
+    assert {f.name for f in dataclasses.fields(default)} >= set(ACT_MODEL_CONSTANTS)
