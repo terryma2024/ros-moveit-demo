@@ -119,11 +119,11 @@ def test_a_carry_doe_policy_differs_from_the_fast_policy_only_in_the_carry_accel
 CARRY_015_POLICY_PATH = CONFIG / "teacher_execution_policy_side_wrist_fast_carry015.yaml"
 
 
-@pytest.mark.parametrize("name,velocity,accel", [("A", 0.05, 0.02), ("B", 0.08, 0.03)])
+@pytest.mark.parametrize("name,velocity,accel", [("a", 0.05, 0.02), ("b", 0.08, 0.03)])
 def test_a_carry_velocity_doe_policy_differs_from_carry015_only_in_the_two_carry_scalings(name, velocity, accel):
     """S1 of the round 2 plan: each level is a copy of the carry015 file whose only differences are the two carry scaling keys."""
     base = yaml.safe_load(CARRY_015_POLICY_PATH.read_bytes())
-    level_path = CONFIG / f"teacher_execution_policy_side_wrist_fast_carry{name}.yaml"
+    level_path = CONFIG / f"teacher_execution_policy_side_wrist_fast_carry_{name}.yaml"
     level = yaml.safe_load(level_path.read_bytes())
     assert level == {**base, "carry_max_velocity_scaling": velocity, "carry_max_acceleration_scaling": accel}
     assert (base["carry_max_velocity_scaling"], base["carry_max_acceleration_scaling"]) == (0.03, 0.015)
