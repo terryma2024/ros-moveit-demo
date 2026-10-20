@@ -65,7 +65,7 @@ def test_the_speed_keys_belong_to_schema_4_only(document, document4):
     with pytest.raises(ValueError, match=INVALID):
         load_document({**document4, "invented": 1})
     with pytest.raises(ValueError, match=INVALID):
-        load_document({**document4, "schema_version": 5})
+        load_document({**document4, "schema_version": 6})
     with pytest.raises(ValueError, match=INVALID):
         load_document({**document4, "schema_version": True})
 
