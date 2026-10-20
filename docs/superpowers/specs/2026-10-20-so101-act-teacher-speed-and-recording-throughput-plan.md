@@ -72,3 +72,12 @@ All are output-neutral; prove them with a debug run whose data matches.
 3. Item 18/19 code is written meanwhile in its own worktree (`codex/so101-teacher-speed`) and merged after review.
 4. Then R0–R6.
 5. Then the boundary search with the final Teacher.
+
+## Amendments after R0–R2 (2026-10-20, human decisions)
+
+R1 (EXP-626) had Teacher 16/16 but 0/16 VALID (CP-3752).
+- **Cause.** The Teacher's `reset_complete` boundary is the first record of its 2.55 s observer ring. 18a shortened the time from the end of the perception pause to the first command to about 2.1 s, so the pause now lies inside the ring. The offline clip (`scan.py`) then cannot skip it.
+
+Decisions:
+1. **Fix D (chosen over reverting 18a).** For a schema ≥ 4 Teacher policy only, the reset boundary is the first retained ring record after the last paused one. It fails closed if no such record exists. The recorder, scan, audit and all limits are unchanged, and schema 3 is byte-identical. This needs a new gate and new images, then R1 and R2 are repeated.
+2. **R1 peak criterion: kept, with a control.** A same-scene schema-3 control run is added. Each EXP-626 per-phase peak (force and compression) must lie within the union range of {EXP-625, control} on the same 16 scenes, with no oracle flag and every value below the r10b limits.
