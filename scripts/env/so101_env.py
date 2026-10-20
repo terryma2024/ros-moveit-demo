@@ -866,7 +866,8 @@ def cmd_apply(args) -> int:
                 venv_cmd.append("--system-site-packages")
             run([*venv_cmd, str(path)])
             run(["/usr/bin/python3", "-m", "pip", "--python", str(path / "bin/python"),
-                 "install", "--no-deps", "--no-index", "--find-links", str(wheels),
+                 "install", "--no-deps", "--ignore-installed", "--no-index",
+                 "--find-links", str(wheels),
                  "-r", str(wheels / "requirements.txt")], timeout=7200)
         elif kind == "tools_replace":
             dest = Path(action["path"])
