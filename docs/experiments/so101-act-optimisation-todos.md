@@ -121,6 +121,14 @@ measured" means the source states no figure. "CP-xxxx" is a checkpoint in
 | O7 idle trim and training view | `training.sample_selection` trims the leading idle stretch; separate backbone learning rate; `training-002.yaml`. | Train samples 72,534 to 68,605. Idle rows were 66 percent in the exported episodes. | 2026-10-18 | CP-3722, CP-3723; `4c9f6f5b5` |
 | DataLoader workers 16 | The side-wrist training config sets `num_workers` 16 (human decision after TRAIN-002 showed 15-23 percent wait). | Not measured yet (TRAIN-003 not run). | 2026-10-18 | CP-3723, CP-3724; `dff04f256` |
 | `act_train` output locations | `--dataset-output` and `--evidence-dir` write the dataset and bundle where told and record path and sha256 in the evidence directory. | Not measured. Lets the 12 GB dataset and the policy live outside the evidence partition. | 2026-10-18 | CP-3727; `57aeb94f0` |
+| Prefetch thread (`_prefetched`) | A background thread with a queue 2 batches deep sits between the DataLoader and the training step. Batch order and content are unchanged. | 5080: 80.7 to 90.4 samples/s (+12%), DataLoader wait 11-12% to about 0%. | 2026-10-19 | `R/train-profile-20261019/report.md`; `c59ca6f61`, `50f788a93` |
+| `cudnn.benchmark` and backbone `channels_last` | Opt-in `training.cudnn_benchmark` and `training.channels_last`; absent means the old behaviour and hash. Accepted by the human although the numerics are not bit-identical. | 5080: +6% on top of the prefetch (+19% combined). Removes the 8.8% of kernel time spent on NCHW/NHWC conversions. | 2026-10-20 | CP-3745; `a39fe5288` |
+| torch.compile | Opt-in `training.compile`. The loss difference was traced to the RNG streams for dropout and the VAE latent; in eval mode compile and eager agree to fp32 rounding. | 5080: +14.8% (90.1 to 103.4 samples/s), lower peak memory, about 95-128 s compile. Validation L1 and action MAE fall within the eager-vs-eager spread. | 2026-10-20 | report section 11; `2c32f7f15` |
+| All training speed-ups on the 5060 Ti | Prefetch, `cudnn.benchmark`, `channels_last` and compile together. | 39.4 to 52.2 samples/s (+32%); TRAIN-004 60000 steps in 5.2 h instead of 7 h. | 2026-10-20 | CP-3745 |
+| bf16 autocast option | Opt-in `training.precision: bf16`. Only the training forward pass and loss run under autocast; weights and optimiser stay fp32; absent means an unchanged hash. | 5080: 1.84x (113 to 209 samples/s); training and validation L1 equal to fp32 over a full 60000-step run; offline MAE equal. 5060 Ti: 52 to 69 samples/s. The default is not decided yet. | 2026-10-20 | report section 12; CP-3747, CP-3748; `0733758bd` |
+| Interior idle trim | `sample_selection.trim_interior_idle` with `keep_tail_rows`: rows whose next chunk is static are no longer used as start rows. | Train 3107 rows dropped (4.2%). TRAIN-004 rollouts 0 of 16, because the chunk targets still held the plateaus. | 2026-10-20 | CP-3745, CP-3746; `a39fe5288` |
+| Dwell compression | `sample_selection.compress_dwell`: dwell rows are removed from the demonstration timeline (observations and action targets); the last 20 rows are kept. | Train rows 73437 to 26461; static start rows outside the tail 42% to 0%. Rollout effect not measured yet (TRAIN-005). | 2026-10-20 | CP-3747; `fe04132c5` |
+| `act_train --reuse-dataset` | Training reuses an existing export after checking the manifest and campaign-index sha256 and re-hashing every frame. | Skips the roughly 10 min re-export per training. | 2026-10-20 | CP-3745; `a39fe5288` |
 
 ### Gates and tests
 
@@ -135,6 +143,7 @@ measured" means the source states no figure. "CP-xxxx" is a checkpoint in
 | Test-only flake fixes | `test_native_timeout_is_bounded` waits for the detached state write; `test_ready_instance_is_polled_during_barrier` has a larger fake-clock backstop; `test_recording_cap` made deterministic; two other flaky gate tests fixed. | 20 runs of the two O5 tests, 8 concurrent, all passed. | 2026-10-15..18 | CP-3681, CP-3693, CP-3722; `e8bf34d75`, `caa85748a` |
 | Fast-gate self-kill fix | A test that signals process groups runs in the serial group; every teleop test invocation runs in its own session. | Cause proven by strace under reproduction. | 2026-10-14 | CP-3645 |
 | Adaptive worker pool | Adaptive worker pool for parallel point validation. | W10 5.57 points/minute and 7.39 times W1; W8 stays the recommended default. | 2026-09 | `docs/experiments/so101-parallel-adaptive-worker-pool-experiment-ledger.md` |
+| ros2_control spawner tests under gate v2 | The colcon main part no longer forces loopback-only discovery, which had made the 1 s spawner tests time out (v3 script). | The upstream ros2_control and JTC suites are green again (`5f4a9477de20.v3`). | 2026-10-19 | `R/tp-ros2control-fix-20261018`; CP-3727 |
 
 ### Evidence, disk and tooling
 
@@ -148,6 +157,10 @@ measured" means the source states no figure. "CP-xxxx" is a checkpoint in
 | Host sampler | `host_sampler.py`: 1 Hz per-container cgroup CPU, memory, IO and pressure, per-thread scheduler delay, host and GPU. | Worst sample cost 1.8 ms. | 2026-10-14 | CP-3649 |
 | Evidence-only partition | Evidence root on its own ext4 partition (`noatime`); tooling, venvs, models, policy and build trees moved to `W/{venvs,models,so101-policies,so101-build,so101-tools}`. | Copy 250.85 GB in 8 min 35 s; REG tree 341 GiB to about 261 GiB after the move-out; checksum dry run printed nothing. | 2026-10-18 | CP-3727, CP-3728; `9682307da`, `57aeb94f0` |
 | Template authoring checks | Template self-checks use their own fixtures and read the install from the gate directory (`build-root.txt`). | Not measured. Removes the dependence on historical evidence. | 2026-10-16..18 | CP-3707, CP-3727 |
+| Evidence cleanup, 2026-10-19..20 | Old history (conclusion files kept), the pre-mount copy, and gate and test scratch after readback. | Batch e 227 GiB; pre-mount copy about 241 GB (root disk 617 to 376 GB used); batch h 93.6 GiB; CP-3745 about 66 G; CP-3747 about 46 GiB; batch i about 41 GiB (`evidence-deletion-20261020i.log`). | 2026-10-19..20 | CP-3728, CP-3745, CP-3747 |
+| Host CPU throttling found and worked around | ai-station's EC limits CPU power with PROCHOT according to fan speed (about 21 W and 0.8 GHz at low fan, about 48 W at full fan). The AGENTS.md rule sets the NBFC fans to 100 during training and collection. | TRAIN-003 recovered from 34 to 39.4 samples/s after the fans were set to 100. | 2026-10-19 | `c1dfbf52f`; MSR 0x64F `0xd030001` |
+| Fan monitor log fixed | `/opt/fan-monitor/collect.py` read hwmon2, which is an NVMe drive, as the CPU temperature. It now finds the coretemp `Package id 0` by name and logs `cpu_max_mhz`. | The log now shows the real CPU temperature and throttling. | 2026-10-19 | `/opt/fan-monitor/collect.py.orig-hwmon2` |
+| Architecture guide rewritten | `docs/guides/so101-act-data-collection-and-training-architecture.md`, with 35 Mermaid diagrams, replaces the outdated head-wrist guide. | Not applicable. | 2026-10-20 | `6af2fdd03` |
 
 ### Images and containers
 
@@ -157,6 +170,16 @@ measured" means the source states no figure. "CP-xxxx" is a checkpoint in
 | Shard image can host the processor | The same shard image runs the phase-2 processor; the entrypoint admits `campaign_processor`. | Not measured. | 2026-10-15 | CP-3673; `c939ed3a5` |
 | Image build | Scoped build cache fetches missing locked web dependencies; inference base resolved by tag with a digest guard; build contexts prepared from tracked files. | Shard 155.6 s and inference 59.8 s (`4b187eee1`); 396.5 s and 66.3 s with the vendored controllers (`3654ec80f`). | 2026-10-13/14 | CP-3643, CP-3654; `0184c017f`, `5be21fe42` |
 | Shard contract mount | The qualification contract is mounted into the shard so its spec validates at eight workers. | Fixed all eight shards refusing their spec at start (EXP-588). | 2026-10-14 | CP-3647; `1c47eab03` |
+
+### Rollout, contact policy and rig v2
+
+| Item | What changed | Measured effect | Date | Evidence |
+| --- | --- | --- | --- | --- |
+| Camera rig v2 (side and wrist) | Head and neck are disabled at zero cost, and a rig profile drives cameras and state width. | EXP-623 15/16, EXP-624 38/40 QUALIFIED, EXP-625 103/103 committed. | 2026-10-18..19 | CP-3738..CP-3741 |
+| Rig-v2 startup readiness fix | The readiness probe and the startup-proof issuer and consumer take the exact check set of the stack's rig. | Unblocked the first side-wrist container runs. | 2026-10-19 | CP-3731, CP-3732; `858140263`, `7dc4a0a48` |
+| Container spot-check plane and judge fixes | One-worker spot-check runs. The judge binds the phase-2 QC report by `processed_result_sha256`, and the over-squeeze path binds through the recording receipt. | Side-wrist contact policy activated under CP-3394 (nominal 1.58 N / 100.9 um, over-squeeze 2.28 N / 143.3 um against limits 1.889 N / 119.2 um). | 2026-10-19 | CP-3733..CP-3737; `9a1fe156c`, `35450df48` |
+| Native rollout hardening and live fixes | Catch-all faults, an input wait, rig-v2 recorder and checks, warm-up, plus 7 live defects (receipt mode, rclpy context, bag location, cancel at the horizon, leftover nodes twice, paused physics on fault). | Two consecutive episodes run with a confirmed stack stop. | 2026-10-19 | CP-3743; `f2157da83`, `dc9626eea` |
+| Rollout execution override | `--execution-prefix N` and `--temporal-ensembling M`, recorded in the run identity and every episode. | TRAIN-003 prefix 5 reached the pre-grasp hover; no mode placed the cup (0 of 12). | 2026-10-19 | CP-3744; `71af516fc` |
 
 ### Unsure or unmeasured
 
