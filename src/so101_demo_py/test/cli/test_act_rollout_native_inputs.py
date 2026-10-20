@@ -97,6 +97,24 @@ def test_a_side_wrist_bundle_gives_a_headless_neckless_observation_and_binds_eve
     assert inputs.timing["stop_timeout_s"] == 1.0 and inputs.endpoint_policy["policy_sha256"] == fixture.endpoint["policy_sha256"]
 
 
+def test_the_clamp_tolerance_is_bound_into_the_identity_when_the_config_sets_it(tmp_path, monkeypatch):
+    inputs = native.load_inputs(Fixture(tmp_path, monkeypatch).args())
+    assert inputs.settings.joint_limit_clamp_tolerance_rad == 0.01
+    assert inputs.identity["joint_limit_clamp_tolerance_rad"] == 0.01
+
+
+def test_without_the_key_the_identity_is_unchanged_and_no_tolerance_is_set(tmp_path, monkeypatch):
+    import yaml
+
+    document = yaml.safe_load((PACKAGE_ROOT / "config/act/rollout.yaml").read_text())
+    del document["joint_limit_clamp_tolerance_rad"]
+    path = tmp_path / "rollout-no-clamp.yaml"
+    path.write_text(yaml.safe_dump(document))
+    inputs = native.load_inputs(Fixture(tmp_path, monkeypatch).args(rollout_config=path))
+    assert inputs.settings.joint_limit_clamp_tolerance_rad is None
+    assert "joint_limit_clamp_tolerance_rad" not in inputs.identity
+
+
 def test_the_activation_receipt_defaults_to_the_frozen_inputs_and_can_be_named(tmp_path, monkeypatch):
     fixture = Fixture(tmp_path, monkeypatch)
     native.load_inputs(fixture.args())

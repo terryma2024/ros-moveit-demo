@@ -15,6 +15,10 @@ from .rollout_episode import RolloutSettings
 _KEYS = frozenset({"kind", "schema_version", "camera_topics", "joint_state_topic", "undeclared_bundle_cameras",
                    "controller_actions", "control", "no_motion_threshold_rad", "world_max_age_s",
                    "session_ready_wait_s"})
+#: keys a config may omit; the behaviour without them is the behaviour before they existed
+_OPTIONAL_KEYS = frozenset({"joint_limit_clamp_tolerance_rad"})
+#: the largest clamp tolerance the loader accepts (rad): a clamp is for small overshoots of a limit, never a way around it
+MAX_CLAMP_TOLERANCE_RAD = 0.1
 
 
 def _topic(value) -> bool:
@@ -34,7 +38,7 @@ def load_rollout_config(path) -> dict:
         document = yaml.safe_load(target.read_bytes())
     except yaml.YAMLError as error:
         raise ValueError(code) from error
-    if (not isinstance(document, dict) or set(document) != _KEYS or document["kind"] != "act_rollout"
+    if (not isinstance(document, dict) or not _KEYS <= set(document) <= _KEYS | _OPTIONAL_KEYS or document["kind"] != "act_rollout"
             or document["schema_version"] != 1):
         raise ValueError(code)
     topics = document["camera_topics"]
@@ -55,6 +59,10 @@ def load_rollout_config(path) -> dict:
             or not _positive(document["no_motion_threshold_rad"]) or not _positive(document["world_max_age_s"])
             or not _positive(document["session_ready_wait_s"])):
         raise ValueError(code)
+    if "joint_limit_clamp_tolerance_rad" in document:
+        tolerance = document["joint_limit_clamp_tolerance_rad"]
+        if not _positive(tolerance) or tolerance > MAX_CLAMP_TOLERANCE_RAD:
+            raise ValueError(code)
     return document
 
 
@@ -91,4 +99,5 @@ def rollout_settings(frozen: dict, config: dict) -> RolloutSettings:
         settle_s=endpoint["tolerances"]["settle_s"],
         no_motion_threshold_rad=config["no_motion_threshold_rad"],
         stop_wait_s=execution["arm_stop_wait_s"],
-        ready_wait_s=config["session_ready_wait_s"])
+        ready_wait_s=config["session_ready_wait_s"],
+        joint_limit_clamp_tolerance_rad=config.get("joint_limit_clamp_tolerance_rad"))

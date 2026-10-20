@@ -29,6 +29,35 @@ def joint_limits_for(profile):
     raise ValueError("JOINT_PROFILE_INVALID")
 
 
+def clamp_positions(rows, tolerance, profile="act"):
+    """Clamp joint positions that exceed a limit by at most `tolerance` rad to that limit.
+
+    `rows` are position rows in `ARM_JOINTS` order. Returns `(rows, clamps)`: the rows as tuples with every out-of-range value
+    moved onto its limit, and one record per clamped value (`position_index`, `joint_index`, `joint`, `original`, `clamped`,
+    `limit`). A value above the tolerance refuses the whole call with `JOINT_LIMIT_INVALID` and nothing is clamped: a prefix is
+    clamped completely or refused as before. A tolerance that is not a positive finite number is `CLAMP_TOLERANCE_INVALID`."""
+
+    if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)) or not isfinite(tolerance) or tolerance <= 0:
+        raise ValueError("CLAMP_TOLERANCE_INVALID")
+    limits = joint_limits_for(profile)
+    clamped_rows, clamps = [], []
+    for position_index, row in enumerate(rows):
+        values = list(row)
+        for joint_index, name in enumerate(ARM_JOINTS):
+            low, high = limits[name]
+            value = values[joint_index]
+            if low <= value <= high:
+                continue
+            limit = low if value < low else high
+            if not isfinite(value) or abs(value - limit) > tolerance:
+                raise ValueError("JOINT_LIMIT_INVALID")
+            clamps.append({"position_index": position_index, "joint_index": joint_index, "joint": name,
+                           "original": value, "clamped": limit, "limit": limit})
+            values[joint_index] = limit
+        clamped_rows.append(tuple(values))
+    return tuple(clamped_rows), clamps
+
+
 def ordered_positions(values, names):
     if not names or len(set(names)) != len(names) or any(name not in values for name in names):
         raise ValueError("JOINT_MAPPING_INVALID")

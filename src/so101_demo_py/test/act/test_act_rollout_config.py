@@ -55,6 +55,24 @@ def test_a_damaged_config_is_refused(tmp_path, edit):
         load_rollout_config(_write(tmp_path, edit))
 
 
+def test_the_shipped_config_sets_the_joint_limit_clamp_tolerance_and_it_reaches_the_settings():
+    config = load_rollout_config(CONFIG_PATH)
+    assert config["joint_limit_clamp_tolerance_rad"] == 0.01
+    assert rollout_settings(FROZEN, config).joint_limit_clamp_tolerance_rad == 0.01
+
+
+def test_without_the_key_the_config_loads_and_the_settings_carry_no_tolerance(tmp_path):
+    config = load_rollout_config(_write(tmp_path, lambda d: d.pop("joint_limit_clamp_tolerance_rad")))
+    assert "joint_limit_clamp_tolerance_rad" not in config
+    assert rollout_settings(FROZEN, config).joint_limit_clamp_tolerance_rad is None
+
+
+@pytest.mark.parametrize("value", [0, -0.01, True, "0.01", None, float("inf"), float("nan"), 0.5])
+def test_a_clamp_tolerance_that_is_not_a_small_positive_number_is_refused(tmp_path, value):
+    with pytest.raises(ValueError, match="ROLLOUT_CONFIG_INVALID"):
+        load_rollout_config(_write(tmp_path, lambda d: d.update(joint_limit_clamp_tolerance_rad=value)))
+
+
 def test_a_missing_config_is_refused(tmp_path):
     with pytest.raises(ValueError, match="ROLLOUT_CONFIG_MISSING"):
         load_rollout_config(tmp_path / "absent.yaml")

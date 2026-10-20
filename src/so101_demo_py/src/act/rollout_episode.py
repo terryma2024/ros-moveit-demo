@@ -28,6 +28,7 @@ import math
 import traceback
 
 from .contracts import ContractError, validate_action_prefix
+from .joints import clamp_positions
 from .policy import to_action_prefix
 from .rollout_execution import PREFIX_END_TOLERANCE_S, ChunkEnsembler, default_mode
 from .rollout_targets import evaluate_rollout_endpoint, rollout_targets
@@ -51,10 +52,15 @@ class RolloutSettings:
     stop_wait_s: float
     #: the longest (wall) wait for the first joint state and the cup pose after the nodes exist, before the loop starts
     ready_wait_s: float
+    #: a prefix that exceeds a joint limit by at most this many rad is clamped to the limit instead of refused; None (the key is
+    #: absent from `config/act/rollout.yaml`) keeps the refusal. A logic parameter: it changes what is sent to the controller.
+    joint_limit_clamp_tolerance_rad: float | None = None
 
     def __post_init__(self):
         for name in self.__dataclass_fields__:
             value = getattr(self, name)
+            if name == "joint_limit_clamp_tolerance_rad" and value is None:
+                continue
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
                 raise ValueError("ROLLOUT_SETTINGS_INVALID")
 
@@ -80,7 +86,8 @@ class _Loop:
 
     def __init__(self, observation_keys, execution=None):
         self.counts = {"observations": 0, "inferences": 0, "applied": 0, "late_replies": 0, "prefix_late": 0,
-                       "limit_refused": 0, "skipped_observations": 0, "prefix_wait_observations": 0}
+                       "limit_refused": 0, "skipped_observations": 0, "prefix_wait_observations": 0,
+                       "clamped_steps": 0}
         #: the execution mode (None: the bundle's own, one inference per observation); an open-loop prefix holds the next
         #: inference until its last target time (`hold_until`), and an ensembling mode keeps the chunks (`ensembler`)
         self.execution = execution
@@ -151,6 +158,19 @@ def _resolve(loop, ports, session, sink, settings):
         except (ValueError, ContractError) as error:
             raise _Abort(f"INFERENCE_FAILED: ENSEMBLE: {_text(error)}") from error
         extra["ensemble"] = {"m": loop.execution.ensemble_m, "contributors": contributors}
+    tolerance = settings.joint_limit_clamp_tolerance_rad
+    if tolerance is not None:
+        # an overshoot of a joint limit of at most the tolerance is moved onto the limit; one above it (any joint of the prefix)
+        # leaves the prefix as it is, and the executor refuses it as before
+        try:
+            positions, clamps = clamp_positions(prefix["positions"], tolerance)
+        except ValueError:
+            clamps = []
+        if clamps:
+            prefix = dict(prefix, positions=positions)
+            extra["clamped"] = True
+            extra["clamps"] = clamps
+            loop.counts["clamped_steps"] += 1
     row = _step_row(pending, late=False, reply_sim_s=reply_sim, reply_wall_s=reply_wall,
                     latency_wall_s=round(reply_wall - pending["submit_wall_s"], 6),
                     reply_age_s=reply.get("age_s"), chunk=[list(map(float, step)) for step in reply["actions"]],
