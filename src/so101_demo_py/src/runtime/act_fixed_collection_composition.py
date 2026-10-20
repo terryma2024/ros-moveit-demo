@@ -86,9 +86,13 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
     runtime = _collection_runtime(arguments.collection_config)
     # collect_timeout_s, process_timeout_s and processing_reserve_s are optional; any of them must fit the admitted total
-    from so101_demo.runtime.container_campaign.processing_limits import check_phase_limits,effective_batch_total_s
-    total_s,_source = effective_batch_total_s(config,runtime.batch_hard_timeout_s)
-    check_phase_limits(config,total_s)
+    from so101_demo.runtime.container_campaign.processing_limits import (
+        check_phase_limits,effective_batch_total_s,effective_limits)
+    limits = effective_limits(config,getattr(arguments,'runtime_document',None))
+    total_s,_source = effective_batch_total_s(limits,runtime.batch_hard_timeout_s)
+    check_phase_limits(limits,total_s)
+    if arguments.qualification and limits.get('retry_invalid_max_rounds',0):
+        raise ValueError('COLLECTION_RETRY_QUALIFICATION_FORBIDDEN')
     launcher = getattr(arguments, 'instance_launcher', 'container')
     if launcher not in ('container', 'native'):
         raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
@@ -144,7 +148,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
                                    parallel_runtime, approved_inputs, qualification, approved_disk_floor_bytes,
                                    docker_runner=None, service_query=None, namespace_reader=None, control_factory=None,
                                    instance_launcher='container', native=None, admit_processor_slots=None,
-                                   collection_mode='formal'):
+                                   collection_mode='formal', runtime_document=None):
     """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
 
     Order: the launch registry first (admission's `finish` opens it with `create=False`, so a construction failure below can
@@ -180,8 +184,9 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
     registry = ContainerLaunchRegistry(Path(paths['host'])/'launches.sqlite3', create=True)
     try:
         runtime = _load_runtime_config(validate_file_ref(parallel_runtime))
-        from so101_demo.runtime.container_campaign.processing_limits import effective_batch_total_s
-        campaign_total_s,_total_source = effective_batch_total_s(config,runtime.batch_hard_timeout_s)
+        from so101_demo.runtime.container_campaign.processing_limits import effective_batch_total_s,effective_limits
+        limits = effective_limits(config,runtime_document)
+        campaign_total_s,_total_source = effective_batch_total_s(limits,runtime.batch_hard_timeout_s)
         teacher = config['teacher_service']
         services = ContainerServiceOwner(admitted_context=context, config=config, paths=paths, roles=('teacher',),
             registry=registry, startup_timeout_s=runtime.initializing_hard_timeout_s,
@@ -226,13 +231,13 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
                     config_paths=(Path(context.campaign_config_path),),
                     **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
                 limit = None
-            processing = ProcessingScheduler(context=context, runtime=runtime, config=config, root=paths['run'],
+            processing = ProcessingScheduler(context=context, runtime=runtime, config=limits, root=paths['run'],
                 launcher=processors, admit_slots=lambda slots: admit_processor_slots(context, slots),
                 case_inputs=case_inputs, max_processors=limit, **given(control_factory=control_factory))
         return ContainerCampaignOwner(admitted_context=context, config=config, root=paths['run'], service_owner=services,
             slots=slots, manifest_path=manifest_path, qualification=qualification, launcher=launcher,
             coordinator=coordinator, verifier=verifier, approved_disk_floor_bytes=approved_disk_floor_bytes,
-            processing=processing,campaign_total_s=campaign_total_s)
+            processing=processing,campaign_total_s=campaign_total_s,runtime_document=runtime_document)
     except BaseException:
         registry.close()
         raise

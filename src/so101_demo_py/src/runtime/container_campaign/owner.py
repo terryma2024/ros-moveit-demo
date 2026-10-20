@@ -18,8 +18,9 @@ from so101_demo.act.parallel_collection_contracts import (
 )
 from so101_demo.runtime.container_campaign.durability import sync_filesystem
 from so101_demo.runtime.container_campaign.processing_limits import (
-    check_phase_limits,phase1_deadline_s,phase2_deadline_s,retry_invalid_max_rounds,retry_round_plan,
+    check_phase_limits,effective_limits,phase1_deadline_s,phase2_deadline_s,retry_invalid_max_rounds,retry_round_plan,
 )
+from so101_demo.runtime.inference.config import RUNTIME_DOCUMENT_KEYS
 from so101_demo.runtime.container_campaign.resource_log import (
     append_resource_log,check_disk_dispatch_guard,read_disk_free_bytes,
 )
@@ -40,7 +41,7 @@ class ContainerCampaignOwner:
     def __init__(self,*,admitted_context,config,root,service_owner,slots,manifest_path,
                  qualification,launcher,coordinator,verifier,monotonic_ns=time.monotonic_ns,
                  approved_disk_floor_bytes=0,disk_reader=read_disk_free_bytes,syncfs=sync_filesystem,processing=None,
-                 campaign_total_s=None):
+                 campaign_total_s=None,runtime_document=None):
         root=Path(root)
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind!='act_collection_start'
@@ -65,6 +66,9 @@ class ContainerCampaignOwner:
         if hashlib.sha256(serialized).hexdigest()!=admitted_context.domain_session_map_sha256:
             raise ValueError('CAMPAIGN_OWNER_SLOT_MISMATCH')
         self.context,self.config,self.root=admitted_context,config,root
+        #: the run's runtime document (or None): `limits` is the campaign config with it laid over, the one source of every time
+        #: limit and count below
+        self.runtime_document=runtime_document
         self.services,self.registry,self.slots=service_owner,service_owner.registry,slots
         self.manifest_path=Path(manifest_path)
         self.qualification,self.launcher,self.coordinator,self.verifier=qualification,launcher,coordinator,verifier
@@ -147,10 +151,14 @@ class ContainerCampaignOwner:
             self.stop_dispatch('CAMPAIGN_RUN_INTERRUPTED')
             raise
 
+    @property
+    def limits(self):
+        return effective_limits(self.config,self.runtime_document)
+
     async def _run(self,manifest):
         monitor=None
         try:
-            retry_max=retry_invalid_max_rounds(self.config)
+            retry_max=retry_invalid_max_rounds(self.limits)
             if retry_max and self.qualification:
                 raise ValueError('CAMPAIGN_RETRY_QUALIFICATION_FORBIDDEN')
             if retry_max and self.processing is None:
@@ -180,8 +188,8 @@ class ContainerCampaignOwner:
             # The time limits are checked before anything is launched. The 1 s tolerance covers the nanosecond rounding of the
             # admitted deadline.
             context=self.context
-            check_phase_limits(self.config,context.deadline_monotonic_s-context.admitted_at_monotonic_s+1.)
-            self.phase1_deadline_s=phase1_deadline_s(self.config,admitted_s=context.admitted_at_monotonic_s,
+            check_phase_limits(self.limits,context.deadline_monotonic_s-context.admitted_at_monotonic_s+1.)
+            self.phase1_deadline_s=phase1_deadline_s(self.limits,admitted_s=context.admitted_at_monotonic_s,
                 total_deadline_s=context.deadline_monotonic_s)
             setter=getattr(self.coordinator,'set_phase1_deadline',None)
             if callable(setter):
@@ -192,8 +200,11 @@ class ContainerCampaignOwner:
                 total=round(context.deadline_monotonic_s-context.admitted_at_monotonic_s,3)
             append_resource_log(self.root/'host/resources.jsonl',monotonic_ns=self.clock(),
                 observed={'campaign_total_s':total,
-                          'campaign_total_source':'campaign config' if 'batch_hard_timeout_s' in self.config else 'runtime yaml'},
+                          'campaign_total_source':'campaign config' if 'batch_hard_timeout_s' in self.limits else 'runtime yaml'},
                 missing={})
+            # the runtime values this run used: recorded, never compared with another stage's
+            _write(self.root/'host/runtime-used.json',dict(schema_version=1,kind='act_collection_runtime_used',
+                values={name:self.limits[name] for name in RUNTIME_DOCUMENT_KEYS if name in self.limits}))
             self._disk_guard()
             _write(self.root/'campaign-index.json',dict(schema_version=1,kind='act_collection_campaign_index',
                 qualification=self.qualification,scene_count=len(ids),waves=plans))
@@ -370,7 +381,7 @@ class ContainerCampaignOwner:
                           'finalizing_hard_timeout_s','worker_recovery_timeout_s')}
                 admitted=getattr(self.processing,'_admitted',None)
                 processors=len(admitted) if admitted else self.phase2['processors']
-                estimate=retry_round_plan(self.config,now_s=self.clock()/1e9,total_deadline_s=self.context.deadline_monotonic_s,
+                estimate=retry_round_plan(self.limits,now_s=self.clock()/1e9,total_deadline_s=self.context.deadline_monotonic_s,
                     scene_count=len(candidates),worker_count=len(worker_ids),processor_count=processors,observed=observed,runtime=runtime)
                 if not estimate['fits']:
                     reason=estimate['reason']
@@ -445,7 +456,7 @@ class ContainerCampaignOwner:
         if not rows:
             return None
         started=self.clock()/1e9
-        deadline=phase2_deadline_s(self.config,phase2_start_s=started,total_deadline_s=self.context.deadline_monotonic_s)
+        deadline=phase2_deadline_s(self.limits,phase2_start_s=started,total_deadline_s=self.context.deadline_monotonic_s)
         host=self.root/'host' if round==0 else self.root/'host'/f'retry-{round}'
         options={} if round==0 else dict(round=round,host_dir=host)
         summary=await self.processing.run(rows,deadline_s=deadline,**options)

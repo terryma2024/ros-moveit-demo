@@ -13,9 +13,74 @@
     "gpu_uuid",
     "qualification_contract"
   ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 2
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "processor_count"
+              ]
+            },
+            {
+              "required": [
+                "processing_max_attempts"
+              ]
+            },
+            {
+              "required": [
+                "processing_reserve_s"
+              ]
+            },
+            {
+              "required": [
+                "collect_timeout_s"
+              ]
+            },
+            {
+              "required": [
+                "process_timeout_s"
+              ]
+            },
+            {
+              "required": [
+                "verification_reserve_s"
+              ]
+            },
+            {
+              "required": [
+                "batch_hard_timeout_s"
+              ]
+            },
+            {
+              "required": [
+                "processing_task_timeout_s"
+              ]
+            },
+            {
+              "required": [
+                "retry_invalid_max_rounds"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "enum": [
+        1,
+        2
+      ]
     },
     "kind": {
       "const": "ACT_CONTAINER_CAMPAIGN"

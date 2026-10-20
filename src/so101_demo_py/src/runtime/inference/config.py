@@ -133,6 +133,52 @@ _OPTIONAL_LIMITS = (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HA
                     _RIG_PROFILE_SHA256, *_INT_LIMITS)
 
 
+# The keys a campaign run takes from its runtime document (design 2026-10-19, class R): none of them changes what the data is.
+# A version 1 campaign config may still carry them; a version 2 one may not.
+RUNTIME_DOCUMENT_KEYS = (_PROCESSOR_COUNT, _PROCESSING_MAX_ATTEMPTS, _PROCESSING_RESERVE_S, _COLLECT_TIMEOUT_S, _PROCESS_TIMEOUT_S,
+                         _VERIFICATION_RESERVE_S, _PROCESSING_TASK_TIMEOUT_S, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS)
+
+
+def _check_limit(name, value):
+    """One optional campaign key against its closed bounds; raises ValueError."""
+    if name == _RECORDING_CAP or name == _TASKS_IN_FLIGHT:
+        _require(type(value) is int and 1 <= value <= 8)
+    elif name == _ASSIGNMENT_GAP:
+        _require(type(value) in (int, float) and 0 <= value <= 3600)
+    elif name == _BATCH_HARD_TIMEOUT_S:
+        _require(type(value) in (int, float) and BATCH_HARD_TIMEOUT_MIN_S <= value <= BATCH_HARD_TIMEOUT_MAX_S)
+    elif name == _RETRY_INVALID_MAX_ROUNDS:
+        low, high = RETRY_INVALID_MAX_ROUNDS_LIMITS
+        _require(type(value) is int and low <= value <= high)
+    elif name == _RIG_PROFILE_SHA256:
+        _sha(value)
+    else:
+        low, high = _INT_LIMITS[name]
+        _require(type(value) is int and low <= value <= high)
+
+
+def load_runtime_document(path):
+    """The runtime document of a campaign run: `{schema_version: 1, kind: ACT_CAMPAIGN_RUNTIME, <runtime keys>}`, every key optional.
+
+    It is read fresh by each stage and never hashed into the campaign identity; the values a run used are recorded beside it."""
+    try:
+        with _open_regular(path) as stream:
+            payload = stream.read(64 * 1024 + 1)
+        _require(len(payload) <= 64 * 1024)
+        document = json.loads(payload.decode("utf-8"), object_pairs_hook=_pairs,
+            parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+        _require(type(document) is dict and set(document) <= {"schema_version", "kind", *RUNTIME_DOCUMENT_KEYS}
+                 and {"schema_version", "kind"} <= set(document))
+        _require(type(document["schema_version"]) is int and document["schema_version"] == 1
+                 and document["kind"] == "ACT_CAMPAIGN_RUNTIME")
+        for name in RUNTIME_DOCUMENT_KEYS:
+            if name in document:
+                _check_limit(name, document[name])
+    except (OSError, ValueError, KeyError, TypeError, UnicodeError, RuntimeError) as error:
+        raise ValueError("CAMPAIGN_RUNTIME_DOCUMENT_INVALID") from error
+    return document
+
+
 def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=None):
     """Validate one format and read hashes only for roles actually launched.
 
@@ -155,27 +201,13 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
               ("schema_version", "kind", "evidence_root", "controlled_runtime",
                "head_service", "teacher_service", "shard_image", "gpu_uuid",
                "qualification_contract"))
-        if _RECORDING_CAP in document:
-            # How many shards may be recording (hold a phase-1 task) at once; the Host reads it, the campaign hash freezes it.
-            _require(type(document[_RECORDING_CAP]) is int and 1 <= document[_RECORDING_CAP] <= 8)
-        if _TASKS_IN_FLIGHT in document:
-            # How many shards may hold a task at once; the Host reads it, the campaign hash freezes it.
-            _require(type(document[_TASKS_IN_FLIGHT]) is int and 1 <= document[_TASKS_IN_FLIGHT] <= 8)
-        if _ASSIGNMENT_GAP in document:
-            # Minimum Host monotonic seconds between two assignments across shards.
-            _require(type(document[_ASSIGNMENT_GAP]) in (int, float) and 0 <= document[_ASSIGNMENT_GAP] <= 3600)
-        if _BATCH_HARD_TIMEOUT_S in document:
-            _require(type(document[_BATCH_HARD_TIMEOUT_S]) in (int, float)
-                     and BATCH_HARD_TIMEOUT_MIN_S <= document[_BATCH_HARD_TIMEOUT_S] <= BATCH_HARD_TIMEOUT_MAX_S)
-        if _RETRY_INVALID_MAX_ROUNDS in document:
-            low, high = RETRY_INVALID_MAX_ROUNDS_LIMITS
-            _require(type(document[_RETRY_INVALID_MAX_ROUNDS]) is int and low <= document[_RETRY_INVALID_MAX_ROUNDS] <= high)
-        if _RIG_PROFILE_SHA256 in document:
-            _sha(document[_RIG_PROFILE_SHA256])
-        for name, (low, high) in _INT_LIMITS.items():
+        for name in (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _RIG_PROFILE_SHA256, *RUNTIME_DOCUMENT_KEYS):
             if name in document:
-                _require(type(document[name]) is int and low <= document[name] <= high)
-        _require(type(document["schema_version"]) is int and document["schema_version"] == 1
+                _check_limit(name, document[name])
+        # version 2 moved the runtime-class keys out of this file into the runtime document (`load_runtime_document`): the file
+        # they were in is hashed whole, so a change of a worker count or a timeout would otherwise change the campaign identity
+        _require(document["schema_version"] == 1 or not any(name in document for name in RUNTIME_DOCUMENT_KEYS))
+        _require(type(document["schema_version"]) is int and document["schema_version"] in (1, 2)
                  and document["kind"] == "ACT_CONTAINER_CAMPAIGN")
         root = _absolute(document["evidence_root"])
         _require(root.is_dir() and root.resolve(strict=True) == root)

@@ -70,7 +70,7 @@ def test_campaign_rejects_invalid_or_unpinned_config(tmp_path, mutation):
     document = campaign_fixture(tmp_path)
     service = document["teacher_service"]
     if mutation == "extra": document["allow_legacy"] = True
-    elif mutation == "version": document["schema_version"] = 2
+    elif mutation == "version": document["schema_version"] = 3
     elif mutation == "relative_root": document["evidence_root"] = "relative"
     elif mutation == "head_limit": document["head_service"]["max_inflight_requests"] = 16
     elif mutation == "zero_instances": service["instances"] = 0
@@ -115,7 +115,7 @@ def test_published_campaign_schema_rejects_authority_and_old_format(tmp_path):
     schema = json.loads((PACKAGE_ROOT / "config/act/campaign-runtime-schema.json").read_text())
     document = campaign_fixture(tmp_path)
     jsonschema.validate(document, schema)
-    for invalid in (document | {"schema_version": 2}, document | {"lease": {}}):
+    for invalid in (document | {"schema_version": 3}, document | {"lease": {}}):
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(invalid, schema)
 
