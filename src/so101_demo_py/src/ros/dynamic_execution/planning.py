@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import math
+import threading
+import time
+from types import SimpleNamespace
 
+from so101_demo.act.teacher_endpoint import EXECUTION_SCHEMA_SPEED, speed_policy_value
 from so101_demo.control.moveit.deterministic_horizon import (
     MOVE_ABOVE_PLAN_CANDIDATE_COUNT,
     HorizonStep,
     HorizonWaypoint,
     cartesian_candidate_score,
-    interpolated_move_above_waypoints,
     solve_horizon,
+    solve_pick_prefix_horizon,
     validate_cartesian_corridor,
 )
 from so101_demo.control.moveit.planning import JointPlanRequest
@@ -19,7 +23,96 @@ from so101_demo.ports.evidence import PoseEvidence
 from so101_demo.ros.task_reachability import _compute_while_progressing
 
 
+#: The largest joint difference (rad, any arm joint) between the state a pick-prefix horizon precompute started from and the state at
+#: the first MOVE_ABOVE_OBJECT goal for which the precomputed horizon is still used. The arm settles slowly after reset: the sealed
+#: EXP-625 episodes (109) moved at most 2.8e-6 rad between the begin of PREPARE_OPEN_GRIPPER and the goal, which moved the selected
+#: joint targets by at most 4.0e-6 rad with the same selected path. Beyond the tolerance the horizon is computed again from the state
+#: at the goal, exactly as it was without a precompute.
+PICK_HORIZON_REUSE_MAX_START_DELTA_RAD = 1e-5
+
+
 class MotionPlanning:
+    #: the schema 4 Teacher policy keys (velocity, acceleration) of the free-space states that have their own MoveIt scaling
+    _SPEED_SCALING_KEYS = {
+        State.MOVE_ABOVE_OBJECT: ("move_above_object_velocity_scaling", "move_above_object_acceleration_scaling"),
+        State.RETREAT: ("retreat_velocity_scaling", "retreat_acceleration_scaling"),
+    }
+
+    def _pick_horizon_precompute_enabled(self) -> bool:
+        """A Teacher run with frozen inputs, a schema 4 Teacher policy and the full pick target set."""
+
+        policy = getattr(self, "_execution_policy", None) or {}
+        return bool(
+            getattr(self, "_execution_snapshot_root", None) is not None
+            and self._teacher_run()
+            and hasattr(self, "_targets")
+            and type(policy.get("schema_version")) is int
+            and policy["schema_version"] >= EXECUTION_SCHEMA_SPEED
+        )
+
+    def _start_pick_horizon_precompute(self) -> None:
+        """Item 18b: compute the pick-prefix IK horizon in a worker thread from the joint state of now (PREPARE_OPEN_GRIPPER), so the
+        first MOVE_ABOVE_OBJECT goal does not wait for it. Never raises: a precompute that cannot start leaves today's behaviour.
+
+        The worker only calls the pure `solve_pick_prefix_horizon` on the IK solver, which keeps no per-solve state, and the main
+        thread does not use the solver until it takes the result."""
+
+        if not self._pick_horizon_precompute_enabled():
+            return
+        try:
+            start = tuple(float(value) for value in self._joint_state())
+            ik, targets, interpolate = self._ik, self._targets, self._interpolate_pose
+            position_tolerance_m = self._template.position_tolerance_m
+            orientation_tolerance_rad = max(self._template.orientation_tolerance_rad)
+        except Exception as error:  # noqa: BLE001 - an optimisation, never a Teacher failure
+            self._document["pick_prefix_precompute"] = {"status": "NOT_STARTED", "error": f"{type(error).__name__}: {error}"}
+            return
+        job = SimpleNamespace(start=start, outcome=[], began=time.monotonic(), thread=None)
+
+        def work() -> None:
+            try:
+                result = solve_pick_prefix_horizon(
+                    ik, start, targets, interpolate, position_tolerance_m=position_tolerance_m,
+                    orientation_tolerance_rad=orientation_tolerance_rad, beam_width=3)
+                job.outcome.append((True, result, time.monotonic()))
+            except BaseException as error:  # noqa: BLE001 - reported, then the goal computes it itself
+                job.outcome.append((False, error, time.monotonic()))
+
+        job.thread = threading.Thread(target=work, daemon=True, name="pick-horizon-precompute")
+        self._pick_horizon_precompute = job
+        job.thread.start()
+
+    def _take_pick_horizon_precompute(self, current: tuple[float, ...]):
+        """The precomputed horizon when its start state is within `PICK_HORIZON_REUSE_MAX_START_DELTA_RAD` of ``current``, else None
+        (the caller computes it from ``current``). Waits for a worker that is still running, spinning like any long computation."""
+
+        job = self.__dict__.pop("_pick_horizon_precompute", None)
+        if job is None:
+            return None
+        waiting_from = time.monotonic()
+        try:
+            while job.thread.is_alive():
+                self._progress()
+                time.sleep(0.001)
+        except BaseException:
+            job.thread.join()
+            raise
+        job.thread.join()
+        report = {"started_state_rad": list(job.start), "wait_s": time.monotonic() - waiting_from}
+        succeeded, value, finished = job.outcome[0]
+        report["compute_s"] = finished - job.began
+        self._document["pick_prefix_precompute"] = report
+        if not succeeded:
+            report.update(status="FAILED", error=f"{type(value).__name__}: {value}")
+            return None
+        delta = max(abs(a - b) for a, b in zip(job.start, current, strict=True))
+        report["start_delta_max_abs_rad"] = delta
+        if not delta <= PICK_HORIZON_REUSE_MAX_START_DELTA_RAD:
+            report["status"] = "START_STATE_DIFFERS"
+            return None
+        report["status"] = "USED"
+        return value
+
     def _motion_horizon(
         self,
         state: State,
@@ -37,49 +130,39 @@ class MotionPlanning:
             return cached
 
         has_full_target_set = hasattr(self, "_targets")
+        position_tolerance_m = self._template.position_tolerance_m
+        orientation_tolerance_rad = max(self._template.orientation_tolerance_rad)
+
+        def while_progressing(compute):
+            return _compute_while_progressing(compute, self._progress)
+
         if state in pick_prefix and has_full_target_set:
-            above = self._targets.for_state(State.MOVE_ABOVE_OBJECT)
-            descend = self._targets.for_state(State.DESCEND)
-            waypoints = list(
-                _compute_while_progressing(
-                    lambda: interpolated_move_above_waypoints(self._ik, current, above),
-                    self._progress,
+            result = self._take_pick_horizon_precompute(current)
+            if result is None:
+                result = solve_pick_prefix_horizon(
+                    self._ik,
+                    current,
+                    self._targets,
+                    self._interpolate_pose,
+                    position_tolerance_m=position_tolerance_m,
+                    orientation_tolerance_rad=orientation_tolerance_rad,
+                    beam_width=3,
+                    run=while_progressing,
                 )
-            )
-            waypoints.extend(
-                HorizonWaypoint(
-                    State.DESCEND,
-                    index,
-                    self._interpolate_pose(above, descend, index / 6.0),
-                )
-                for index in range(1, 7)
-            )
-            waypoints.extend(
-                (
-                    HorizonWaypoint(
-                        State.MICRO_LIFT,
-                        0,
-                        self._targets.for_state(State.MICRO_LIFT),
-                    ),
-                    HorizonWaypoint(State.LIFT, 0, self._targets.for_state(State.LIFT)),
-                )
-            )
         else:
             waypoints = [
                 HorizonWaypoint(state, index, target) for index, target in enumerate(motion_targets)
             ]
-
-        result = _compute_while_progressing(
-            lambda: solve_horizon(
-                self._ik,
-                tuple(waypoints),
-                current,
-                position_tolerance_m=self._template.position_tolerance_m,
-                orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
-                beam_width=3,
-            ),
-            self._progress,
-        )
+            result = while_progressing(
+                lambda: solve_horizon(
+                    self._ik,
+                    tuple(waypoints),
+                    current,
+                    position_tolerance_m=position_tolerance_m,
+                    orientation_tolerance_rad=orientation_tolerance_rad,
+                    beam_width=3,
+                )
+            )
         if state in pick_prefix and has_full_target_set:
             horizon_document = result.to_document()
             horizon_document.update(
@@ -243,12 +326,20 @@ class MotionPlanning:
         return self._joint_state()
 
     def _planning_scaling(self, state: State) -> tuple[float, float]:
-        """(velocity, acceleration) MoveIt scaling: the frozen carry values for the carry states with frozen inputs."""
+        """(velocity, acceleration) MoveIt scaling with frozen inputs: the frozen carry values for the carry states, and the
+        schema 4 values for MOVE_ABOVE_OBJECT and RETREAT (a schema 3 policy has none: the template's). Every other state and
+        every run without frozen inputs plans with the template's."""
 
         template = (self._template.velocity_scaling, self._template.acceleration_scaling)
-        if getattr(self, "_execution_snapshot_root", None) is None or state not in self._CARRY_STATES:
+        if getattr(self, "_execution_snapshot_root", None) is None:
             return template
         policy = getattr(self, "_execution_policy", None)
+        speed_keys = self._SPEED_SCALING_KEYS.get(state)
+        if speed_keys is not None:
+            return (speed_policy_value(policy, speed_keys[0], template[0]),
+                    speed_policy_value(policy, speed_keys[1], template[1]))
+        if state not in self._CARRY_STATES:
+            return template
         if (policy is None or "carry_max_velocity_scaling" not in policy
                 or "carry_max_acceleration_scaling" not in policy):
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: carry scaling")

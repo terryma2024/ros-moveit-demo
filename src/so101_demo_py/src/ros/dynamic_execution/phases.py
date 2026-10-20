@@ -242,6 +242,8 @@ class PhaseSequencing:
             elif self._teacher_run() and state in (State.WAIT_GRASP_STABLE, State.OPEN_GRIPPER, State.WAIT_RELEASE_SETTLE):
                 self._perform_teacher_state(state)
             elif state is State.PREPARE_OPEN_GRIPPER:
+                # item 18b (schema 4 only, otherwise a no-op): the pick-prefix IK horizon computes while the gripper opens
+                self._start_pick_horizon_precompute()
                 self._command_gripper(state, self._PREOPEN_Q6)
             elif state is State.CLOSE_GRIPPER:
                 self._command_gripper(state, self._close_target_q6())

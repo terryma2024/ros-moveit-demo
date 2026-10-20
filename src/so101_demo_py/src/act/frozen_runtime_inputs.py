@@ -20,7 +20,7 @@ def load_teacher_frozen_inputs(manifest_path: Path):
     are the ones the freeze bound (`verify_frozen_inputs` cross-checks each policy file against the snapshot's copy).
     """
     from .execution_snapshot import verify_execution_snapshot
-    from .diagnostic_episode_inputs import validate_execution_snapshot_binding, verify_frozen_inputs
+    from .diagnostic_episode_inputs import snapshot_policy_path, validate_execution_snapshot_binding, verify_frozen_inputs
 
     manifest_path = Path(manifest_path)
     frozen = verify_frozen_inputs(manifest_path)
@@ -34,9 +34,7 @@ def load_teacher_frozen_inputs(manifest_path: Path):
     root = manifest_path.parent / binding["path"]
     snapshot = verify_execution_snapshot(root, expected_sha256=binding["sha256"])
     for name in TEACHER_POLICY_BINDINGS:
-        config_path = f"config/act/{name}.yaml"
-        copy = snapshot["files"].get(config_path)
-        if copy is None or copy["sha256"] != frozen[name]["file_sha256"]:
+        if snapshot_policy_path(snapshot["files"], name, frozen[name]["file_sha256"]) is None:
             raise ValueError("INPUTS_TEACHER_POLICY_MISMATCH: " + name)
     return frozen, snapshot, root
 

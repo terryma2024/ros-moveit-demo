@@ -65,8 +65,8 @@ class TeacherExecution:
         self._monotonic = lambda: 1.0
         self._safety_state = None
 
-    def _select_execution_policy(self):
-        self.policy_selected = True
+    def _select_execution_policy(self, file_name=None):
+        self.policy_selected = file_name or True
 
     def finish(self, result):
         self.events.append("execution.finish")
@@ -75,7 +75,7 @@ class TeacherExecution:
         self.events.append("execution.close")
 
 
-def teacher_run(tmp_path, monkeypatch, *, safety_fails=False, simulator_x=-0.2, frozen_inputs=True):
+def teacher_run(tmp_path, monkeypatch, *, safety_fails=False, simulator_x=-0.2, frozen_inputs=True, schema=3):
     from so101_demo.act import frozen_runtime_inputs
     from so101_demo.ros import teacher_safety
     events, built, attached = [], {}, []
@@ -92,11 +92,12 @@ def teacher_run(tmp_path, monkeypatch, *, safety_fails=False, simulator_x=-0.2, 
     runtime.runner = lambda actions, **kwargs: (built.__setitem__("runner_workflow", kwargs.get("workflow")),
                                                 plain_runner(actions, **{k: v for k, v in kwargs.items() if k != "workflow"}))[1]
     runtime.bind_scene_source = lambda *a, **k: None
-    frozen = {"runtime_policy": {"sha256": "x", "kind": "k"}}
+    frozen = {"runtime_policy": {"sha256": "x", "kind": "k"}, "teacher_execution_policy": {"values": {"schema_version": schema}}}
     monkeypatch.setattr(frozen_runtime_inputs, "load_teacher_frozen_inputs",
                         lambda path: (frozen, {"scene_path": "assets/mujoco/act/scene.xml"}, PACKAGE))
 
     def load(path):
+        events.append("safety.load")
         if safety_fails:
             raise RuntimeError("TEACHER_SAFETY_INPUTS_MISMATCH: x")
         return SimpleNamespace(limits=teacher_safety.CupSafetyLimits(3.2, 1e-4), process_pairs=frozenset(), known_geoms=frozenset())
