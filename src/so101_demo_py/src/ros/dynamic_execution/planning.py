@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from so101_demo.act.teacher_endpoint import speed_policy_value
 from so101_demo.control.moveit.deterministic_horizon import (
     MOVE_ABOVE_PLAN_CANDIDATE_COUNT,
     HorizonStep,
@@ -20,6 +21,12 @@ from so101_demo.ros.task_reachability import _compute_while_progressing
 
 
 class MotionPlanning:
+    #: the schema 4 Teacher policy keys (velocity, acceleration) of the free-space states that have their own MoveIt scaling
+    _SPEED_SCALING_KEYS = {
+        State.MOVE_ABOVE_OBJECT: ("move_above_object_velocity_scaling", "move_above_object_acceleration_scaling"),
+        State.RETREAT: ("retreat_velocity_scaling", "retreat_acceleration_scaling"),
+    }
+
     def _motion_horizon(
         self,
         state: State,
@@ -243,12 +250,20 @@ class MotionPlanning:
         return self._joint_state()
 
     def _planning_scaling(self, state: State) -> tuple[float, float]:
-        """(velocity, acceleration) MoveIt scaling: the frozen carry values for the carry states with frozen inputs."""
+        """(velocity, acceleration) MoveIt scaling with frozen inputs: the frozen carry values for the carry states, and the
+        schema 4 values for MOVE_ABOVE_OBJECT and RETREAT (a schema 3 policy has none: the template's). Every other state and
+        every run without frozen inputs plans with the template's."""
 
         template = (self._template.velocity_scaling, self._template.acceleration_scaling)
-        if getattr(self, "_execution_snapshot_root", None) is None or state not in self._CARRY_STATES:
+        if getattr(self, "_execution_snapshot_root", None) is None:
             return template
         policy = getattr(self, "_execution_policy", None)
+        speed_keys = self._SPEED_SCALING_KEYS.get(state)
+        if speed_keys is not None:
+            return (speed_policy_value(policy, speed_keys[0], template[0]),
+                    speed_policy_value(policy, speed_keys[1], template[1]))
+        if state not in self._CARRY_STATES:
+            return template
         if (policy is None or "carry_max_velocity_scaling" not in policy
                 or "carry_max_acceleration_scaling" not in policy):
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: carry scaling")

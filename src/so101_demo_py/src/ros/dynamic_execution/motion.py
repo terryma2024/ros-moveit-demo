@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from so101_demo.act.teacher_endpoint import DEFAULT_GRIPPER_DURATION_S, SPEED_DURATION_FIELD, speed_policy_value
 from so101_demo.core.domain import ActionResult, ActionStatus, Failure, FailureCategory, State
 from so101_demo.ports.evidence import PoseEvidence
 from so101_demo.ros.dynamic_execution.common import INJECTED_EXECUTION_FAILURE, _ExecutionFailed
@@ -169,11 +170,20 @@ class MotionExecution:
             )
         self._record(state, before, after, **details)
 
+    def _gripper_duration_s(self, state: State) -> float:
+        """The gripper trajectory duration: 2.0 s for every command, except PREPARE_OPEN_GRIPPER with frozen inputs, which takes the
+        schema 4 Teacher policy value (a schema 3 policy has none: 2.0 s). CLOSE_GRIPPER and OPEN_GRIPPER always keep 2.0 s."""
+
+        if state is not State.PREPARE_OPEN_GRIPPER or getattr(self, "_execution_snapshot_root", None) is None:
+            return DEFAULT_GRIPPER_DURATION_S
+        return speed_policy_value(getattr(self, "_execution_policy", None), SPEED_DURATION_FIELD, DEFAULT_GRIPPER_DURATION_S)
+
     def _command_gripper(self, state: State, target: float, *, before=None) -> None:
         self._check_stop()  # no new goal after a stop
         if before is None:
             before = self._snapshot()
         timeout_s = getattr(self, "_gripper_timeout_s", 15.0)
+        duration_s = self._gripper_duration_s(state)
         # The gripper goal has the arm goal's stop path: the same monitor, a raise cancels the goal.
         monitor = self._motion_monitor(state)
         if state in (State.OPEN_GRIPPER, State.RECOVER_OPEN_GRIPPER) and not self._teacher_run():
@@ -181,10 +191,10 @@ class MotionExecution:
                 self._check_selected_release_freshness(before)
                 self._emit_phase_begin("gripper")
 
-            result = self._gripper.command(target, 2.0, timeout_s, before_dispatch=before_dispatch, monitor=monitor)
+            result = self._gripper.command(target, duration_s, timeout_s, before_dispatch=before_dispatch, monitor=monitor)
         else:
             result = self._gripper.command(
-                target, 2.0, timeout_s, before_dispatch=lambda: self._emit_phase_begin("gripper"), monitor=monitor)
+                target, duration_s, timeout_s, before_dispatch=lambda: self._emit_phase_begin("gripper"), monitor=monitor)
         if result.status is not ActionStatus.SUCCEEDED:
             failure = result.failure
             code = failure.code if failure is not None else "GRIPPER_COMMAND_FAILED"

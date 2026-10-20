@@ -87,6 +87,20 @@ def _sha256(document: dict) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+def speed_policy_value(policy, key: str, default: float) -> float:
+    """The schema 4 speed value ``key`` of a loaded Teacher execution policy, or ``default`` for a policy that predates it.
+
+    A schema 4 policy that lacks the key is not a policy this build can run (``TEACHER_POLICY_UNAVAILABLE``); a schema 3 policy, the
+    general runtime policy and no policy at all keep today's behaviour."""
+
+    if policy is not None and key in policy:
+        return float(policy[key])
+    if (policy is not None and policy.get("kind") == EXECUTION_KIND
+            and type(policy.get("schema_version")) is int and policy["schema_version"] >= EXECUTION_SCHEMA_SPEED):
+        raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + key)
+    return default
+
+
 def load_teacher_endpoint_policy(source) -> dict:
     """Load and validate the endpoint policy from YAML bytes or a path; the result carries its sha256."""
 
