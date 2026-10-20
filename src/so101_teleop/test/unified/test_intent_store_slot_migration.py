@@ -1,4 +1,4 @@
-"""The unified store moves from schema 1 to 2 in place, or refuses and changes nothing.
+"""The unified store moves from schema 1 through 2 to 3 in place, or refuses and changes nothing.
 
 Every store here is a fixture built in a temporary directory; no registered store is ever opened.
 """
@@ -69,10 +69,10 @@ def snapshot(path):
         connection.close()
 
 
-def test_a_fresh_store_is_schema_two_with_the_five_column_slot_table(tmp_path):
+def test_a_fresh_store_is_the_current_schema_with_the_five_column_slot_table(tmp_path):
     store = IntentStore.open(tmp_path / "state")
     try:
-        assert store._query_one("SELECT value FROM schema_meta WHERE key='schema_version'")["value"] == "2"
+        assert store._query_one("SELECT value FROM schema_meta WHERE key='schema_version'")["value"] == "3"
         assert [row["name"] for row in store._query_all("PRAGMA table_info(act_worker_slots)")] == [
             "campaign_id", "worker_id", "execution_generation", "slot_json", "active"]
         names = {row["name"] for row in store._query_all("SELECT name FROM sqlite_master")}
@@ -85,7 +85,7 @@ def test_an_idle_store_with_only_inactive_per_slot_rows_migrates_in_place_keepin
     path = make_per_slot_resource_store(tmp_path / "state")
     store = IntentStore.open(tmp_path / "state")
     try:
-        assert store._query_one("SELECT value FROM schema_meta WHERE key='schema_version'")["value"] == "2"
+        assert store._query_one("SELECT value FROM schema_meta WHERE key='schema_version'")["value"] == "3"
         assert [row["name"] for row in store._query_all("PRAGMA table_info(act_worker_slots)")] == [
             "campaign_id", "worker_id", "execution_generation", "slot_json", "active"]
         assert store._query_all("SELECT * FROM act_worker_slots") == []
@@ -144,7 +144,7 @@ def test_a_failure_in_the_middle_of_the_migration_rolls_everything_back(tmp_path
 def test_an_unknown_future_version_is_refused(tmp_path):
     path = make_per_slot_resource_store(tmp_path / "state")
     connection = sqlite3.connect(path, isolation_level=None)
-    connection.execute("UPDATE schema_meta SET value='3' WHERE key='schema_version'")
+    connection.execute("UPDATE schema_meta SET value='4' WHERE key='schema_version'")
     connection.close()
 
     with pytest.raises(MutationError, match="^STORE_SCHEMA_UNSUPPORTED"):

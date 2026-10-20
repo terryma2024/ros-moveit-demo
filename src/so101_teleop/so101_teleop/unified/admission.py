@@ -640,6 +640,7 @@ class UnifiedWorkloadService:
                 if (spec.kind == 'act_collection_start'
                         and spec.execution_generation != store.execution_generation(Domain.VALIDATION)+1):
                     raise ValueError('ACT_CONTAINER_GENERATION_STALE')
+                self._check_campaign_admission_order(store, spec, payload)
             # Reserve the complete child map before taking either durable resource.
             # Another registry user cannot create a collision between validation and
             # persistence, and a failed database/lease step rolls this map back.
@@ -694,6 +695,39 @@ class UnifiedWorkloadService:
                     self.gpu_arbiter.release(lease)
                     raise
                 return context
+
+    def _check_campaign_admission_order(self, store, spec, payload) -> None:
+        """One campaign id has exactly one FIRST admission; a later stage continues that run or is refused.
+
+        The first admission (phase 1, or a run in one piece; command id `collection-<id>`) is refused when the campaign id
+        already has a context (`CAMPAIGN_FIRST_ADMISSION_REPEATED`). A later stage (`collection-<id>-<stage>`, container
+        collection only) needs the first admission (`STAGE_FIRST_ADMISSION_MISSING`), the same run root and the same logic
+        document (`STAGE_RUN_ROOT_MISMATCH`), and the stage records of the run as that stage needs them (`STAGE_*` codes)."""
+        campaign_id = payload['campaign_id']
+        stage = None
+        if spec.kind == 'act_collection_start':
+            prefix = 'collection-' + campaign_id + '-'
+            if spec.command_id.startswith(prefix):
+                stage = spec.command_id[len(prefix):]
+                if re.fullmatch(r'phase2|retry-[1-9][0-9]*|finalize', stage) is None:
+                    raise ValueError('STAGE_NAME_INVALID')
+        rows = store._query_all("SELECT context_json FROM act_campaign_contexts WHERE campaign_id=?", (campaign_id,))
+        if stage is None:
+            if rows:
+                raise ValueError('CAMPAIGN_FIRST_ADMISSION_REPEATED')
+            return
+        if not rows:
+            raise ValueError('STAGE_FIRST_ADMISSION_MISSING')
+        for row in rows:
+            earlier = json.loads(row[0])
+            if (earlier.get('evidence_root') != str(Path(payload['evidence_root']))
+                    or earlier.get('registered_evidence_root') != payload.get('registered_evidence_root')
+                    or earlier.get('campaign_config_sha256') != payload.get('campaign_config_sha256')
+                    or earlier.get('workload_kind') != spec.kind):
+                raise ValueError('STAGE_RUN_ROOT_MISMATCH')
+        from so101_demo.runtime.container_campaign import stage_records
+        stage_records.check_before_admission(Path(payload['evidence_root']) / 'host', stage,
+                                             logic=dict(sha256=payload.get('campaign_config_sha256')))
 
     def admit_processor_slots(self, context: AdmittedCampaignContext, slots):
         """Reserve the phase-2 processor slots `(campaign, pNN, generation)` of an admitted container campaign.

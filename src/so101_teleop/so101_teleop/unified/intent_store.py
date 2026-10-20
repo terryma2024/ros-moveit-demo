@@ -56,7 +56,10 @@ from .contracts import (
 #: 2: `act_worker_slots` is keyed by (campaign, worker, generation) alone; the per-slot ROS domain, namespace and
 #: controller columns and their three partial unique indexes are gone (the fixed in-instance identity). A version 1 store
 #: is migrated in place by `_migrate_slot_identity_schema`; its slot rows stay readable in `act_worker_slots_v1`.
-SCHEMA_VERSION = 2
+#: 3: `act_campaign_contexts.campaign_id` is no longer UNIQUE: a staged collection admits once per stage, each admission with its
+#: own operation and context row. A second FIRST admission of a campaign id is refused by admission (not by the table). A
+#: version 2 store is migrated in place by `_migrate_campaign_context_schema`; its rows are copied unchanged.
+SCHEMA_VERSION = 3
 LOCK_FILE_NAME = "service.lock"
 
 LEASE_CLAIMING = "CLAIMING"
@@ -142,7 +145,7 @@ CREATE TABLE IF NOT EXISTS gpu_workload_leases (
 );
 CREATE TABLE IF NOT EXISTS act_campaign_contexts (
   operation_id TEXT PRIMARY KEY,
-  campaign_id TEXT NOT NULL UNIQUE,
+  campaign_id TEXT NOT NULL,
   context_json TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS act_worker_slots (
@@ -167,7 +170,7 @@ def _stored_schema_version(connection: sqlite3.Connection) -> int | None:
             return int(row[0])
     if "act_worker_slots" in tables:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(act_worker_slots)")}
-        return 1 if "ros_domain_id" in columns else SCHEMA_VERSION
+        return 1 if "ros_domain_id" in columns else 2
     return None
 
 
@@ -196,6 +199,40 @@ def _migrate_slot_identity_schema(connection: sqlite3.Connection) -> None:
             "active INTEGER NOT NULL CHECK (active IN (0,1)), "
             "PRIMARY KEY (campaign_id, worker_id, execution_generation))"
         )
+        connection.execute("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            ("2",),
+        )
+    except BaseException:
+        with contextlib.suppress(sqlite3.Error):
+            connection.execute("ROLLBACK")
+        raise
+    connection.execute("COMMIT")
+
+
+def _migrate_campaign_context_schema(connection: sqlite3.Connection) -> None:
+    """Move a version 2 store to version 3 in one immediate transaction: the context table is rebuilt without the
+    UNIQUE on `campaign_id`, every row copied as it is (operations and their contexts stay readable)."""
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "act_campaign_contexts" in tables:
+            before = connection.execute("SELECT COUNT(*) FROM act_campaign_contexts").fetchone()[0]
+            connection.execute(
+                "CREATE TABLE act_campaign_contexts_next (operation_id TEXT PRIMARY KEY, "
+                "campaign_id TEXT NOT NULL, context_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO act_campaign_contexts_next SELECT operation_id, campaign_id, context_json "
+                "FROM act_campaign_contexts"
+            )
+            after = connection.execute("SELECT COUNT(*) FROM act_campaign_contexts_next").fetchone()[0]
+            if before != after:
+                raise MutationError(f"STORE_MIGRATION_REFUSED: {before} context rows, {after} copied")
+            connection.execute("DROP TABLE act_campaign_contexts")
+            connection.execute("ALTER TABLE act_campaign_contexts_next RENAME TO act_campaign_contexts")
         connection.execute("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         connection.execute(
             "INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?) "
@@ -256,6 +293,9 @@ class IntentStore:
             stored = _stored_schema_version(connection)
             if stored == 1:
                 _migrate_slot_identity_schema(connection)
+                stored = 2
+            if stored == 2:
+                _migrate_campaign_context_schema(connection)
             elif stored is not None and stored != SCHEMA_VERSION:
                 raise MutationError(f"STORE_SCHEMA_UNSUPPORTED: version {stored}")
             connection.executescript(_SCHEMA)
