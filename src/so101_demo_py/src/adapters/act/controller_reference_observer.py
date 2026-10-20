@@ -3,6 +3,7 @@
 from collections import deque
 import copy
 import json
+import math
 import threading
 
 from so101_demo.act.contracts import finite, identifier, integer, vector
@@ -26,6 +27,62 @@ def _ns(value):
 PERIOD_NS = 2_000_000
 # Gap steps kept per controller (the count is always complete): the first ones, enough to locate a defect.
 GAP_STEP_LIMIT = 256
+
+
+_FINITE_PLANS: dict = {}
+
+
+def _plan_of(message_class):
+    """[(field, kind)] for the fields of a message class that can hold a non-finite float: 'f' a float, 'fa' a float sequence or array,
+    'm' a nested message, 'ma' a sequence of messages. Strings, integers and booleans cannot, so they are not listed."""
+    plan = _FINITE_PLANS.get(message_class)
+    if plan is None:
+        plan = []
+        for name, type_name in message_class.get_fields_and_field_types().items():
+            many = "[" in type_name or "<" in type_name
+            base = type_name.split("<")[-1].rstrip(">").split("[")[0]
+            if base in ("double", "float"):
+                plan.append((name, "fa" if many else "f"))
+            elif "/" in base:
+                plan.append((name, "ma" if many else "m"))
+        _FINITE_PLANS[message_class] = plan
+    return plan
+
+
+def _finite(message) -> bool:
+    for name, kind in _plan_of(type(message)):
+        value = getattr(message, name)
+        if kind == "f":
+            if not math.isfinite(value):
+                return False
+        elif kind == "fa":
+            if not all(map(math.isfinite, value)):
+                return False
+        elif kind == "m":
+            if not _finite(value):
+                return False
+        elif not all(_finite(item) for item in value):
+            return False
+    return True
+
+
+def _serialisable(message):
+    """True if `json.dumps(message_to_ordereddict(message), allow_nan=False)` succeeds, False if it would raise.
+
+    A ROS message holds only integers, booleans, strings and floats, so the dump fails exactly when a floating point field, anywhere
+    in the message, is NaN or infinite."""
+    return _finite(message)
+
+
+def _copy_frame(frame):
+    """A deep copy of a retained frame; the original message dict is built here, for the frames a reader actually takes."""
+    message = frame.get("_message")
+    plain = {key: value for key, value in frame.items() if key != "_message"}
+    copied = copy.deepcopy(plain)
+    if message is not None:
+        from rosidl_runtime_py.convert import message_to_ordereddict
+        copied["original_message"] = json.loads(json.dumps(message_to_ordereddict(message), allow_nan=False))
+    return copied
 
 
 class ControllerReferenceObserver:
@@ -127,9 +184,13 @@ class ControllerReferenceObserver:
             original = {}
             from control_msgs.msg import JointTrajectoryControllerState
             if type(message) is JointTrajectoryControllerState:
-                from rosidl_runtime_py.convert import message_to_ordereddict
-                original = {"original_message": json.loads(json.dumps(
-                    message_to_ordereddict(message), allow_nan=False))}
+                # The original message is converted when a reader takes the frame (about 1,800 of the 96,000 accepted per episode).
+                # A message that json would refuse (a NaN or infinite float) is still refused here, at the same place as before.
+                if _serialisable(message):
+                    original = {"_message": message}
+                else:       # a float json refuses: convert now, so the refusal (and its text) is the old one
+                    from rosidl_runtime_py.convert import message_to_ordereddict
+                    original = {"original_message": json.loads(json.dumps(message_to_ordereddict(message), allow_nan=False))}
             history.append({
                 "sim_stamp_ns": stamp,
                 "received_monotonic_ns": receipt,
@@ -174,7 +235,7 @@ class ControllerReferenceObserver:
                     if 0 <= now - frame["sim_stamp_ns"] <= window:
                         fresh_seen = True
                         if abs(frame["sim_stamp_ns"] - target_ns) <= tolerance_ns:
-                            matching.append(copy.deepcopy(frame))
+                            matching.append(_copy_frame(frame))
                 if history and not fresh_seen:
                     raise ValueError("CONTROLLER_REFERENCE_HISTORY_STALE")
                 return self._identity, tuple(matching)
@@ -189,7 +250,7 @@ class ControllerReferenceObserver:
             now = _ns(now_sim_ns)
             window = _ns(window_ns)
             history = self._frames[kind]
-            fresh = tuple(copy.deepcopy(frame) for frame in history if 0 <= now - frame["sim_stamp_ns"] <= window)
+            fresh = tuple(_copy_frame(frame) for frame in history if 0 <= now - frame["sim_stamp_ns"] <= window)
             if history and not fresh:
                 raise ValueError("CONTROLLER_REFERENCE_HISTORY_STALE")
             return self._identity, fresh
@@ -211,7 +272,7 @@ class ControllerReferenceObserver:
             history = self._frames[kind]
             if any(frame["received_monotonic_ns"] > now for frame in history):
                 raise ValueError("CONTROLLER_REFERENCE_FUTURE_RECEIPT")
-            fresh = tuple(copy.deepcopy(frame) for frame in history
+            fresh = tuple(_copy_frame(frame) for frame in history
                           if now - frame["received_monotonic_ns"] <= max_age)
             if history and not fresh:
                 raise ValueError("CONTROLLER_REFERENCE_HISTORY_STALE")
