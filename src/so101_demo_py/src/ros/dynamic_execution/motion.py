@@ -14,7 +14,7 @@ from so101_demo.act.teacher_endpoint import (
 from so101_demo.control.moveit.deterministic_horizon import descend_waypoints
 from so101_demo.core.domain import ActionResult, ActionStatus, Failure, FailureCategory, State
 from so101_demo.ports.evidence import PoseEvidence
-from so101_demo.ros.dynamic_execution.common import INJECTED_EXECUTION_FAILURE, _ExecutionFailed
+from so101_demo.ros.dynamic_execution.common import INJECTED_EXECUTION_FAILURE, _ExecutionFailed, _mark_place_side
 
 
 class MotionExecution:
@@ -61,6 +61,7 @@ class MotionExecution:
         raise _ExecutionFailed(f"{code}: {message}", executed)
 
     def _motion(self, state: State, target: PoseEvidence) -> None:
+        _mark_place_side(state, "motion.begin")
         before = self._snapshot()
         current = self._motion_planning_start()
         motion_targets = [target]
@@ -86,7 +87,9 @@ class MotionExecution:
         cartesian_corridor_receipts: list[dict[str, object]] = []
         joint_target = current
         resolved_pose = self._ik.forward(current)
+        _mark_place_side(state, "horizon.begin")
         horizon_steps = self._motion_horizon(state, motion_targets, current)
+        _mark_place_side(state, "horizon.end")
         for segment_index, step in enumerate(horizon_steps):
             self._check_stop()  # no new goal is planned or sent after a stop
             motion_target = step.waypoint.target
@@ -100,12 +103,14 @@ class MotionExecution:
                 selection_reason="selected complete-path minimum cumulative score",
             )
             self._record_planning_attempt(selection_document)
+            _mark_place_side(state, f"segment{segment_index}.plan.begin")
             planned, candidate_corridors = self._plan_candidate_set(
                 state=state,
                 step=step,
                 current=current,
                 joint_target=joint_target,
             )
+            _mark_place_side(state, f"segment{segment_index}.plan.end")
             cartesian_corridor_receipts.extend(candidate_corridors)
             execution_generation = self._joint_state_generation
             try:

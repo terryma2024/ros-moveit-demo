@@ -28,6 +28,7 @@ from so101_demo.control.moveit.deterministic_horizon import (
 from so101_demo.control.moveit.planning import JointPlanRequest
 from so101_demo.core.domain import State
 from so101_demo.ports.evidence import PoseEvidence
+from so101_demo.ros.dynamic_execution.common import _mark_place_side
 from so101_demo.ros.task_reachability import _compute_while_progressing
 
 
@@ -225,6 +226,7 @@ class MotionPlanning:
         last_failure = "CUP_POSE_PLAN_FAILED"
         scaling = self._planning_scaling(state, step)
         for candidate_index in range(candidate_count):
+            _mark_place_side(state, f"candidate{candidate_index}.moveit.begin")
             planned = self._planning.plan_joint_path(
                 JointPlanRequest(
                     joint_names=self._ARM_JOINTS,
@@ -238,6 +240,7 @@ class MotionPlanning:
                 ),
                 timeout_s=self._template.planning_timeout_s + 5.0,
             )
+            _mark_place_side(state, f"candidate{candidate_index}.moveit.end")
             if planned.failure is not None or planned.trajectory is None:
                 last_failure = (
                     "CUP_POSE_PLAN_FAILED"
@@ -272,6 +275,7 @@ class MotionPlanning:
                     ),
                 }
             )
+            _mark_place_side(state, f"candidate{candidate_index}.corridor.begin")
             corridor = validate_cartesian_corridor(
                 self._ik,
                 planned.trajectory,
@@ -298,6 +302,7 @@ class MotionPlanning:
                     else -math.inf
                 ),
             )
+            _mark_place_side(state, f"candidate{candidate_index}.corridor.end")
             corridor_document = corridor.to_document()
             corridor_document.update(
                 kind=(
