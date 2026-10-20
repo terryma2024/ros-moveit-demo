@@ -91,3 +91,10 @@ Decisions:
    - **Criterion change:** R1's "leading rows ≤ 2.2 s" criterion is dropped, because about 5 s is expected with A.
    - **What remains of tier 1:** 18b (pick-prefix precompute) only.
 5. **Peak reference widened (human decision).** The one-sided rule of amendment 3 is unchanged. The reference max and the run-to-run tolerance are computed from every schema 3 run available on the same 16 scene positions: EXP-625 and EXP-627, plus EXP-623 and EXP-624 where they cover the same positions.
+6. **Over-squeeze judge route (human decision after EXP-7007).** The spot-check judge gains a second no-QC route. It accepts phase-2 INVALID with `TEACHER_ORACLE_EXCLUDED: ORACLE_CUP_OVERLOAD <phase>` only if all of these hold:
+   - the phase lies in CLOSE..VERIFY;
+   - `processor_rc` is 0;
+   - the Teacher manifest and the receipt are bound by sha256, as in the hazard route.
+
+   Before this, the judge accepted only the physics-hazard outcome (rc 3). The route needs a RED-to-GREEN test, a new gate and new images, then R2' is re-run and R3 follows.
+7. **"Endpoint not worse" (human decision).** The median xy and z errors must be no worse than EXP-625's. R1'' (EXP-629) passes under this rule.
