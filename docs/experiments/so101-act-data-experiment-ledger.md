@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3748
+latest_checkpoint: CP-3749
 next_experiment: TRAIN-005 (compress_dwell) training, then the 4-point rollout (CP-3747). Before that, TRAIN-004 rollouts found 0 of 16 DONE (CP-3746): the policy holds at the rest/dwell pose. The coordinator decides the next change (see the CP-3746 diagnosis).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3749 — TRAIN-005 (fp32) trained on antzb and handed back; concurrent rollouts REFUSED by the rollout tool's `no_gpu_process` precondition; no rollout ran
+
+- Executed by a Sonnet 5.5 subagent for the coordinator. REG=/data/work/so101-evidence/act-data/20260924-fbc25063-resume.
+- OBSERVED training (antzb, driver tools/profile_driver005.py = profile_driver.py pointed at a code005 checkout; calls `train_act_bundle` unchanged; runinfo.json): commit 75debaa680b893acd09007d654e8d80efda402b4, config training-side-wrist-005.yaml sha256 3baa9f20705ac54a7f545bba2e4a00662a923e7dc4bca4f40e9c173dd7bad3dd (equals the worktree file), 60000 steps, fp32, dataset side-wrist-103-20261019T0342Z, rows train 73437 -> 26461 and validation 8701 -> 3048, started 2026-10-20T08:02:08+08:00, ended 10:30:34+08:00, wall 8906 s, steady 113.2 samples/s (overall 107.8), final validation L1 0.03194 (512 samples; TRAIN-004's 0.0198 is on a different, uncompressed validation subset, so not comparable), peak allocated 6108 MB. bundle_state.json not produced.
+- Handback copied to /data/work/so101-policies/train005-fp32-antzb/ (bundle.json, policy.safetensors sha a9018f7d..., metrics.jsonl, training-log.json, runinfo.json, profile_driver005.py); `sha256sum -c sha256sums.txt` all OK. bundle.json differs from TRAIN-004's only in config_sha256 (d813ce7c...), last validation, policy sha, and `model_source.sha256` = all zeros (TRAIN-004: afa05520...); whether the rollout loader accepts that value is untested.
+- Rollout attempt: evidence root REG/act-rollout-train005fp32-20261020T023800Z (scripts = CP-3746 scripts with root and bundle changed; gate R/gates/75debaa680b8; the diff of src, scripts and third_party between that gate and HEAD 6af2fdd03 is empty). `run_mode.zsh 75debaa680b8 prefix5 --execution-prefix 5` exited rc 2 after 7 s: `ROLLOUT_REFUSED: ROLLOUT_PRECONDITION_FAILED: no_gpu_process: ['762540, /data/work/venvs/so101-act-train/bin/python']`, which is the TRAIN-005-bf16 training (tmux train005b) on the same GPU. The probe is hard-coded in `act_rollout_native.default_probes` (design decision D5) and has no flag, so the human's "run at the same time" decision cannot be carried out without a source change, which this task forbids. Nothing was relaxed or bypassed; no episode ran; the stack never started.
+- Next: either wait for train005b to end (about 12:10 CST), then run the 4-point rollout of both bundles on ai-station; or the coordinator authorises a reviewed change of the precondition (for example an explicit opt-in flag recorded in run.json) plus a new gate.
+- Retained: the handback dir and the evidence root above (manifest, scripts, refused-run logs). Deletion candidates: REG/act-rollout-train005fp32-20261020T023800Z/scratch (after readback), /tmp/so101-debug-o6-train005fp32. No process of this task remains; fans untouched.
 
 ## CP-3748 — TRAIN-005-bf16 launched (compress_dwell + bf16 + compile); rows confirmed 26461 / 3048; about 69 samples/s
 
