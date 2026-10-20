@@ -162,7 +162,8 @@ def test_every_scene_is_dispatched_once_to_the_admitted_slots_and_all_processors
     assert {item["processor"] for item in world.assigned} == {"p00", "p01"}
     assert summary["counts"] == dict(VALID=5, INVALID=0, FAULT=0, MISSING=0) and summary["processors_stopped"] is True
     assert sorted(launch for launch, _ in world.terminated) == ["processing-p00-g1", "processing-p01-g1"]
-    first = world.assigned[0]["document"]
+    # the dispatch order across two processors is not fixed, so the document is the one of the first row, not the first sent
+    first = next(item["document"] for item in world.assigned if item["scene"] == rows[0]["scene_id"])
     assert first["kind"] == "ACT_PROCESSING_TASK" and first["proc_attempt"] == 1 and first["task_id"].endswith("-proc-1")
     assert first["output_dir"] == str(world.run / "processing" / first["scene_id"] / f"{first['scene_id']}-lease-1-proc-1")
     assert first["phase1_result_sha256"] == "0" * 64 and first["scope"]["sha256"] == "a" * 64
