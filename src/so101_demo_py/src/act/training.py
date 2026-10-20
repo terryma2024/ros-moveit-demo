@@ -170,9 +170,9 @@ def attach_episode_content(committed, *, root, workers=None, trust_qc_memo=False
     serial path in every case, so the digest checks run every time and the first refusal in order is the one raised.
     """
 
-    from .bundle import _prime_verification_memo, resolve_workers, sealed_episode_content
+    from .bundle import _prime_verification_memo, default_cli_workers, resolve_workers, sealed_episode_content
 
-    workers = resolve_workers(workers)
+    workers = resolve_workers(workers, default=default_cli_workers())
     if workers > 1:
         _prime_verification_memo(
             [episode for episode in committed if isinstance(episode, dict) and isinstance(episode.get("collection_evidence"), dict)

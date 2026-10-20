@@ -645,7 +645,7 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index, workers=None, 
     from .qc_session import assert_export_path_allowed
 
     assert_export_path_allowed()        # a cached proof grants no eligibility: only a readback entry point may hold a session here
-    workers = resolve_workers(workers)
+    workers = resolve_workers(workers, default=default_cli_workers())
     if not isinstance(manifest, dict) or not isinstance(manifest.get("episodes"), list):
         raise ValueError("MANIFEST_INVALID")
     committed = _index(campaign_index)
@@ -803,7 +803,7 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     from .qc_session import assert_export_path_allowed
 
     assert_export_path_allowed()
-    workers = resolve_workers(workers)
+    workers = resolve_workers(workers, default=default_cli_workers())
     _bundle_digest(source_manifest_sha256, "EXPORT_SOURCE_DIGEST_INVALID")
     _bundle_digest(campaign_index_sha256, "EXPORT_INDEX_DIGEST_INVALID")
     if not isinstance(committed, (list, tuple)):

@@ -344,7 +344,10 @@ class ContainerCampaignOwner:
 
     async def _retry_rounds(self,ids,worker_ids,completed,endpoints,maximum):
         rounds=[dict(recording_round=0,scene_ids=list(ids),waves=completed)]
-        combine=self.verifier.verify_rounds
+        # The intermediate passes only choose the next candidates: they read each round once and trust the offline processor's QC memo
+        # (human-approved 2026-10-19). The pass that produces the result and the index (below) reads every round afresh, in full.
+        provisional=getattr(self.verifier,'verify_rounds_provisional',None)
+        combine=provisional or self.verifier.verify_rounds
         combined=await asyncio.to_thread(combine,rounds,list(ids))
         initially_invalid={item['scene_id'] for item in combined['scenes'] if retry_candidate(item)}
         observed=self._retry_observations()
@@ -399,6 +402,8 @@ class ContainerCampaignOwner:
             combined=await asyncio.to_thread(combine,rounds,list(ids))
             if aborted is not None:
                 break
+        if provisional is not None:
+            combined=await asyncio.to_thread(self.verifier.verify_rounds,rounds,list(ids))
         recovered=sum(item['scene_id'] in initially_invalid and item['verdict']['export_eligible'] is True
                       for item in combined['scenes'])
         retry=dict(max_rounds=maximum,rounds_run=len(rounds)-1,recovered=recovered,

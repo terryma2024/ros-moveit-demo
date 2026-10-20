@@ -144,11 +144,14 @@ def _default_reader(output_dir, **kwargs):
     return verify_processed_result(output_dir, **kwargs)
 
 
-def verify_processing(root, waves, scene_ids, *, host_dir=None, readback_workers=None, readback_timeout_s=None, processed_reader=None):
+def verify_processing(root, waves, scene_ids, *, host_dir=None, readback_workers=None, readback_timeout_s=None, processed_reader=None,
+                      trust_memo=False):
     """The combined proof of every scene in `scene_ids`, in that order; see the module docstring.
 
     `waves` are the verified phase-1 wave records (`case_results` rows with their readback proof). `processed_reader` is a seam
-    (default: `act.processed_result.verify_processed_result`, in worker processes when more than one readback worker is allowed)."""
+    (default: `act.processed_result.verify_processed_result`, in worker processes when more than one readback worker is allowed).
+    ``trust_memo`` lets the data grading accept the offline processor's content-bound QC memo where it covers the files on disk now
+    (human-approved for intermediate passes only; the final pass of a campaign leaves it off)."""
     root = Path(root)
     host_dir = root / 'host' if host_dir is None else Path(host_dir)
     events = read_journal(host_dir / JOURNAL_NAME)
@@ -200,7 +203,7 @@ def verify_processing(root, waves, scene_ids, *, host_dir=None, readback_workers
         else:
             entries[scene] = _record(row, "FAULT", "PROCESSING_RECORD_MISMATCH", attempts=made)
     for (scene, row, made, output_dir), answer in zip(jobs, _read_back(jobs, readback_workers, readback_timeout_s,
-                                                                      processed_reader or _default_reader), strict=True):
+                                                                      processed_reader or _default_reader, trust_memo), strict=True):
         if isinstance(answer, Exception):
             reason = str(answer) or PROCESSED_REFUSAL
             entries[scene] = _record(row, "FAULT", reason if reason.startswith(PROCESSED_REFUSAL) else f"{PROCESSED_REFUSAL}: {reason}",
@@ -221,8 +224,13 @@ def retry_candidate(item):
             and item['phase1']['result_status'] == 'PASSED' and item['verdict']['act_data_status'] == 'INVALID')
 
 
-def verify_rounds(root, rounds, scene_ids, *, readback_workers=None, readback_timeout_s=None, processed_reader=None):
+def verify_rounds(root, rounds, scene_ids, *, readback_workers=None, readback_timeout_s=None, processed_reader=None, trust_memo=False,
+                  round_cache=None):
     """Read each round independently; retain failed retries while selecting the latest completed verdict per scene.
+
+    ``round_cache`` (a dict the caller keeps between calls) lets an intermediate pass read each round once: a round whose inputs and
+    files are unchanged since its cached readback is not read again. It is only for ``trust_memo`` passes; the final pass of a campaign
+    reads every round afresh and in full.
 
     Each round holds `recording_round`, `scene_ids` and verified `waves`. Its Host files use the conventional retry directory.
     The complete ordered scene list belongs to round zero; later lists are subsets of the preceding eligible recordings."""
@@ -252,8 +260,12 @@ def verify_rounds(root, rounds, scene_ids, *, readback_workers=None, readback_ti
                     raise ValueError('PROCESSING_ROUND_CANDIDATES_INVALID')
                 wave_for_scene[scene] = index
         host = root / 'host' if number == 0 else root / 'host' / f'retry-{number}'
-        combined = verify_processing(root, waves, ids, host_dir=host, readback_workers=readback_workers,
-                                     readback_timeout_s=readback_timeout_s, processed_reader=processed_reader)
+        combined = _cached_round(round_cache, number, root, waves, ids, host) if round_cache is not None and trust_memo else None
+        if combined is None:
+            combined = verify_processing(root, waves, ids, host_dir=host, readback_workers=readback_workers,
+                                         readback_timeout_s=readback_timeout_s, processed_reader=processed_reader, trust_memo=trust_memo)
+            if round_cache is not None and trust_memo:
+                _remember_round(round_cache, number, root, waves, ids, host, combined)
         for item in combined['scenes']:
             scene = item['scene_id']
             expected = proc_counts.get(scene, 0) + 1
@@ -276,7 +288,46 @@ def verify_rounds(root, rounds, scene_ids, *, readback_workers=None, readback_ti
                 processing=records[0]['processing'], rounds=records, scenes=scenes)
 
 
-def _read_back(jobs, workers, timeout_s, reader):
+def _round_trees(combined):
+    """Every directory a round readback read: the sealed phase-1 attempts and the phase-2 outputs it names."""
+    trees = set()
+    for item in combined["scenes"]:
+        if item["phase1"] is not None:
+            trees.add(item["phase1"]["location"])
+        trees.update(attempt["output_dir"] for attempt in item["attempts"])
+    return sorted(trees)
+
+
+def _round_key(waves, ids, host):
+    """The inputs of one round readback: the waves and ids given, and the processing journal and summary it reads."""
+    return hashlib.sha256(json.dumps([list(ids), waves, _file_ref(host / SUMMARY_NAME), _file_ref(host / JOURNAL_NAME)],
+                                     sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _cached_round(cache, number, root, waves, ids, host):
+    held = cache.get(number)
+    if held is None:
+        return None
+    from so101_demo.act.qc_session import tree_signature
+
+    key, trees, signatures, combined = held
+    if key != _round_key(waves, ids, Path(host)) or [tree_signature(tree) for tree in trees] != signatures:
+        cache.pop(number, None)
+        return None
+    import copy
+    return copy.deepcopy(combined)
+
+
+def _remember_round(cache, number, root, waves, ids, host, combined):
+    import copy
+
+    from so101_demo.act.qc_session import tree_signature
+
+    trees = _round_trees(combined)
+    cache[number] = (_round_key(waves, ids, Path(host)), trees, [tree_signature(tree) for tree in trees], copy.deepcopy(combined))
+
+
+def _read_back(jobs, workers, timeout_s, reader, trust_memo=False):
     """The processed readback of every job, in job order: the record, or the `ValueError` that refused it."""
     arguments = [dict(sealed=Path(row["proof"]["location"]), scene_id=scene, result_sha256=row["proof"]["result_sha256"],
                       receipt_sha256=row["proof"]["receipt_sha256"], scope=Path(row["scope_path"]),
@@ -286,14 +337,15 @@ def _read_back(jobs, workers, timeout_s, reader):
         answers = []
         for (_scene, _row, _made, output_dir), kwargs in zip(jobs, arguments, strict=True):
             try:
-                answers.append(reader(output_dir, **kwargs))
+                answers.append(reader(output_dir, **kwargs, **({'trust_memo': True} if trust_memo else {})))
             except (OSError, ValueError, TypeError, KeyError) as error:
                 answers.append(error if isinstance(error, ValueError) else ValueError(PROCESSED_REFUSAL))
         return answers
     pooled = [dict(scene_id=scene, registration=row["registration"], scope=row["scope_path"],
                    inputs_manifest=row["inputs_manifest"],
                    processing=dict(output_dir=output_dir, **{key: (str(value) if isinstance(value, Path) else value)
-                                                             for key, value in kwargs.items() if key not in ("scope", "inputs_manifest")}))
+                                                             for key, value in kwargs.items() if key not in ("scope", "inputs_manifest")},
+                                   **({'trust_memo': True} if trust_memo else {})))
               for (scene, row, _made, output_dir), kwargs in zip(jobs, arguments, strict=True)]
     return run_readbacks(pooled, workers=workers, timeout_s=timeout_s)
 
