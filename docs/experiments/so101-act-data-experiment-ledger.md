@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3753
+latest_checkpoint: CP-3754
 next_experiment: TRAIN-005 (compress_dwell) training, then the 4-point rollout (CP-3747). Before that, TRAIN-004 rollouts found 0 of 16 DONE (CP-3746): the policy holds at the rest/dwell pose. The coordinator decides the next change (see the CP-3746 diagnosis).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3754 — Item 18 R0'-R3 preparation: fix D and env-align merged, 10 GiB freed; stopped before R0' because the evidence partition (64 GiB free) cannot pass the R1' authoring dispatch-floor check (needs about 75 GiB)
+
+- Executed by a Sonnet 5.5 subagent for the coordinator. Ledger only. Debug dir /tmp/so101-debug-ts-r1b-1020. No gate, image, container or fan action in this checkpoint (fans stay on auto).
+- Merges (OBSERVED, no-ff, no conflicts): codex/so101-teacher-reset-boundary (74455b8c5, 82f769807, c387903bb) as 5d72f1670, then codex/so101-env-align as 1cb17ea1f. Note for the coordinator: the env-align branch tracks `scripts/env/__pycache__/so101_env.cpython-312.pyc`; a gate that imports that module may rewrite it and show `dirty_after` not 0.
+- Deletions (authorised by the standing rule; record REG/evidence-deletion-20261020j/deletions.jsonl, df-before/df-after.txt): REG/act-w8d-inputs-20261020T072719Z (537165 B, 32 files, failed authoring); REG/act-w8d-20261018T180809Z/wave-0 (3965409847 B, 952 files, EXP-623 raw bags, root not in SEALED-ROOTS.json); REG/scratch/reset-boundary-a1 (6019032211 B, 278637 files); W/so101-build/gates-archived-932fa5404785-run1 (2.7 GB, other filesystem, no effect on the evidence partition). Not deleted: the EXP-624 raw bags (root act-w8-20261018T184409Z is a sealed root), R/scratch (already empty). No path was inside a sealed root (checked against SEALED-ROOTS.json; the full readback verify_sealed_roots.py was not run).
+- Disk (OBSERVED): evidence partition free 54 GiB before, 68592914432 B (63.9 GiB) after. Target 80 GiB, minimum about 70 GiB: not reached. The R1' authoring check needs free minus 16 x 1.3 GB >= 53.7 GB, i.e. about 75 GiB; the first authoring of CP-3752 failed this at 65 GB.
+- Further candidates (not deleted, need authorisation): EXP-626 run root act-w8d-20261020T072821Z (5.2 GB, 0/16 VALID), EXP-627 run root act-w8d-20261020T091702Z (9.8 GB, wave-0 raw 3.8 GB; kept by instruction), act-w1s-20261020T075151Z/T075743Z (0.9 GB), act-w1s-oversqueeze-src-20261020T0710Z (0.9 GB), handoffs/teacher-act-decoupling-20261005.1RmsJ3ZJ (47 GB).
 
 ## CP-3753 — Item 18 R1 same-scene schema-3 control (EXP-627): Teacher 16/16, no oracle flag, 15 of 16 VALID; the R1 peak criterion with the control union FAILS (18 of 38 phase-metric pairs outside the union range of EXP-625 and EXP-627), although every EXP-626 value stays below the r10b limits
 
