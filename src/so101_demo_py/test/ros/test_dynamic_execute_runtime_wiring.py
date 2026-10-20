@@ -77,3 +77,51 @@ def test_reset_complete_is_announced_from_the_first_retained_evidence_of_the_epo
     assert value._verified_reset_boundary()["simulation_step"] == 6
     value.observer = SimpleNamespace(retained_with_receipts=lambda: ())
     assert value._verified_reset_boundary() is None
+
+
+def _boundary_run(schema, paused_steps, steps=(1, 2, 3, 4, 5, 6)):
+    from dataclasses import replace
+    from so101_demo.core.simulation.types import ReceivedSimulationEvidence
+    from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
+    value = object.__new__(RosDynamicMujocoExecution)
+    value._session_id, value._expected_reset_epoch = "s", 1
+    value._execution_policy = None if schema is None else {"schema_version": schema}
+    value._document, value.writes = {}, []
+    value._write = lambda: value.writes.append(dict(value._document))
+    value.observer = SimpleNamespace(retained_with_receipts=lambda: tuple(
+        ReceivedSimulationEvidence(replace(evidence(step=step), paused=step in paused_steps), step * 0.01)
+        for step in steps))
+    return value
+
+
+def test_schema_4_reset_boundary_is_the_first_record_after_the_last_pause_in_the_ring():
+    assert _boundary_run(4, {3, 4})._verified_reset_boundary()["simulation_step"] == 5
+    # several pauses: the last one counts
+    assert _boundary_run(4, {2, 5})._verified_reset_boundary()["simulation_step"] == 6
+
+
+def test_schema_3_and_an_unreadable_schema_keep_the_first_record_as_the_boundary():
+    for schema in (3, None):
+        assert _boundary_run(schema, {3, 4})._verified_reset_boundary()["simulation_step"] == 1
+
+
+def test_schema_4_without_a_paused_record_keeps_the_first_record_as_the_boundary():
+    assert _boundary_run(4, set())._verified_reset_boundary()["simulation_step"] == 1
+
+
+def test_schema_4_fails_closed_when_the_ring_is_all_paused_or_ends_paused():
+    import pytest
+    for paused in ({1, 2, 3, 4, 5, 6}, {5, 6}):
+        value = _boundary_run(4, paused)
+        with pytest.raises(RuntimeError, match="TEACHER_RESET_BOUNDARY_PAUSED_RING"):
+            value._verified_reset_boundary()
+        # the refusal is on the Teacher document, written before the raise
+        assert value._document["teacher_reset_boundary_error"] == "TEACHER_RESET_BOUNDARY_PAUSED_RING"
+        assert value.writes and value.writes[-1]["teacher_reset_boundary_error"] == "TEACHER_RESET_BOUNDARY_PAUSED_RING"
+
+
+def test_the_paused_ring_refusal_is_a_failed_teacher_execution_and_a_failed_attempt():
+    from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
+    result = SimpleNamespace(status=SimpleNamespace(value="ERROR"),
+                             failure=SimpleNamespace(code="TEACHER_RESET_BOUNDARY_PAUSED_RING"))
+    assert RosDynamicMujocoExecution._teacher_execution_status(result, {}) == "FAILED"

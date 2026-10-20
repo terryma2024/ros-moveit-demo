@@ -505,3 +505,20 @@ def test_replay_node_opens_the_window_at_the_first_message_stamped_at_or_after_t
     node.deliver_due(mono_of(1.0) + 10_000_000_000)
     assert node.window_open is True
     assert replay.ReplayNode(replay.BagStream(bag, clock_map), clock).window_open is True   # no window start: nothing to wait for
+
+
+def test_a_reset_boundary_after_the_pause_end_lets_the_scan_clip_the_window(tmp_path):
+    """The schema 4 Teacher announces the first record after the last paused one as `reset_complete`.
+
+    Paused world records 9 and 10 are 1.008 s and 1.020 s; a reset at 1.0 s precedes them (the old boundary: no clip, the paused
+    records are never clipped), a reset at 1.032 s, the first record after the pause, clips the window there.
+    """
+    from so101_demo.act.offline.scan import scan_bag
+
+    before = scan_bag(build_bag(tmp_path / "before", paused_worlds=(9, 10), reset_s=1.0))
+    assert before["window_start"] is None
+    after = scan_bag(build_bag(tmp_path / "after", paused_worlds=(9, 10), reset_s=1.032))
+    window = after["window_start"]
+    assert window["sim_time_ns"] == 1_032_000_000 and window["last_paused_sim_time_ns"] == 1_020_000_000
+    assert after["paused_world_records_in_window"] == 0
+    assert not any(reason.startswith("OFFLINE_PAUSED") for reason in after["reasons"]), after["reasons"]
