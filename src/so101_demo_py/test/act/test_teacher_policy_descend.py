@@ -114,7 +114,7 @@ def test_schema_3_and_4_files_load_and_hash_as_before():
             json.dumps(fields, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
 
-@pytest.mark.parametrize("name,approach", [("descend010", 0.10), ("descend020", 0.20)])
+@pytest.mark.parametrize("name,approach", [("descend010", 0.10), ("descend020", 0.20), ("two_leg_open_1s", 0.03)])
 def test_the_descend_policy_files_are_carry_b_at_schema_5_with_only_the_new_keys(name, approach):
     document4 = yaml.safe_load(CARRY_B_PATH.read_bytes())
     path = CONFIG / f"teacher_execution_policy_side_wrist_fast_{name}.yaml"
