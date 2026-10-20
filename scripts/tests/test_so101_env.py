@@ -304,3 +304,25 @@ def test_capture_accepts_no_rosdep_flag():
 def test_select_apt_scope_includes_wanted_names():
     chosen = env.select_apt_scope({"foo": "1", "bar": "2", "ros-jazzy-x": "3"}, {"foo"})
     assert set(chosen) == {"foo", "ros-jazzy-x"}
+
+
+def test_gl_apt_prefixes_in_scope_and_nvidia_excluded():
+    chosen = env.select_apt_scope({"libegl1": "1", "libgl1-mesa-dri": "2", "libglvnd0": "3", "libnvidia-gl-595": "4", "vim": "5"}, set())
+    assert set(chosen) == {"libegl1", "libgl1-mesa-dri", "libglvnd0"}
+
+
+def test_glvnd_vendor_file_missing_is_must_hash_differ_is_should():
+    expected = _manifest()
+    expected["gl"] = {"egl_vendor_files": {"a.json": "h", "b.json": "h"}, "nvidia_userland": {"libnvidia-gl-595": "1"}}
+    actual = copy.deepcopy(expected)
+    actual["gl"]["egl_vendor_files"] = {"b.json": "other"}
+    actual["gl"]["nvidia_userland"] = {}
+    rows = {r["key"]: r["class"] for r in env.diff_manifests(expected, actual)}
+    assert rows["glvnd:a.json"] == "must"
+    assert rows["glvnd:b.json"] == "should"
+    assert rows["nvidia-userland:libnvidia-gl-595"] == "should"
+
+
+def test_gl_probe_fails_closed_without_venv(tmp_path):
+    ok, detail = env.gl_probe(tmp_path)
+    assert ok is False and "missing" in detail

@@ -50,6 +50,21 @@ EXTRA_APT = (
 )
 # Packages from packages.osrfoundation.org (Gazebo Harmonic), matched by prefix.
 OSRF_PREFIXES = ("gz-", "libgz-", "python3-gz-", "libsdformat", "sdformat")
+# GL/EGL userland the MuJoCo camera plugin and mujoco.Renderer load (Mesa and
+# glvnd). The NVIDIA userland (libnvidia-gl-*, nvidia-driver-*) is tied to the
+# kernel module and the driver version, so it is reported, not applied.
+GL_APT_PREFIXES = ("libegl", "libgl1", "libglvnd", "libgles", "libgbm", "libosmesa")
+GLVND_VENDOR_DIR = "/usr/share/glvnd/egl_vendor.d"
+GL_PROBE_VENV = "so101-act-test"
+GL_PROBE_SCRIPT = (
+    "import os, mujoco\n"
+    "xml = \"<mujoco><worldbody><light pos='0 0 3'/><geom type='sphere' size='.2'/>"
+    "<camera name='c' pos='0 -1 .5' xyaxes='1 0 0 0 .5 1'/></worldbody></mujoco>\"\n"
+    "m = mujoco.MjModel.from_xml_string(xml); d = mujoco.MjData(m); mujoco.mj_forward(m, d)\n"
+    "r = mujoco.Renderer(m, 64, 64); r.update_scene(d, 'c'); img = r.render()\n"
+    "print('GLPROBE_OK', img.shape, int(img.max()), flush=True)\n"
+    "os._exit(0 if img.max() > 0 else 3)\n"
+)
 TOOLS_EXCLUDE_DIRS = {"__pycache__", ".pytest_cache"}
 SNAPSHOT_LIST = "/etc/apt/sources.list.d/so101-ros-snapshot.list"
 ROS_KEYRING = "/usr/share/keyrings/ros-archive-keyring.gpg"
@@ -191,6 +206,7 @@ def select_apt_scope(installed: dict[str, str], resolved: set[str]) -> dict[str,
             or name in resolved
             or name in EXTRA_APT
             or name.startswith(OSRF_PREFIXES)
+            or name.startswith(GL_APT_PREFIXES)
         ):
             chosen[name] = version
     return dict(sorted(chosen.items()))
@@ -235,6 +251,19 @@ def diff_manifests(expected: dict, actual: dict) -> list[dict]:
             expected["host"]["memory_kb"], actual["host"]["memory_kb"])
     _scalar(rows, HOST, "apt_sources.sha256",
             expected["apt_sources_sha256"], actual["apt_sources_sha256"])
+
+    e_gl, a_gl = expected.get("gl"), actual.get("gl")
+    if e_gl is not None and a_gl is not None:
+        for name, digest in e_gl["egl_vendor_files"].items():
+            have = a_gl["egl_vendor_files"].get(name)
+            if have is None:
+                rows.append(_row(MUST, f"glvnd:{name}", digest, None, "missing"))
+            elif have != digest:
+                rows.append(_row(SHOULD, f"glvnd:{name}", digest, have, "differ"))
+        for name, version in e_gl["nvidia_userland"].items():
+            have = a_gl["nvidia_userland"].get(name)
+            if have != version:
+                rows.append(_row(SHOULD, f"nvidia-userland:{name}", version, have, "differ"))
 
     for name, version in expected["apt"].items():
         have = actual["apt"].get(name)
@@ -429,9 +458,9 @@ class Log:
                 handle.write(line + "\n")
 
 
-def run(cmd: list[str], check=True, timeout=None, input_text=None):
+def run(cmd: list[str], check=True, timeout=None, input_text=None, env=None):
     result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=timeout, input=input_text
+        cmd, capture_output=True, text=True, timeout=timeout, input=input_text, env=env
     )
     if check and result.returncode != 0:
         raise RuntimeError(
@@ -540,6 +569,35 @@ def repo_dependency_keys(repo: Path) -> set[str]:
     return {k for k in keys if k not in own}
 
 
+def collect_gl(installed: dict[str, str]) -> dict:
+    """glvnd EGL vendor files (sha256) and the NVIDIA GL userland versions."""
+    vendors: dict[str, str] = {}
+    vendor_dir = Path(GLVND_VENDOR_DIR)
+    if vendor_dir.is_dir():
+        for path in sorted(vendor_dir.glob("*.json")):
+            vendors[path.name] = sha256_file(path)
+    nvidia_pkgs = {
+        n: v for n, v in installed.items()
+        if n.startswith(("libnvidia-gl-", "libnvidia-egl", "nvidia-driver-"))
+    }
+    return {"egl_vendor_files": vendors, "nvidia_userland": dict(sorted(nvidia_pkgs.items())),
+            "mujoco_gl": "egl"}
+
+
+def gl_probe(work_root: Path) -> tuple[bool, str]:
+    """Headless MuJoCo EGL render with the gate's venv python and MUJOCO_GL=egl."""
+    python = work_root / "venvs" / GL_PROBE_VENV / "bin" / "python"
+    if not python.exists():
+        return False, f"missing {python}"
+    env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "PYOPENGL_PLATFORM")}
+    env["MUJOCO_GL"] = "egl"
+    result = run([str(python), "-I", "-c", GL_PROBE_SCRIPT], check=False, timeout=120, env=env)
+    ok = result.returncode == 0 and "GLPROBE_OK" in result.stdout
+    detail = (result.stdout.strip().splitlines() or [""])[-1] if ok else (
+        (result.stderr or result.stdout).strip().splitlines()[-1:] or [f"rc={result.returncode}"])[0]
+    return ok, detail
+
+
 def collect_state(
     repo: Path,
     work_root: Path,
@@ -604,6 +662,7 @@ def collect_state(
             "extra_apt": list(EXTRA_APT),
             "osrf_prefixes": list(OSRF_PREFIXES),
         },
+        "gl": collect_gl(installed),
         "python3": run(["/usr/bin/python3", "--version"]).stdout.split()[-1],
         "venvs": venvs,
         "tools": collect_tools(work_root / "so101-tools"),
@@ -651,6 +710,8 @@ def cmd_capture(args) -> int:
                           with_scope=not args.no_rosdep)
     if args.snapshot_date:
         state["ros_snapshot"] = {"date": args.snapshot_date}
+    ok, detail = gl_probe(Path(args.work_root))
+    state["gl"]["probe"] = {"ok": ok, "detail": detail}
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(state, indent=1, sort_keys=True) + "\n")
@@ -668,6 +729,10 @@ def cmd_check(args) -> int:
     state = collect_state(Path(args.repo), Path(args.work_root), with_scope=False,
                           wanted=set(manifest["apt"]))
     rows = diff_manifests(manifest, state)
+    if not getattr(args, "no_gl_probe", False):
+        ok, detail = gl_probe(Path(args.work_root))
+        if not ok:
+            rows.append(_row(MUST, "gl.probe", "headless MuJoCo EGL render ok", detail, "failed"))
     if args.json:
         Path(args.json).write_text(json.dumps(rows, indent=1) + "\n")
     print(format_table(rows, limit=args.limit))
@@ -834,6 +899,8 @@ def build_parser() -> argparse.ArgumentParser:
     chk = sub.add_parser("check")
     common(chk)
     chk.add_argument("--manifest", required=True)
+    chk.add_argument("--no-gl-probe", action="store_true",
+                     help="skip the headless MuJoCo EGL render probe")
     chk.add_argument("--json", help="write all difference rows here")
     chk.add_argument("--limit", type=int, default=40)
     chk.set_defaults(func=cmd_check)

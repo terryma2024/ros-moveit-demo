@@ -103,3 +103,21 @@ step is written as JSON lines to `--log`.
 
 `scripts/tests/test_so101_env.py` covers version comparison, diff classification, apply planning
 and the parsers with fixture manifests. It does not call apt.
+
+## GL / EGL
+
+The MuJoCo camera plugin (C++) tries GLFW and falls back to a surfaceless EGL
+context; `mujoco.Renderer` needs `MUJOCO_GL=egl` (the gate scripts export it).
+The manifest therefore records:
+
+- the Mesa and glvnd apt packages (`libegl*`, `libgl1*`, `libglvnd*`, `libgles*`,
+  `libgbm*`, `libosmesa*`), which `apply` aligns with the rest of apt;
+- the `/usr/share/glvnd/egl_vendor.d/*.json` files by sha256 (a missing file is a
+  must-match difference, a content difference is a warning);
+- the NVIDIA GL userland versions (`libnvidia-gl-*`, `nvidia-driver-*`), reported as
+  warnings only because they are tied to the kernel module and need a driver
+  upgrade and reboot, which `apply` never does.
+
+`check` also runs a functional probe: a 64x64 headless render with the
+`so101-act-test` venv python, `MUJOCO_GL=egl` and no `DISPLAY`. A failing probe is a
+must-match difference (`gl.probe`). Use `--no-gl-probe` to skip it.
