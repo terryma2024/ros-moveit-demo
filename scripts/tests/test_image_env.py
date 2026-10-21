@@ -197,21 +197,22 @@ def test_colcon_plugins_only_the_image_venv_carries_are_not_must_matches():
     assert not ie.must_failures(rows)
 
 
-def test_esm_and_host_specific_apt_differences_outside_the_closure_are_warnings_only():
+def test_esm_and_host_specific_apt_differences_are_warnings_only():
     apt = {"libqt5core5t64": "5.15.13+dfsg-1ubuntu1", "python3-filelock": "3.13.1-1", "libxnvctrl0": "510.47", "libc6": "2.39"}
     ours = {"libqt5core5t64": "5.15.13+dfsg-1ubuntu1+esm1", "python3-filelock": "3.13.1-1ubuntu0.1~esm1", "libxnvctrl0": "610.43", "libc6": "2.39"}
-    rows = ie.compare(image(apt=apt), host(apt=ours), required=set())
-    assert not ie.must_failures(rows)
-    assert {row["key"] for row in rows if row["class"] == "should"} >= {"apt:libqt5core5t64", "apt:python3-filelock", "apt:libxnvctrl0"}
+    for required in (set(), set(apt)):          # outside the closure and inside it
+        rows = ie.compare(image(apt=apt), host(apt=ours), required=required)
+        assert not ie.must_failures(rows)
+        assert {row["key"] for row in rows if row["class"] == "should"} >= {"apt:libqt5core5t64", "apt:python3-filelock", "apt:libxnvctrl0"}
 
 
-def test_an_esm_difference_inside_the_closure_is_still_refused():
-    rows = ie.compare(image(apt={"libqt5core5t64": "5.15.13+dfsg-1ubuntu1"}), host(apt={"libqt5core5t64": "5.15.13+dfsg-1ubuntu1+esm1"}),
-                      required={"libqt5core5t64"})
-    assert [row["key"] for row in ie.must_failures(rows)] == ["apt:libqt5core5t64"]
+def test_a_non_esm_difference_inside_the_closure_is_still_refused():
+    rows = ie.compare(image(apt={"libfoo1": "1.0-1", "libqt5core5t64": "5.15.13+dfsg-1ubuntu1"}),
+                      host(apt={"libfoo1": "1.1-1", "libqt5core5t64": "5.15.14+dfsg-1ubuntu1+esm1"}), required={"libfoo1", "libqt5core5t64"})
+    assert sorted(row["key"] for row in ie.must_failures(rows)) == ["apt:libfoo1", "apt:libqt5core5t64"]    # another upstream version, even with +esm
 
 
-def test_other_apt_differences_are_still_refused_even_outside_the_closure():
+def test_other_apt_differences_are_still_refused():
     for image_version, host_version in (("1.0-1", "1.1-1"), ("1.0-1", "1.0-2"), ("1.0-1+esm1", "1.1-1+esm1")):
         rows = ie.compare(image(apt={"libother": image_version}), host(apt={"libother": host_version}), required=set())
         assert [row["key"] for row in ie.must_failures(rows)] == ["apt:libother"], (image_version, host_version)

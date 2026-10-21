@@ -85,7 +85,10 @@ The must-match set is everything the host and the image share, plus what the mou
    to packages). A package in this set that the host lacks is a refusal, because the host build could not have linked against it;
 3. `python3` minor version, Ubuntu codename, and the venv pip set (name and version).
 
-Any mismatch is a refusal (exit 1) with the diff table. Packages only the host has are reported, not refused. The check runs on the
+Two classes of difference are warnings, not refusals, anywhere in the set (human decision 2026-10-21): the same upstream version that
+differs only by an Ubuntu Pro ESM suffix (`+esmN` / `~esmN`: ESM is a security backport of one upstream version, API and ABI unchanged; a
+Docker image cannot take ESM packages), and `libxnvctrl0` (NVIDIA driver userland, host-specific). They are listed in the check's output and
+in the preflight record. Colcon plug-ins that only the image venv carries are warnings too. Any other mismatch is a refusal (exit 1) with the diff table. Packages only the host has are reported, not refused. The check runs on the
 host before the container starts and its result is stored next to the run evidence. Step 6 of the plan builds against a deliberately
 skewed host and shows that the check refuses it.
 
@@ -177,11 +180,14 @@ passing record for its commit and base image (`MOUNT_PREFLIGHT_MISSING` / `MOUNT
 the run seal covers; the recompute and `act_merge_collections` read that copy (`MERGE_MOUNT_PREFLIGHT_*`: every source passed, and they
 checked the same base image manifest, which is the cross-host comparison of the environment).
 
-**The narrow exception in `check-image`** (human decision): an apt difference is a warning only if (a) it is the same upstream version
-that differs only by an Ubuntu Pro ESM suffix (`+esmN` / `~esmN`), or the package is `libxnvctrl0` (NVIDIA driver userland), **and** (b) the
-package is outside the mounted tree's dependency closure and `ldd`-owner packages. Every other difference refuses. Measured on antzb for
-commit 555fb8a6d (see `progress-mount-images.md`): all 20 known differences are *inside* the closure (the Qt 5 development packages and the
-Python build tools the tree's `package.xml` files name, and `libxnvctrl0`), so (b) does not hold for any of them and the check still fails.
+**The narrow exception in `check-image`** (human decision 2026-10-21, second version): an apt difference is a warning, wherever the package
+is (inside the dependency closure or not), if (a) it is the same upstream version that differs only by an Ubuntu Pro ESM suffix (`+esmN` /
+`~esmN`; a security backport of one upstream version, API and ABI unchanged), or (b) the package is `libxnvctrl0` (NVIDIA driver userland, host-specific).
+Every other difference refuses, inside the closure or not: another upstream version (also one that carries an ESM suffix), another
+revision without ESM, a missing required package. The applied exceptions are listed in the preflight record. Measured on antzb for the
+trees of 555fb8a6d and 4420b7cf8: 20 exceptions (17 Qt/qmake, 4 python build tools, `libxnvctrl0`; all in the closure), 0 must-match
+differences, PASS. (The first version required the package to be outside the closure; every one of the 20 is inside it, through
+`rviz2`, `moveit-core` -> `boost-all-dev` and direct package.xml references, so that version rejected the real trees.)
 
 ### e. Security
 

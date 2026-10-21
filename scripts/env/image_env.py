@@ -199,8 +199,9 @@ _ESM_SUFFIX = re.compile(r"[+~]esm\d+")
 
 
 def narrow_exception(name: str, image_version: str, host_version: str) -> str | None:
-    """Why this apt difference is only a warning, or None. Narrow: the same upstream version that differs only by an Ubuntu Pro ESM
-    suffix, or a host-specific package. The caller applies it only to packages outside the tree's dependency closure."""
+    """Why this apt difference is only a warning, or None. Narrow, and independent of the dependency closure: the same upstream version
+    that differs only by an Ubuntu Pro ESM suffix (a security backport of one upstream version, API and ABI unchanged), or a
+    host-specific package (NVIDIA driver userland). Any other difference, inside the closure or not, refuses."""
     if name in HOST_SPECIFIC_PACKAGES:
         return "host-specific"
     if (_ESM_SUFFIX.search(image_version) or _ESM_SUFFIX.search(host_version)) \
@@ -223,7 +224,7 @@ def compare(image: dict, host: dict, required: set[str], missing_libraries=froze
                 rows.append(row(MUST, f"apt:{name}", version, None, "missing-on-host"))
         elif have != version:
             relation = "newer" if base.compare_versions(have, version) > 0 else "older"
-            exempt = name not in required and narrow_exception(name, version, have)
+            exempt = narrow_exception(name, version, have)
             rows.append(row(SHOULD if exempt else MUST, f"apt:{name}", version, have, f"{relation} ({exempt})" if exempt else relation))
     for name, version in host["apt"].items():
         if name not in image["apt"]:
