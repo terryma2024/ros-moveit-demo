@@ -88,11 +88,22 @@ def test_the_cpp_build_maps_build_paths_and_uses_no_ccache():
 
 # --- the pinned sets --------------------------------------------------------------------------------------------------
 
-def test_apt_packages_are_exact_sorted_pkg_equals_version_lines():
+def test_apt_packages_are_sorted_package_names_without_versions():
     lines = [line for line in (DEPS / "apt-packages.txt").read_text().splitlines() if line and not line.startswith("#")]
     assert len(lines) > 400 and lines == sorted(set(lines))
     for line in lines:
-        assert re.fullmatch(r"[a-z0-9][a-z0-9+.\-]*=[0-9][^\s=*?]*", line), line
+        assert re.fullmatch(r"[a-z0-9][a-z0-9+.\-]*", line), line
+
+
+def test_the_deps_image_reads_apt_from_the_tsinghua_mirrors_before_it_updates():
+    text = instructions(DOCKERFILES["shard-deps"]).replace("\\\n", " ")
+    layer = re.search(r"RUN find / -xdev -name '\*\.pyc'[^\n]*", text).group(0)
+    assert layer.index("mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu") < layer.index("apt-get update")
+    assert layer.index("mirrors.tuna.tsinghua.edu.cn/ubuntu") < layer.index("apt-get update")
+    assert "/etc/apt/sources.list.d/ros2.sources" in layer and "/etc/apt/sources.list.d/ubuntu.sources" in layer
+    assert "http://packages.ros.org" in layer and "archive.ubuntu.com" in layer and "security.ubuntu.com" in layer   # what is replaced
+    assert "Types: deb deb-src" in layer and "Types: deb|" in layer     # the mirror has no ROS Sources index
+    assert "Signed-By" not in layer     # the keyring of the ROS source is kept as it is
 
 
 def test_pip_lock_pins_every_requirement_with_a_sha256():
@@ -220,3 +231,22 @@ def test_no_cache_is_passed_to_docker_build_only_when_asked(repo, host):
         assert done.returncode == 0, done.stderr
         argv = json.loads((built({"evidence": evidence})/ "argv.json").read_text())
         assert ("--no-cache" in argv) is expected and argv[:2] == ["docker", "build"]
+
+
+# --- record_deps_installed.zsh ----------------------------------------------------------------------------------------
+
+def test_the_record_script_writes_sorted_apt_and_pip_sets_from_the_image(tmp_path):
+    images = tmp_path / "scripts" / "images"
+    images.mkdir(parents=True)
+    script = images / "record_deps_installed.zsh"
+    script.write_text((IMAGES / "record_deps_installed.zsh").read_text())
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text("#!/bin/sh\nif [ \"$6\" = dpkg-query ] || echo \"$*\" | grep -q dpkg-query; then printf 'zlib1g\\t1.3\\nacl\\t2.3.2\\n'; "
+                      "else printf 'pydantic==2.14.1\\nabsl-py==2.5.1\\n'; fi\n")
+    docker.chmod(docker.stat().st_mode | stat.S_IXUSR)
+    done = subprocess.run(["zsh", str(script), "sha256:abc"], capture_output=True, text=True, env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"})
+    assert done.returncode == 0, done.stderr
+    assert (images / "shard-deps-apt-installed.tsv").read_text() == "acl\t2.3.2\nzlib1g\t1.3\n"
+    assert (images / "shard-deps-pip-installed.txt").read_text() == "absl-py==2.5.1\npydantic==2.14.1\n"
