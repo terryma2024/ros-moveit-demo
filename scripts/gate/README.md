@@ -17,6 +17,7 @@ result is valid only if `scripts/gate` was clean at the commit that was tested.
 | --- | --- |
 | `--host H` | Use `hosts/H.env`. Without it, the host whose `HOST_NAMES` contains `hostname` is used. An unknown host is refused (exit 2). |
 | `--full` | Run the `controller_manager` and `hardware_interface_testing` tests even when the skip rule allows skipping them. |
+| `--results-reference FILE` | Compare `result-sets.json` (all packages, test ids and outcomes) with that of a serial gate; a difference fails the gate. |
 | `--serial` | Demo pytest, then colcon test; the colcon parts one after the other; `so101_teleop` with `ctest -j1`. The skip rule still applies; add `--full` for full coverage. |
 | `--teleop-jobs N` | `ctest -j` for the parallel part of `so101_teleop` (default 6). |
 | `--gate-suffix S` | Gate directory `gates/<commit12>.S` instead of `gates/<commit12>`. |
@@ -107,7 +108,12 @@ kept to the remaining CPUs (`taskset -c`; the user systemd manager here does not
   spawner tests; see the times in `upstream-groups.txt`) each have a group of their own. `upstream_groups.py timing` lists them for a build.
 - Domains: group *i* uses `UPSTREAM_DOMAIN_BASE` (223) + *i*. `joint_trajectory_controller` stays loopback only, `controller_manager` does not.
 - A package split over several groups is several ctest runs in one build directory. A ctest tag has minute resolution and colcon reads only the
-  newest, so `upstream_slot.zsh` keeps the starts of one package at least 75 s apart; `ctest_extra_phases.py` adds the older phases.
+  newest, so `upstream_slot.zsh` starts two ctest runs of one package in different tag minutes (a start waits for the first minute boundary
+  after the previous start plus 15 s; at most 75 s, about 37 s on average); `ctest_extra_phases.py` adds the older phases. A group lists the
+  packages that no other group is starting first, then the package every group needs (`other`: hardware_interface_testing, joint_trajectory_controller,
+  controller_manager), so the waits are off its critical path.
+- `result_sets.py collect` writes `result-sets.json` for every gate (every package: ctest names and statuses, every test case of every xunit/gtest
+  file with its outcome, no times). `--results-reference FILE` compares it with the file of a serial gate and fails the gate on any difference.
 - `upstream_groups.py sets` writes the executed tests of the upstream packages (ctest name and status, gtest cases per file) to
   `upstream-sets.json`; `--upstream-sets-reference FILE` compares them with those of a serial gate and fails the gate on any difference.
 - The known-flake rerun is one serial colcon stage; the groups do not take part in it.
