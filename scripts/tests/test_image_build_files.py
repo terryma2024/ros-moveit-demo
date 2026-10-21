@@ -462,6 +462,19 @@ def test_a_clean_build_writes_the_commit_record_last_and_leaves_the_trees_read_o
     assert (root / "source" / "a.txt").read_text() == "1\n" and (root / "install/lib/x").exists()
 
 
+def test_the_mounted_install_holds_no_bytecode_and_the_build_runs_without_writing_any(tmp_path, worktree):
+    tree, head = worktree
+    command = ('echo "$PYTHONDONTWRITEBYTECODE" > "$MOUNT_ROOT/env-seen" && mkdir -p "$MOUNT_INSTALL/pkg/__pycache__" "$MOUNT_INSTALL/share/launch/__pycache__" '
+               '&& echo x > "$MOUNT_INSTALL/pkg/__pycache__/m.cpython-312.pyc" && echo y > "$MOUNT_INSTALL/share/launch/__pycache__/l.cpython-312.pyc" '
+               '&& echo z > "$MOUNT_INSTALL/pkg/stray.pyc" && echo keep > "$MOUNT_INSTALL/pkg/m.py"')
+    done = build_mount(tree, head, tmp_path, command)
+    assert done.returncode == 0, done.stderr
+    root = tmp_path / "br" / "mount" / head[:12]
+    assert (root / "env-seen").read_text() == "1\n"
+    assert not list((root / "install").rglob("*.pyc")) and not list((root / "install").rglob("__pycache__"))
+    assert (root / "install/pkg/m.py").read_text() == "keep\n" and (root / "install/BUILD-COMMIT").read_text() == head + "\n"
+
+
 def test_the_build_refuses_a_dirty_worktree_or_another_head_before_it_creates_anything(tmp_path, worktree):
     tree, head = worktree
     (tree / "a.txt").write_text("changed\n")

@@ -46,6 +46,11 @@ else
     --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DFETCHCONTENT_SOURCE_DIR_LODEPNG=$LODE -DFETCHCONTENT_FULLY_DISCONNECTED=ON $CC_ARGS \
     > $MOUNT_LOG/colcon.log 2>&1 || { print -u2 "MOUNT_BUILD_FAILED: see $MOUNT_LOG/colcon.log"; exit 4; }
 fi
+# No bytecode in the mounted tree: the build does not write any (PYTHONDONTWRITEBYTECODE above), but ament_cmake_python byte-compiles what it installs and
+# install(DIRECTORY) copies a source __pycache__; both are removed here, before the record, and a remaining one fails the build.
+find $MOUNT_INSTALL -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null
+find $MOUNT_INSTALL -type f -name '*.pyc' -delete
+[[ -z $(find $MOUNT_INSTALL \( -name '*.pyc' -o -name __pycache__ \) -print -quit) ]] || { print -u2 "MOUNT_BUILD_FAILED: bytecode in the install tree"; exit 4; }
 git -C $WT archive --format=tar $COMMIT | tar -x -C $ROOT/source || { print -u2 "MOUNT_BUILD_FAILED: source snapshot"; exit 4; }
 check_worktree end || exit 3
 # The commit records come last, and only now.
