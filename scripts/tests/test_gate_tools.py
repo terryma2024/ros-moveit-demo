@@ -184,7 +184,7 @@ def _expand(values, key):
 
 def test_the_known_flakes_file_follows_the_format():
     entries = known_flakes.load(GATE / "known-flakes.txt")
-    assert len(entries) == 6
+    assert len(entries) == 8
     assert len({substring for substring, _reason, _date in entries}) == len(entries)
 
 
