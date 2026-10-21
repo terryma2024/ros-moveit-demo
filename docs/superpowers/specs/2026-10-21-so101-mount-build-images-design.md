@@ -1,6 +1,8 @@
 # SO-101 ACT: dependency-only images with the build mounted — design and prototype result
 
-Status: DRAFT for coordinator review. Nothing here is on the main branch, and no collection code (provenance, launch) is changed.
+Status: CONFIRMED-by-coordinator (review of 4f3300f8d). The principle comes from the human's instruction of 2026-10-21; the four decisions
+below were taken by the coordinator, following the recommendations. Nothing here is on the main branch, and no collection code
+(provenance, launch, config) is changed until step 7 of section h has been reviewed.
 Requested by the human on 2026-10-21. Prototype and measurements: antzb, `progress-mount-images.md` in the run directory.
 
 ## Why
@@ -55,35 +57,37 @@ Content: Ubuntu 24.04, ROS Jazzy and the apt packages the stack needs, the pip s
 entry script, and the `.pth`. No `so101_*` code, no `/act/install`, no `/act/source`.
 
 It is the item-23 shard-deps image plus the inference dependencies it already inherits, with two changes: the vendor file and the entry
-script move in, and the stale `/opt/venv/.../so101_demo` goes out (the inference base needs a rebuild or a `rm` layer; decision for
-the coordinator). It is built once, with the Tsinghua apt and PyPI mirrors and the hashed lock (item 23), pinned by image ID in
+script move in, and the stale `/opt/venv/.../so101_demo` goes out (the inference base is rebuilt without it; a `rm` layer is not acceptable, because the data stays in the lower layer and the manifest gets harder to read). It is built once, with the Tsinghua apt and PyPI mirrors and the hashed lock (item 23), pinned by image ID in
 `scripts/images/base-image-ids.json`, and recorded in `shard-deps-apt-installed.tsv` and `shard-deps-pip-installed.txt`. Build time on
 antzb with the mirrors: 97 s.
 
 The inference image has the same shape and gets the same treatment.
 
+**Rule:** the base images contain no `so101_*` code. A test over the Dockerfile and a check over the image manifest (no path or
+distribution named `so101_*` under `/act`, `/opt/venv` or any `site-packages`, except the mounted tree) enforce it.
+
 ### b. Proving the environment matches
 
-Mounted artifacts run against the container's libraries, so the container must agree with the host that built them. Extend
-`scripts/env/so101_env.py`:
+Mounted artifacts run against the container's libraries, so the container must agree with the host that built them. The base image's
+manifest is the reference, and both hosts are aligned to it with the tool that aligned antzb to ai-station (`so101_env.py apply`, with
+the same hold mechanism). Extend `scripts/env/so101_env.py`:
 
 - `capture --image IMAGE_ID` runs `docker run --rm --network none --read-only --entrypoint …` and reads `dpkg-query -W`, `pip freeze
   --all` for `/act/venv`, `/etc/os-release` and the python minor version out of the image, and produces the same manifest schema.
-- `check --manifest HOST.json --against-image IMAGE_ID` compares them with the existing diff rules.
+- `apply --manifest IMAGE.json` brings a host to that manifest, and `check --manifest IMAGE.json` compares.
 
-The comparison must be narrower than "every package equal" (F5 shows 208 differences that did not matter). The must-match set is
-what the mounted tree can see at run time:
+The must-match set is everything the host and the image share, plus what the mounted tree needs:
 
-1. the `ros-jazzy-*` packages in the dependency closure of the mounted packages (`package.xml` `depend`, `exec_depend`, `build_depend`,
-   resolved the way `repo_dependency_keys` already does), because their message types, typesupport libraries and ABIs are linked
-   against;
-2. the apt package that owns each `DT_NEEDED` library of every ELF file in the mounted tree, found by running `ldd` over the tree
-   inside the image and mapping the files to packages;
-3. `python3` minor version, Ubuntu codename, and the venv pip set (name and version) for every distribution the mounted code imports.
+1. every apt package installed in **both** the host and the image: the versions are equal (this is what `apply` achieves);
+2. for packages only the image has, the dependency closure decides: the `ros-jazzy-*` packages in the closure of the mounted packages
+   (`package.xml` `depend`, `exec_depend`, `build_depend`, resolved as `repo_dependency_keys` does) and the apt package that owns each
+   `DT_NEEDED` library of every ELF file in the mounted tree (found by running `ldd` over the tree inside the image and mapping files
+   to packages). A package in this set that the host lacks is a refusal, because the host build could not have linked against it;
+3. `python3` minor version, Ubuntu codename, and the venv pip set (name and version).
 
-Any mismatch in these is a refusal (exit 1) with the diff table. The rest is reported as a warning. The check runs on the host before the
-container starts, and its result is stored next to the run evidence. Whether the narrower set is enough is the main open risk; step 3 of
-the plan measures it by building against a deliberately skewed host.
+Any mismatch is a refusal (exit 1) with the diff table. Packages only the host has are reported, not refused. The check runs on the
+host before the container starts and its result is stored next to the run evidence. Step 6 of the plan builds against a deliberately
+skewed host and shows that the check refuses it.
 
 ### c. Host build, and where absolute paths come from
 
@@ -155,8 +159,10 @@ The base image is built or loaded once and moved to the other host (it is the on
 builds its own install tree at the same path with the same compiler version (the environment check covers `gcc`, `cmake`,
 `python3`). The campaign compares `install_sha256` and `package_source_sha256` as it already does for images. If two builds of the same
 commit differ, the content-manifest `diff` command names the files; the allowed exclusions are the ones in the content-identity
-design, never inside the mounted tree. Where the C++ build is not bit-identical across hosts (CPU-dependent flags, different ccache
-state), the result is recorded, and the fix is a build flag, not an exclusion.
+design, never inside the mounted tree. ccache is allowed on the host. When the two hashes differ, look in this order: (1) the compiler
+and toolchain versions and the ccache version/config (`gcc`, `cmake`, `ccache -V`, `CCACHE_*`); (2) a cold build with `CCACHE_DISABLE=1`
+on the host that differs; (3) the `content-manifest diff` file list. Where the build is not bit-identical (CPU-dependent flags, build
+paths), the result is recorded, and the fix is a build flag, not an exclusion.
 
 ### h. Migration and tests
 
@@ -180,15 +186,23 @@ state), the result is recorded, and the fix is a build flag, not an exclusion.
 - **Venv path.** Shebangs tie the host build to the venv path. A host without it fails at build time, which is early and visible.
 - **pyc.** Python must not write bytecode on a read-only mount; `PYTHONDONTWRITEBYTECODE=1` is already set, and `python -I` calls need
   `-B` (the same defect was found in the image builds this session).
+- **Mounted directories are campaign inputs (rule).** Under the AGENTS evidence rules the mounted `install` and `source` directories are recorded
+  in the evidence root by path and sha256, and may not be deleted before the campaign that used them is sealed.
 - **Build trees get deleted.** Old gate trees are cleaned up to keep disk free (the 50 GiB floor); mounted builds for a campaign must live in the
   commit-addressed directory and be kept until the campaign is sealed.
 - **Reviewability.** A campaign record now names a base image ID and two tree hashes instead of one image ID; the qualification
   recompute (`collection_qualification_recompute.py`) must learn both.
 
-## Decisions for the coordinator
+## Decisions (coordinator, 2026-10-21)
 
-1. Rebuild the inference base without the stale `so101_demo` in `/opt/venv`, or delete it in a layer on top?
-2. Same-path mounting at `/data/work/so101-build/mount/<commit12>` as the rule (recommended), or mount at `/act/install` and give the
-   hosts a matching host-side path?
-3. Is the narrowed must-match set in section b acceptable, or should the whole apt set match?
-4. Approve step 7 (logic changes in provenance and launch) after steps 1 to 6 pass?
+1. The inference base is rebuilt without the old `so101_demo` in `/opt/venv`. No `rm` layer. The base images may not contain `so101_*`
+   code; a test and a manifest check enforce it.
+2. Same-path mounting at `/data/work/so101-build/mount/<commit12>/{install,source}` is the rule.
+3. The must-match set is not a narrow set plus luck. Both hosts are aligned to the base image manifest with `so101_env apply`; must-match is
+   all apt packages the host and image share, plus the closure and `ldd`-owner packages, plus the python minor version and venv pip set.
+   Packages only the image has are judged by the closure. The skew test (step 6) stays, to show that the check refuses.
+4. Step 7 (provenance, launch, config logic) is submitted for review only after steps 1 to 6 pass, behind a switch that defaults to off.
+   It merges only after the coordinator has reviewed it.
+
+Also: in the `python -I` audit, all four build-time call sites in the Dockerfiles carry `-B` (commit 6005d558d); the runtime
+`ENTRYPOINT` uses `-I` on a read-only root, where no bytecode can be written.
