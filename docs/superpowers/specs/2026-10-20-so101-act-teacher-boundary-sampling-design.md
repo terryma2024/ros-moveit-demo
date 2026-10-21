@@ -82,3 +82,31 @@ The W and NW rays (and any other ray the old exclusion capped) are searched outw
 **Rollout points:** all four rollout points must be inside the region and at least 0.01 m from every reach or Teacher edge. Training scenes keep ≥ 0.004 m clearance from them.
 
 **New data range:** scenes between 0.045 and 0.060 m from the target are a new data range; the old formal set never went below 0.060 m.
+
+## Amendment 3 (2026-10-21, human decision: "Re-sample all lists jointly")
+
+The formal list of CP-3762 (`boundary-103`) is not disjoint from the old qualification list: 10 of its scenes are closer than 0.004 m to `qualification-40` (nearest 0.000651 m) and 2 to `functional-8`. Those two lists also come from the old triangle region and the old 0.060 m exclusion. The CP-3762 list is superseded, not deleted.
+
+**Decision:** one Poisson-disk sample of 151 points in the same region (amendments 1 and 2: exact 0.045 m exclusion, 0.01 m margin on reach edges, at least 0.004 m from the four rollout points), divided into:
+- 103 formal scenes (83 train, 10 validation, 10 offline_test, split spatially as before);
+- 40 qualification scenes (split `qualification`);
+- 8 functional scenes (split `functional`).
+
+**Constraints:**
+- every pair of the 151 points is at least the sample spacing apart, never below 0.004 m, and the spacing is maximised as before;
+- each list is spread over the region: the lists are taken from the smallest to the largest, a list of `n` takes one point from each of `n` k-means strata of the points still free (the one nearest the stratum centroid), and the largest list is the rest;
+- seeds are fixed: sampling seed 576020, row seeds 200+i (formal), 400+i (qualification), 600+i (functional).
+
+**Code:** `scene_sampling.sample_joint` and `assign_lists`; `act_scene_sample --lists formal:103,qualification:40,functional:8 --scenes-output-dir DIR` writes `formal-103.scenes.json`, `qualification-40.scenes.json` and `functional-8.scenes.json` plus one report (list sha256, seeds, clearances). Tests: counts, disjointness, spacing across all lists, spread against taking the first points, determinism, reachability filter, CLI format and report.
+
+**Consequence:** the staged qualification template takes the qualification and functional lists as arguments instead of pinning the old bytes; its other checks are unchanged.
+
+**Result (CP-3764, sampler run with the reachability container, seed 576020, 15 reachability calls, 1626 s, 0 positions rejected):**
+
+| List | Count | sha256 | First row seed | Nearest pair inside the list |
+| --- | --- | --- | --- | --- |
+| formal | 103 (83 / 10 / 10) | `42ea6adae990bb7c7f239072b6b3e82b7ce9a95732e8eed90124f332879ea7a3` | 200 | 0.007586 m |
+| qualification | 40 | `c0277c5a618f9ee0bf130e225ba9c2ba848d0483e5ea4e90fd93a7407af58e0b` | 400 | 0.009827 m |
+| functional | 8 | `daf1e9b20a0decc4b7538aa9ce87b042def0bc019277cdc8b52ce2727d899eea` | 600 | 0.032681 m |
+
+Sample spacing 0.007582 m (every pair of all 151 points at least 0.007586 m apart, against the 0.004 m floor). The nearest pair across lists is qualification-formal at 0.007595 m. All four rollout points are inside the region; the nearest scene to each is at least 0.004208 m. Files: `REG/act-prep-20261021/joint/lists/`, report `joint-151.report.json`, plot `joint/plots/joint-scenes.png`.

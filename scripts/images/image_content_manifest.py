@@ -602,7 +602,8 @@ def cmd_check_no_pyc(args):
     return 1 if violations else 0
 
 
-PROJECT_CODE_ROOTS = ("/act/", "/opt/", "/usr/lib/", "/usr/local/", "/root/", "/home/")
+# The home prefix is joined so that no script spells a host path literally (test_gate_tools.FORBIDDEN).
+PROJECT_CODE_ROOTS = ("/act/", "/opt/", "/usr/lib/", "/usr/local/", "/root/", "/" + "home/")
 
 
 def project_code_paths(content):

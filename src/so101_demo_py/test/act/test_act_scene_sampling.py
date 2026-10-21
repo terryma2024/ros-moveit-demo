@@ -194,3 +194,69 @@ def test_a_scene_is_never_sampled_inside_the_exclusion_and_the_kinds_are_recorde
 def test_the_kinds_must_name_all_eight_points():
     with pytest.raises(ss.RegionInvalidError):
         ss.vertex_scales({"E": sb.LIMIT_REACH})
+
+
+# --- several lists from one sample (boundary design amendment 3) ---------------------------------------------------
+JOINT_COUNTS = {"formal": 103, "qualification": 40, "functional": 8}
+JOINT_SPLITS = {"train": 83, "validation": 10, "offline_test": 10}
+
+
+def _joint(**options):
+    options.setdefault("reachable", _everywhere)
+    options.setdefault("list_counts", JOINT_COUNTS)
+    options.setdefault("split_list", "formal")
+    options.setdefault("split_counts", JOINT_SPLITS)
+    return ss.sample_joint(BOUNDARY, ROLLOUT, **options)
+
+
+def _nearest_neighbour_mean(points):
+    return sum(min(math.dist(p, q) for q in points if q != p) for p in points) / len(points)
+
+
+def test_the_joint_sample_has_the_requested_counts_and_disjoint_lists():
+    joint = _joint()
+    assert {name: len(points) for name, points in joint.lists.items()} == JOINT_COUNTS
+    everything = [p for points in joint.lists.values() for p in points]
+    assert len(everything) == 151 and len(set(everything)) == 151
+    assert sorted(joint.splits) == sorted(["train"] * 83 + ["validation"] * 10 + ["offline_test"] * 10) and len(joint.splits) == 103
+
+
+def test_every_pair_across_all_lists_keeps_the_sample_spacing_and_the_floor():
+    joint = _joint()
+    everything = [p for points in joint.lists.values() for p in points]
+    nearest = min(math.dist(a, b) for i, a in enumerate(everything) for b in everything[:i])
+    assert joint.spacing_m >= ss.MIN_SPACING_FLOOR_M and nearest >= joint.spacing_m - 1e-9 >= ss.MIN_SPACING_FLOOR_M - 1e-9
+    region = ss.Region(joint.polygon, 0.01)
+    assert all(region.contains(p) for p in everything)
+    for name, p in ROLLOUT.items():
+        assert min(math.dist(p, q) for q in everything) >= ss.ROLLOUT_CLEARANCE_M
+        assert all(joint.rollout_nearest_scene_m[n][name] >= ss.ROLLOUT_CLEARANCE_M for n in JOINT_COUNTS)
+
+
+def test_each_list_is_spread_over_the_region_better_than_taking_the_first_points():
+    joint = _joint()
+    everything = [p for points in joint.lists.values() for p in points]
+    cx, cy = sum(p[0] for p in everything) / 151, sum(p[1] for p in everything) / 151
+    for name in ("qualification", "functional"):
+        chosen = list(joint.lists[name])
+        naive = everything[: len(chosen)]
+        assert _nearest_neighbour_mean(chosen) > _nearest_neighbour_mean(naive)
+        assert {(p[0] >= cx, p[1] >= cy) for p in chosen} == {(a, b) for a in (True, False) for b in (True, False)}
+
+
+def test_the_joint_sample_is_a_pure_function_of_the_seed():
+    first, again, other = _joint(seed=11), _joint(seed=11), _joint(seed=12)
+    assert (first.lists, first.splits, first.spacing_m) == (again.lists, again.splits, again.spacing_m)
+    assert first.lists != other.lists
+
+
+def test_the_joint_reachability_verdict_filters_every_list():
+    joint = _joint(reachable=lambda x, y: y < -0.27)
+    assert all(p[1] < -0.27 for points in joint.lists.values() for p in points)
+
+
+def test_joint_counts_that_do_not_add_up_are_refused():
+    with pytest.raises(ss.SplitStratificationError, match="SPLIT_STRATIFICATION"):
+        _joint(split_counts={"train": 80, "validation": 10, "offline_test": 10})
+    with pytest.raises(ss.SplitStratificationError, match="SPLIT_STRATIFICATION"):
+        ss.assign_lists([(0.0, 0.0)] * 5, {"a": 2, "b": 2}, 1)

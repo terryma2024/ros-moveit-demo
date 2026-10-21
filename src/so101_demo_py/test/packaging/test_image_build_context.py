@@ -268,10 +268,11 @@ def _selected(run: str) -> set[str]:
     return set(match.group(1).split())
 
 
-def test_shard_dockerfile_has_deps_build_and_final_stages() -> None:
+def test_shard_dockerfile_has_deps_web_build_and_final_stages() -> None:
     stages = _shard_stages()
-    assert list(stages) == ["deps", "build", "final"]
+    assert list(stages) == ["deps", "web", "build", "final"]
     assert stages["deps"][0] == f"FROM {SHARD_DEPS_BASE} AS deps"
+    assert stages["web"][0] == "FROM deps AS web"
     assert stages["build"][0] == "FROM deps AS build"
     assert stages["final"][0] == "FROM deps AS final"
 
@@ -303,7 +304,7 @@ def test_shard_final_stage_carries_no_build_tree() -> None:
     final = _shard_stage_text("final")
     for path in BUILD_TREE_PATHS:
         assert path not in final, path
-    for word in ("colcon", "SO101_TELEOP_BUN", "bun-cache"):
+    for word in ("colcon", "SO101_TELEOP_BUN", "bun-cache", "AS web", "--from=web"):
         assert word not in final, word
     assert "COPY --from=build /act/install /act/install" in final
 
@@ -370,7 +371,7 @@ def test_shard_copies_precede_the_colcon_run_that_needs_them() -> None:
     late = support | code
 
     def copied(before: int) -> list[str]:
-        return [item.split()[2].rstrip("/") for item in build[:before] if item.startswith("COPY ")]
+        return [item.split()[-1].rstrip("/") for item in build[:before] if item.startswith("COPY ")]
 
     for name, bound in ([(n, early_at) for n in early] + [(n, late_at) for n in support]
                         + [(n, build.index(runs[2])) for n in code]):

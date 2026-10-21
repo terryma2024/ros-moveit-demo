@@ -159,3 +159,16 @@ def test_both_kept_nodes_together_and_the_retained_reader_is_usable_again_afterw
     finally:
         reader.close()
         check.close()
+
+
+def test_a_kept_readiness_session_that_has_made_its_clients_does_not_reach_the_inventory(stack, tmp_path):
+    """EXP-655: a session that has run a check owns its service and action clients. `Node.destroy_node` does not destroy an
+    `ActionClient`, so the node stayed in the graph for as long as the process lived (the refusal named `/act_stack_ready_1`)."""
+    from so101_demo.backends.mujoco.teleop_runtime import current_evidence
+
+    check = kept_readiness_session(tmp_path)
+    try:
+        check._session._ensure_clients()
+        assert observe(current_evidence) == (True, [])
+    finally:
+        check.close()

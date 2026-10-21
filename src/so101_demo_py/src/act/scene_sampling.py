@@ -427,3 +427,99 @@ def sample_scenes(
             for name, p in rollout_points.items()
         },
     )
+
+
+# --- several lists from one sample (boundary design amendment 3) -----------------------------------------------------
+@dataclass(frozen=True)
+class JointSceneSample:
+    polygon: tuple[Point, ...]
+    shrunk_polygon: tuple[Point, ...]
+    boundary_kinds: tuple[str, ...]
+    spacing_m: float
+    area_m2: float
+    #: list name -> its points, in the order the rows are written
+    lists: dict[str, tuple[Point, ...]]
+    #: the split of each point of the list that was split (``split_list``); empty for the other lists
+    splits: tuple[str, ...]
+    split_list: str
+    rollout_nearest_scene_m: dict[str, dict[str, float]]
+
+
+def assign_lists(points: Sequence[Point], list_counts: Mapping[str, int], seed: int) -> dict[str, list[int]]:
+    """Indices of ``points`` per list, every list spread over the region.
+
+    The lists are taken from the smallest to the largest.  A list of ``n`` points takes one point from each of ``n`` k-means
+    strata of the points still free (the one nearest the stratum centroid); the largest list is what remains, which is a
+    near-uniform thinning of the sample.  Pure function of the points and the seed.
+    """
+
+    if sum(list_counts.values()) != len(points) or min(list_counts.values()) < 1:
+        raise SplitStratificationError("SPLIT_STRATIFICATION: list counts do not add up to the point count")
+    order = sorted(list_counts, key=lambda name: (list_counts[name], name))
+    free = list(range(len(points)))
+    taken: dict[str, list[int]] = {}
+    for name in order[:-1]:
+        count = list_counts[name]
+        strata = _kmeans([points[i] for i in free], count, seed + len(taken) + 1)
+        chosen = []
+        for stratum in strata:
+            members = [free[position] for position in stratum]
+            centre = (sum(points[i][0] for i in members) / len(members), sum(points[i][1] for i in members) / len(members))
+            chosen.append(min(members, key=lambda i: (math.dist(points[i], centre), i)))
+        taken[name] = sorted(chosen)
+        free = [i for i in free if i not in set(chosen)]
+    taken[order[-1]] = free
+    return taken
+
+
+def sample_joint(
+    boundary_points: Mapping[str, Point],
+    rollout_points: Mapping[str, Point],
+    *,
+    reachable: Callable[[float, float], bool],
+    list_counts: Mapping[str, int],
+    split_list: str,
+    split_counts: Mapping[str, int],
+    seed: int = DEFAULT_SEED,
+    margin_m: float = INWARD_MARGIN_M,
+    rollout_clearance_m: float = ROLLOUT_CLEARANCE_M,
+    boundary_kinds: Mapping[str, str] | None = None,
+) -> JointSceneSample:
+    """One Poisson-disk sample of ``sum(list_counts)`` points, divided into spatially spread lists (amendment 3).
+
+    Every pair of points of the sample, in the same or in different lists, is at least the sample's spacing apart (never
+    below 0.004 m), so the lists are pairwise disjoint with that clearance.  ``split_list`` is additionally split
+    spatially into ``split_counts``.
+    """
+
+    if split_list not in list_counts or sum(split_counts.values()) != list_counts[split_list]:
+        raise SplitStratificationError("SPLIT_STRATIFICATION: the split counts must add up to the split list's count")
+    total = sum(list_counts.values())
+    polygon = boundary_polygon(boundary_points)
+    scales = vertex_scales(boundary_kinds)
+    region = Region(polygon, margin_m, vertex_scales=scales)
+    for name, p in rollout_points.items():
+        if not region.contains((float(p[0]), float(p[1]))):
+            raise RolloutPointOutsideRegionError(f"ROLLOUT_POINT_OUTSIDE_REGION: {name}")
+    keep_clear = [((float(p[0]), float(p[1])), rollout_clearance_m) for p in rollout_points.values()]
+    points, spacing = poisson_disk(region, total, seed, keep_clear=keep_clear, accept=lambda p: reachable(p[0], p[1]))
+    taken = assign_lists(points, list_counts, seed)
+    lists = {name: tuple(points[i] for i in taken[name]) for name in list_counts}
+    splits = tuple(stratified_splits(list(lists[split_list]), split_counts, seed))
+    return JointSceneSample(
+        polygon=polygon,
+        shrunk_polygon=tuple(shrink_polygon(polygon, margin_m, scales)),
+        boundary_kinds=tuple((boundary_kinds or {}).get(name, boundary.LIMIT_REACH) for name in boundary.RAY_NAMES),
+        spacing_m=spacing,
+        area_m2=round(region.area, DECIMALS),
+        lists=lists,
+        splits=splits,
+        split_list=split_list,
+        rollout_nearest_scene_m={
+            name: {
+                point_id: round(min(math.dist((float(p[0]), float(p[1])), q) for q in members), DECIMALS)
+                for point_id, p in rollout_points.items()
+            }
+            for name, members in lists.items()
+        },
+    )

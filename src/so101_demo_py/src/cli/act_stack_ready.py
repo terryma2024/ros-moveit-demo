@@ -228,7 +228,13 @@ class StackReadinessSession:
     def close(self) -> None:
         """Release the node and the context. Never raises: it runs while a failure of the check is still propagating."""
         node, self._node = self._node, None
-        for release in (lambda: node is not None and node.destroy_node(), self._scope.close):
+        clients, self._clients = self._clients, None
+        # `Node.destroy_node` does not destroy an `ActionClient`, and the node handle is not released while one is alive: the
+        # node would stay in the ROS graph for as long as the process lives (EXP-655, `/act_stack_ready_<pid>` at the gate).
+        action_clients = () if clients is None else tuple(clients[2].values())
+        releases = [(lambda client=client: client.destroy()) for client in action_clients]
+        releases += [lambda: node is not None and node.destroy_node(), self._scope.close]
+        for release in releases:
             try:
                 release()
             except Exception:   # noqa: BLE001

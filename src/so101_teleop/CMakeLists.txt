@@ -4,52 +4,66 @@ project(so101_teleop)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 
-if(DEFINED ENV{SO101_TELEOP_BUN})
-  set(BUN_EXECUTABLE "$ENV{SO101_TELEOP_BUN}")
-elseif(EXISTS "/home/lenovo/.bun/bin/bun")
-  set(BUN_EXECUTABLE "/home/lenovo/.bun/bin/bun")
-else()
-  find_program(BUN_EXECUTABLE bun REQUIRED)
-endif()
-if(NOT EXISTS "${BUN_EXECUTABLE}")
-  message(FATAL_ERROR "Bun is required; set SO101_TELEOP_BUN to its executable")
-endif()
-get_filename_component(SO101_TELEOP_BUN_BIN "${BUN_EXECUTABLE}" DIRECTORY)
+# The campaign shard image builds the web bundle in its own Docker stage and copies web/dist/ into the source tree before
+# colcon runs. With this option ON the package installs that bundle as it is and never starts Bun.
+option(SO101_TELEOP_PREBUILT_WEB_DIST "Install an existing web/dist instead of building it with Bun" OFF)
 
 set(SO101_TELEOP_WEB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/web)
 set(SO101_TELEOP_WEB_INDEX ${SO101_TELEOP_WEB_ROOT}/dist/index.html)
-file(GLOB_RECURSE SO101_TELEOP_WEB_SOURCES CONFIGURE_DEPENDS
-  ${SO101_TELEOP_WEB_ROOT}/src/*.ts
-  ${SO101_TELEOP_WEB_ROOT}/src/*.tsx
-  ${SO101_TELEOP_WEB_ROOT}/e2e/*.ts
-)
-# Styles, local font assets, the component manifest and the design-system lock are real build
-# inputs: changing any of them must rebuild the bundle.
-file(GLOB_RECURSE SO101_TELEOP_WEB_STYLES CONFIGURE_DEPENDS
-  ${SO101_TELEOP_WEB_ROOT}/src/*.css
-)
-file(GLOB_RECURSE SO101_TELEOP_WEB_PUBLIC CONFIGURE_DEPENDS
-  ${SO101_TELEOP_WEB_ROOT}/public/*
-)
-list(APPEND SO101_TELEOP_WEB_SOURCES
-  ${SO101_TELEOP_WEB_STYLES}
-  ${SO101_TELEOP_WEB_PUBLIC}
-)
-add_custom_command(
-  OUTPUT ${SO101_TELEOP_WEB_INDEX}
-  COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} install --frozen-lockfile
-  COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} run build
-  WORKING_DIRECTORY ${SO101_TELEOP_WEB_ROOT}
-  DEPENDS ${SO101_TELEOP_WEB_ROOT}/package.json ${SO101_TELEOP_WEB_ROOT}/bun.lock
-    ${SO101_TELEOP_WEB_ROOT}/vite.config.ts ${SO101_TELEOP_WEB_ROOT}/tailwind.config.ts
-    ${SO101_TELEOP_WEB_ROOT}/postcss.config.cjs
-    ${SO101_TELEOP_WEB_ROOT}/index.html
-    ${SO101_TELEOP_WEB_ROOT}/components.json
-    ${SO101_TELEOP_WEB_ROOT}/design-system.lock.json
-    ${SO101_TELEOP_WEB_SOURCES}
-  VERBATIM
-)
-add_custom_target(so101_teleop_web ALL DEPENDS ${SO101_TELEOP_WEB_INDEX})
+
+if(SO101_TELEOP_PREBUILT_WEB_DIST)
+  if(NOT EXISTS "${SO101_TELEOP_WEB_INDEX}")
+    message(FATAL_ERROR
+      "SO101_TELEOP_PREBUILT_WEB_DIST is ON but ${SO101_TELEOP_WEB_INDEX} does not exist; "
+      "build the web bundle first or turn the option OFF")
+  endif()
+  add_custom_target(so101_teleop_web ALL)
+else()
+  if(DEFINED ENV{SO101_TELEOP_BUN})
+    set(BUN_EXECUTABLE "$ENV{SO101_TELEOP_BUN}")
+  elseif(EXISTS "/home/lenovo/.bun/bin/bun")
+    set(BUN_EXECUTABLE "/home/lenovo/.bun/bin/bun")
+  else()
+    find_program(BUN_EXECUTABLE bun REQUIRED)
+  endif()
+  if(NOT EXISTS "${BUN_EXECUTABLE}")
+    message(FATAL_ERROR "Bun is required; set SO101_TELEOP_BUN to its executable")
+  endif()
+  get_filename_component(SO101_TELEOP_BUN_BIN "${BUN_EXECUTABLE}" DIRECTORY)
+
+  file(GLOB_RECURSE SO101_TELEOP_WEB_SOURCES CONFIGURE_DEPENDS
+    ${SO101_TELEOP_WEB_ROOT}/src/*.ts
+    ${SO101_TELEOP_WEB_ROOT}/src/*.tsx
+    ${SO101_TELEOP_WEB_ROOT}/e2e/*.ts
+  )
+  # Styles, local font assets, the component manifest and the design-system lock are real build
+  # inputs: changing any of them must rebuild the bundle.
+  file(GLOB_RECURSE SO101_TELEOP_WEB_STYLES CONFIGURE_DEPENDS
+    ${SO101_TELEOP_WEB_ROOT}/src/*.css
+  )
+  file(GLOB_RECURSE SO101_TELEOP_WEB_PUBLIC CONFIGURE_DEPENDS
+    ${SO101_TELEOP_WEB_ROOT}/public/*
+  )
+  list(APPEND SO101_TELEOP_WEB_SOURCES
+    ${SO101_TELEOP_WEB_STYLES}
+    ${SO101_TELEOP_WEB_PUBLIC}
+  )
+  add_custom_command(
+    OUTPUT ${SO101_TELEOP_WEB_INDEX}
+    COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} install --frozen-lockfile
+    COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} run build
+    WORKING_DIRECTORY ${SO101_TELEOP_WEB_ROOT}
+    DEPENDS ${SO101_TELEOP_WEB_ROOT}/package.json ${SO101_TELEOP_WEB_ROOT}/bun.lock
+      ${SO101_TELEOP_WEB_ROOT}/vite.config.ts ${SO101_TELEOP_WEB_ROOT}/tailwind.config.ts
+      ${SO101_TELEOP_WEB_ROOT}/postcss.config.cjs
+      ${SO101_TELEOP_WEB_ROOT}/index.html
+      ${SO101_TELEOP_WEB_ROOT}/components.json
+      ${SO101_TELEOP_WEB_ROOT}/design-system.lock.json
+      ${SO101_TELEOP_WEB_SOURCES}
+    VERBATIM
+  )
+  add_custom_target(so101_teleop_web ALL DEPENDS ${SO101_TELEOP_WEB_INDEX})
+endif()
 
 ament_python_install_package(so101_teleop)
 

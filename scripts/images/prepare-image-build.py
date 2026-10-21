@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 
 # Run from the worktree to build (it reads `git ls-files` of the current directory). Host paths come from the arguments;
 # their defaults are the host values (scripts/gate/hosts/<host>.env, loaded by scripts/gate/load_host.zsh).
@@ -93,6 +94,17 @@ if needs_build_deps:
         os.replace(replacement,link)
         cache_links[link.relative_to(source).as_posix()]={'original':str(original),'normalized':normalized}
     (build/'normalized-build-cache-links.json').write_text(json.dumps(cache_links,sort_keys=True,indent=2)+'\n')
+    # The copied cache must hold every package of the web lockfile under the registry key the image build uses
+    # (build-bun.bash sets BUN_CONFIG_REGISTRY to the same default). An incomplete cache would send the image build to the
+    # network, which is how a 20-minute build happened. Install into a scratch directory with --offline and refuse otherwise.
+    if (source/'src/so101_teleop/web/bun.lock').is_file():   # a tree without the web lockfile has nothing to check
+        with tempfile.TemporaryDirectory(prefix='so101-web-cache-check-') as scratch:
+            for name in ('package.json','bun.lock'):
+                shutil.copy2(source/'src/so101_teleop/web'/name,scratch)
+            check=subprocess.run([str(deps/'bun'),'install','--frozen-lockfile','--offline','--cache-dir',str(cache_copy)],cwd=scratch,
+                                 env={**os.environ,'BUN_CONFIG_REGISTRY':os.environ.get('BUN_CONFIG_REGISTRY','https://registry.npmmirror.com')},
+                                 stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+            assert check.returncode==0, 'BUN_CACHE_INCOMPLETE_FOR_WEB_LOCKFILE: '+check.stdout[-2000:]
     shutil.copytree(args.lodepng,deps/'lodepng',symlinks=True)
     dependency_hashes={}
     for path in deps.rglob('*'):
