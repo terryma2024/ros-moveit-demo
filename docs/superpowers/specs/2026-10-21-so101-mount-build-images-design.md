@@ -94,7 +94,7 @@ skewed host and shows that the check refuses it.
 Use the gate's build tree when the gate has built the commit, or a dedicated root for builds that are not gated. Both hosts have
 `W=/data/work`, `BUILD_ROOT=/data/work/so101-build` and `TEST_VENV=/data/work/venvs/so101-act-test`, so one path works on both
 hosts: `/data/work/so101-build/mount/<commit12>/install`. The container mounts it **at the same path**. Same-path mounting is the
-rule, even though the prototype also ran from `/act/install`, because it keeps every embedded path true and keeps the content hash the
+rule, even though the prototype also ran from `/act/install`, because it keeps every embedded path true and keeps every embedded string the
 same on both hosts.
 
 Sources of absolute paths in an install tree, checked in the prototype tree:
@@ -117,28 +117,39 @@ turns out too strict, the fallback is the prototype's `PYTHONPATH` entry.
 Source snapshot: `git archive` of the commit into `/data/work/so101-build/mount/<commit12>/source`, mounted read-only at the same
 path. It carries `.image-git.json` as now.
 
-### d. Identity and provenance
+### d. Identity and provenance (commit record, no content hash)
 
-Today `provenance.py` freezes the hashes of `/act/source` and `/act/install` into the image at build time and reads them back at
-container start. With mounts, there is nothing to freeze in the image.
+Coordinator decision 2026-10-21 (replaces the earlier content-hash design): consistency is checked by the git commit alone. Nothing is
+hashed per file and nothing is recomputed at container start.
 
-- **Host side:** compute `install_sha256` and `package_source_sha256` over the mounted trees with the same tree rule as the content
-  manifest (path, type, mode, size, sha256; `__pycache__` and `.pyc` rejected, not skipped; uid and gid normalised). These two values
-  stay in the logic class of the identity, as in the content-identity design.
-- **Container side:** at start, recompute both hashes over the mount points inside the container and compare with the values from the
-  launch record. A difference is a refusal (`IMAGE_PROVENANCE_INVALID` family). The mounts are read-only, so the tree cannot change
-  after the check, and the check runs again where the readback runs today.
-- **Image ID:** identifies the base only. It stays in the environment class; the base is the same file set on both hosts when the
-  base image is transferred once (g).
+- **Launch:** `start_mounted.zsh --commit HEX40` passes `SO101_EXPECTED_COMMIT`, `SO101_MOUNT_INSTALL` and `SO101_MOUNT_SOURCE` to the
+  container.
+- **Record:** the host build (`scripts/images/build_mount_tree.zsh`) writes `BUILD-COMMIT` (the 40-hex commit and a newline) into the root
+  of `install/` and of `source/`.
+- **Check at start:** the entry script (`bootstrap.bash`, before it sources anything from the mount) runs `check-mount-commit.bash`. Equality
+  of the record and the expected commit is the whole check. Refusals: `MOUNT_COMMIT_NOT_GIVEN` (exit 2, expected commit or mount
+  variable absent or not 40-hex), `MOUNT_COMMIT_MISSING` (exit 3, a tree has no record), `MOUNT_COMMIT_MISMATCH` (exit 4, a record differs
+  or is malformed). Tests in `scripts/tests/test_image_build_files.py`.
+- **Minimal trust conditions** (they make equality of the commit mean something, without hashing):
+  1. The host build runs only in a clean worktree: `git status --porcelain` is empty and `HEAD` equals the commit, checked at the start
+     **and again at the end** of the build. If either check fails there is no record (`MOUNT_BUILD_WORKTREE_DIRTY`,
+     `MOUNT_BUILD_HEAD_MISMATCH`, exit 3). A failing build command leaves no record either (`MOUNT_BUILD_FAILED`, exit 4).
+  2. The record is the last thing the build writes; afterwards both trees are made read-only (`chmod -R a-w`, directories 0555) and mounted
+     `readonly`. The source snapshot is `git archive` of the commit, so it equals the commit by construction.
+  3. A missing or different record is a refusal, never a warning.
+  4. The two hosts are compared by the commit hash plus the base-image environment manifest (section b). Tree hashes are not compared.
+- **Image ID:** identifies the base only, in the environment class.
+- What the scheme does not catch: a build made after someone edited an installed file under the clean worktree's nose, or a tree altered
+  by a user with write access after the build. Read-only modes and the single build user are the mitigations; this is accepted.
 
-This changes `provenance.py`, `image_bootstrap`, the launch record and the config validation (`runtime/inference/config.py:66-71`). None
-of that is touched until the coordinator approves; it is logic and needs the approval gate.
+This still changes `provenance.py`, the launch record and the config validation (`runtime/inference/config.py:66-71`) when step 7 is
+done; none of that is touched before the coordinator approves, and it stays behind a default-off switch.
 
 ### e. Security
 
 Unchanged: `--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges`, `--network none`, `--ipc private`, a non-root user.
 New: the mounts are `readonly`, and the host paths are the commit-addressed directories above, so a running container cannot alter its
-own code. The host builds are made by the same user that starts the containers; the content-hash check at start is what ties the
+own code. The host builds are made by the same user that starts the containers; the commit record check at start is what ties the
 container to a specific build rather than to "whatever is at that path". The directory must not be writable by the container user
 (it is mounted read-only; the host directory is mode 0555 after the build).
 
@@ -155,19 +166,18 @@ The determinism work moves to the host build, where it is cheaper to test (secti
 
 ### g. Two hosts
 
-The base image is built or loaded once and moved to the other host (it is the only large transfer, and it changes rarely). Each host
-builds its own install tree at the same path with the same compiler version (the environment check covers `gcc`, `cmake`,
-`python3`). The campaign compares `install_sha256` and `package_source_sha256` as it already does for images. If two builds of the same
-commit differ, the content-manifest `diff` command names the files; the allowed exclusions are the ones in the content-identity
-design, never inside the mounted tree. ccache is allowed on the host. When the two hashes differ, look in this order: (1) the compiler
-and toolchain versions and the ccache version/config (`gcc`, `cmake`, `ccache -V`, `CCACHE_*`); (2) a cold build with `CCACHE_DISABLE=1`
-on the host that differs; (3) the `content-manifest diff` file list. Where the build is not bit-identical (CPU-dependent flags, build
-paths), the result is recorded, and the fix is a build flag, not an exclusion.
+The base image is built or loaded once and moved to the other host (the only large transfer; it changes rarely). Each host builds its own
+install tree at the same path (`build_mount_tree.zsh`) from the same commit. The campaign compares only the **commit hash** and the **base
+image environment manifest** (section b); there is no tree hash to compare. ccache is allowed on the host. If two hosts nevertheless
+behave differently for one commit, look in this order: (1) the compiler and toolchain versions and the ccache version/config (`gcc`,
+`cmake`, `ccache -V`, `CCACHE_*`); (2) a cold build with `CCACHE_DISABLE=1` on the host that differs; (3) the environment-manifest diff.
+The content manifest tool (`image_content_manifest.py`) stays for the cross-host equivalence of the base image (item 23).
 
 ### h. Migration and tests
 
 1. Add `capture --image` / `check --against-image` to `so101_env.py`, with fixture tests (fake `docker`, canned dpkg output).
-2. Add the tree-hash command to the content manifest tool (reuses the existing walk), with tests for pyc rejection, mode, symlinks.
+2. Add the `tree` and `check-no-project-code` commands to the content manifest tool (used for the base image only), with tests.
+   Add the commit-record pieces: `check-mount-commit.bash`, the entry script change, `build_mount_tree.zsh`, `start_mounted.zsh --commit`.
 3. Build the base with the vendor file, entry script and corrected `.pth`; test the Dockerfile text like the other images.
 4. A `start-mounted` script (the prototype in the run directory is the starting point) with the same container flags as today, plus
    the mounts, and a test that asserts the flag set.
@@ -190,7 +200,7 @@ paths), the result is recorded, and the fix is a build flag, not an exclusion.
   in the evidence root by path and sha256, and may not be deleted before the campaign that used them is sealed.
 - **Build trees get deleted.** Old gate trees are cleaned up to keep disk free (the 50 GiB floor); mounted builds for a campaign must live in the
   commit-addressed directory and be kept until the campaign is sealed.
-- **Reviewability.** A campaign record now names a base image ID and two tree hashes instead of one image ID; the qualification
+- **Reviewability.** A campaign record now names a base image ID and a commit instead of one image ID; the qualification
   recompute (`collection_qualification_recompute.py`) must learn both.
 
 ## Decisions (coordinator, 2026-10-21)
@@ -206,3 +216,6 @@ paths), the result is recorded, and the fix is a build flag, not an exclusion.
 
 Also: in the `python -I` audit, all four build-time call sites in the Dockerfiles carry `-B` (commit 6005d558d); the runtime
 `ENTRYPOINT` uses `-I` on a read-only root, where no bytecode can be written.
+5. (2026-10-21, lightweight consistency) The container start checks the git commit against `BUILD-COMMIT` records in the mounted trees;
+   no per-file content hash, none recomputed at start. Conditions in section d. Two-host comparison is the commit plus the base-image
+   environment manifest.
