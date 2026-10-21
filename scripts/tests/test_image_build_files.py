@@ -542,3 +542,9 @@ def test_the_mount_base_installs_the_apt_versions_of_the_build_host_from_a_sorte
     text = (ROOT / "src/so101_demo_py/docker/mount-base/Dockerfile").read_text()
     assert "--allow-downgrades" in text and "$(cat /tmp/mount-base/apt-pins.txt)" in text
     assert "COPY apt-packages.txt apt-pins.txt " in text
+
+
+def test_the_mount_base_removes_the_bytecode_ensurepip_compiled_for_each_venv():
+    text = (ROOT / "src/so101_demo_py/docker/mount-base/Dockerfile").read_text()
+    for venv in ("/opt/venv", "/act/venv"):
+        assert f"find {venv} -type d -name __pycache__ -prune -exec rm -rf {{}} +" in text

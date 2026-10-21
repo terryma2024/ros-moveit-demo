@@ -5,7 +5,8 @@
 # package set of the previous image); a version the mirrors no longer offer is not pinned and apt takes the candidate (listed in
 # progress-mount-images.md). Built once and pinned by ID. It reaches the network for apt (Tsinghua mirrors, current versions) and pip (Tsinghua PyPI, the PyTorch
 # index for the CUDA wheels). Nothing under /act, /opt/venv or any site-packages is named so101_*: a test and a manifest check enforce it.
-# No .pyc: PIP_NO_COMPILE, PYTHONDONTWRITEBYTECODE, and the ones apt's package scripts compile are removed in the same layer.
+# No .pyc of our own: PIP_NO_COMPILE, PYTHONDONTWRITEBYTECODE, the ones apt's package scripts compile and the ones `python3 -m venv` (ensurepip)
+# compiles for each venv's pip are removed in the same layer. The pyc of the upstream ROS image stay (check-no-pyc --base).
 FROM docker.m.daocloud.io/library/ros:jazzy-ros-base-noble@sha256:2589a8fba5257307857890173c069852c2abf913a0be7970f172478baecb09e4
 
 LABEL org.opencontainers.image.title="SO-101 mount base" \
@@ -40,6 +41,7 @@ RUN python3 -m venv --system-site-packages /opt/venv \
     && install -d -m 1777 /opt/ultralytics /opt/torch-cache \
     && install -m 0644 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /opt/ultralytics/Arial.ttf \
     && /usr/bin/bash -c 'source /opt/ros/jazzy/setup.bash && /opt/venv/bin/python -B -c "import open3d, rclpy, torch, torchvision, ultralytics; from vision_msgs.msg import Detection2DArray; assert open3d.__version__ == \"0.19.0\"; assert torch.__version__ == \"2.13.0+cu130\"; assert torchvision.__version__ == \"0.28.0+cu130\"; assert ultralytics.__version__ == \"8.4.115\""'
+    && find /opt/venv -type d -name __pycache__ -prune -exec rm -rf {} +
 
 # /act/venv: the interpreter of the host-built console scripts' environment. Its .pth puts the mounted tree's site-packages first when
 # SO101_MOUNT_INSTALL is set, then ROS, then /opt/venv.
@@ -47,6 +49,7 @@ RUN python3 -m venv --system-site-packages /act/venv \
     && printf '%s\n' 'import glob, os, sys; mount = os.environ.get("SO101_MOUNT_INSTALL"); sys.path[:0] = (sorted(glob.glob(mount + "/*/lib/python3.12/site-packages")) if mount else []) + ["/opt/ros/jazzy/lib/python3.12/site-packages", "/opt/venv/lib/python3.12/site-packages"]' \
        > /act/venv/lib/python3.12/site-packages/act-runtime.pth \
     && /act/venv/bin/python -m pip install --no-compile --no-deps --require-hashes --index-url https://pypi.tuna.tsinghua.edu.cn/simple -r /tmp/mount-base/pip-requirements.lock \
+    && find /act/venv -type d -name __pycache__ -prune -exec rm -rf {} + \
     && rm -rf /tmp/mount-base /root/.cache
 
 # The NVIDIA container runtime injects libEGL_nvidia but not its glvnd vendor file; without it EGL lands on Mesa llvmpipe (CPU rendering).
