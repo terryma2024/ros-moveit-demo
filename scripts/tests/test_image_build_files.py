@@ -557,6 +557,11 @@ def test_the_mount_base_installs_the_apt_versions_of_the_build_host_from_a_sorte
     assert "COPY apt-packages.txt apt-pins.txt " in text
 
 
+def test_the_built_mount_base_is_pinned_by_id_under_the_tag_prepare_image_build_gives_it():
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", PINS["mount-base"]["id"])
+    assert PINS["mount-base"]["tag"] in (IMAGES / "prepare-image-build.py").read_text()
+
+
 def test_the_mount_base_removes_the_bytecode_ensurepip_compiled_for_each_venv():
     text = (ROOT / "src/so101_demo_py/docker/mount-base/Dockerfile").read_text()
     for venv in ("/opt/venv", "/act/venv"):

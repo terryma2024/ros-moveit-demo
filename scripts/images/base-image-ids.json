@@ -10,5 +10,9 @@
   "shard": {
     "tag": "so101-campaign-shard-deps:ros-jazzy-yolo11n-v1",
     "id": null
+  },
+  "mount-base": {
+    "tag": "so101-mount-base:ros-jazzy-torch2.13.0-cu130-v1",
+    "id": "sha256:19a57e708a8e968c8ebd8dd19e650b0ae47af130f550da37c3502c934ffcbd52"
   }
 }
