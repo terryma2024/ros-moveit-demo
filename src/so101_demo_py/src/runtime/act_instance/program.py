@@ -128,6 +128,25 @@ async def serve_instance(spec, runtime_config, layout, *, process, stack, ready,
     return 0 if executor.cleanup_confirmed and not failed else 1
 
 
+def _releasing_graph_clear_probe_class():
+    from so101_teleop.unified.act_stack_probes import RosGraphClearProbe
+    from so101_demo.ros.kept_nodes import release_kept_ros_nodes
+
+    class ReleasingGraphClearProbe(RosGraphClearProbe):
+        """The stack stop's proof that the domain has no node, after this process closed the nodes it keeps (the readiness
+        session, the retained evidence reader): they are participants of the same domain, and left open they are what the proof
+        finds (GRAPH_NOT_CLEARED, EXP-658)."""
+
+        def __call__(self) -> bool:
+            release_kept_ros_nodes()
+            return super().__call__()
+    return ReleasingGraphClearProbe
+
+
+def _ReleasingGraphClearProbe(launch):
+    return _releasing_graph_clear_probe_class()(launch)
+
+
 def compose_stack(launch, observer):
     """The shard's stack owner and its probes: returns `(start_probe, ready_check, stack)`.
 
@@ -142,7 +161,7 @@ def compose_stack(launch, observer):
     ready = InstalledActStackReadinessProbe(launch,observer)
     ready_check = KeptActStackReadyCheck(launch,observer)
     stack = ActStackProcessOwner(launch,ready_probe=ready,
-        stop_probe=RepeatableActStackStopProbe(launch,observer),graph_clear_probe=RosGraphClearProbe(launch))
+        stop_probe=RepeatableActStackStopProbe(launch,observer),graph_clear_probe=_ReleasingGraphClearProbe(launch))
     return ready,ready_check,stack
 
 

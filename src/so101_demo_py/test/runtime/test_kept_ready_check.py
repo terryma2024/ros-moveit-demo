@@ -149,3 +149,20 @@ def test_the_shard_composes_the_kept_check_and_leaves_the_start_probe_single_use
     ready_probe, ready_check, _stack = compose_stack(launch, observer)
     assert type(ready_check) is KeptActStackReadyCheck and type(ready_probe) is InstalledActStackReadinessProbe
     assert ready_check.kept_attempt_timeout_s == KEPT_ATTEMPT_TIMEOUT_S
+
+
+def test_the_graph_clear_proof_of_the_stack_stop_runs_after_the_kept_nodes_are_released(parts):
+    """EXP-658: the stack stop proves the domain has no node (`ros2 node list`). The instance's own kept readiness session and
+    retained evidence reader are nodes of that domain, so they are closed first (GRAPH_NOT_CLEARED otherwise, 7 of 8 shards)."""
+    check = parts.make(in_instance=True)       # a registered holder
+    events = []
+    check.release = lambda: events.append("release")
+
+    def run(argv, **_kwargs):
+        events.append("node-list")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    _ready, _check, stack = compose_stack(parts.launch, check.executable)
+    stack.graph_clear_probe.run = run
+    assert stack.graph_clear_probe() is True
+    assert events and events[-1] == "node-list" and "release" in events[:-1]
