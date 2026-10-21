@@ -7,5 +7,3 @@ test_an_instance_that_ignores_term_is_not_confirmed_and_keeps_the_slot_fenced | 
 test_the_probe_with_a_spin_reports_a_live_node_every_time_and_a_clear_graph_after_it_is_gone | not root-caused; passes alone, rare under load (test_native_graph_probe) | 2026-10-20
 test_camera_plugin | concurrent OpenGL/EGL initialisation; seen only when the demo and colcon stages run at the same time | 2026-10-20
 robot_launch_mjcf_generation_from_robot_description_test | seen only when the demo and colcon stages run at the same time; passes alone | 2026-10-20
-test_the_kept_session_and_the_command_line_judge_every_scenario_alike[instance_context] | the observer refuses a sequence gap (ACT_STACK_SOURCE_REJECTED) on a depth-one subscription under full-suite load and the 5 retries in the test can all hit it; fails the same way on the merge 2d551fb04 without the mount-mode commits; passes alone and at 8 workers over test/cli (test_act_stack_ready_session) | 2026-10-21
-test_a_session_that_is_not_ready_recovers_when_the_stack_does[instance_context] | same cause as the entry above (test_act_stack_ready_session); passes alone | 2026-10-21

@@ -16,7 +16,17 @@ import time
 import pytest
 
 SESSION = "ready-session"
-DOMAIN = "232"      # none of the gate stages uses it (demo 203, teleop 204, jtc 229, upstream groups 223-226)
+FIRST_DOMAIN, DOMAIN_COUNT = 205, 18     # 205..222: none of the gate stages (demo 203, teleop 204, jtc 229, upstream groups 223-226) or other tests (227, 230-232) uses them
+
+
+def domain_for(worker):
+    """The ROS domain of one xdist worker. Every parametrisation and both tests of this file run on a live graph with the same session id: two of them on one
+    domain at the same time see each other's publishers (sequence gaps, ACT_STACK_SOURCE_REJECTED), so each worker gets a domain of its own."""
+    number = int(worker[2:]) if worker.startswith("gw") and worker[2:].isdigit() else 0
+    return str(FIRST_DOMAIN + number % DOMAIN_COUNT)
+
+
+DOMAIN = domain_for(os.environ.get("PYTEST_XDIST_WORKER", "gw0"))
 TIMEOUT_S = 4.0
 
 
@@ -239,3 +249,10 @@ def test_a_session_that_is_not_ready_recovers_when_the_stack_does(graph):
         assert kept(session)[0] is True
     finally:
         session.close()
+
+
+def test_each_xdist_worker_has_a_domain_of_its_own_and_none_that_another_stage_or_test_uses():
+    reserved = {203, 204, 223, 224, 225, 226, 227, 229, 230, 231, 232}
+    domains = [int(domain_for(f"gw{number}")) for number in range(DOMAIN_COUNT)]
+    assert len(set(domains)) == DOMAIN_COUNT and not reserved & set(domains) and max(domains) <= 232
+    assert domain_for("master") == domain_for("gw0") == str(FIRST_DOMAIN)
