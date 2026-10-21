@@ -45,7 +45,7 @@ PY
   ok $ids || exit 3
   print "rerun demo: $#ids tests"
   # test ids carry module paths as classnames (test.act.x -> test/act/x.py); keep only the part pytest can take
-  GATE_DEMO_TARGETS="${(j: :)${(q)ids}}" DEMO_WORKERS=1 zsh $FG/gate_demo_py.zsh > $G/rerun/demo.console 2>&1; r=$?
+  GATE_DEMO_TARGETS="${(j: :)${(@q)ids}}" DEMO_WORKERS=1 zsh $FG/gate_demo_py.zsh > $G/rerun/demo.console 2>&1; r=$?
   print $r > $G/rerun/demo.rc; tail -2 $G/rerun/demo.console | cut -c1-200; (( r )) && rc=1
 fi
 if [[ $(cat $G/stage-colcon.rc) != 0 ]]; then

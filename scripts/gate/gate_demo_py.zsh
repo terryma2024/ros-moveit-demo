@@ -42,7 +42,7 @@ workers=${DEMO_WORKERS:-16}
 [[ $workers == <1-> ]] || exit 97
 start=$SECONDS
 # --dist only when the host config sets it (xdist default is "load").
-argv=($TEST_PYTHON -m pytest ${=GATE_DEMO_TARGETS:-test} -n $workers ${DEMO_DIST:+--dist} ${DEMO_DIST} -q -p no:cacheprovider -p so101_pytest_worker_temp --junitxml=$run/junit.xml)
+argv=($TEST_PYTHON -m pytest ${(Q)${(z)GATE_DEMO_TARGETS:-test}} -n $workers ${DEMO_DIST:+--dist} ${DEMO_DIST} -q -p no:cacheprovider -p so101_pytest_worker_temp --junitxml=$run/junit.xml)
 print -r -- "${(q)argv}" > $run/command.txt
 $argv > $run/pytest.log 2>&1
 rc=$?
