@@ -172,37 +172,17 @@ def test_campaign_shard_python_mujoco_pin_equals_the_setup_declaration() -> None
     """The shard venv's Python MuJoCo must be the version setup.py requires and the vendored native one."""
     declared = set(re.findall(r'"mujoco==([0-9.]+)"', (REPOSITORY_ROOT / PACKAGE_SOURCE / "setup.py").read_text()))
     assert len(declared) == 1
-    dockerfile = REPOSITORY_ROOT / PACKAGE_SOURCE / "docker/campaign-shard/Dockerfile"
-    pinned = re.findall(r"\bmujoco==([0-9.]+)", dockerfile.read_text())
+    lock = REPOSITORY_ROOT / PACKAGE_SOURCE / "docker/campaign-shard-deps/pip-requirements.lock"
+    pinned = re.findall(r"^mujoco==([0-9.]+)", lock.read_text(), re.M)
     assert pinned == sorted(declared)
 
 
 # --- campaign-shard image layering -------------------------------------------------------------------
 
 SHARD_DOCKERFILE = REPOSITORY_ROOT / PACKAGE_SOURCE / "docker/campaign-shard/Dockerfile"
-SHARD_BASE = "so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115"
 BUILD_TREE_PATHS = ("/act/build", "/act/build-source", "/act/build-log", "/act/build-tools")
-# The dependency stage is cache-keyed by its text: it must stay byte-identical to the previous revision
-# except for the mujoco pin that tracks setup.py.
-SHARD_DEPS_STAGE = """\
-ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \\
-    PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 YOLO_OFFLINE=true
-RUN apt-get update && apt-get install --yes --no-install-recommends \\
-    build-essential cmake python3-dev python3-venv python3-colcon-common-extensions \\
-    libboost-all-dev libeigen3-dev libfmt-dev libglfw3-dev libegl1-mesa-dev libtinyxml2-dev \\
-    ros-jazzy-moveit ros-jazzy-moveit-configs-utils ros-jazzy-ros2-control ros-jazzy-ros2-controllers \\
-    ros-jazzy-control-toolbox ros-jazzy-mujoco-vendor ros-jazzy-backward-ros \\
-    ros-jazzy-ros-gz-interfaces ros-jazzy-tf2-geometry-msgs ros-jazzy-vision-msgs
-RUN apt-get install --yes --no-install-recommends \\
-    ros-jazzy-ros2-control-cmake ros-jazzy-ros2-control-test-assets \\
-    ros-jazzy-example-interfaces ros-jazzy-launch-testing-ros \\
-    ros-jazzy-launch ros-jazzy-launch-testing ros-jazzy-launch-ros
-RUN python3 -m venv --system-site-packages /act/venv \\
-    && printf '%s\\n' 'import sys; sys.path[:0] = ["/act/install/lib/python3.12/site-packages", "/act/install/local/lib/python3.12/dist-packages", "/opt/ros/jazzy/lib/python3.12/site-packages", "/opt/venv/lib/python3.12/site-packages"]' \\
-       > /act/venv/lib/python3.12/site-packages/act-runtime.pth \\
-    && NO_PROXY="${NO_PROXY:+$NO_PROXY,}pypi.tuna.tsinghua.edu.cn" no_proxy="${no_proxy:+$no_proxy,}pypi.tuna.tsinghua.edu.cn" \\
-       /act/venv/bin/python -m pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple pydantic==2.14.1 mujoco==3.12.0 colcon-override-check==0.0.1 pytest==7.4.4 pytest-xdist==3.8.0
-"""
+# The apt and pip steps live in the so101-campaign-shard-deps base (docker/campaign-shard-deps); the shard's `deps` stage is that base alone.
+SHARD_DEPS_BASE = "so101-campaign-shard-deps:ros-jazzy-yolo11n-v1"
 COLCON_COMMON = (
     "--base-paths src third_party",
     "--build-base /act/build --install-base /act/install --merge-install",
@@ -291,13 +271,16 @@ def _selected(run: str) -> set[str]:
 def test_shard_dockerfile_has_deps_build_and_final_stages() -> None:
     stages = _shard_stages()
     assert list(stages) == ["deps", "build", "final"]
-    assert stages["deps"][0] == f"FROM {SHARD_BASE} AS deps"
+    assert stages["deps"][0] == f"FROM {SHARD_DEPS_BASE} AS deps"
     assert stages["build"][0] == "FROM deps AS build"
     assert stages["final"][0] == "FROM deps AS final"
 
 
-def test_shard_dependency_stage_text_is_unchanged_apart_from_the_mujoco_pin() -> None:
-    assert "\n".join(_shard_stages()["deps"][1:]) + "\n" == SHARD_DEPS_STAGE
+def test_shard_dependency_stage_is_the_pinned_base_alone() -> None:
+    """No networked step in the shard build: apt and pip are in the base, which scripts/images/base-image-ids.json pins by ID."""
+    assert _shard_stages()["deps"][1:] == []
+    pins = json.loads((REPOSITORY_ROOT / "scripts/images/base-image-ids.json").read_text())
+    assert pins["shard"]["tag"] == SHARD_DEPS_BASE
 
 
 def test_shard_final_stage_registers_the_nvidia_egl_vendor_with_glvnd() -> None:

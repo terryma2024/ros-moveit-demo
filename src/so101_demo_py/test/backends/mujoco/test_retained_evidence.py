@@ -15,7 +15,7 @@ SESSION = "retained-session"
 class FakeSimulator:
     """Publishes SimulationEvidence at 50 Hz on the transient-local topic and serves `set_pause`; paused stops the step counter."""
 
-    def __init__(self, session=SESSION, epoch=3):
+    def __init__(self, session=SESSION, epoch=3, node_name="fake_simulator"):
         import rclpy
         from mujoco_ros2_control_msgs.srv import SetPause
         from rclpy.context import Context
@@ -29,7 +29,7 @@ class FakeSimulator:
         self._message = SimulationEvidence
         self.context = Context()
         rclpy.init(context=self.context)
-        self.node = rclpy.create_node("fake_simulator", context=self.context)
+        self.node = rclpy.create_node(node_name, context=self.context)
         self.publisher = self.node.create_publisher(SimulationEvidence, "/so101/simulation/evidence", ATOMIC_EVIDENCE_QOS)
         self.node.create_service(SetPause, "/mujoco_ros2_control_node/set_pause", self._pause)
         self.executor = SingleThreadedExecutor(context=self.context)

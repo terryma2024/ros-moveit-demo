@@ -21,6 +21,7 @@ from so101_demo.parallel_batch.perception import (
     LocalizedPose,
 )
 from so101_demo.runtime.parallel_ros_ports.binding import RuntimeBinding
+from so101_demo.ros.kept_nodes import release_kept_ros_nodes
 from so101_demo.ros.process_init import global_init_options
 from so101_demo.runtime.parallel_ros_ports.isolated_node import (
     _ACTIVE_GOAL_STATES,
@@ -150,6 +151,7 @@ def observe_worker_shutdown(session_id: str, *, timeout_s: float) -> ShutdownObs
 
     import rclpy
 
+    release_kept_ros_nodes()    # a node this process keeps is a participant of the domain whose graph is read next
     initialized_here = not rclpy.ok()
     if initialized_here:
         rclpy.init(**global_init_options())
@@ -534,7 +536,12 @@ def observe_parallel_initial_gate(
     if read_evidence is None:
         from so101_demo.backends.mujoco.teleop_runtime import current_evidence as read_evidence
 
+    # The graph sampled below is checked against the worker node inventory, which refuses every node it does not know. What this
+    # process keeps between calls (the readiness session, the retained evidence node) is closed before that, also after the
+    # evidence read above reopened it; both reopen on their next use.
+    release_kept_ros_nodes()
     evidence = read_evidence(boundary.simulation_session_id, timeout_s=timeout_s)
+    release_kept_ros_nodes()
     evidence_received = time.monotonic()
     if str(evidence.reset_epoch) != boundary.reset_epoch.removeprefix("reset-"):
         raise RuntimeError("POINT_INITIAL_GATE_RESET_EPOCH")
