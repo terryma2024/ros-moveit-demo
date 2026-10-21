@@ -77,9 +77,9 @@ ENV PATH=/act/venv/bin:/act/install/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/
 COPY source/src/so101_demo_py/docker/campaign-inference/bootstrap.bash /act/bootstrap.bash
 RUN chmod 0555 /act/bootstrap.bash && printf '%s\n' shard > /act/image-role \
     && chmod -R a+rX,a-w /act/install && chmod u+w /act/install/share \
-    && /act/bootstrap.bash /act/venv/bin/python -I -c 'from so101_demo.runtime.container_campaign.provenance import write_build_freeze; write_build_freeze("shard")' \
+    && /act/bootstrap.bash /act/venv/bin/python -B -I -c 'from so101_demo.runtime.container_campaign.provenance import write_build_freeze; write_build_freeze("shard")' \
     && chmod a-w /act/install/share /act/install/share/act-image-dependencies.json /act/provenance.json /act/image-role \
-    && /act/bootstrap.bash /act/venv/bin/python -I -m so101_demo.runtime.container_campaign.provenance
+    && /act/bootstrap.bash /act/venv/bin/python -B -I -m so101_demo.runtime.container_campaign.provenance
 
 WORKDIR /act
 ENTRYPOINT ["/act/bootstrap.bash", "/act/venv/bin/python", "-I", "-m", "so101_demo.runtime.container_campaign.image_bootstrap"]

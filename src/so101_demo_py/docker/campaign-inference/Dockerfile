@@ -25,9 +25,9 @@ RUN chmod 0555 /act/bootstrap.bash \
     && mkdir -p /act/install/share \
     && chmod -R a+rX,a-w /act/install \
     && chmod u+w /act/install/share \
-    && /act/venv/bin/python -I -c 'from so101_demo.runtime.container_campaign.provenance import write_build_freeze; write_build_freeze("inference")' \
+    && /act/venv/bin/python -B -I -c 'from so101_demo.runtime.container_campaign.provenance import write_build_freeze; write_build_freeze("inference")' \
     && chmod a-w /act/install/share /act/install/share/act-image-dependencies.json /act/provenance.json /act/image-role \
-    && /act/bootstrap.bash /act/venv/bin/python -I -m so101_demo.runtime.container_campaign.provenance
+    && /act/bootstrap.bash /act/venv/bin/python -B -I -m so101_demo.runtime.container_campaign.provenance
 
 WORKDIR /act
 ENTRYPOINT ["/act/bootstrap.bash", "/act/venv/bin/python", "-I", "-m", "so101_demo.runtime.container_campaign.image_bootstrap"]

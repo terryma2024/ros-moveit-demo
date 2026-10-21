@@ -250,3 +250,14 @@ def test_the_record_script_writes_sorted_apt_and_pip_sets_from_the_image(tmp_pat
     assert done.returncode == 0, done.stderr
     assert (images / "shard-deps-apt-installed.tsv").read_text() == "acl\t2.3.2\nzlib1g\t1.3\n"
     assert (images / "shard-deps-pip-installed.txt").read_text() == "absl-py==2.5.1\npydantic==2.14.1\n"
+
+
+@pytest.mark.parametrize("role", ["inference", "shard"])
+def test_isolated_python_steps_of_a_build_write_no_bytecode(role):
+    """`python -I` ignores PYTHONDONTWRITEBYTECODE, so every isolated interpreter call in a build needs `-B` itself."""
+    text = instructions(DOCKERFILES[role]).replace("\\\n", " ")
+    calls = re.findall(r"/act/venv/bin/python (-[A-Za-z]+(?: -[A-Za-z]+)*)", text)
+    isolated = [flags for flags in calls if "I" in flags.replace("-", "").replace(" ", "")]
+    assert isolated
+    for flags in isolated:
+        assert "B" in flags.replace("-", "").replace(" ", ""), flags
