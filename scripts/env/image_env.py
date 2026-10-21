@@ -3,6 +3,7 @@
 
 Subcommands
 -----------
+capture-host   Read-only. Saves this host's apt packages, python version, codename and venv pins.
 capture-image  Read-only. Runs the image with `docker run --rm --network none --read-only` and writes its package manifest.
 check-image    Compares this host with that manifest for one install tree. Exit 1 on any "must" difference.
                --plan also writes what `so101_env apply` would have to change on the host (installs and downgrades; no removals).
@@ -250,6 +251,20 @@ def collect_host(venv: Path) -> dict:
             "python3": base.run(["/usr/bin/python3", "--version"]).stdout.split()[-1], "venv_freeze": info["freeze"]}
 
 
+def load_host_state(path: Path) -> dict:
+    state = json.loads(Path(path).read_text())
+    if not all(key in state for key in ("apt", "os", "python3", "venv_freeze")) or "codename" not in state["os"]:
+        raise SystemExit(f"IMAGE_ENV_HOST_STATE_INVALID: {path}")
+    return state
+
+
+def cmd_capture_host(args) -> int:
+    state = collect_host(Path(args.host_venv))
+    Path(args.output).write_text(json.dumps(state, indent=1, sort_keys=True) + "\n")
+    print(f"captured {len(state['apt'])} packages and {len(state['venv_freeze'])} pip pins of this host into {args.output}")
+    return 0
+
+
 def cmd_capture_image(args) -> int:
     manifest = capture_image(args.image)
     Path(args.output).write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
@@ -261,7 +276,7 @@ def cmd_check_image(args) -> int:
     manifest = json.loads(Path(args.manifest).read_text())
     tree = Path(args.tree).resolve()
     needs = required_packages(manifest, tree)
-    host = collect_host(Path(args.host_venv))
+    host = load_host_state(Path(args.host_state)) if args.host_state else collect_host(Path(args.host_venv))
     rows = compare(manifest, host, needs["required"], needs["missing_libraries"])
     if args.json:
         Path(args.json).write_text(json.dumps({"rows": rows, "unresolved_keys": sorted(needs["unresolved_keys"]),
@@ -283,10 +298,15 @@ def build_parser() -> argparse.ArgumentParser:
     cap.add_argument("--image", required=True)
     cap.add_argument("--output", required=True)
     cap.set_defaults(func=cmd_capture_image)
+    host_cmd = sub.add_parser("capture-host", help="save this host's packages, python and venv pins for a later check-image --host-state")
+    host_cmd.add_argument("--output", required=True)
+    host_cmd.add_argument("--host-venv", default="/data/work/venvs/so101-act-test")
+    host_cmd.set_defaults(func=cmd_capture_host)
     chk = sub.add_parser("check-image")
     chk.add_argument("--manifest", required=True)
     chk.add_argument("--tree", required=True, help="the host-built install tree that will be mounted")
     chk.add_argument("--host-venv", default="/data/work/venvs/so101-act-test")
+    chk.add_argument("--host-state", help="host state saved by capture-host (compare another host, or a deliberately skewed copy)")
     chk.add_argument("--json")
     chk.add_argument("--plan")
     chk.add_argument("--limit", type=int, default=40)

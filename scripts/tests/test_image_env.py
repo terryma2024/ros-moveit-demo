@@ -169,3 +169,21 @@ def test_image_manifest_round_trips_as_json(tmp_path):
     path = tmp_path / "m.json"
     path.write_text(json.dumps(manifest))
     assert json.loads(path.read_text()) == manifest
+
+
+def test_a_saved_host_state_is_read_back_and_a_malformed_one_is_refused(tmp_path):
+    path = tmp_path / "host.json"
+    path.write_text(json.dumps(host()))
+    assert ie.load_host_state(path) == host()
+    path.write_text(json.dumps({"apt": {}}))
+    with pytest.raises(SystemExit, match="IMAGE_ENV_HOST_STATE_INVALID"):
+        ie.load_host_state(path)
+
+
+def test_a_skewed_host_state_is_refused_where_the_aligned_one_passes():
+    required = {"ros-jazzy-rclcpp", "ros-jazzy-rcl", "libc6"}
+    assert not ie.must_failures(ie.compare(image(), host(), required))
+    skewed = host(apt={**host()["apt"], "ros-jazzy-rcl": "9.2.1-1"})                 # one required ROS package at another build
+    assert [row["key"] for row in ie.must_failures(ie.compare(image(), skewed, required))] == ["apt:ros-jazzy-rcl"]
+    lacking = host(apt={name: v for name, v in host()["apt"].items() if name != "libc6"})      # a library owner missing on the host
+    assert [row["relation"] for row in ie.must_failures(ie.compare(image(), lacking, required))] == ["missing-on-host"]
