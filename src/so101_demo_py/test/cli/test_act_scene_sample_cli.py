@@ -55,7 +55,9 @@ def test_the_scene_list_has_the_existing_format_and_the_report_the_required_fiel
     assert len(rows) == 103 and [r["scene_id"] for r in rows][:2] == ["frm-000", "frm-001"]
     assert [r["split"] for r in rows] == ["train"] * 83 + ["validation"] * 10 + ["offline_test"] * 10
     assert len({r["seed"] for r in rows}) == 103 and all(set(r) == {"scene_id", "seed", "split", "cup_position_world_m"} for r in rows)
-    assert "e-" not in text.replace("sample", "")  # plain decimals, no exponents
+    literals = []
+    json.loads(text, parse_float=lambda literal: literals.append(literal) or float(literal))
+    assert literals and not [literal for literal in literals if "e" in literal.lower()]  # plain decimals, no exponents (paths in strings do not count)
     assert read_scene_rows(tmp_path / "scenes.json") == rows
     report = json.loads((tmp_path / "report.json").read_text())
     assert report["scene_count"] == 103 and report["split_counts"] == {"train": 83, "validation": 10, "offline_test": 10}
