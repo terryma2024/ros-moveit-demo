@@ -197,3 +197,10 @@ A red result on a listed test is not evidence of a regression until it fails aga
 Deleting a gate: after the results are read back, the build root and the scratch directory are deletion candidates; the evidence gate
 directory stays. Do not delete the build root of a gate that an image was built from until the template runs for that commit are
 finished.
+
+## Front end tests (manual, not in the gate)
+
+`scripts/gate/run_web_tests.zsh [--e2e] [--install] [--dry-run]` runs the `so101_teleop` web tests through bun: `bun run test`
+(vitest, about 5 s) and, with `--e2e`, `bun run test:e2e` (Playwright; the browsers must be installed on the host). `--install`
+runs `bun install --frozen-lockfile` first; without it a missing `node_modules` is an error. bun is `$BUN_BIN`, else the host env
+file's `BUN_BIN`, else `bun` on `PATH`. The gate does not call it.
