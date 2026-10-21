@@ -124,7 +124,7 @@ def _run_wrapper(tmp_path: Path, *args: str, offline_ok: bool, env_registry: str
 def test_wrapper_installs_offline_from_the_cache_against_the_mirror_registry(tmp_path: Path) -> None:
     result, calls = _run_wrapper(tmp_path, "install", offline_ok=True)
     assert result.returncode == 0, result.stderr
-    assert calls == [f"https://registry.npmmirror.com|install --frozen-lockfile --cache-dir {tmp_path}/cache --offline"]
+    assert calls == [f"https://registry.npmmirror.com|install --frozen-lockfile --backend=copyfile --cache-dir {tmp_path}/cache --offline"]
 
 
 def test_wrapper_falls_back_to_the_mirror_when_the_cache_is_incomplete(tmp_path: Path) -> None:
@@ -132,8 +132,8 @@ def test_wrapper_falls_back_to_the_mirror_when_the_cache_is_incomplete(tmp_path:
     assert result.returncode == 0, result.stderr
     assert "cache is incomplete" in result.stderr
     assert calls == [
-        f"https://registry.npmmirror.com|install --frozen-lockfile --cache-dir {tmp_path}/cache --offline",
-        f"https://registry.npmmirror.com|install --frozen-lockfile --cache-dir {tmp_path}/cache",
+        f"https://registry.npmmirror.com|install --frozen-lockfile --backend=copyfile --cache-dir {tmp_path}/cache --offline",
+        f"https://registry.npmmirror.com|install --frozen-lockfile --backend=copyfile --cache-dir {tmp_path}/cache",
     ]
     assert all("--no-frozen-lockfile" not in call for call in calls)
 
@@ -149,7 +149,7 @@ def test_wrapper_keeps_an_explicit_registry_and_passes_other_commands_through(tm
 def test_wrapper_defaults_point_at_the_image_paths() -> None:
     text = WRAPPER.read_text()
     assert "/act/source/build-deps/bun" in text and "/act/build-source/build-deps/bun-cache" in text
-    assert "--frozen-lockfile" in text and "--offline" in text and "registry.npmmirror.com" in text
+    assert "--frozen-lockfile" in text and "--offline" in text and "--backend=copyfile" in text and "registry.npmmirror.com" in text
 
 
 # --- so101_teleop CMake option ------------------------------------------------------------------------------------------

@@ -10,6 +10,10 @@
 # is fetched from the mirror instead of failing the build. The lockfile stays frozen in both runs and bun still checks
 # the integrity hashes in bun.lock.
 #
+# `--backend=copyfile` matters: the cache sits in a lower image layer and node_modules in the layer being built, so bun's
+# default hardlink backend fails with EXDEV on each of the ~20000 files before it falls back to copying (20-40 s here);
+# copying directly takes about 0.4 s.
+#
 # SO101_BUN_BIN and SO101_BUN_CACHE_DIR exist so a test can point the wrapper at fixtures; the image uses the defaults.
 set -euo pipefail
 bun_bin="${SO101_BUN_BIN:-/act/source/build-deps/bun}"
@@ -17,10 +21,10 @@ cache_dir="${SO101_BUN_CACHE_DIR:-/act/build-source/build-deps/bun-cache}"
 export BUN_CONFIG_REGISTRY="${BUN_CONFIG_REGISTRY:-https://registry.npmmirror.com}"
 if [[ "${1:-}" == install ]]; then
     shift
-    if "$bun_bin" install "$@" --frozen-lockfile --cache-dir "$cache_dir" --offline; then
+    if "$bun_bin" install "$@" --frozen-lockfile --backend=copyfile --cache-dir "$cache_dir" --offline; then
         exit 0
     fi
     echo "build-bun: offline install failed; the bun cache is incomplete, retrying from ${BUN_CONFIG_REGISTRY}" >&2
-    exec "$bun_bin" install "$@" --frozen-lockfile --cache-dir "$cache_dir"
+    exec "$bun_bin" install "$@" --frozen-lockfile --backend=copyfile --cache-dir "$cache_dir"
 fi
 exec "$bun_bin" "$@"
