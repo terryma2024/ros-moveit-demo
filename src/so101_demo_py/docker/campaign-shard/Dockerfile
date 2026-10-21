@@ -1,7 +1,10 @@
 # The coordinator verifies the cached base ID and resulting layer ancestry.
 # Expected ID: sha256:5998505c1debdd1a3410ed6bd1aec8796ef3f82e3b3dc403bbc992423b6304fd.
 #
-# Three stages. `deps` holds the apt and venv layers and is cache-keyed only by its own text.
+# Four stages. `deps` holds the apt and venv layers and is cache-keyed only by its own text.
+# `web` builds the so101_teleop web bundle (Bun install, then `tsc -b && vite build`). Its inputs are only the files under
+# src/so101_teleop/web, so a change elsewhere in the repository leaves the stage cached; the dependency install is a layer
+# of its own that depends on package.json and bun.lock alone.
 # `build` compiles the colcon closure in two layers: the rarely changing native packages first
 # (third_party and so101_quik), then the packages that change with the code (so101_mujoco_support,
 # so101_teleop, so101_demo_py). `final` is `deps` plus the complete read-only /act/source and the
@@ -26,10 +29,26 @@ RUN python3 -m venv --system-site-packages /act/venv \
     && NO_PROXY="${NO_PROXY:+$NO_PROXY,}pypi.tuna.tsinghua.edu.cn" no_proxy="${no_proxy:+$no_proxy,}pypi.tuna.tsinghua.edu.cn" \
        /act/venv/bin/python -m pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple pydantic==2.14.1 mujoco==3.12.0 colcon-override-check==0.0.1 pytest==7.4.4 pytest-xdist==3.8.0
 
+FROM deps AS web
+
+ENV PATH=/act/build-tools:/act/source/build-deps/node/bin:/act/venv/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Dependency manifests first, so the install layer is keyed by them alone.
+COPY source/src/so101_teleop/web/package.json source/src/so101_teleop/web/bun.lock /act/build-source/src/so101_teleop/web/
+# The Bun toolchain and the offline cache; build-bun.bash selects the npmmirror registry the cache was filled from.
+COPY source/src/so101_demo_py/docker/campaign-shard/build-bun.bash /act/build-tools/bun
+COPY source/build-deps/bun /act/source/build-deps/bun
+COPY source/build-deps/node /act/source/build-deps/node
+COPY source/build-deps/bun-cache /act/build-source/build-deps/bun-cache
+RUN chmod 0555 /act/build-tools/bun && chmod -R a+rX,a-w /act/source && chmod -R u+w /act/build-source/build-deps \
+    && cd /act/build-source/src/so101_teleop/web && /act/build-tools/bun install
+# The rest of web/. The build context holds tracked files only, so node_modules and dist are never copied.
+COPY source/src/so101_teleop/web /act/build-source/src/so101_teleop/web
+RUN cd /act/build-source/src/so101_teleop/web && /act/build-tools/bun run build
+
 FROM deps AS build
 
-ENV PATH=/act/build-tools:/act/source/build-deps/node/bin:/act/venv/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    SO101_TELEOP_BUN=/act/build-tools/bun \
+ENV PATH=/act/venv/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     AMENT_PREFIX_PATH=/act/install:/opt/ros/jazzy
 
 # Native layer: only the files the third_party packages and so101_quik compile from.
@@ -48,14 +67,10 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; cd /ac
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
       -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
 
-# Code layer: the Bun toolchain first (stable), then the sources that change.
-COPY source/src/so101_demo_py/docker/campaign-shard/build-bun.bash /act/build-tools/bun
-COPY source/build-deps/bun /act/source/build-deps/bun
-COPY source/build-deps/node /act/source/build-deps/node
-COPY source/build-deps/bun-cache /act/build-source/build-deps/bun-cache
-RUN chmod 0555 /act/build-tools/bun && chmod -R a+rX,a-w /act/source && chmod -R u+w /act/build-source/build-deps
+# Code layer: the sources that change. The web bundle comes from the `web` stage and Bun is not installed here.
 COPY source/scripts /act/build-source/scripts
 COPY source/src /act/build-source/src
+COPY --from=web /act/build-source/src/so101_teleop/web/dist /act/build-source/src/so101_teleop/web/dist
 RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; source /act/install/local_setup.bash; cd /act/build-source; \
     /act/venv/bin/python -m pytest --version; \
     /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
@@ -64,7 +79,8 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; source
       --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
       --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
-      -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
+      -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+      -DSO101_TELEOP_PREBUILT_WEB_DIST=ON'
 
 FROM deps AS final
 
