@@ -105,6 +105,19 @@ def test_plain_decimals_replace_exponent_numbers():
     assert plain_decimal_json({"a": 1e-05, "b": [-2.5e-07, 0.5]}) == '{"a": 0.000010, "b": [-0.000000, 0.5]}'
 
 
+def test_plain_decimal_json_leaves_strings_that_look_like_exponents_alone():
+    document = {"path": "/x/gate-94933e030f2e/y", "k1e5": "1e5", "list": ["2E-3", 7e-06], "n": 3}
+    text = plain_decimal_json(document)
+    assert json.loads(text) == {**document, "list": ["2E-3", 0.000007]}
+    assert text == '{"path": "/x/gate-94933e030f2e/y", "k1e5": "1e5", "list": ["2E-3", 0.000007], "n": 3}'
+
+
+def test_plain_decimal_json_indent_and_sorted_keys_match_json_dumps_without_exponents():
+    document = {"b": [1, 2.5, {"z": None, "a": True}], "a": "1e5", "e": [], "f": {}}
+    assert plain_decimal_json(document, sort_keys=True, indent=2) == json.dumps(document, sort_keys=True, indent=2)
+    assert plain_decimal_json(document) == json.dumps(document)
+
+
 def test_boundary_kinds_set_the_margin_rule_and_the_report_lists_the_rollout_points(tmp_path):
     arguments = inputs(tmp_path)
     state = json.loads((tmp_path / "state.json").read_text())

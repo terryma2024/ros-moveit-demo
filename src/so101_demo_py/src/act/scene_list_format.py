@@ -16,17 +16,53 @@ from pathlib import Path
 KIND = "ACT_CONTAINER_SCENE_MANIFEST"
 SCHEMA_VERSION = 1
 CUP_Z_M = 0.165
-_EXPONENT = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?[eE][-+]?\d+")
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
-def plain_decimal_json(document: object, **options: object) -> str:
-    """``json.dumps`` with every exponent number written as a plain six-decimal number."""
+def _number(value: float) -> str:
+    """One float: ``repr`` as JSON writes it, except an exponent form becomes a plain six-decimal number."""
 
-    text = _EXPONENT.sub(lambda match: format(float(match.group(0)), ".6f"), json.dumps(document, **options))
-    if _EXPONENT.search(text):
-        raise ValueError("SCENE_LIST_EXPONENT_REMAINS")
+    text = json.dumps(value)
+    if "e" in text or "E" in text:
+        text = format(value, ".6f")
     return text
+
+
+def _encode(value: object, indent: int | None, sort_keys: bool, level: int) -> str:
+    """Walk the object: only real floats are formatted here; strings, keys and integers are left to ``json.dumps``."""
+
+    if isinstance(value, float):
+        return _number(value)
+    if isinstance(value, dict):
+        items = sorted(value.items()) if sort_keys else list(value.items())
+        pairs = [(json.dumps(key), _encode(item, indent, sort_keys, level + 1)) for key, item in items]
+        if not pairs:
+            return "{}"
+        if indent is None:
+            return "{" + ", ".join(f"{key}: {item}" for key, item in pairs) + "}"
+        inner = "\n" + " " * (indent * (level + 1))
+        outer = "\n" + " " * (indent * level)
+        return "{" + inner + ("," + inner).join(f"{key}: {item}" for key, item in pairs) + outer + "}"
+    if isinstance(value, (list, tuple)):
+        parts = [_encode(item, indent, sort_keys, level + 1) for item in value]
+        if not parts:
+            return "[]"
+        if indent is None:
+            return "[" + ", ".join(parts) + "]"
+        inner = "\n" + " " * (indent * (level + 1))
+        outer = "\n" + " " * (indent * level)
+        return "[" + inner + ("," + inner).join(parts) + outer + "]"
+    return json.dumps(value)
+
+
+def plain_decimal_json(document: object, *, indent: int | None = None, sort_keys: bool = False) -> str:
+    """``json.dumps`` with every exponent float written as a plain six-decimal number.
+
+    The document is walked and only float values are reformatted; no text is rewritten after serialising, so a string
+    such as ``"gate-94933e030f2e"`` or ``"1e5"`` is never touched.
+    """
+
+    return _encode(document, indent, sort_keys, 0)
 
 
 def scene_row(scene_id: str, seed: int, split: str, xy: tuple[float, float], cup_z_m: float = CUP_Z_M) -> dict:
