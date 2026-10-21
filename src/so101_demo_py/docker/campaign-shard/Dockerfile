@@ -66,6 +66,11 @@ RUN mkdir -p /act/install/bin \
     && /act/venv/bin/python -c 'from pathlib import Path; source=Path("/opt/ros/jazzy/bin/ros2").read_bytes(); assert source.startswith(b"#!"); body=source.split(b"\n",1)[1]; Path("/act/install/bin/ros2").write_bytes(b"#!/act/venv/bin/python\n"+body)' \
     && chmod 0555 /act/install/bin/ros2
 
+# rosidl_generator_c and rosidl_typesupport_introspection_c both write <msg>__type_support.c, and the install rule that should keep
+# only the headers has no EXCLUDE, so both copies are installed and the one that finished generating last wins: a race between two
+# builds of one commit. Nothing compiles the installed copies; the libraries were built from the build tree.
+RUN find /act/install/include -type f -name '*.c' -delete
+
 # The NVIDIA container runtime injects libEGL_nvidia but not its glvnd vendor file; without it the simulator's EGL
 # display (camera_plugin.cpp) lands on Mesa llvmpipe, i.e. CPU rendering. Outside /act, so no provenance hash covers it.
 RUN mkdir -p /usr/share/glvnd/egl_vendor.d \

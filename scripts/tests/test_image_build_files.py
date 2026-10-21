@@ -268,3 +268,13 @@ def test_isolated_python_steps_of_a_build_write_no_bytecode(role):
     assert isolated
     for flags in isolated:
         assert "B" in flags.replace("-", "").replace(" ", ""), flags
+
+
+def test_generated_c_sources_are_removed_from_the_installed_include_tree_before_the_freeze():
+    """rosidl_generator_c and rosidl_typesupport_introspection_c both write <msg>__type_support.c, and the install rule that should
+    keep only the headers has no EXCLUDE, so it installs both. file(INSTALL) copies a file only when the source is newer, so the winner
+    is whichever generator finished last: two builds of one commit differed in 9 to 12 files. Nothing compiles these installed copies."""
+    text = instructions(DOCKERFILES["shard"]).replace("\\\n", " ")
+    final = text.split("FROM deps AS final")[1]
+    assert "find /act/install/include -type f -name '*.c' -delete" in final
+    assert final.index("-name '*.c' -delete") < final.index("write_build_freeze")
