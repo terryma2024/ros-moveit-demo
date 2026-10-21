@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import stat
 import sys
+import time
 
 from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_inspect
 from so101_demo.runtime.container_campaign.mount_build import (
@@ -158,31 +159,58 @@ def _report(report, install_root="/act/install"):
     _runtime_contract(report["runtime"], install_root)
 
 
+#: A container read just after `docker run` may not be up yet: the daemon's inspect fails, the container is not running yet, or the exec of
+#: the probe exits non-zero. Only these three are read again, `READ_ATTEMPTS` times in all with `READ_PAUSES_S` between (3.5 s at most).
+#: What was read is compared once, as before: a report that is malformed or different, another container id, and a restart between the two
+#: inspects are refused at the first sight.
+READ_ATTEMPTS = 4
+READ_PAUSES_S = (0.5, 1.0, 2.0)
+_sleep = time.sleep
+
+
+class _NotReadYet(ValueError):
+    pass
+
+
 def read_container_provenance(container_id, *, docker_runner, mount_role=None, install_root="/act/install"):
     """`mount_role` ('inference' or 'shard') reads a mount-mode container: the entry script first (it checks the trees' records and
     sets the environment), and the role says which modules the readback imports."""
     try:
         _require(_sha(container_id))
-        def inspect():
+        def inspect(retryable=True):
+            def refuse(condition):
+                if not condition:
+                    raise (_NotReadYet if retryable else ValueError)("IMAGE_PROVENANCE_INVALID")
             result = bounded_docker_inspect(docker_runner, ["docker", "inspect", container_id])
-            _require(result.returncode == 0)
+            refuse(result.returncode == 0)
             documents = _json(result.stdout)
             _require(type(documents) is list and len(documents) == 1)
             document = documents[0]
             key = container_key_from_inspect(document, launch_generation=1)
             state = document["State"]
-            _require(key.container_id == container_id and state["Running"] is True
-                     and state["Restarting"] is False and type(state["Pid"]) is int and state["Pid"] > 0)
+            _require(key.container_id == container_id)
+            refuse(state["Running"] is True and state["Restarting"] is False and type(state["Pid"]) is int and state["Pid"] > 0)
             return key
-        before = inspect()
         module = "so101_demo.runtime.container_campaign.provenance"
         command = (["/act/venv/bin/python", "-I", "-m", module] if mount_role is None
                    else [ENTRY_SCRIPT, INTERPRETER, "-I", "-B", "-m", module, mount_role])
-        result = docker_runner(["docker", "exec", container_id, *command])
-        _require(result.returncode == 0)
+        def read():
+            before = inspect()
+            result = docker_runner(["docker", "exec", container_id, *command])
+            if result.returncode != 0:
+                raise _NotReadYet("IMAGE_PROVENANCE_INVALID")
+            return before, result
+        for attempt in range(READ_ATTEMPTS):
+            try:
+                before, result = read()
+                break
+            except _NotReadYet:
+                if attempt == READ_ATTEMPTS - 1:
+                    raise
+                _sleep(READ_PAUSES_S[attempt])
         report = _json(result.stdout)
         _report(report, install_root)
-        _require(inspect() == before)
+        _require(inspect(retryable=False) == before)
         return dict(container_id=before.container_id, docker_started_at=before.docker_started_at,
                     image_digest=before.image_digest, provenance=report)
     except (OSError, ValueError, TypeError, KeyError, RuntimeError, AttributeError) as error:
