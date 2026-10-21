@@ -130,8 +130,18 @@ networked = role in ('shard-deps', 'mount-base')
 tag = {'shard-deps': "so101-campaign-shard-deps:ros-jazzy-yolo11n-v1", 'mount-base': "so101-mount-base:ros-jazzy-torch2.13.0-cu130-v1"}.get(role) or "so101-campaign-"+role+":dispatch-2130aaf1-"+commit[:12]
 dockerfile = source / (DEPS_DIR + "Dockerfile") if role == 'shard-deps' else build / "mount-context/Dockerfile" if role == 'mount-base' else source / ("src/so101_demo_py/docker/campaign-"+role+"/Dockerfile")
 context = source / DEPS_DIR if role == 'shard-deps' else build / "mount-context" if role == 'mount-base' else build / "context"
-argv = ["docker", "build", *(["--no-cache"] if args.no_cache else []), "--network", 'default' if networked else 'none', "--progress", "plain", "--iidfile", str(build / (role+".iid")),
-        "-t", tag, "-f", str(dockerfile), str(context)]
+# BUILD_PROXY / BUILD_NO_PROXY (host values) route the networked steps through a proxy that listens on the host's loopback: the build
+# then needs the host network namespace. The proxy variables go in as docker's predefined build arguments, which are neither
+# recorded in the image history nor part of the image environment. Not set: the build is exactly as before.
+proxy = os.environ.get('BUILD_PROXY') if networked else None
+proxy_args = []
+if proxy:
+    no_proxy = os.environ.get('BUILD_NO_PROXY', '')
+    for name, value in (('HTTP_PROXY', proxy), ('HTTPS_PROXY', proxy), ('NO_PROXY', no_proxy), ('http_proxy', proxy), ('https_proxy', proxy), ('no_proxy', no_proxy)):
+        if value:
+            proxy_args += ["--build-arg", name+"="+value]
+argv = ["docker", "build", *(["--no-cache"] if args.no_cache else []), "--network", 'host' if proxy else 'default' if networked else 'none', *proxy_args,
+        "--progress", "plain", "--iidfile", str(build / (role+".iid")), "-t", tag, "-f", str(dockerfile), str(context)]
 (build / "argv.json").write_text(json.dumps(argv, indent=2)+"\n")
 (root / "current-image-build-path.txt").write_text(str(build)+"\n")
 (root / ("current-"+role+"-image-build-path.txt")).write_text(str(build)+"\n")

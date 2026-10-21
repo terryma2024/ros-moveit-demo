@@ -16,6 +16,7 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+HOSTS_DIR = ROOT / "scripts/gate/hosts"
 IMAGES = ROOT / "scripts" / "images"
 DOCKER = ROOT / "src" / "so101_demo_py" / "docker"
 DEPS = DOCKER / "campaign-shard-deps"
@@ -170,14 +171,15 @@ def host(tmp_path):
     return dict(bin=bin_dir, deps=deps, evidence=evidence)
 
 
-def prepare(repo, host, role, image_id, *extra, build_deps=True):
+def prepare(repo, host, role, image_id, *extra, build_deps=True, env=None):
     arguments = [sys.executable, str(PREPARE), "--role", role, "--evidence-root", str(host["evidence"]), *extra]
     if build_deps:
         arguments += ["--native-build-deps", str(host["deps"]), "--bun", str(host["deps"] / "bun"),
                       "--bun-cache", str(host["deps"] / "bun-cache"), "--lodepng", str(host["deps"] / "lodepng")]
     environment = {**os.environ, "PATH": f"{host['bin']}:{os.environ['PATH']}", "FAKE_DOCKER_ID": image_id}
-    for name in ("EVIDENCE_R", "NATIVE_BUILD_DEPS", "BUN_BIN", "BUN_CACHE", "DEPS_FREEZE"):
+    for name in ("EVIDENCE_R", "NATIVE_BUILD_DEPS", "BUN_BIN", "BUN_CACHE", "DEPS_FREEZE", "BUILD_PROXY", "BUILD_NO_PROXY"):
         environment.pop(name, None)
+    environment.update(env or {})
     return subprocess.run(arguments, cwd=repo, env=environment, capture_output=True, text=True)
 
 
@@ -482,3 +484,49 @@ def test_a_failed_build_command_leaves_no_commit_record(tmp_path, worktree):
     done = build_mount(tree, head, tmp_path, "false")
     assert done.returncode == 4 and "MOUNT_BUILD_FAILED" in done.stderr
     assert not list((tmp_path / "br").rglob("BUILD-COMMIT"))
+
+
+PROXY = {"BUILD_PROXY": "http://127.0.0.1:10809", "BUILD_NO_PROXY": "mirrors.tuna.tsinghua.edu.cn,pypi.tuna.tsinghua.edu.cn,registry.npmmirror.com"}
+
+
+def build_args(argv):
+    return [argv[i + 1] for i, word in enumerate(argv) if word == "--build-arg"]
+
+
+@pytest.mark.parametrize("role", ["shard-deps", "mount-base"])
+def test_a_networked_build_with_a_proxy_uses_the_host_network_and_the_predefined_proxy_arguments(repo, host, role):
+    done = prepare(repo, host, role, PINS["shard-deps"]["id"] if role == "shard-deps" else "", build_deps=False, env=PROXY)
+    assert done.returncode == 0, done.stderr
+    argv = json.loads((built(host) / "argv.json").read_text())
+    assert argv[argv.index("--network") + 1] == "host"
+    given = build_args(argv)
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        assert f"{name}={PROXY['BUILD_PROXY']}" in given
+    for name in ("NO_PROXY", "no_proxy"):
+        assert f"{name}={PROXY['BUILD_NO_PROXY']}" in given
+    assert all(item.split("=")[0].lower() in ("http_proxy", "https_proxy", "no_proxy") for item in given)
+
+
+@pytest.mark.parametrize("role", ["shard-deps", "mount-base"])
+def test_a_networked_build_without_a_proxy_is_as_before(repo, host, role):
+    done = prepare(repo, host, role, PINS["shard-deps"]["id"] if role == "shard-deps" else "", build_deps=False)
+    assert done.returncode == 0, done.stderr
+    argv = json.loads((built(host) / "argv.json").read_text())
+    assert argv[argv.index("--network") + 1] == "default" and "--build-arg" not in argv
+
+
+@pytest.mark.parametrize("role", ["inference", "shard"])
+def test_the_images_built_from_the_source_snapshot_stay_offline_whatever_the_proxy(repo, host, role):
+    pin = PINS["inference"]["id"] if role == "inference" else "sha256:" + "2" * 64
+    done = prepare(repo, host, role, pin, *(["--pin-shard-deps", pin] if role == "shard" else []), env=PROXY)
+    assert done.returncode == 0, done.stderr
+    argv = json.loads((built(host) / "argv.json").read_text())
+    assert argv[argv.index("--network") + 1] == "none" and "--build-arg" not in argv
+
+
+def test_both_host_files_give_the_proxy_and_the_no_proxy_list_for_the_mirrors():
+    for name in ("antzb", "ai-station"):
+        values = dict(line.split("=", 1) for line in (HOSTS_DIR / f"{name}.env").read_text().splitlines() if line.startswith("BUILD_"))
+        assert values["BUILD_PROXY"] == "http://127.0.0.1:10809"
+        for mirror in ("mirrors.tuna.tsinghua.edu.cn", "pypi.tuna.tsinghua.edu.cn", "registry.npmmirror.com"):
+            assert mirror in values["BUILD_NO_PROXY"].split(",")
