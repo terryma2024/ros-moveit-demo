@@ -234,6 +234,8 @@ class Docker:
         self.containers = {}
         self.names = {}
         self.fail_kill = set()
+        self.fail_rm = set()
+        self.refuse_rm = False
         self.refuse_run = None
         self.specs = {}
 
@@ -242,7 +244,19 @@ class Docker:
         if argv[:2] == ['docker', 'run']:
             return self._run(argv)
         if argv[:2] == ['docker', 'inspect']:
+            if argv[2] not in self.containers:
+                return SimpleNamespace(returncode=1, stdout='[]', stderr='Error: No such object: ' + argv[2])
             return SimpleNamespace(returncode=0, stdout=json.dumps([self.containers[argv[2]]]), stderr='')
+        if argv[:2] == ['docker', 'rm']:
+            if argv[2] not in self.containers or self.refuse_rm or argv[2] in self.fail_rm:
+                return SimpleNamespace(returncode=1, stdout='', stderr='cannot remove ' + argv[2])
+            del self.containers[argv[2]]
+            return SimpleNamespace(returncode=0, stdout=argv[2] + '\n', stderr='')
+        if argv[:3] == ['docker', 'ps', '-a']:
+            kind, value = argv[argv.index('--filter') + 1].split('=', 1)
+            found = [cid for cid, item in self.containers.items()
+                     if (cid.startswith(value) if kind == 'id' else item['Name'] == '/' + value.strip('^$').lstrip('/'))]
+            return SimpleNamespace(returncode=0, stdout=''.join(cid + '\n' for cid in found), stderr='')
         if argv[:2] == ['docker', 'exec']:
             return SimpleNamespace(returncode=0, stdout=json.dumps(self.report), stderr='')
         if argv[:2] == ['docker', 'kill']:
@@ -251,7 +265,7 @@ class Docker:
                 return SimpleNamespace(returncode=1, stdout='', stderr='injected kill failure')
             if cid in self.specs and self.containers[cid]['State']['Running']:
                 controlled_stop_evidence(self.specs[cid], CONTAINER_NAMESPACE)    # the shard retires itself, then exits
-            self.containers[cid]['State'].update(Running=False, Pid=0, Status='exited')
+            self.containers[cid]['State'].update(Running=False, Pid=0, Status='exited', FinishedAt='2026-10-12T01:05:03.123Z')
             return SimpleNamespace(returncode=0, stdout=cid + '\n', stderr='')
         pytest.fail(f'unexpected Docker command {argv}')
 

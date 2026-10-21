@@ -880,7 +880,11 @@ class UnifiedWorkloadService:
                         raise ValueError('foreign shard scope')
                 else:
                     raise ValueError('unknown role')
-            if not registry.all_terminated(self.container_inspect, inspect_native=self._observe_native_exit):
+            # A run collected stage by stage proved each finished stage's containers and removed them (a stage receipt);
+            # those launches are checked against the receipt and the registry's settlement, not inspected live.
+            from so101_demo.runtime.container_campaign import container_receipts
+            covered = container_receipts.covered_launches(root/'host', registry.records())
+            if not registry.all_terminated(self.container_inspect, inspect_native=self._observe_native_exit, exclude=covered):
                 raise ValueError('owned launch stop not proven')
         except (OSError, ValueError, TypeError, KeyError, RuntimeError, sqlite3.Error) as error:
             raise ValueError('ACT_CONTAINER_CLEANUP_NOT_CONFIRMED') from error

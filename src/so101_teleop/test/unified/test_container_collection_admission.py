@@ -103,7 +103,7 @@ def terminated_services(paths, inspect):
         registry.bind_container(launch.launch_id,owner)
         inspect[owner.container_id] = dict(Id=owner.container_id, Image=owner.image_digest,
             State=dict(StartedAt=owner.docker_started_at, Running=False, Restarting=False,
-                       Pid=0, Status='exited', ExitCode=0))
+                       Pid=0, Status='exited', ExitCode=0, FinishedAt='2026-10-12T01:05:03.123Z'))
         registry.prove_terminated(launch.launch_id,inspect[owner.container_id])
     registry.close()
 
