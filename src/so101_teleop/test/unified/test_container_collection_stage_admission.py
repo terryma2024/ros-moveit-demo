@@ -12,7 +12,8 @@ import pytest
 
 from test_container_collection_admission import fixture, terminated_services
 from so101_demo.runtime.container_campaign import container_receipts, stage_records
-from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
+from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey
+from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
 from so101_teleop.unified.worker_slots import ActWorkerSlot
 
 FIRST = 'collection-campaign-1'
@@ -249,6 +250,63 @@ def test_a_receipt_that_does_not_hold_does_not_settle(tmp_path, damage):
         else:
             logs.write_bytes(logs.read_bytes() + b'x')
         path.write_bytes(stage_records.canonical_json(document) + b'\n')
+        with pytest.raises(ValueError, match='ACT_CONTAINER_CLEANUP_NOT_CONFIRMED'):
+            workload.finish(context, cleanup_confirmed=True)
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is not None
+    finally:
+        store.close()
+
+
+def terminated_processor(paths, inspect, root):
+    """A phase-2 processor launch, proven exited like the services of `terminated_services`."""
+    (root/'processing'/'p00'/'g1').mkdir(parents=True)
+    registry = ContainerLaunchRegistry(paths['host']/'launches.sqlite3', create=False)
+    launch = ContainerLaunch(launch_id='processing-p00-g1', role='processor', worker_id='p00', wave_id=None,
+        launch_generation=1, container_name='so101-processor-p00', image_digest='sha256:'+'b'*64,
+        owned_root=str(root/'processing'/'p00'/'g1'))
+    owner = ContainerOwnerKey('3'*64, '2026-10-12T01:02:03.123Z', 'sha256:'+'b'*64, 1)
+    registry.register(launch)
+    registry.bind_container(launch.launch_id, owner)
+    inspect[owner.container_id] = dict(Id=owner.container_id, Image=owner.image_digest,
+        State=dict(StartedAt=owner.docker_started_at, Running=False, Restarting=False,
+                   Pid=0, Status='exited', ExitCode=0, FinishedAt='2026-10-12T01:05:03.123Z'))
+    registry.prove_terminated(launch.launch_id, inspect[owner.container_id])
+    registry.close()
+
+
+def release_processor_slots(store, campaign_id):
+    """What the end of the phase-2 stage does to the processor slots: they are released with that stage's admission."""
+    with store.immediate_transaction():
+        store._connection.execute("UPDATE act_worker_slots SET active=0 WHERE campaign_id=? AND worker_id LIKE 'p%'",
+                                  (campaign_id,))
+
+
+def test_a_later_stage_settles_although_the_processor_slots_were_released_by_phase_2(tmp_path):
+    """Phase 2 admits and releases the pNN slots; the finalize still settles the processor launches of the registry on their receipt."""
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        context = workload.start(first_spec(spec), allow_existing=False)
+        terminated_services(paths, inspect)
+        terminated_processor(paths, inspect, paths['run'])
+        workload.admit_processor_slots(context, (ActWorkerSlot(campaign_id=context.campaign_id, worker_id='p00',
+                                                               execution_generation=context.execution_generation),))
+        record_phase1(paths, spec)
+        receipt_and_remove(paths, inspect)
+        release_processor_slots(store, context.campaign_id)
+        workload.finish(context, cleanup_confirmed=True)
+        assert workload.slot_registry.slots() == () and store._query_one('SELECT * FROM gpu_workload_leases') is None
+    finally:
+        store.close()
+
+
+def test_a_processor_launch_that_no_slot_ever_covered_does_not_settle(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        context = workload.start(first_spec(spec), allow_existing=False)
+        terminated_services(paths, inspect)
+        terminated_processor(paths, inspect, paths['run'])
+        record_phase1(paths, spec)
+        receipt_and_remove(paths, inspect)
         with pytest.raises(ValueError, match='ACT_CONTAINER_CLEANUP_NOT_CONFIRMED'):
             workload.finish(context, cleanup_confirmed=True)
         assert store._query_one('SELECT * FROM gpu_workload_leases') is not None

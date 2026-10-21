@@ -861,6 +861,12 @@ class UnifiedWorkloadService:
             root = Path(context.evidence_root)
             registry = ContainerLaunchRegistry(root/'host/launches.sqlite3', create=False)
             by_worker = {slot.worker_id:slot for slot in slots}
+            # The processor slots (`pNN`) of an earlier stage were released when that stage settled, but the registry still holds
+            # their launches (a stage receipt covers them). They are checked against the processor slots this campaign was
+            # admitted with, which stay in the table as inactive rows.
+            for released in self.slot_registry.slots(active=False):
+                if released.is_processor and released.campaign_id == context.campaign_id:
+                    by_worker.setdefault(released.worker_id, released)
             for record in registry.records():
                 item = record['launch']
                 if item['role'] in ('head','teacher'):
