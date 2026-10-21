@@ -79,7 +79,7 @@ def test_the_deps_image_removes_the_bytecode_apt_compiles_in_the_same_layer():
 def test_the_cpp_build_maps_build_paths_and_uses_no_ccache():
     text = instructions(DOCKERFILES["shard"]).replace("\\\n", " ")
     colcon_builds = re.findall(r"colcon --log-base[^\n]*?FETCHCONTENT_FULLY_DISCONNECTED=ON", text)
-    assert len(colcon_builds) == 2
+    assert len(colcon_builds) == 3
     for build in colcon_builds:
         assert "-ffile-prefix-map=" in build and "-fdebug-prefix-map=" in build
         assert "CMAKE_C_COMPILER_LAUNCHER=" in build and "CMAKE_CXX_COMPILER_LAUNCHER=" in build
@@ -270,11 +270,17 @@ def test_isolated_python_steps_of_a_build_write_no_bytecode(role):
         assert "B" in flags.replace("-", "").replace(" ", ""), flags
 
 
-def test_generated_c_sources_are_removed_from_the_installed_include_tree_before_the_freeze():
-    """rosidl_generator_c and rosidl_typesupport_introspection_c both write <msg>__type_support.c, and the install rule that should
-    keep only the headers has no EXCLUDE, so it installs both. file(INSTALL) copies a file only when the source is newer, so the winner
-    is whichever generator finished last: two builds of one commit differed in 9 to 12 files. Nothing compiles these installed copies."""
+def test_generated_c_sources_are_removed_before_the_package_that_hashes_the_install_tree_is_built():
+    """rosidl_generator_c and rosidl_typesupport_introspection_c both write <msg>__type_support.c, and the install rule that should keep
+    only the headers has no EXCLUDE, so it installs both. file(INSTALL) copies a file only when the source is newer, so the winner
+    is whichever generator finished last: two builds of one commit differed in 9 to 12 files. Nothing compiles these installed copies.
+    so101_demo_py writes debug-provenance-manifest.json with a hash of every installed file, so the .c files must be gone before it builds."""
     text = instructions(DOCKERFILES["shard"]).replace("\\\n", " ")
-    final = text.split("FROM deps AS final")[1]
-    assert "find /act/install/include -type f -name '*.c' -delete" in final
-    assert final.index("-name '*.c' -delete") < final.index("write_build_freeze")
+    build_stage = text.split("FROM deps AS final")[0]
+    delete = "find /act/install/include -type f -name '*.c' -delete"
+    assert build_stage.count(delete) == 2, "one after the native layer, one after so101_mujoco_support"
+    support = build_stage.index("--packages-select so101_mujoco_support")
+    demo = build_stage.index("--packages-select so101_teleop so101_demo_py")
+    assert build_stage.index(delete, support) < demo
+    assert build_stage.index(delete) < support       # the first delete follows the native layer
+    assert "-name '*.c'" not in text.split("FROM deps AS final")[1]

@@ -34,6 +34,11 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; cd /ac
       -DCMAKE_C_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_CXX_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER= \
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
       -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
+# rosidl_generator_c and rosidl_typesupport_introspection_c both write <msg>__type_support.c, and the install rule that should keep
+# only the headers has no EXCLUDE, so both copies are installed and the one that finished generating last wins: a race between two
+# builds of one commit. Nothing compiles the installed copies (the libraries come from the build tree). They are deleted right after
+# the packages that install them, because so101_demo_py writes debug-provenance-manifest.json with a hash of every installed file.
+RUN find /act/install/include -type f -name '*.c' -delete
 
 # Code layer: the Bun toolchain first (stable), then the sources that change.
 COPY source/src/so101_demo_py/docker/campaign-shard/build-bun.bash /act/build-tools/bun
@@ -47,7 +52,18 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; source
     /act/venv/bin/python -m pytest --version; \
     /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
       --build-base /act/build --install-base /act/install --merge-install \
-      --packages-select so101_mujoco_support so101_teleop so101_demo_py \
+      --packages-select so101_mujoco_support \
+      --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
+      --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+      -DCMAKE_C_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_CXX_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER= \
+      -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
+      -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
+RUN find /act/install/include -type f -name '*.c' -delete
+RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; source /act/install/local_setup.bash; cd /act/build-source; \
+    /act/venv/bin/python -m pytest --version; \
+    /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
+      --build-base /act/build --install-base /act/install --merge-install \
+      --packages-select so101_teleop so101_demo_py \
       --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
       --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
       -DCMAKE_C_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_CXX_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER= \
@@ -65,11 +81,6 @@ COPY --from=build /act/install /act/install
 RUN mkdir -p /act/install/bin \
     && /act/venv/bin/python -c 'from pathlib import Path; source=Path("/opt/ros/jazzy/bin/ros2").read_bytes(); assert source.startswith(b"#!"); body=source.split(b"\n",1)[1]; Path("/act/install/bin/ros2").write_bytes(b"#!/act/venv/bin/python\n"+body)' \
     && chmod 0555 /act/install/bin/ros2
-
-# rosidl_generator_c and rosidl_typesupport_introspection_c both write <msg>__type_support.c, and the install rule that should keep
-# only the headers has no EXCLUDE, so both copies are installed and the one that finished generating last wins: a race between two
-# builds of one commit. Nothing compiles the installed copies; the libraries were built from the build tree.
-RUN find /act/install/include -type f -name '*.c' -delete
 
 # The NVIDIA container runtime injects libEGL_nvidia but not its glvnd vendor file; without it the simulator's EGL
 # display (camera_plugin.cpp) lands on Mesa llvmpipe, i.e. CPU rendering. Outside /act, so no provenance hash covers it.

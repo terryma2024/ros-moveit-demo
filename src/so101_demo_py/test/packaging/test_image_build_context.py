@@ -335,15 +335,18 @@ def test_shard_final_stage_keeps_the_freeze_and_runtime_contract() -> None:
 
 def test_shard_layers_build_exactly_the_colcon_closure_once() -> None:
     runs = _colcon_runs()
-    assert len(runs) == 2
-    early, late = (_selected(run) for run in runs)
+    assert len(runs) == 3      # native layer, then so101_mujoco_support, then the packages that hash the install tree
+    early, support, code = (_selected(run) for run in runs)
+    late = support | code
     closure = _package_closure()
-    assert early.isdisjoint(late)
+    assert early.isdisjoint(late) and support.isdisjoint(code)
     assert early | late == set(closure)
     # The early layer is dependency-closed, so it never needs a file of the later layer.
     for name in early:
         assert closure[name][1] <= early, name
-    for name in late:
+    for name in support:
+        assert closure[name][1] <= early | support, name
+    for name in code:
         assert closure[name][1] <= early | late, name
     assert all(closure[name][0].startswith("third_party/") or name == "so101_quik" for name in early)
     for run in runs:
@@ -353,21 +356,24 @@ def test_shard_layers_build_exactly_the_colcon_closure_once() -> None:
         assert "--log-base /act/build-log build" in flat
         assert "pytest --version" in flat
     assert "ROS_PACKAGE_READBACK" in runs[0]
-    assert "source /act/install/local_setup.bash" in _flat(runs[1]), "the later layer must see the earlier install"
+    for run in runs[1:]:
+        assert "source /act/install/local_setup.bash" in _flat(run), "the later layers must see the earlier install"
 
 
 def test_shard_copies_precede_the_colcon_run_that_needs_them() -> None:
     build = _shard_stages()["build"]
     runs = _colcon_runs()
-    assert len(runs) == 2
+    assert len(runs) == 3
     early_at, late_at = build.index(runs[0]), build.index(runs[1])
     closure = _package_closure()
-    early, late = (_selected(run) for run in runs)
+    early, support, code = (_selected(run) for run in runs)
+    late = support | code
 
     def copied(before: int) -> list[str]:
         return [item.split()[2].rstrip("/") for item in build[:before] if item.startswith("COPY ")]
 
-    for name, bound in [(n, early_at) for n in early] + [(n, late_at) for n in late]:
+    for name, bound in ([(n, early_at) for n in early] + [(n, late_at) for n in support]
+                        + [(n, build.index(runs[2])) for n in code]):
         directory = f"/act/build-source/{closure[name][0]}"
         assert any(
             directory == destination or directory.startswith(destination + "/") for destination in copied(bound)
