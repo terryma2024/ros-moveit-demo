@@ -1,6 +1,10 @@
 # SO-101 ACT: build images on each host and prove they are equivalent — design and plan
 
-Status: DRAFT for the human's confirmation. The human chose option 2 on 2026-10-21 ("可以，按方案2写设计文档").
+Status: CONFIRMED by the human on 2026-10-21 ("可以，按推荐执行。 Q4 pyc不生成").
+- Q1–Q3 and Q5 are as recommended.
+- **Q4 is changed: no `.pyc` is generated.** The builds use `PIP_NO_COMPILE=1`, setuptools `--no-compile` and no `compileall`. A test asserts that the manifest holds no `*.pyc` under `/act` or `/act/venv`, and none in site-packages added by our builds.
+
+Option 2 was chosen on 2026-10-21 ("可以，按方案2写设计文档").
 
 ## Why
 
@@ -81,7 +85,12 @@ This follows the confirmed logic/runtime design (2026-10-19) and the multi-host 
    - It is built once (on ai-station), pinned by ID in `prepare-image-build.py` like the other two bases, and transferred once per change. It changes rarely: only when the apt or pip set changes.
    - In that build, pin apt by exact `pkg=version` from the env-align manifest (`scripts/env`), and pin pip with a fully resolved lock file plus `--require-hashes`.
    - The shard build then runs `--network none`, like inference.
-2. **Python bytecode.** Set `SOURCE_DATE_EPOCH` (a fixed constant) in both Dockerfiles, so pip and setuptools write `checked-hash` `.pyc` files that depend only on the source content. An alternative is no `.pyc` at all, through `PIP_NO_COMPILE=1` and setuptools `--no-compile`; the first determinism test chooses.
+2. **Python bytecode (Q4 as decided).** No `.pyc` is generated at build time:
+   - `PIP_NO_COMPILE=1` for every pip install;
+   - setuptools / colcon Python installs use `--no-compile`;
+   - no `compileall`.
+
+   `PYTHONDONTWRITEBYTECODE=1` already stops runtime writes. The images' file systems are read-only at run time anyway.
 3. **Compiled C++.**
    - Add `-ffile-prefix-map=/act/=/act/` and `-fdebug-prefix-map`; the build paths are the same in both builds already.
    - Do not use ccache in image builds.
