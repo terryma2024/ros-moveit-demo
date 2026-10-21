@@ -9,6 +9,9 @@
 #            tests, test_trajectory, test_tolerances, test_trajectory_actions, test_load_joint_trajectory_controller) are
 #            skipped. Otherwise the whole package runs.
 #   teleop : so101_teleop only. SERIAL_TELEOP_TESTS first with -j1, then everything else with -j $TELEOP_JOBS.
+#   up-<group> : (UPSTREAM_PARALLEL=1, started by upstream_stage.zsh on its own CPUs) the entries of one group of upstream-groups.txt, one after the
+#            other, each a ctest -j1 of one package with -R/-E from $UPSTREAM_SPEC, in the ROS domain $UPSTREAM_GROUP_DOMAIN. With UPSTREAM_PARALLEL=1 the
+#            main part leaves out controller_manager and hardware_interface_testing, and the jtc part its upstream suites: the groups run them.
 # Own TMPDIR, own IPC socket base, own colcon log base. Interpreters and PYTHONPATH come from the host values (hosts/<host>.env).
 set -o pipefail
 FG=${0:A:h}
@@ -41,6 +44,7 @@ SERIAL_TELEOP_TESTS=(
   test_container_child_ownership
   test_expert_validation_e2e_installed_port
 )
+source $FG/upstream_slot.zsh
 test -x /usr/bin/colcon && test -x /usr/bin/python3 && test -x $TESTVENV/bin/python && test -r $GB/install/setup.zsh && test -d $FZ/python-deps && test "$(cat $G/build-root.txt)" = "$GB" || exit 90
 test -d $run || exit 91
 d=$run/$part
@@ -67,6 +71,7 @@ if [[ ${ISOLATE_ROS:-1} == 1 ]]; then
   fi
   [[ $part == teleop ]] && export ROS_DOMAIN_ID=${TELEOP_ROS_DOMAIN_ID:-204}
 fi
+# An upstream group has its own domain (not loopback-only for controller_manager, whose spawner tests need it; see above), set in its branch below.
 print -r -- "ROS_DOMAIN_ID_effective=${ROS_DOMAIN_ID-<unset>} ROS_LOCALHOST_ONLY=${ROS_LOCALHOST_ONLY-<unset>} ROS_AUTOMATIC_DISCOVERY_RANGE=${ROS_AUTOMATIC_DISCOVERY_RANGE-<unset>}" >> $d/ros-env.txt
 export TMPDIR=$scratch/tmp TMP=$scratch/tmp TEMP=$scratch/tmp PYTHONNOUSERSITE=1 MUJOCO_GL=egl
 ipc=$(mktemp -d /tmp/so101-ipc.XXXXXXXX) || exit 95
@@ -108,6 +113,10 @@ if [[ $part == main ]]; then
     PKGS=(${PKGS:#(controller_manager|hardware_interface_testing)})
     print -r -- "skipped_packages=controller_manager hardware_interface_testing" > $d/skipped.txt
   fi
+  if [[ ${UPSTREAM_PARALLEL:-0} == 1 ]]; then   # the upstream groups run these two (when they run at all)
+    PKGS=(${PKGS:#(controller_manager|hardware_interface_testing)})
+    print -r -- "upstream_parallel: controller_manager hardware_interface_testing run in the upstream groups" >> $d/skipped.txt
+  fi
   print -r -- "${(j: :)PKGS}" > $d/packages.txt
   # --pytest-args as in the old gate: they reach colcon's own pytest verb only; ctest-registered tests ignore them.
   /usr/bin/colcon --log-base $d/colcon-log-main test --base-paths src third_party --packages-select $PKGS \
@@ -118,6 +127,9 @@ if [[ $part == main ]]; then
   cp -- $d/colcon-test-main.log $d/colcon-test.log
 elif [[ $part == jtc && ${NO_OVERLAY:-0} == 1 ]]; then
   print -r -- "NO_OVERLAY=1 (--legacy-build): joint_trajectory_controller was not built, nothing to test" > $d/skipped.txt
+  : > $d/colcon-test.log
+elif [[ $part == jtc && ${UPSTREAM_PARALLEL:-0} == 1 && ${FAST_SKIP_JTC_UPSTREAM:-0} == 0 ]]; then
+  print -r -- "UPSTREAM_PARALLEL=1: joint_trajectory_controller runs in the upstream groups" > $d/skipped.txt
   : > $d/colcon-test.log
 elif [[ $part == jtc ]]; then
   # Unique domain outside the live (181, 216-222), demo (100-163) and launch-test (1-100) ranges, loopback only.
@@ -152,6 +164,25 @@ elif [[ $part == teleop ]]; then
     test -f $f && cat -- $f >> $d/colcon-test.log
   done
   print -r -- $rc > $d/colcon-test-teleop.rc; print -r -- $(( SECONDS - start )) > $d/colcon-test-teleop.elapsed
+elif [[ $part == up-* ]]; then
+  spec=${UPSTREAM_SPEC:?set UPSTREAM_SPEC}
+  export ROS_DOMAIN_ID=${UPSTREAM_GROUP_DOMAIN:?set UPSTREAM_GROUP_DOMAIN}
+  : > $d/colcon-test.log
+  entry=0
+  while IFS=$'\t' read -r group pkg mode regex; do
+    ca=(-j1 --no-tests=error)
+    [[ $mode == R ]] && ca+=(-R $regex)
+    [[ $mode == E ]] && ca+=(-E $regex)
+    # joint_trajectory_controller was loopback-only in its own part; controller_manager must not be (see above).
+    if [[ $pkg == joint_trajectory_controller ]]; then export ROS_LOCALHOST_ONLY=1 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST; else unset ROS_LOCALHOST_ONLY ROS_AUTOMATIC_DISCOVERY_RANGE; fi
+    upstream_slot $run $pkg
+    print -r -- "$group $pkg ctest ${ca[*]} ROS_DOMAIN_ID=$ROS_DOMAIN_ID start=$EPOCHSECONDS" >> $d/packages.txt
+    (( entry++ )); tag=$pkg-$entry
+    colcon_test $tag $pkg -- $ca; r=$?
+    cat -- $d/colcon-test-$tag.log >> $d/colcon-test.log
+    (( r != 0 )) && rc=1
+  done < $spec
+  print -r -- $rc > $d/colcon-test-upstream.rc; print -r -- $(( SECONDS - start )) > $d/colcon-test-upstream.elapsed
 else
   exit 99
 fi

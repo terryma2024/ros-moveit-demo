@@ -91,6 +91,27 @@ Files added to the gate directory by the repository version of the gate:
 Without `--serial` and with `GATE_STAGED=0` the demo stage and the colcon stage run at the same time. When either skip decision is
 `run`, the gate switches to serial by itself: the upstream suites are timing sensitive and flake under concurrent mode.
 
+## Parallel upstream tests
+
+Off by default (`GATE_UPSTREAM_PARALLEL=0` in the host config; `--upstream-parallel` / `--no-upstream-parallel` per run). When the
+decisions say `run`, the gate normally goes serial. With the switch on it does not: the upstream suites run in the groups of
+`upstream-groups.txt`, each group on CPUs of its own and in its own ROS domain, beside the demo stage and the other colcon parts, which are
+kept to the remaining CPUs (`taskset -c`; the user systemd manager here does not delegate the `cpuset` controller, so
+`systemd-run -p AllowedCPUs=` is not available).
+
+- `upstream_groups.py cpus` gives the groups whole cores (both threads), the fastest first, until they hold `GATE_UPSTREAM_CPU_SHARE`
+  of the logical CPUs (at least one core per group); the group weights split the cores; the rest is every other CPU. The split is
+  written to `upstream-cpus.json` in the gate directory.
+- `upstream_stage.zsh` first checks the groups against `ctest -N` of each package (every test in exactly one group; a selector naming a test
+  that no longer exists is refused), then starts the groups. The slowest tests (`test_trajectory_actions`, `test_controller_manager`, the
+  spawner tests; see the times in `upstream-groups.txt`) each have a group of their own. `upstream_groups.py timing` lists them for a build.
+- Domains: group *i* uses `UPSTREAM_DOMAIN_BASE` (223) + *i*. `joint_trajectory_controller` stays loopback only, `controller_manager` does not.
+- A package split over several groups is several ctest runs in one build directory. A ctest tag has minute resolution and colcon reads only the
+  newest, so `upstream_slot.zsh` keeps the starts of one package at least 75 s apart; `ctest_extra_phases.py` adds the older phases.
+- `upstream_groups.py sets` writes the executed tests of the upstream packages (ctest name and status, gtest cases per file) to
+  `upstream-sets.json`; `--upstream-sets-reference FILE` compares them with those of a serial gate and fails the gate on any difference.
+- The known-flake rerun is one serial colcon stage; the groups do not take part in it.
+
 ## Skip rules
 
 `controller_manager` and `hardware_interface_testing` (`third_party/ros2_control`) and the upstream `joint_trajectory_controller`
@@ -148,6 +169,7 @@ A red result on a listed test is not evidence of a regression until it fails aga
 
 | File | Use |
 | --- | --- |
+| `upstream_groups.py`, `upstream-groups.txt`, `upstream_stage.zsh`, `upstream_slot.zsh` | The parallel upstream tests: CPU split, group partition, executed sets, timing, start slots. |
 | `rc_record.py` | `decide`, `finish`, `seed` (skip-rule records) and `tools` (gate tools commit and diff stat). |
 | `ros2_control_decision.zsh`, `jtc_decision.zsh` | The two skip decisions. Read only. |
 | `collect_results.zsh <gate dir> <build root>` | Copy the small result files of the run directories into the evidence gate directory. |
