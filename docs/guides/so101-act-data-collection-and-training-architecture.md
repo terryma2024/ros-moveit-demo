@@ -1091,6 +1091,61 @@ computed, not recorded.
 | TRAIN-004 rollouts | v2 | 16 episodes (prefix 5, prefix 1, ensembling; 4 points each), 0 of 16 DONE | CP-3746 |
 | TRAIN-005-bf16 | v2 | dwell compression + bf16 + compile; running, about 69 samples/s | CP-3747, CP-3748 |
 
+### 3.7 Teacher success boundary and uniform scene sampling
+
+The 103 formal scenes lie in a small triangle. The boundary tooling replaces that triangle with a region measured on the
+Teacher itself, then samples scenes evenly inside it. The design is
+`docs/superpowers/specs/2026-10-20-so101-act-teacher-boundary-sampling-design.md`. It runs after the Teacher
+speed-ups, because the boundary should be measured with the final Teacher policy. A new scene list still means a new
+qualification and a new formal collection (3.2).
+
+The pure logic is in `act/scene_boundary.py` (rays, hard limits, kinematic limit, bracket), `act/scene_sampling.py`
+(polygon, Poisson-disk sampling, spatial splits), `act/five_pose_reachability.py` and `act/boundary_search.py` (state
+documents). Four evidence-side commands wrap it. Each writes its outputs once and never overwrites.
+
+| Command | Does |
+| --- | --- |
+| `act_boundary_prefilter` | Walks 8 rays (E, NE, N, NW, W, SW, S, SE) from the centre (0.02, -0.29) in 1 cm steps and stops at the first point whose five-pose Teacher reachability fails or that hits a hard limit. Writes `r_kin` per ray. |
+| `act_boundary_round` | Writes the next round as a debug scene list (one scene per ray, ids `bnd-<ray>-r<round>`, split `functional`) and a sidecar state with each scene's probe. |
+| `act_boundary_update` | Reads the finished debug campaign and updates the brackets. Teacher PASS means `teacher_execution_status == COMPLETED`, `teacher_task_result.result == PASS`, `current_state == DONE` and `failure is None`, read from each scene's `dynamic/dynamic-execute-manifest.json`. The phase-2 data verdict is recorded but does not count. A scene without a manifest stops the update. |
+| `act_scene_sample` | From the finished boundary: polygon through the 8 boundary points, eroded 0.01 m, minus the hard limits; seeded Poisson-disk sampling of 103 scenes; spatial 83 / 10 / 10 split; writes the scene list and a report. |
+
+Hard limits (each cited in `scene_boundary.py`): the table edge with the 0.04 m cup radius and a 0.01 m margin, the
+pedestal footprint grown by the same 0.05 m, and 0.060 m around the Teacher place target. The place exclusion is the
+formal sampler's.
+
+Live search per ray. Round 1 probes the kinematic limit itself. A failure starts a bisection between the last success
+and that failure. The search stops at a 1 cm bracket or after 3 bisection rounds, then one repeat round runs at the
+last success; if the repeat fails, the boundary steps back 1 cm without another run (`boundary_verified` is false).
+A functional debug run takes exactly 8 scenes, so a ray that is already final runs a filler at its boundary radius, which
+is recorded in the history and never changes the bracket. The centre counts as a known success (it lies inside the
+current data).
+
+Sampling rules. The minimum spacing is the largest of a 3 % ladder that still fits 103 points, never below the formal
+sampler's 0.004 m. No scene is closer than 0.004 m to any of the 4 standard rollout points, and the command stops with
+`ROLLOUT_POINT_OUTSIDE_REGION` when a rollout point is outside the region (the boundary is too small). The report lists
+each rollout point's nearest-scene distance. Validation and offline_test each take one point from `k-means` strata
+spread over the region, dealt in angular order. Every scene must pass the same five-pose filter as the formal lists;
+the sampler asks for unknown positions in batches and re-samples until a pass asks for nothing new.
+
+The five-pose filter needs the native ACT execution stack (ROS 2, MoveIt `/move_group`, joint states), not a bare shell.
+Start the container as `start-container.zsh` did for the formal lists (`so101_mujoco_act_execution_stack.launch.py
+headless:=true sensor_rendering:=true`), and pass `--reach-command` the prefix that runs `task_reachability` in it,
+such as `zsh reach_call.zsh <out> <container>`. The prefix receives the points file, the evidence file and a session id.
+
+```sh
+# 1) offline limits per ray (stack running)
+act_boundary_prefilter --reach-command "zsh reach_call.zsh $OUT $CONTAINER" --call-dir $OUT/calls --output $OUT/limits.json
+# 2) one round, then a debug campaign on that scene list, then the update; repeat 2 until "FINISHED"
+act_boundary_round --limits $OUT/limits.json --scenes-output $OUT/round-1.scenes.json --state-output $OUT/round-1.state.json
+act_boundary_update --state $OUT/round-1.state.json --run-root $RUN --output $OUT/after-1.state.json
+act_boundary_round --state $OUT/after-1.state.json --scenes-output $OUT/round-2.scenes.json --state-output $OUT/round-2.state.json
+# 3) final list and report (stack running)
+act_scene_sample --state $OUT/after-N.state.json --rollout-points config/mujoco/rgbd_task_points.yaml \
+  --reach-command "zsh reach_call.zsh $OUT $CONTAINER" --call-dir $OUT/sample-calls \
+  --scenes-output $OUT/boundary-103.scenes.json --report-output $OUT/boundary-103.report.json
+```
+
 ---
 
 ## 4. Configuration reference
