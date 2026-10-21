@@ -31,24 +31,35 @@ def staged_world(tmp_path, monkeypatch, **kwargs):
 def new_process(phase, stage=None):
     """What a separate process starts with: an owner that is not closing and a coordinator that is not stopped."""
     phase.owner._closing, phase.owner.dispatch_stopped, phase.owner.stop_reason = False, False, None
+    phase.owner._close_task = None
     phase.owner.coordinator.stop_reason = None
     services = phase.owner.services
+    services._close_task = None
     if hasattr(services, '_closing') and stage is not None:
         services._closing, services._start_task, services._endpoints, services._launch_ids = False, None, {}, []
         services.stage, services._tail = stage, '-' + stage
         services._startup_done = asyncio.Event()
 
 
-def stage(phase, name):
-    async def run():
-        return await getattr(phase.owner, 'stage_' + name)(phase.world.manifest)
-    new_process(phase)
-    return asyncio.run(run())
+async def ended(phase, run, close):
+    """A stage as its own process ends it: the stage, then `close()`, which proves the stage's containers, removes them and receipts.
+
+    `close=False` is a stage the CLI refuses before admission: that process would never exist, so nothing closes."""
+    try:
+        return await run
+    finally:
+        if close:
+            phase.closed = getattr(phase, 'closed', []) + [await phase.owner.close()]
 
 
-def retry(phase, number):
+def stage(phase, name, close=True):
+    new_process(phase, name)
+    return asyncio.run(ended(phase, getattr(phase.owner, 'stage_' + name)(phase.world.manifest), close))
+
+
+def retry(phase, number, close=True):
     new_process(phase, 'retry-%d' % number)
-    return asyncio.run(phase.owner.stage_retry(phase.world.manifest, number))
+    return asyncio.run(ended(phase, phase.owner.stage_retry(phase.world.manifest, number), close))
 
 
 def normalised(phase, name):
@@ -99,11 +110,11 @@ def test_a_stage_run_twice_is_refused_and_does_nothing_the_second_time(tmp_path,
     phase = staged_world(tmp_path, monkeypatch)
     stage(phase, 'phase2')
     with pytest.raises(ValueError, match='STAGE_ALREADY_COMPLETE'):
-        stage(phase, 'phase2')
+        stage(phase, 'phase2', close=False)
     stage(phase, 'finalize')
     before = (phase.owner.root / 'collection-index.json').read_bytes()
     with pytest.raises(ValueError, match='STAGE_ALREADY_COMPLETE'):
-        stage(phase, 'finalize')
+        stage(phase, 'finalize', close=False)
     assert len(phase.scheduler.calls) == 1 and (phase.owner.root / 'collection-index.json').read_bytes() == before
 
 
@@ -190,7 +201,8 @@ def test_a_run_with_retry_rounds_collected_stage_by_stage_equals_the_all_in_one_
     result = drive(whole)
     staged = retry_staged(tmp_path / 'staged', monkeypatch)
     stage(staged, 'phase2')
-    assert retry(staged, 1)['status'] == 'RUN'
+    first = retry(staged, 1)
+    assert first['status'] == 'RUN', first
     assert retry(staged, 2)['status'] == 'SKIPPED'
     final = stage(staged, 'finalize')
     assert final['processing'] == result['processing'] == 'COMPLETE'
@@ -240,4 +252,4 @@ def test_a_retry_round_run_twice_is_refused(tmp_path, monkeypatch):
     stage(phase, 'phase2')
     retry(phase, 1)
     with pytest.raises(ValueError, match='STAGE_ALREADY_COMPLETE'):
-        retry(phase, 1)
+        retry(phase, 1, close=False)

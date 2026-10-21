@@ -6,11 +6,13 @@ admission, the SQLite store and the stage records of the run (`host/<stage>-comp
 from dataclasses import asdict, replace
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from test_container_collection_admission import fixture, terminated_services
-from so101_demo.runtime.container_campaign import stage_records
+from so101_demo.runtime.container_campaign import container_receipts, stage_records
+from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_teleop.unified.worker_slots import ActWorkerSlot
 
 FIRST = 'collection-campaign-1'
@@ -180,5 +182,75 @@ def test_an_unknown_stage_name_is_refused(tmp_path):
         settle_first(paths, inspect, workload, spec)
         with pytest.raises(ValueError, match='STAGE_NAME_INVALID'):
             workload.start(staged(spec, 'whatever', 2), allow_existing=False)
+    finally:
+        store.close()
+
+
+def receipt_and_remove(paths, inspect, stage=stage_records.PHASE1):
+    """What the owner does at the end of a stage: receipt every container that was proven exited, then remove it."""
+    registry = ContainerLaunchRegistry(paths['host'] / 'launches.sqlite3', create=False)
+    try:
+        entries = []
+        for record in registry.records():
+            entry = container_receipts.container_entry(record, inspect[record['owner']['container_id']])
+            logs, digest = container_receipts.save_logs(paths['host'], stage, entry['container_name'],
+                lambda argv: SimpleNamespace(returncode=0, stdout='t out', stderr='t err'), entry['container_id'])
+            entries.append(dict(entry, logs_path=logs, logs_sha256=digest, removed=True, absent_after_removal=True))
+    finally:
+        registry.close()
+    record = stage_records.read_record(paths['host'], stage)
+    container_receipts.write_receipt(paths['host'], stage=stage, stage_record_sha256=record['sha256'], containers=entries)
+    inspect.clear()
+
+
+def test_a_stage_settles_on_its_receipt_when_its_containers_were_removed(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        context = workload.start(first_spec(spec), allow_existing=False)
+        terminated_services(paths, inspect)
+        record_phase1(paths, spec)
+        receipt_and_remove(paths, inspect)
+        workload.finish(context, cleanup_confirmed=True)
+        assert workload.slot_registry.slots() == () and store._query_one('SELECT * FROM gpu_workload_leases') is None
+    finally:
+        store.close()
+
+
+def test_removed_containers_without_a_receipt_do_not_settle(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        context = workload.start(first_spec(spec), allow_existing=False)
+        terminated_services(paths, inspect)
+        inspect.clear()
+        with pytest.raises(ValueError, match='ACT_CONTAINER_CLEANUP_NOT_CONFIRMED'):
+            workload.finish(context, cleanup_confirmed=True)
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is not None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('damage', ['uncovered', 'altered', 'log missing', 'log altered'])
+def test_a_receipt_that_does_not_hold_does_not_settle(tmp_path, damage):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        context = workload.start(first_spec(spec), allow_existing=False)
+        terminated_services(paths, inspect)
+        record_phase1(paths, spec)
+        receipt_and_remove(paths, inspect)
+        path = container_receipts.receipt_files(paths['host'])[0][2]
+        document = json.loads(path.read_bytes())
+        logs = paths['host'] / document['containers'][0]['logs_path']
+        if damage == 'uncovered':
+            document['containers'].pop()
+        elif damage == 'altered':
+            document['containers'][0]['exit_code'] = 9
+        elif damage == 'log missing':
+            logs.unlink()
+        else:
+            logs.write_bytes(logs.read_bytes() + b'x')
+        path.write_bytes(stage_records.canonical_json(document) + b'\n')
+        with pytest.raises(ValueError, match='ACT_CONTAINER_CLEANUP_NOT_CONFIRMED'):
+            workload.finish(context, cleanup_confirmed=True)
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is not None
     finally:
         store.close()

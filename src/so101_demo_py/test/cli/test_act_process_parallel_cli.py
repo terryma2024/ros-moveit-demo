@@ -9,7 +9,7 @@ import json
 import pytest
 
 from so101_demo.cli import act_process_parallel as process_cli
-from so101_demo.runtime.container_campaign import stage_records
+from so101_demo.runtime.container_campaign import container_receipts, stage_records
 from test_container_task_campaign_integration import (  # noqa: F401 - fixtures and the world builder
     _short_polls, argv_for, controlled_verifier, make_world, shared)
 
@@ -196,3 +196,99 @@ def test_a_stage_that_ran_is_refused_when_asked_again(stopped, capsys):
     code, _, err = process(stopped, capsys, '--phase2')
     assert code == 2 and 'STAGE_ALREADY_COMPLETE' in err
     assert len(contexts(stopped)[0]) == 2
+
+
+# ---- the containers of a stage: proven and removed by the stage itself, verified from receipts by the later stages ---------------
+
+def receipt_path(world, number, stage):
+    return world.run_root / 'host' / f'containers-receipt-{number:02d}-{stage}.json'
+
+
+def rewrite(path, change):
+    document = json.loads(path.read_text())
+    change(document)
+    path.write_bytes(stage_records.canonical_json(document) + b'\n')
+
+
+def test_phase_one_removes_its_containers_after_proving_them_exited_and_receipts_them(stopped):
+    assert stopped.docker.containers == {}
+    receipts = container_receipts.read_receipts(stopped.run_root / 'host')
+    assert [item['stage'] for item in receipts] == ['phase1']
+    entries = receipts[0]['containers']
+    assert {entry['role'] for entry in entries} == {'teacher', 'shard'}
+    assert all(entry['status'] == 'exited' and entry['removed'] and entry['absent_after_removal'] and entry['finished_at']
+               for entry in entries)
+    host = stopped.run_root / 'host'
+    for entry in entries:
+        assert entry['logs_path'] == f"container-logs/phase1/{entry['container_name']}.log" and (host / entry['logs_path']).is_file()
+    assert receipts[0]['stage_record_sha256'] == stage_records.read_record(stopped.run_root / 'host', 'phase1')['sha256']
+
+
+def test_the_staged_run_finalizes_with_the_containers_removed_between_stages(stopped, capsys):
+    assert process(stopped, capsys, '--phase2')[0] == 0
+    assert stopped.docker.containers == {}
+    code, out, err = process(stopped, capsys, '--finalize')
+    assert code == 0, err
+    assert stopped.docker.containers == {}
+    host = stopped.run_root / 'host'
+    assert [item['stage'] for item in container_receipts.read_receipts(host)] == ['phase1', 'phase2', 'finalize']
+    assert (stopped.run_root / 'collection-index.json').exists()
+    admissions, lease, active = contexts(stopped)
+    assert sorted(generation for _, generation in admissions) == [1, 2, 3] and lease is None and active == []
+    for stage in ('--phase2', '--finalize'):                      # the negative checks still hold after the finalize
+        code, _, err = process(stopped, capsys, stage)
+        assert code == 2 and 'STAGE_ALREADY_COMPLETE' in err
+    assert len(contexts(stopped)[0]) == 3
+
+
+def test_the_finalize_is_refused_before_admission_for_a_missing_receipt(stopped, capsys):
+    assert process(stopped, capsys, '--phase2')[0] == 0
+    receipt_path(stopped, 2, 'phase2').unlink()
+    code, _, err = process(stopped, capsys, '--finalize')
+    assert code == 2 and 'STAGE_CONTAINER_RECEIPT_MISSING' in err
+    assert len(contexts(stopped)[0]) == 2 and not (stopped.run_root / 'collection-index.json').exists()
+
+
+def test_the_finalize_is_refused_before_admission_for_a_tampered_receipt(stopped, capsys):
+    assert process(stopped, capsys, '--phase2')[0] == 0
+    rewrite(receipt_path(stopped, 1, 'phase1'), lambda d: d['containers'][0].update(finished_at='2020-01-01T00:00:00Z'))
+    code, _, err = process(stopped, capsys, '--finalize')
+    assert code == 2 and 'STAGE_CONTAINER_RECEIPT_INVALID' in err
+    assert len(contexts(stopped)[0]) == 2
+
+
+def test_a_later_stage_is_refused_before_admission_for_a_receipt_that_does_not_cover_a_container(stopped, capsys):
+    rewrite(receipt_path(stopped, 1, 'phase1'), lambda d: d['containers'].pop())
+    code, _, err = process(stopped, capsys, '--phase2')
+    assert code == 2 and 'STAGE_CONTAINER_RECEIPT_COVERAGE' in err
+    assert len(contexts(stopped)[0]) == 1
+
+
+def test_phase_one_fails_the_cleanup_when_a_container_cannot_be_removed(tmp_path, shared, monkeypatch, capsys):
+    from so101_demo.cli.act_collect_parallel import main
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1', polls_to_finish=2)
+    controlled_verifier(monkeypatch)
+    world.docker.refuse_rm = True
+    capsys.readouterr()
+    code = main(argv_for(world) + ['--stop-after-phase1'], edges=world.edges)
+    close_stores()
+    err = capsys.readouterr().err
+    assert code == 1 and 'CAMPAIGN_CLEANUP_UNCONFIRMED' in err
+    run_root = world.evidence / 'run-one'
+    assert container_receipts.receipt_files(run_root / 'host') == [] and world.docker.containers
+    assert 'STAGE_CONTAINER_REMOVE_FAILED' in json.loads((run_root / 'host/campaign-cleanup.json').read_text())['container_receipt_error']
+
+
+def test_phase_one_keeps_its_containers_when_their_logs_cannot_be_saved(tmp_path, shared, monkeypatch, capsys):
+    from so101_demo.cli.act_collect_parallel import main
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1', polls_to_finish=2)
+    controlled_verifier(monkeypatch)
+    world.docker.refuse_logs = True
+    capsys.readouterr()
+    code = main(argv_for(world) + ['--stop-after-phase1'], edges=world.edges)
+    close_stores()
+    assert code == 1 and 'CAMPAIGN_CLEANUP_UNCONFIRMED' in capsys.readouterr().err
+    run_root = world.evidence / 'run-one'
+    assert container_receipts.receipt_files(run_root / 'host') == [] and world.docker.containers
+    assert 'STAGE_CONTAINER_LOGS_UNSAVED' in json.loads((run_root / 'host/campaign-cleanup.json').read_text())['container_receipt_error']
+    assert [call for call in world.docker.calls if call[:2] == ['docker', 'rm']] == []
