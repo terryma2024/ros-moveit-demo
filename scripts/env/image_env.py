@@ -31,6 +31,8 @@ import so101_env as base  # noqa: E402  (same directory)
 MUST, SHOULD = base.MUST, base.SHOULD
 ROS_PREFIX = base.ROS_PREFIX
 IMAGE_VENV_PYTHON = "/act/venv/bin/python"
+# colcon plug-ins that only the image venv carries: the host builds with /usr/bin/colcon and the runtime never imports them.
+BUILD_ONLY_PINS = frozenset({"colcon-installed-package-information", "colcon-override-check"})
 ROS_LIBRARY_DIRS = ("/opt/ros/jazzy/lib", "/opt/ros/jazzy/opt/mujoco_vendor/lib")
 
 
@@ -211,7 +213,7 @@ def compare(image: dict, host: dict, required: set[str], missing_libraries=froze
     for name, version in image_pins.items():
         have = host_pins.get(name)
         if have is None:
-            rows.append(row(MUST, f"venv:{name}", version, None, "missing-on-host"))
+            rows.append(row(SHOULD if name in BUILD_ONLY_PINS else MUST, f"venv:{name}", version, None, "missing-on-host"))
         elif have != version:
             rows.append(row(MUST, f"venv:{name}", version, have, "differ"))
     for name, version in host_pins.items():

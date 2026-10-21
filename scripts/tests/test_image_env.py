@@ -187,3 +187,11 @@ def test_a_skewed_host_state_is_refused_where_the_aligned_one_passes():
     assert [row["key"] for row in ie.must_failures(ie.compare(image(), skewed, required))] == ["apt:ros-jazzy-rcl"]
     lacking = host(apt={name: v for name, v in host()["apt"].items() if name != "libc6"})      # a library owner missing on the host
     assert [row["relation"] for row in ie.must_failures(ie.compare(image(), lacking, required))] == ["missing-on-host"]
+
+
+def test_colcon_plugins_only_the_image_venv_carries_are_not_must_matches():
+    only_image = image(venv_freeze=["absl-py==2.5.1", "colcon-override-check==0.0.1", "colcon-installed-package-information==0.1"])
+    rows = ie.compare(only_image, host(venv_freeze=["absl-py==2.5.1"]), required=set())
+    assert ("should", "venv:colcon-override-check", "missing-on-host") in keys(rows)
+    assert ("should", "venv:colcon-installed-package-information", "missing-on-host") in keys(rows)
+    assert not ie.must_failures(rows)
