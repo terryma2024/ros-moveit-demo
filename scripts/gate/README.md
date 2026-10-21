@@ -112,6 +112,20 @@ kept to the remaining CPUs (`taskset -c`; the user systemd manager here does not
   `upstream-sets.json`; `--upstream-sets-reference FILE` compares them with those of a serial gate and fails the gate on any difference.
 - The known-flake rerun is one serial colcon stage; the groups do not take part in it.
 
+## so101_teleop as one xdist run
+
+Off by default (`GATE_TELEOP_XDIST=0` in the host config; `--teleop-xdist` / `--no-teleop-xdist` per run). The ordinary gate runs one ctest process (one pytest
+process) per `so101_add_pytest_test` registration of `src/so101_teleop/CMakeLists.txt`, `-j $TELEOP_JOBS` at a time, after the serial tests. With the switch on, the
+serial tests (`SERIAL_TELEOP_TESTS` in `colcon_part.zsh`) still run first as ctest runs with `-j1`, and every other registered module runs as ONE
+`python3 -u -m pytest <files> -n $TELEOP_JOBS` in the build directory, with the flags `ament_add_pytest_test` uses (`--junit-xml`, `--junit-prefix=so101_teleop`, a cache
+directory of its own) and one xunit file `so101_teleop_xdist.xunit.xml` in the same results directory, so `colcon test-result` counts it as before.
+
+- `teleop_pytest.py paths` gives the files from the registrations (refusing an excluded name that is not registered, a missing file, a duplicate name or path), so one
+  pytest run collects exactly what the separate runs collect. The serial tests stay separate because one of them kills the process group of a sibling pytest.
+- `teleop_pytest.py sets` writes the executed tests of the package (`classname::name` -> pass|fail|error|skipped) to `teleop-sets.json` in the gate directory in every gate;
+  `--teleop-sets-reference FILE` compares them with another gate's and fails the gate on any difference (ids or results).
+- The whole run is bounded by `timeout 1800`; there is no per-module ctest timeout in this mode.
+
 ## Skip rules
 
 `controller_manager` and `hardware_interface_testing` (`third_party/ros2_control`) and the upstream `joint_trajectory_controller`

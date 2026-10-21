@@ -4,6 +4,7 @@
 # with a build-root.txt pointer. Host values (paths, interpreters, workers, staged mode, memory scope) come from hosts/<host>.env. See README.md.
 #   run_host_gate.zsh [--host H] [--gate-suffix S] [--demo-workers N] [--no-isolation] [--full] [--serial] [--teleop-jobs N] [--plan]
 #                     [--no-rerun-known-flakes] [--upstream-parallel|--no-upstream-parallel] [--upstream-sets-reference FILE]
+#                     [--teleop-xdist|--no-teleop-xdist] [--teleop-sets-reference FILE]
 #     --host H         host config hosts/H.env; default: the host whose HOST_NAMES contains `hostname`; an unknown host is refused
 #     --full           run controller_manager / hardware_interface_testing tests even if the skip rule allows skipping
 #     --serial         demo pytest and colcon test one after the other, colcon parts one after the other, so101_teleop with ctest -j1
@@ -21,13 +22,18 @@
 #                      the host config (0). See README.md "Parallel upstream tests".
 #     --upstream-sets-reference FILE
 #                      compare the executed upstream test sets (upstream_groups.py sets) with those of a serial gate; a difference fails the gate
+#     --teleop-xdist / --no-teleop-xdist
+#                      run the so101_teleop pytest modules (all registrations but the serial ones) as ONE `pytest -n <teleop jobs>` run instead of one ctest
+#                      process per module; default: GATE_TELEOP_XDIST of the host config (0). See README.md "so101_teleop as one xdist run".
+#     --teleop-sets-reference FILE
+#                      compare the executed so101_teleop tests (teleop_pytest.py sets) with those of a gate run the other way; a difference fails the gate
 # One new gate directory per commit under gates/<commit12>; refuses if it exists. The worktree and scripts/gate must be clean.
 set -o pipefail
 zmodload zsh/datetime
 FG=${0:A:h}
 WT=${FG:h:h}
 orig_args=("$@")
-FULL=0; SERIAL=0; PLAN=0; TELEOP_JOBS=6; SUFFIX=; DEMO_WORKERS_ARG=; DEMO_WORKERS_SET=0; ISOLATE=1; HOST_ARG=; RERUN=1; UP_ARG=; SETS_REF=
+FULL=0; SERIAL=0; PLAN=0; TELEOP_JOBS=6; SUFFIX=; DEMO_WORKERS_ARG=; DEMO_WORKERS_SET=0; ISOLATE=1; HOST_ARG=; RERUN=1; UP_ARG=; SETS_REF=; TX_ARG=; TSETS_REF=
 while (( $# )); do
   case $1 in
     --host) shift; HOST_ARG=${1:-} ;;
@@ -43,6 +49,9 @@ while (( $# )); do
     --upstream-parallel) UP_ARG=1 ;;
     --no-upstream-parallel) UP_ARG=0 ;;
     --upstream-sets-reference) shift; SETS_REF=${1:-} ;;
+    --teleop-xdist) TX_ARG=1 ;;
+    --no-teleop-xdist) TX_ARG=0 ;;
+    --teleop-sets-reference) shift; TSETS_REF=${1:-} ;;
     -h|--help) sed -n '2,/^set -o/p' $0 | sed '$d'; exit 0 ;;
     *) print -u2 "unknown argument: $1"; exit 2 ;;
   esac
@@ -55,6 +64,9 @@ R=$EVIDENCE_R
 UPSTREAM_PARALLEL_REQUESTED=${UP_ARG:-${GATE_UPSTREAM_PARALLEL:-0}}
 [[ $UPSTREAM_PARALLEL_REQUESTED == [01] ]] || { print -u2 "GATE_UPSTREAM_PARALLEL must be 0 or 1"; exit 2; }
 [[ -z $SETS_REF || -r $SETS_REF ]] || { print -u2 "--upstream-sets-reference: cannot read $SETS_REF"; exit 2; }
+TELEOP_XDIST=${TX_ARG:-${GATE_TELEOP_XDIST:-0}}
+[[ $TELEOP_XDIST == [01] ]] || { print -u2 "GATE_TELEOP_XDIST must be 0 or 1"; exit 2; }
+[[ -z $TSETS_REF || -r $TSETS_REF ]] || { print -u2 "--teleop-sets-reference: cannot read $TSETS_REF"; exit 2; }
 STAGED=${GATE_STAGED:-0}
 [[ $TELEOP_JOBS == <1-> ]] || { print -u2 "--teleop-jobs needs a positive integer"; exit 2; }
 (( SERIAL )) && TELEOP_JOBS=1
@@ -147,10 +159,10 @@ if [[ $decision == run || $jtc_decision == run ]] && (( ! SERIAL )); then
   fi
 fi
 export UPSTREAM_PARALLEL
-export TELEOP_JOBS
+export TELEOP_JOBS TELEOP_XDIST
 (( SERIAL )) && export PARTS_SEQUENTIAL=1 || export PARTS_SEQUENTIAL=0
 # The settings of the stages, kept so that rerun_known_flakes.zsh can rerun a stage with the same environment.
-for v in ISOLATE_ROS DEMO_WORKERS DEMO_ROS_DOMAIN_ID TELEOP_ROS_DOMAIN_ID JTC_ROS_DOMAIN_ID FAST_SKIP_ROS2_CONTROL FAST_SKIP_JTC_UPSTREAM NO_OVERLAY TELEOP_JOBS PARTS_SEQUENTIAL UPSTREAM_PARALLEL; do
+for v in ISOLATE_ROS DEMO_WORKERS DEMO_ROS_DOMAIN_ID TELEOP_ROS_DOMAIN_ID JTC_ROS_DOMAIN_ID FAST_SKIP_ROS2_CONTROL FAST_SKIP_JTC_UPSTREAM NO_OVERLAY TELEOP_JOBS TELEOP_XDIST PARTS_SEQUENTIAL UPSTREAM_PARALLEL; do
   print -r -- "$v=${(P)v}"
 done > $GATE/stage-env.txt
 
@@ -222,6 +234,13 @@ if (( ${#up_pkgs} )); then
     python3 -I $FG/upstream_groups.py compare $SETS_REF $GATE/upstream-sets.json > $GATE/upstream-sets-compare.txt 2>&1 || sets_rc=1
     print -r -- "upstream_sets_vs_reference rc=$sets_rc ($SETS_REF)"; head -5 $GATE/upstream-sets-compare.txt
   fi
+fi
+
+# --- the executed so101_teleop tests (the one xdist run must run exactly the tests the ctest runs run) ---
+python3 -I $FG/teleop_pytest.py sets --results $GATE_BUILD/build/so101_teleop/test_results --out $GATE/teleop-sets.json || sets_rc=1
+if [[ -n $TSETS_REF ]]; then
+  python3 -I $FG/teleop_pytest.py compare $TSETS_REF $GATE/teleop-sets.json > $GATE/teleop-sets-compare.txt 2>&1 || sets_rc=1
+  print -r -- "teleop_sets_vs_reference rc=$sets_rc ($TSETS_REF)"; head -5 $GATE/teleop-sets-compare.txt
 fi
 
 # --- record for the skip rule of later gates ---
