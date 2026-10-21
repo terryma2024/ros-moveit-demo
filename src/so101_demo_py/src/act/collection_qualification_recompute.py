@@ -41,6 +41,7 @@ REASON_CODES = frozenset({
     'WAVE_VERIFIED_MISSING'})
 _LIMIT = 16*1024*1024
 _SPEC_IDENTITY = ('manifest_sha256', 'runtime_config_sha256', 'collection_config_sha256', 'contact_policy_fingerprint')
+_STAGES = ('phase1', 'phase2', 'retry-1', 'retry-2', 'retry-3', 'finalize')
 _RUN_ERRORS = (OSError, ValueError, TypeError, KeyError, UnicodeError, json.JSONDecodeError, sqlite3.Error)
 
 
@@ -498,25 +499,68 @@ class _Run:
                     self.reasons.add('SCOPE_MISMATCH:'+row['scene_id'])
 
     def cleanup(self, registry):
+        from so101_demo.runtime.container_campaign import stage_records
+
+        host = self.run/'host'
+        # a run collected stage by stage leaves stage completion records; an all-in-one run leaves none and one combined cleanup record
+        staged = any(stage_records.record_path(host, stage).exists() for stage in _STAGES)
         clear = False
         try:
             stored = {record['owner']['container_id']: record['exit_inspect'] for record in self.records
                       if record['owner'] is not None and record['exit_inspect'] is not None}
             clear = registry is not None and registry.all_terminated(lambda container_id: stored[container_id])
-            document = read_document(self.run/'host'/'campaign-cleanup.json')
-            keys = {'terminated', 'services', 'shards', 'stop_reason'} | ({'processors'} if self.processors else set())
-            clear = (clear and set(document) == keys
-                     and document['terminated'] is True and document['stop_reason'] == 'CAMPAIGN_CLOSING'
-                     and document['services'].get('terminated') is True and len(document['shards']) == len(WAVES)*len(WORKERS)
-                     and all(item.get('terminated') is True for item in document['shards'])
-                     and sorted(item.get('launch_id') for item in document.get('processors', ())) == sorted(self.processors)
-                     and all(item.get('terminated') is True for item in document.get('processors', ())))
+            clear = clear and (self.staged_cleanup(host) if staged else self.combined_cleanup(host))
         except _RUN_ERRORS:
             clear = False
         if not clear:
             self.reasons.add('CLEANUP_UNCONFIRMED')
         if (self.run/'host'/'dispatch-fault.json').exists() or (self.run/'host'/'dispatch-fault.json').is_symlink():
             self.reasons.add('DISPATCH_FAULT')
+
+    def combined_cleanup(self, host):
+        document = read_document(host/'campaign-cleanup.json')
+        keys = {'terminated', 'services', 'shards', 'stop_reason'} | ({'processors'} if self.processors else set())
+        return (set(document) == keys
+                and document['terminated'] is True and document['stop_reason'] == 'CAMPAIGN_CLOSING'
+                and document['services'].get('terminated') is True and len(document['shards']) == len(WAVES)*len(WORKERS)
+                and all(item.get('terminated') is True for item in document['shards'])
+                and sorted(item.get('launch_id') for item in document.get('processors', ())) == sorted(self.processors)
+                and all(item.get('terminated') is True for item in document.get('processors', ())))
+
+    def staged_cleanup(self, host):
+        """The cleanup of a run collected stage by stage: one record per stage, each bound to its hash-chained container receipt.
+
+        Every stage the run completed (phase 1, phase 2, any retry round, the finalize) must have its completion record, its receipt
+        and its cleanup record with the exact key set of that stage; the receipts must verify with the verifier the stages use
+        (chain, logs, agreement with the registry's settlement); and the launches the records name must be the registered launches,
+        each exactly once."""
+        from so101_demo.runtime.container_campaign import container_receipts, stage_records
+
+        done = [stage for stage in _STAGES if stage_records.record_path(host, stage).exists()]
+        if not {stage_records.PHASE1, stage_records.PHASE2, stage_records.FINALIZE} <= set(done) or not self.records:
+            return False
+        receipts = container_receipts.verify_receipts(host, stage_records.read_record(host, stage_records.FINALIZE), self.records)
+        by_stage = {item['stage']: item for item in receipts}
+        if set(by_stage) != set(done):
+            return False
+        named = []
+        for stage in done:
+            document = read_document(host/('campaign-cleanup.json' if stage == stage_records.PHASE1 else f'campaign-cleanup-{stage}.json'))
+            processing = stage not in (stage_records.PHASE1, stage_records.FINALIZE)
+            keys = {'terminated', 'services', 'shards', 'stop_reason', 'container_receipt'} | ({'processors'} if processing else set())
+            receipt = by_stage[stage]
+            if (set(document) != keys or document['terminated'] is not True or document['stop_reason'] != 'CAMPAIGN_CLOSING'
+                    or document['container_receipt'] != f'containers-receipt-{receipt["seq"]:02d}-{stage}.json'
+                    or document['services'].get('terminated') is not True):
+                return False
+            items = [*document['shards'], *document.get('processors', ())]
+            if not all(item.get('terminated') is True for item in items):
+                return False
+            launches = [*document['services'].get('launch_ids', ()), *(item.get('launch_id') for item in items)]
+            if sorted(launches) != sorted(entry['launch_id'] for entry in receipt['containers']):
+                return False        # the stage's record names exactly the containers its receipt proves gone
+            named += launches
+        return sorted(named) == sorted(record['launch']['launch_id'] for record in self.records)
 
     # ---- quality -------------------------------------------------------------------------------------------------------------
 

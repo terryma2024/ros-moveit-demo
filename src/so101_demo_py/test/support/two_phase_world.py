@@ -18,7 +18,7 @@ from pathlib import Path
 
 from so101_demo.act.processed_result import PROCESSED_KIND, canonical as processed_canonical
 from so101_demo.act.result_store import export_eligible
-from so101_demo.runtime.container_campaign import result_verifier
+from so101_demo.runtime.container_campaign import container_receipts, result_verifier, stage_records
 from so101_demo.runtime.container_campaign.processing_scheduler import ProcessingJournal
 from so101_demo.runtime.container_campaign.processing_verifier import build_campaign_result, verify_processing
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch, ContainerLaunchRegistry
@@ -202,3 +202,47 @@ def convert(world, *, processors=2, missing=(), faults=(), exhausted=(), task_fa
     cleanup['processors'] = [dict(terminated=True, launch_id=f'processing-p{slot:02d}-g1', errors=[]) for slot in range(processors)]
     _rewrite(run/'host'/'campaign-cleanup.json', cleanup)
     return combined
+
+
+def to_staged(run):
+    """Turns the finished two-phase run `convert` left into the form a run collected stage by stage leaves (CONTROLLED edit).
+
+    REAL producers: `stage_records.write_record` for phase1, phase2 and finalize, `container_receipts.container_entry` and
+    `write_receipt` (the hash chain), the owner's `_write`. CONTROLLED: the saved logs (one small file per container), the stage record
+    bodies (only the logic document ref) and the split of the single cleanup record into the three per-stage records the owner writes
+    (`campaign-cleanup.json` for phase 1, `campaign-cleanup-phase2.json`, `campaign-cleanup-finalize.json`, each naming its receipt)."""
+    host = Path(run)/'host'
+    registry = ContainerLaunchRegistry(host/'launches.sqlite3', create=False, read_only=True)
+    try:
+        records = registry.records()
+    finally:
+        registry.close()
+    whole = json.loads((host/'campaign-cleanup.json').read_bytes())
+    groups = dict(phase1=[item for item in records if item['launch']['role'] != 'processor'],
+                  phase2=[item for item in records if item['launch']['role'] == 'processor'], finalize=[])
+    empty = dict(terminated=True, launch_ids=[], errors={})
+    documents = dict(
+        phase1=dict(services=whole['services'], shards=whole['shards']),
+        phase2=dict(services=empty, shards=[], processors=whole['processors']),
+        finalize=dict(services=empty, shards=[]))
+    previous = None
+    for number, stage in enumerate(('phase1', 'phase2', 'finalize'), start=1):
+        previous = stage_records.write_record(host, stage, dict(campaign_config=dict(path='campaign-config.json', sha256='c'*64)),
+                                              previous=previous)
+        entries = []
+        for item in groups[stage]:
+            name = item['launch']['container_name']
+            raw = f'log of {name}\n'.encode()
+            directory = host/container_receipts.LOG_DIRECTORY/stage
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory/f'{name}.log').write_bytes(raw)
+            entries.append(dict(container_receipts.container_entry(item, item['exit_inspect']),
+                                logs_path=f'{container_receipts.LOG_DIRECTORY}/{stage}/{name}.log',
+                                logs_sha256=hashlib.sha256(raw).hexdigest(), removed=True, absent_after_removal=True))
+        receipt = container_receipts.write_receipt(host, stage=stage, stage_record_sha256=previous['sha256'], containers=entries)
+        document = dict(documents[stage], terminated=True, stop_reason='CAMPAIGN_CLOSING',
+                        container_receipt=f'containers-receipt-{receipt["seq"]:02d}-{stage}.json')
+        path = host/('campaign-cleanup.json' if stage == 'phase1' else f'campaign-cleanup-{stage}.json')
+        if path.exists():
+            path.unlink()
+        _write(path, document)
