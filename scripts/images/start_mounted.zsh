@@ -3,11 +3,12 @@
 # read-only at the path they were built at. Container restrictions are the ones of the image-based start: --read-only, --cap-drop ALL,
 # no-new-privileges, --network none, --ipc private, a non-root user.
 #
-# usage: start_mounted.zsh --image ID --install DIR --source DIR --out-dir DIR --gpu UUID --name NAME --domain-id N [--session-id S] [-- COMMAND...]
+# usage: start_mounted.zsh --image ID --install DIR --source DIR --out-dir DIR --gpu UUID --name NAME --domain-id N --commit HEX40 [--session-id S] [-- COMMAND...]
 #   Without a COMMAND the act execution stack is launched headless. Writes under OUT/container-root (tmp, ros-logs, stack, launch.log).
+# The entry script of the image refuses to start unless both trees carry a BUILD-COMMIT record equal to --commit.
 # Design: docs/superpowers/specs/2026-10-21-so101-mount-build-images-design.md
 set -o pipefail
-IMAGE= INSTALL= SOURCE= OUT= GPU= NAME= DOMAIN= SESSION=mountedstack
+IMAGE= INSTALL= SOURCE= OUT= GPU= NAME= DOMAIN= COMMIT= SESSION=mountedstack
 while (( $# )); do
   case $1 in
     --image) IMAGE=$2; shift 2;;
@@ -17,12 +18,13 @@ while (( $# )); do
     --gpu) GPU=$2; shift 2;;
     --name) NAME=$2; shift 2;;
     --domain-id) DOMAIN=$2; shift 2;;
+    --commit) COMMIT=$2; shift 2;;
     --session-id) SESSION=$2; shift 2;;
     --) shift; break;;
     *) print -u2 "unknown argument $1"; exit 2;;
   esac
 done
-for v in IMAGE INSTALL SOURCE OUT GPU NAME DOMAIN; do [[ -n ${(P)v} ]] || { print -u2 "MOUNT_ARGUMENT_MISSING: $v"; exit 2; }; done
+for v in IMAGE INSTALL SOURCE OUT GPU NAME DOMAIN COMMIT; do [[ -n ${(P)v} ]] || { print -u2 "MOUNT_ARGUMENT_MISSING: $v"; exit 2; }; done
 for tree in $INSTALL $SOURCE $OUT; do
   [[ $tree == /* ]] || { print -u2 "MOUNT_PATH_NOT_ABSOLUTE: $tree"; exit 2; }
   [[ -d $tree ]] || { print -u2 "MOUNT_TREE_MISSING: $tree"; exit 2; }
@@ -41,7 +43,7 @@ exec docker run --detach --name $NAME --user 1000:1000 --read-only --cap-drop AL
   --env MPLCONFIGDIR=$CR/tmp/matplotlib --env ROS_HOME=$CR/tmp/ros-home --env ROS_LOG_DIR=$CR/ros-logs \
   --env ROS_DOMAIN_ID=$DOMAIN --env MUJOCO_GL=egl --env ROS_LOCALHOST_ONLY=1 --env ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST \
   --env SO101_MUJOCO_SESSION_ID=$SESSION --env SO101_SIMULATION_SESSION_ID=$SESSION --env SO101_TASK_EVIDENCE_ROOT=$CR/stack \
-  --env GZ_PARTITION=$SESSION --env SO101_MOUNT_INSTALL=$INSTALL \
+  --env GZ_PARTITION=$SESSION --env SO101_MOUNT_INSTALL=$INSTALL --env SO101_MOUNT_SOURCE=$SOURCE --env SO101_EXPECTED_COMMIT=$COMMIT \
   --mount type=bind,src=$OUT,dst=$OUT \
   --mount type=bind,src=$INSTALL,dst=$INSTALL,readonly \
   --mount type=bind,src=$SOURCE,dst=$SOURCE,readonly \

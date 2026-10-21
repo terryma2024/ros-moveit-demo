@@ -134,6 +134,7 @@ def repo(tmp_path):
                           "src/so101_demo_py/docker/campaign-shard-deps/pip-requirements.lock": "b==1 \\\n    --hash=sha256:" + "0" * 64 + "\n",
                           "src/so101_demo_py/docker/mount-base/Dockerfile": "FROM m\n",
                           "src/so101_demo_py/docker/mount-base/bootstrap.bash": "true\n",
+                          "src/so101_demo_py/docker/mount-base/check-mount-commit.bash": "true\n",
                           "src/so101_demo_py/config/perception/inference-requirements.lock": "numpy==1\n",
                           "src/so101_demo_py/docker/campaign-shard/Dockerfile": "FROM y\n",
                           "src/so101_demo_py/docker/campaign-inference/Dockerfile": "FROM z\n",
@@ -324,7 +325,7 @@ def test_the_mount_base_context_is_flat_and_may_use_the_network(repo, host):
     assert argv[argv.index("-t") + 1] == "so101-mount-base:ros-jazzy-torch2.13.0-cu130-v1"
     context = Path(argv[-1])
     assert sorted(path.name for path in context.iterdir()) == [
-        "Dockerfile", "apt-packages.txt", "bootstrap.bash", "inference-requirements.lock", "pip-requirements.lock"]
+        "Dockerfile", "apt-packages.txt", "bootstrap.bash", "check-mount-commit.bash", "inference-requirements.lock", "pip-requirements.lock"]
     assert Path(argv[argv.index("-f") + 1]) == context / "Dockerfile"
     assert not (build / "context/source/build-deps").exists()
 
@@ -348,7 +349,7 @@ def run_start(tmp_path, *extra, install=None):
     docker.chmod(docker.stat().st_mode | stat.S_IXUSR)
     argv_file = tmp_path / "argv.txt"
     done = subprocess.run(["zsh", str(START), "--image", "sha256:" + "a" * 64, "--install", str(install), "--source", str(source),
-                           "--out-dir", str(out), "--gpu", "GPU-1111", "--name", "t-mounted", "--domain-id", "181", *extra],
+                           "--out-dir", str(out), "--gpu", "GPU-1111", "--commit", COMMIT, "--name", "t-mounted", "--domain-id", "181", *extra],
                           capture_output=True, text=True,
                           env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DOCKER_ARGV": str(argv_file)})
     return done, (argv_file.read_text().splitlines() if argv_file.exists() else []), install, source, out
@@ -369,13 +370,115 @@ def test_a_mounted_run_keeps_every_container_restriction_and_mounts_the_trees_re
     assert sum(1 for mount in mounts if not mount.endswith(",readonly")) == 1
     environment = [argv[i + 1] for i, item in enumerate(argv) if item == "--env"]
     assert f"SO101_MOUNT_INSTALL={install}" in environment and "ROS_DOMAIN_ID=181" in environment
+    assert f"SO101_MOUNT_SOURCE={source}" in environment and f"SO101_EXPECTED_COMMIT={COMMIT}" in environment
     assert "PYTHONDONTWRITEBYTECODE=1" in environment and "ROS_LOCALHOST_ONLY=1" in environment
 
 
 def test_a_mounted_run_refuses_a_missing_tree_or_a_relative_path(tmp_path):
     missing = subprocess.run(["zsh", str(START), "--image", "sha256:x", "--install", "relative/install", "--source", "/tmp", "--out-dir", "/tmp",
-                              "--gpu", "G", "--name", "n", "--domain-id", "1"], capture_output=True, text=True)
+                              "--gpu", "G", "--name", "n", "--domain-id", "1", "--commit", COMMIT], capture_output=True, text=True)
     assert missing.returncode == 2 and "MOUNT_PATH_NOT_ABSOLUTE" in missing.stderr
     gone = subprocess.run(["zsh", str(START), "--image", "sha256:x", "--install", "/nonexistent/install", "--source", "/tmp", "--out-dir", "/tmp",
-                           "--gpu", "G", "--name", "n", "--domain-id", "1"], capture_output=True, text=True)
+                           "--gpu", "G", "--name", "n", "--domain-id", "1", "--commit", COMMIT], capture_output=True, text=True)
     assert gone.returncode == 2 and "MOUNT_TREE_MISSING" in gone.stderr
+
+
+# --- mount commit records: the light consistency check (host build writes BUILD-COMMIT, the container entry compares it) -------------
+
+BUILD_MOUNT = IMAGES / "build_mount_tree.zsh"
+CHECK_COMMIT = MOUNT / "check-mount-commit.bash"
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+def run_check(expected, *directories):
+    return subprocess.run(["bash", str(CHECK_COMMIT), *([expected] if expected is not None else []), *map(str, directories)],
+                          capture_output=True, text=True)
+
+
+def trees(tmp_path, install_record=COMMIT, source_record=COMMIT):
+    install, source = tmp_path / "install", tmp_path / "source"
+    for tree, record in ((install, install_record), (source, source_record)):
+        tree.mkdir(exist_ok=True)
+        if record is not None:
+            (tree / "BUILD-COMMIT").write_text(record + "\n")
+    return install, source
+
+
+def test_the_container_entry_accepts_trees_whose_records_equal_the_expected_commit(tmp_path):
+    install, source = trees(tmp_path)
+    assert run_check(COMMIT, install, source).returncode == 0
+
+
+def test_the_container_entry_refuses_a_missing_record_a_different_commit_and_a_malformed_record(tmp_path):
+    install, source = trees(tmp_path, source_record=None)
+    done = run_check(COMMIT, install, source)
+    assert done.returncode == 3 and "MOUNT_COMMIT_MISSING" in done.stderr and str(source) in done.stderr
+    install, source = trees(tmp_path, source_record="f" * 40)
+    done = run_check(COMMIT, install, source)
+    assert done.returncode == 4 and "MOUNT_COMMIT_MISMATCH" in done.stderr
+    install, source = trees(tmp_path, install_record="not-a-commit")
+    assert run_check(COMMIT, install, source).returncode == 4
+    assert run_check(None, install, source).returncode == 2
+    assert run_check("short", install, source).returncode == 2
+
+
+def test_the_mount_base_entry_runs_the_commit_check_before_it_sources_anything_from_the_mounted_tree():
+    text = (MOUNT / "bootstrap.bash").read_text()
+    assert text.index("check-mount-commit") < text.index('source "$SO101_MOUNT_INSTALL/setup.bash"')
+    assert "SO101_EXPECTED_COMMIT" in text and "SO101_MOUNT_SOURCE" in text and "MOUNT_COMMIT_NOT_GIVEN" in text
+    assert "COPY check-mount-commit.bash /act/check-mount-commit.bash" in instructions(MOUNT / "Dockerfile")
+
+
+@pytest.fixture
+def worktree(tmp_path):
+    tree = tmp_path / "wt"
+    tree.mkdir()
+    (tree / "a.txt").write_text("1\n")
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@localhost"]
+    subprocess.run(git + ["init", "-q"], cwd=tree, check=True)
+    subprocess.run(git + ["add", "-A"], cwd=tree, check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "x"], cwd=tree, check=True)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tree, capture_output=True, text=True, check=True).stdout.strip()
+    return tree, head
+
+
+def build_mount(tree, head, tmp_path, command, commit=None):
+    return subprocess.run(["zsh", str(BUILD_MOUNT), "--build-root", str(tmp_path / "br"), "--commit", commit or head],
+                          cwd=tree, capture_output=True, text=True, env={**os.environ, "MOUNT_BUILD_COMMAND": command})
+
+
+def test_a_clean_build_writes_the_commit_record_last_and_leaves_the_trees_read_only(tmp_path, worktree):
+    tree, head = worktree
+    done = build_mount(tree, head, tmp_path, 'mkdir -p "$MOUNT_INSTALL/lib" && echo built > "$MOUNT_INSTALL/lib/x"', )
+    assert done.returncode == 0, done.stderr
+    root = tmp_path / "br" / "mount" / head[:12]
+    for part in ("install", "source"):
+        assert (root / part / "BUILD-COMMIT").read_text() == head + "\n"
+        assert not os.access(root / part, os.W_OK) and not os.access(root / part / "BUILD-COMMIT", os.W_OK)
+        assert oct((root / part).stat().st_mode & 0o777) == "0o555"
+    assert (root / "source" / "a.txt").read_text() == "1\n" and (root / "install/lib/x").exists()
+
+
+def test_the_build_refuses_a_dirty_worktree_or_another_head_before_it_creates_anything(tmp_path, worktree):
+    tree, head = worktree
+    (tree / "a.txt").write_text("changed\n")
+    done = build_mount(tree, head, tmp_path, "true")
+    assert done.returncode == 3 and "MOUNT_BUILD_WORKTREE_DIRTY" in done.stderr and not (tmp_path / "br").exists()
+    subprocess.run(["git", "checkout", "-q", "a.txt"], cwd=tree, check=True)
+    done = build_mount(tree, head, tmp_path, "true", commit="f" * 40)
+    assert done.returncode == 3 and "MOUNT_BUILD_HEAD_MISMATCH" in done.stderr and not (tmp_path / "br").exists()
+
+
+def test_a_worktree_changed_during_the_build_leaves_no_commit_record(tmp_path, worktree):
+    tree, head = worktree
+    done = build_mount(tree, head, tmp_path, 'mkdir -p "$MOUNT_INSTALL" && echo edit >> a.txt')
+    assert done.returncode == 3 and "MOUNT_BUILD_WORKTREE_DIRTY" in done.stderr
+    root = tmp_path / "br" / "mount" / head[:12]
+    assert not (root / "install" / "BUILD-COMMIT").exists() and not (root / "source" / "BUILD-COMMIT").exists()
+
+
+def test_a_failed_build_command_leaves_no_commit_record(tmp_path, worktree):
+    tree, head = worktree
+    done = build_mount(tree, head, tmp_path, "false")
+    assert done.returncode == 4 and "MOUNT_BUILD_FAILED" in done.stderr
+    assert not list((tmp_path / "br").rglob("BUILD-COMMIT"))

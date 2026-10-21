@@ -53,7 +53,8 @@ RUN mkdir -p /usr/share/glvnd/egl_vendor.d \
     && chmod 0644 /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 COPY bootstrap.bash /act/bootstrap.bash
-RUN chmod 0555 /act/bootstrap.bash
+COPY check-mount-commit.bash /act/check-mount-commit.bash
+RUN chmod 0555 /act/bootstrap.bash /act/check-mount-commit.bash
 
 WORKDIR /act
 ENTRYPOINT ["/act/bootstrap.bash"]
