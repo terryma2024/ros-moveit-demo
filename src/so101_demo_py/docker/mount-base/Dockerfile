@@ -40,7 +40,7 @@ RUN python3 -m venv --system-site-packages /opt/venv \
         --requirement /tmp/mount-base/inference-requirements.lock \
     && install -d -m 1777 /opt/ultralytics /opt/torch-cache \
     && install -m 0644 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /opt/ultralytics/Arial.ttf \
-    && /usr/bin/bash -c 'source /opt/ros/jazzy/setup.bash && /opt/venv/bin/python -B -c "import open3d, rclpy, torch, torchvision, ultralytics; from vision_msgs.msg import Detection2DArray; assert open3d.__version__ == \"0.19.0\"; assert torch.__version__ == \"2.13.0+cu130\"; assert torchvision.__version__ == \"0.28.0+cu130\"; assert ultralytics.__version__ == \"8.4.115\""'
+    && /usr/bin/bash -c 'source /opt/ros/jazzy/setup.bash && /opt/venv/bin/python -B -c "import open3d, rclpy, torch, torchvision, ultralytics; from vision_msgs.msg import Detection2DArray; assert open3d.__version__ == \"0.19.0\"; assert torch.__version__ == \"2.13.0+cu130\"; assert torchvision.__version__ == \"0.28.0+cu130\"; assert ultralytics.__version__ == \"8.4.115\""' \
     && find /opt/venv -type d -name __pycache__ -prune -exec rm -rf {} +
 
 # /act/venv: the interpreter of the host-built console scripts' environment. Its .pth puts the mounted tree's site-packages first when

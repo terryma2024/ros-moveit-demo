@@ -548,3 +548,12 @@ def test_the_mount_base_removes_the_bytecode_ensurepip_compiled_for_each_venv():
     text = (ROOT / "src/so101_demo_py/docker/mount-base/Dockerfile").read_text()
     for venv in ("/opt/venv", "/act/venv"):
         assert f"find {venv} -type d -name __pycache__ -prune -exec rm -rf {{}} +" in text
+
+
+@pytest.mark.parametrize("name", ["mount-base", "campaign-shard-deps", "campaign-shard", "campaign-inference"])
+def test_a_continued_run_line_never_follows_a_line_without_its_backslash(name):
+    lines = (ROOT / f"src/so101_demo_py/docker/{name}/Dockerfile").read_text().split("\n")
+    for number, line in enumerate(lines[1:], 2):
+        if line.startswith("    &&") or line.startswith("      ") and lines[number - 2].rstrip().endswith("\\"):
+            previous = lines[number - 2].rstrip()
+            assert previous.endswith("\\") or previous.endswith("'") or previous == "", f"{name}:{number}"
