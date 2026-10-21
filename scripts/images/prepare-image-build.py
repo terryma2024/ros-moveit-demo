@@ -12,6 +12,7 @@ import subprocess
 # their defaults are the host values (scripts/gate/hosts/<host>.env, loaded by scripts/gate/load_host.zsh).
 parser=argparse.ArgumentParser()
 parser.add_argument('--role',choices=('inference','shard-deps','shard'),default='inference')
+parser.add_argument('--no-cache',action='store_true',help='docker build --no-cache: every layer is built again (the determinism acceptance builds twice this way)')
 parser.add_argument('--pin-shard-deps',default=None,help='sha256 image ID of the so101-campaign-shard-deps base when base-image-ids.json has none yet (a new base is pinned there once it is built and transferred)')
 parser.add_argument('--evidence-root',default=os.environ.get('EVIDENCE_R'),help='image-build-<T>/ and current-*-path.txt are written here (default $EVIDENCE_R)')
 parser.add_argument('--native-build-deps',default=os.environ.get('NATIVE_BUILD_DEPS'),help='directory holding node/ (default $NATIVE_BUILD_DEPS)')
@@ -103,7 +104,7 @@ for line in subprocess.check_output(["git", "submodule", "status"], text=True).s
 tag = "so101-campaign-shard-deps:ros-jazzy-yolo11n-v1" if role == 'shard-deps' else "so101-campaign-"+role+":dispatch-2130aaf1-"+commit[:12]
 dockerfile = source / (DEPS_DIR + "Dockerfile") if role == 'shard-deps' else source / ("src/so101_demo_py/docker/campaign-"+role+"/Dockerfile")
 context = source / DEPS_DIR if role == 'shard-deps' else build / "context"
-argv = ["docker", "build", "--network", 'default' if role == 'shard-deps' else 'none', "--progress", "plain", "--iidfile", str(build / (role+".iid")),
+argv = ["docker", "build", *(["--no-cache"] if args.no_cache else []), "--network", 'default' if role == 'shard-deps' else 'none', "--progress", "plain", "--iidfile", str(build / (role+".iid")),
         "-t", tag, "-f", str(dockerfile), str(context)]
 (build / "argv.json").write_text(json.dumps(argv, indent=2)+"\n")
 (root / "current-image-build-path.txt").write_text(str(build)+"\n")

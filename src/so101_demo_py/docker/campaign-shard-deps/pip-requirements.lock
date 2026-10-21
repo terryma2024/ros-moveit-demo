@@ -3,6 +3,8 @@
 # Hashes are of the wheels pip selects on linux x86_64 / CPython 3.12.
 absl-py==2.5.1 \
     --hash=sha256:721200f2f0e9960f2ca9dc3a2a706b201f5f75d812c158f059cbbe29eeafbdb8
+colcon-installed-package-information==0.2.1 \
+    --hash=sha256:71af86bafc5b529c80682a68ff4b92a0f595ac07d32c2ba0a78068910a84a5a0
 colcon-override-check==0.0.1 \
     --hash=sha256:6c07e828a99933aa6acd3312ad3b0d63896f33239b1d7022e8a6e8c04e122da2
 etils==1.14.0 \
@@ -21,3 +23,5 @@ pyopengl==3.1.10 \
     --hash=sha256:794a943daced39300879e4e47bd94525280685f42dbb5a998d336cfff151d74f
 pytest-xdist==3.8.0 \
     --hash=sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88
+setuptools==79.0.1 \
+    --hash=sha256:e147c0549f27767ba362f9da434eab9c5dc0045d5304feb602a0af001089fc51

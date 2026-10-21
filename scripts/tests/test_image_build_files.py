@@ -210,3 +210,13 @@ def test_the_inference_build_is_unchanged_offline_with_the_full_snapshot(repo, h
     assert argv[argv.index("--network") + 1] == "none"
     assert "README.md" not in json.loads((built(host) / "source-files.json").read_text())
     assert (built(host) / "context/source/src/so101_demo_py/src/module.py").is_file()
+
+
+def test_no_cache_is_passed_to_docker_build_only_when_asked(repo, host):
+    for flag, expected in (((), False), (("--no-cache",), True)):
+        evidence = host["evidence"] / ("cached" if not flag else "fresh")     # one build directory name per second: separate roots
+        evidence.mkdir()
+        done = prepare(repo, {**host, "evidence": evidence}, "shard-deps", PINS["shard-deps"]["id"], *flag, build_deps=False)
+        assert done.returncode == 0, done.stderr
+        argv = json.loads((built({"evidence": evidence})/ "argv.json").read_text())
+        assert ("--no-cache" in argv) is expected and argv[:2] == ["docker", "build"]
