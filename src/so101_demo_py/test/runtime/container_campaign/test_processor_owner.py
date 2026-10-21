@@ -223,3 +223,59 @@ def test_a_ready_record_of_another_process_fails_the_start(tmp_path, monkeypatch
         asyncio.run(run())
     finally:
         fixture.registry.close()
+
+
+def mounted_provenance(image, mount, seen, *, commit=None):
+    def read(cid, docker_runner, mount_role=None, install_root=None):
+        seen.update(mount_role=mount_role, install_root=install_root)
+        return dict(container_id=cid, docker_started_at=STARTED, image_digest=image["digest"],
+            provenance={**{name: image[name] for name in ("package_source_sha256", "install_sha256")}, "git_commit": commit or mount.commit})
+    return read
+
+
+def mount_trees(tmp_path):
+    from so101_demo.runtime.container_campaign.mount_build import MountBuild
+
+    commit = "0123456789abcdef0123456789abcdef01234567"
+    mount = MountBuild(commit=commit, root=tmp_path / "mounted" / commit[:12])
+    for name in ("install", "source"):
+        (mount.root / name).mkdir(parents=True)
+        (mount.root / name / "BUILD-COMMIT").write_text(commit + "\n")
+    return mount
+
+
+def test_a_mounted_processor_launches_with_the_trees_and_records_the_mount(tmp_path, monkeypatch):
+    fixture = Fixture(tmp_path)
+    fixture.child_files(PROCESS)
+    mount, seen = mount_trees(tmp_path), {}
+    monkeypatch.setattr(owner_module, "read_container_provenance", mounted_provenance(fixture.image, mount, seen))
+    owner = fixture.owner(mount_build=mount)
+
+    async def run():
+        await owner.start()
+        argv = fixture.calls[0]
+        assert f"SO101_EXPECTED_COMMIT={mount.commit}" in argv and f"type=bind,src={mount.install},dst={mount.install},readonly" in argv
+        assert argv[argv.index(fixture.image["digest"]) + 1:][:3] == ["/act/venv/bin/python", "-I", "-B"]
+        assert seen == dict(mount_role="shard", install_root=str(mount.install))
+        record = json.loads((fixture.root / "actual-container-provenance.json").read_text())
+        assert record["mount_build"] == mount.document()
+    try:
+        asyncio.run(run())
+    finally:
+        fixture.registry.close()
+
+
+def test_a_mounted_processor_whose_readback_names_another_commit_fails_the_start(tmp_path, monkeypatch):
+    fixture = Fixture(tmp_path)
+    fixture.child_files(PROCESS)
+    mount = mount_trees(tmp_path)
+    monkeypatch.setattr(owner_module, "read_container_provenance", mounted_provenance(fixture.image, mount, {}, commit="f" * 40))
+    owner = fixture.owner(mount_build=mount)
+
+    async def run():
+        with pytest.raises(ValueError, match="PROCESSOR_IMAGE_PROVENANCE_CHANGED"):
+            await owner.start()
+    try:
+        asyncio.run(run())
+    finally:
+        fixture.registry.close()

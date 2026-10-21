@@ -71,6 +71,15 @@ def _image(image):
     _sha(image["install_sha256"])
 
 
+def validate_mount_build(document):
+    """The shape of the `mount_build` key: `{commit: 40 hex, root: <canonical absolute dir named by the commit's first 12 hex>}`."""
+    _keys(document, ("commit", "root"))
+    _text(document["commit"])
+    _require(re.fullmatch(r"[0-9a-f]{40}", document["commit"]) is not None)
+    root = _absolute(document["root"])
+    _require(root.name == document["commit"][:12] and ".." not in root.parts and str(root) == document["root"])
+
+
 def _service(service, role, *, readback):
     _keys(service, ("image", "model", "instances", "torch_threads", "torch_interop_threads",
         "max_inflight_requests", "max_frame_bytes", "max_image_height", "max_image_width",
@@ -131,7 +140,12 @@ RETRY_INVALID_MAX_ROUNDS_LIMITS = (0, 3)
 _RIG_PROFILE_SHA256 = "rig_profile_sha256"
 # The GPU model the campaign declares (environment class: recorded in the qualification report, not part of the identity).
 _GPU_MODEL = "gpu_model"
-_OPTIONAL_LIMITS = (_GPU_MODEL, _RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
+# Mount mode (design 2026-10-21, mount-build images; default off = absent): the containers run one dependency-only base image and get
+# the host-built install and source trees of one commit as read-only bind mounts at `<root>/install` and `<root>/source`. The key is
+# class L: it is part of the controlled identity (`unified.admission._collection_identity`) beside the images, whose `digest` is then the
+# base image and whose two hashes are the sha256 of the trees' BUILD-COMMIT records (`container_campaign.mount_build`).
+_MOUNT_BUILD = "mount_build"
+_OPTIONAL_LIMITS = (_GPU_MODEL, _MOUNT_BUILD, _RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
                     _RIG_PROFILE_SHA256, *_INT_LIMITS)
 
 
@@ -218,6 +232,10 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
             _service(document[role + "_service"], role, readback=role in roles)
         _require(document["head_service"]["image"] == document["teacher_service"]["image"])
         _image(document["shard_image"])
+        if _MOUNT_BUILD in document:
+            validate_mount_build(document[_MOUNT_BUILD])
+            # one base image runs every role
+            _require(document["shard_image"]["digest"] == document["head_service"]["image"]["digest"])
         _text(document["gpu_uuid"])
         _require(document["gpu_uuid"].startswith("GPU-"))
         if "gpu_model" in document:

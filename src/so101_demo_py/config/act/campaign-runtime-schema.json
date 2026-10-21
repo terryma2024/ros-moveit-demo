@@ -483,6 +483,24 @@
           "type": "null"
         }
       ]
+    },
+    "mount_build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "root"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "root": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      }
     }
   }
 }

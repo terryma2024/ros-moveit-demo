@@ -7,6 +7,7 @@ not GPU or campaign authorization. Failed/unknown exits keep cleanup unconfirmed
 import asyncio
 import copy
 from dataclasses import dataclass
+import functools
 import hashlib
 import json
 import math
@@ -18,6 +19,7 @@ import time
 from types import SimpleNamespace
 
 from so101_demo.runtime.container_campaign.launch import InferenceLaunchArgs, build_container_argv
+from so101_demo.runtime.container_campaign.mount_build import PREFLIGHT_COPY, mount_from_config, read_preflight, verify_images
 from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_inspect
 from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey, container_key_from_inspect
 from so101_demo.runtime.container_campaign.provenance import read_container_provenance
@@ -145,6 +147,16 @@ class ContainerServiceOwner:
             deadline = min(self.clock()+int(self.startup_timeout_s*1e9),
                            int(self.context.deadline_monotonic_s*1e9))
             prepared = []
+            mount_build = mount_from_config(self.config)
+            if mount_build is not None:
+                verify_images(self.config, mount_build)
+                payload, _record = read_preflight(self.config['evidence_root'], mount_build, self.config)
+                copy_path = self.paths['host']/PREFLIGHT_COPY
+                if copy_path.exists():
+                    if copy_path.read_bytes() != payload:
+                        raise ValueError('MOUNT_PREFLIGHT_CHANGED')
+                else:
+                    copy_path.write_bytes(payload)
             for role in self.roles:
                 settings = self.config[role+'_service']
                 config_path = self.paths['run']/(role+'-service'+self._tail+'.json')
@@ -174,7 +186,7 @@ class ContainerServiceOwner:
                     host_paths=dict(owned_root=owned, approved_inputs=(Path(settings['model']['weights']['path']),),
                         socket_roots=self.paths['socket_roots'], config_paths=(config_path, self.head_descriptor)
                             if role == 'head' else (config_path,), entry=entry),
-                    container_name='so101-'+generation, uid=os.getuid(), gid=os.getgid())
+                    container_name='so101-'+generation, uid=os.getuid(), gid=os.getgid(), mount_build=mount_build)
                 prepared.append((role, generation, argv))
             for role, generation, argv in prepared:
                 if self._closing or self.clock() >= deadline:
@@ -227,11 +239,15 @@ class ContainerServiceOwner:
                     if ready['ready'] is True and ready['loaded_instances'] == settings['instances']:
                         break
                     await asyncio.sleep(.05)
-                actual = await asyncio.to_thread(read_container_provenance, cid, docker_runner=self.docker_runner)
+                actual = await asyncio.to_thread(functools.partial(read_container_provenance, cid, docker_runner=self.docker_runner,
+                    **({} if mount_build is None else dict(mount_role='inference', install_root=str(mount_build.install)))))
                 if (actual['image_digest'] != settings['image']['digest'] or any(
                         actual['provenance'][name] != settings['image'][name]
-                        for name in ('package_source_sha256','install_sha256'))):
+                        for name in ('package_source_sha256','install_sha256'))
+                        or (mount_build is not None and actual['provenance']['git_commit'] != mount_build.commit)):
                     raise ValueError('SERVICE_IMAGE_PROVENANCE_MISMATCH')
+                if mount_build is not None:
+                    actual = dict(actual, mount_build=mount_build.document())
                 _write(self.paths['host']/(role+'-ready'+self._tail+'.json'), ready)
                 _write(self.paths['host']/(role+'-provenance'+self._tail+'.json'), actual)
                 self._endpoints[role] = endpoint

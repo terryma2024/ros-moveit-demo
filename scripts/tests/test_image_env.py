@@ -215,3 +215,16 @@ def test_other_apt_differences_are_still_refused_even_outside_the_closure():
     for image_version, host_version in (("1.0-1", "1.1-1"), ("1.0-1", "1.0-2"), ("1.0-1+esm1", "1.1-1+esm1")):
         rows = ie.compare(image(apt={"libother": image_version}), host(apt={"libother": host_version}), required=set())
         assert [row["key"] for row in ie.must_failures(rows)] == ["apt:libother"], (image_version, host_version)
+
+
+def test_the_preflight_record_names_the_commit_the_base_image_and_the_exceptions():
+    apt = {"libqt5core5t64": "5.15.13+dfsg-1ubuntu1", "libxnvctrl0": "510.47"}
+    rows = ie.compare(image(apt=apt), host(apt={"libqt5core5t64": "5.15.13+dfsg-1ubuntu1+esm1", "libxnvctrl0": "610.43"}), required=set())
+    record = ie.preflight_record(manifest_bytes=b"manifest", manifest=image(), record_bytes=b"a" * 40 + b"\n", rows=rows, host="antzb")
+    assert record["result"] == "PASS" and record["must_failures"] == 0 and record["commit"] == "a" * 40
+    assert record["base_image_id"] == "sha256:abc" and record["exceptions"] == {"libqt5core5t64": "esm", "libxnvctrl0": "host-specific"}
+    import hashlib
+    assert record["base_manifest_sha256"] == hashlib.sha256(b"manifest").hexdigest()
+    assert record["install_record_sha256"] == hashlib.sha256(b"a" * 40 + b"\n").hexdigest()
+    bad = ie.compare(image(), host(python3="3.13.0"), required=set())
+    assert ie.preflight_record(manifest_bytes=b"m", manifest=image(), record_bytes=b"b" * 40, rows=bad, host="h")["result"] == "FAIL"

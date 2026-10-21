@@ -142,8 +142,46 @@ hashed per file and nothing is recomputed at container start.
 - What the scheme does not catch: a build made after someone edited an installed file under the clean worktree's nose, or a tree altered
   by a user with write access after the build. Read-only modes and the single build user are the mitigations; this is accepted.
 
-This still changes `provenance.py`, the launch record and the config validation (`runtime/inference/config.py:66-71`) when step 7 is
-done; none of that is touched before the coordinator approves, and it stays behind a default-off switch.
+#### Step 7: how the collection code uses it (implemented 2026-10-21, default off)
+
+**The switch** is the campaign config key `mount_build: {commit, root}` (`root` = `<mount dir>/<commit12>`, canonical). Absent, every
+container runs a self-contained image exactly as before. It is class L: `unified.admission._collection_identity` puts `mount_build` into
+the controlled identity beside the images (qualification contract, report, `act_merge_collections` all compare it), and the config hash
+covers it, so a stage chain that continues a run cannot change it.
+
+**The image records keep their shape**, so no schema or comparison code needed a second branch: in a mounted config `digest` is the base
+image (one for the Teacher/Head service and the shard; the loader refuses different ones), and `package_source_sha256` / `install_sha256`
+are the sha256 of the two trees' `BUILD-COMMIT` records. The commit therefore is in the identity twice (the key and, through the
+hashes, the image records), and `container_campaign.mount_build.verify_images` checks on the host that the config's records are the trees'
+records before the first launch.
+
+**Launch** (`build_container_argv(mount_build=...)`): the base image, the two trees as `readonly` bind mounts at their own host paths, the
+three environment variables of the entry script, the Fast DDS profile of the mounted `so101_demo_py` prefix, and the command
+`/act/venv/bin/python -I -B -m ...image_bootstrap <program>` (the base's ENTRYPOINT is only the entry script, which checks the records
+against the expected commit before it sources anything). An input inside the mounted root is refused. The Teacher/Head service, the shard
+and the processor all use it. Everything else (`--read-only`, `--cap-drop ALL`, `--network none`, one GPU, the private IPC) is unchanged.
+In the container `image_bootstrap` derives the role from the program (the base has no role file), reads back the mounted trees
+(`provenance.read_mounted_image`: the commit from the records, the two hashes, the imported modules and their paths under the mounted
+install) and execs the program. The shard shell takes the mounted `so101_demo_py` prefix as its install prefix and the base's own
+`/opt/ros/jazzy/bin/ros2` (the image path carries a rewritten copy inside its install).
+
+**Records.** `actual-container-provenance.json` (shard, processor) and `host/<role>-provenance.json` (Teacher, Head) keep their
+content and add `mount_build`; an owner refuses (`*_IMAGE_PROVENANCE_CHANGED` / `SERVICE_IMAGE_PROVENANCE_MISMATCH`) when the container's
+readback names another commit, base image or record hash. The qualification recompute reads them with the mounted install root, refuses a
+mount record under an image identity and the reverse, and compares the config's `mount_build` with the contract's.
+
+**Environment check before the start.** `scripts/env/image_env.py check-image --manifest BASE.json --tree <mount>/install --preflight
+<evidence_root>/mount-preflight-<commit12>.json` writes the record (`MOUNT_PREFLIGHT`: result, commit, base image, sha256 of the base
+manifest, install record hash, must-failures, warnings, the exceptions applied, host). The service owner refuses to start without a
+passing record for its commit and base image (`MOUNT_PREFLIGHT_MISSING` / `MOUNT_PREFLIGHT_REFUSED`) and keeps a copy as `host/mount-preflight.json`, which
+the run seal covers; the recompute and `act_merge_collections` read that copy (`MERGE_MOUNT_PREFLIGHT_*`: every source passed, and they
+checked the same base image manifest, which is the cross-host comparison of the environment).
+
+**The narrow exception in `check-image`** (human decision): an apt difference is a warning only if (a) it is the same upstream version
+that differs only by an Ubuntu Pro ESM suffix (`+esmN` / `~esmN`), or the package is `libxnvctrl0` (NVIDIA driver userland), **and** (b) the
+package is outside the mounted tree's dependency closure and `ldd`-owner packages. Every other difference refuses. Measured on antzb for
+commit 555fb8a6d (see `progress-mount-images.md`): all 20 known differences are *inside* the closure (the Qt 5 development packages and the
+Python build tools the tree's `package.xml` files name, and `libxnvctrl0`), so (b) does not hold for any of them and the check still fails.
 
 ### e. Security
 

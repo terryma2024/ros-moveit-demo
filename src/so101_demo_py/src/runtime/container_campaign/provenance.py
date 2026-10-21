@@ -11,6 +11,8 @@ import stat
 import sys
 
 from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_inspect
+from so101_demo.runtime.container_campaign.mount_build import (
+    COMMIT_ENV, ENTRY_SCRIPT, INSTALL_ENV, INTERPRETER, SOURCE_ENV, read_record, record_sha256)
 from so101_demo.runtime.container_campaign.process_identity import container_key_from_inspect
 from so101_demo.runtime.inference.config import _open_regular
 from so101_demo.runtime.parallel_ipc.frames import _pairs, canonical_json
@@ -80,7 +82,7 @@ def _git_readback(source_root, commit, submodules):
     _require(metadata == dict(git_commit=commit, submodules=submodules))
 
 
-def _runtime_contract(runtime):
+def _runtime_contract(runtime, install_root="/act/install"):
     _require(type(runtime) is dict and set(runtime) == {
         "interpreter", "dependencies", "module_origins", "package_prefixes"})
     _require(runtime["interpreter"] == "/act/venv/bin/python")
@@ -91,7 +93,7 @@ def _runtime_contract(runtime):
             if group != "dependencies":
                 path = Path(value)
                 _require(path.is_absolute() and ".." not in path.parts
-                         and path.is_relative_to("/act/install") and str(path) == value)
+                         and path.is_relative_to(install_root) and str(path) == value)
 
 
 def freeze_image(*, source_root, install_root, git_commit, submodules, runtime):
@@ -130,11 +132,11 @@ def verify_image_freeze(manifest, *, source_root, install_root, runtime):
         raise ValueError("IMAGE_PROVENANCE_INVALID") from error
 
 
-def runtime_readback(contract):
+def runtime_readback(contract, install_root="/act/install"):
     """Import the requested installed modules and query actual dependency metadata."""
     from ament_index_python.packages import get_package_prefix
 
-    _runtime_contract(contract)
+    _runtime_contract(contract, install_root)
     modules = {name: str(Path(importlib.import_module(name).__file__).resolve(strict=True))
                for name in contract["module_origins"]}
     runtime = dict(interpreter=sys.executable,
@@ -142,21 +144,23 @@ def runtime_readback(contract):
         module_origins=modules,
         package_prefixes={name: str(Path(get_package_prefix(name)).resolve(strict=True))
                           for name in contract["package_prefixes"]})
-    _runtime_contract(runtime)
+    _runtime_contract(runtime, install_root)
     return runtime
 
 
-def _report(report):
+def _report(report, install_root="/act/install"):
     _require(type(report) is dict and set(report) == {"schema_version", "kind",
         "package_source_sha256", "install_sha256", "git_commit", "submodules", "runtime"})
     _require(type(report["schema_version"]) is int and report["schema_version"] == 1
              and report["kind"] == "ACT_CONTAINER_IMAGE_READBACK")
     _require(_sha(report["package_source_sha256"]) and _sha(report["install_sha256"]))
     _git(report["git_commit"], report["submodules"])
-    _runtime_contract(report["runtime"])
+    _runtime_contract(report["runtime"], install_root)
 
 
-def read_container_provenance(container_id, *, docker_runner):
+def read_container_provenance(container_id, *, docker_runner, mount_role=None, install_root="/act/install"):
+    """`mount_role` ('inference' or 'shard') reads a mount-mode container: the entry script first (it checks the trees' records and
+    sets the environment), and the role says which modules the readback imports."""
     try:
         _require(_sha(container_id))
         def inspect():
@@ -171,16 +175,38 @@ def read_container_provenance(container_id, *, docker_runner):
                      and state["Restarting"] is False and type(state["Pid"]) is int and state["Pid"] > 0)
             return key
         before = inspect()
-        result = docker_runner(["docker", "exec", container_id, "/act/venv/bin/python", "-I", "-m",
-                               "so101_demo.runtime.container_campaign.provenance"])
+        module = "so101_demo.runtime.container_campaign.provenance"
+        command = (["/act/venv/bin/python", "-I", "-m", module] if mount_role is None
+                   else [ENTRY_SCRIPT, INTERPRETER, "-I", "-B", "-m", module, mount_role])
+        result = docker_runner(["docker", "exec", container_id, *command])
         _require(result.returncode == 0)
         report = _json(result.stdout)
-        _report(report)
+        _report(report, install_root)
         _require(inspect() == before)
         return dict(container_id=before.container_id, docker_started_at=before.docker_started_at,
                     image_digest=before.image_digest, provenance=report)
     except (OSError, ValueError, TypeError, KeyError, RuntimeError, AttributeError) as error:
         raise ValueError("IMAGE_PROVENANCE_INVALID") from error
+
+
+def read_mounted_image(role):
+    """Mount mode: the report a container gives for the trees mounted into it. The trees' records name the commit, the two hashes are
+    those of the records (`mount_build`), and the runtime is read back from what is imported, as for a frozen image."""
+    _require(role in ("inference", "shard"))
+    install, source = Path(os.environ[INSTALL_ENV]), Path(os.environ[SOURCE_ENV])
+    commit = os.environ[COMMIT_ENV]
+    _require(_sha(commit, 40))
+    for directory in (install, source):
+        _require(read_record(directory)[1] == commit)
+    modules = ["so101_demo"] + (["so101_teleop", "so101_quik"] if role == "shard" else [])
+    packages = list(SHARD_PACKAGES if role == "shard" else INFERENCE_PACKAGES)
+    versions = {distribution.metadata["Name"]: importlib.metadata.version(distribution.metadata["Name"])
+                for distribution in importlib.metadata.distributions() if distribution.metadata.get("Name")}
+    runtime = runtime_readback(dict(interpreter=INTERPRETER, dependencies=versions,
+        module_origins={name: str(install) for name in modules},
+        package_prefixes={name: str(install) for name in packages}), str(install))
+    return dict(schema_version=1, kind="ACT_CONTAINER_IMAGE_READBACK", package_source_sha256=record_sha256(source),
+                install_sha256=record_sha256(install), git_commit=commit, submodules={}, runtime=runtime)
 
 
 def read_installed_image():
@@ -220,9 +246,10 @@ def write_build_freeze(role):
         install_root="/act/install", runtime=runtime)).decode())
 
 
-def main():
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
     try:
-        report = read_installed_image()
+        report = read_mounted_image(argv[0]) if os.environ.get(INSTALL_ENV) else read_installed_image()
         print(canonical_json(report).decode())
         return 0
     except (OSError, ValueError, TypeError, KeyError, RuntimeError, ImportError) as error:

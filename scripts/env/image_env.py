@@ -19,9 +19,12 @@ A library the container cannot find is a failure. Packages that only the host ha
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import sys
 
@@ -291,6 +294,27 @@ def cmd_capture_image(args) -> int:
     return 0
 
 
+def preflight_record(*, manifest_bytes: bytes, manifest: dict, record_bytes: bytes, rows: list[dict], host: str) -> dict:
+    """The record the campaign reads before a mount-mode start (`container_campaign.mount_build.preflight_problem`)."""
+    failures = must_failures(rows)
+    exceptions = {row["key"].partition(":")[2]: row["relation"].partition("(")[2].rstrip(")")
+                  for row in rows if row["class"] == SHOULD and "(" in row["relation"]}
+    return {"schema_version": 1, "kind": "MOUNT_PREFLIGHT", "result": "FAIL" if failures else "PASS",
+            "commit": record_bytes.decode("ascii").strip(), "base_image_id": manifest["image_id"],
+            "base_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+            "install_record_sha256": hashlib.sha256(record_bytes).hexdigest(), "must_failures": len(failures),
+            "warnings": len([row for row in rows if row["class"] == SHOULD]), "exceptions": dict(sorted(exceptions.items())), "host": host}
+
+
+def write_preflight(path: Path, *, manifest_path: Path, manifest: dict, tree: Path, rows: list[dict]) -> None:
+    record = preflight_record(manifest_bytes=manifest_path.read_bytes(), manifest=manifest, record_bytes=(tree / "BUILD-COMMIT").read_bytes(),
+                              rows=rows, host=socket.gethostname())
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
+    os.replace(temporary, path)
+    print(f"preflight record {record['result']} written to {path}")
+
+
 def cmd_check_image(args) -> int:
     manifest = json.loads(Path(args.manifest).read_text())
     tree = Path(args.tree).resolve()
@@ -305,6 +329,8 @@ def cmd_check_image(args) -> int:
         Path(args.plan).write_text(json.dumps(alignment_plan(manifest, host, needs["required"]), indent=1) + "\n")
     print(base.format_table(rows, limit=args.limit))
     failures = must_failures(rows)
+    if args.preflight:
+        write_preflight(Path(args.preflight), manifest_path=Path(args.manifest), manifest=manifest, tree=tree, rows=rows)
     print(f"RESULT: {'FAIL' if failures else 'PASS'} ({len(failures)} must-match difference(s); "
           f"{len(needs['required'])} required packages, {len(needs['unresolved_keys'])} unresolved keys)")
     return 1 if failures else 0
@@ -328,6 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
     chk.add_argument("--host-state", help="host state saved by capture-host (compare another host, or a deliberately skewed copy)")
     chk.add_argument("--json")
     chk.add_argument("--plan")
+    chk.add_argument("--preflight", help="write the record a mount-mode campaign start requires (host/base-image check result)")
     chk.add_argument("--limit", type=int, default=40)
     chk.set_defaults(func=cmd_check_image)
     return parser
