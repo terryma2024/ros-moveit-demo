@@ -6,6 +6,12 @@ Status: CONFIRMED by the human on 2026-10-21 ("可以，按推荐执行。 Q4 py
 
 Option 2 was chosen on 2026-10-21 ("可以，按方案2写设计文档").
 
+**Amendment 1 (2026-10-21, human: "可以，按这个做").** The shard-deps base no longer reproduces the exact apt versions of the current shard image. Those old ROS builds are no longer on the mirrors, which keep only the newest build, and inside `docker build` `packages.ros.org` reached only about 32 KB/s from antzb.
+- **Sources.** The shard-deps build switches its apt sources to `mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu` (same keyring) and `mirrors.tuna.tsinghua.edu.cn/ubuntu`, and pip stays on the tuna PyPI mirror. It installs the mirror's current versions.
+- **Lock file.** The installed apt (`dpkg-query -W`) and pip (`pip freeze --all` with hashes) sets are exported into a tracked lock file under `scripts/images/`, as a record and for later comparison.
+- **One build, pinned by ID.** The base is built once on ai-station, pinned by ID in `prepare-image-build.py`, and transferred once (zstd) to antzb. A shard-deps built on antzb is used only to validate the build flow.
+- **Requalification.** The ROS packages in the shard image move from the June builds to the mirror's current builds. Adopting the new images therefore needs a gate and a qualification, after the current formal collection.
+
 ## Why
 
 - **The link is slow.** ai-station and antzb are on different networks, and tailscale reaches about 2.8 MB/s between them, so transferring a full image pair (about 31 GB) takes hours.
