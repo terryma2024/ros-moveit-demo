@@ -374,7 +374,7 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
                 sources = sources_factory(node, episode, options, policy)
             engine = OfflineEngine(episode=episode, sources=sources, policy=policy, identity=stream_identity,
                                    result_file=Path(work) / "recorder-result.json",
-                                   clock=clock.monotonic, sleep=clock.advance, rig=rig)
+                                   clock=clock.monotonic, sleep=clock.advance, rig=rig, readback_after_seal=False)
             # a DIAGNOSTIC run looks past the camera defect: the scan names it, the engine is not told
             rc = engine.process(node, preset_reasons=[r for r in reasons
                                                        if not (camera_repair and r.startswith("OFFLINE_CAMERA_"))])

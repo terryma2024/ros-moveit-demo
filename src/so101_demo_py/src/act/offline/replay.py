@@ -25,6 +25,17 @@ from dataclasses import dataclass
 from so101_demo.act.rig_profile import DEFAULT_RIG
 
 
+_DESERIALIZE: list = []
+
+
+def _deserialize_message():
+    """`rclpy.serialization.deserialize_message`, imported once (this module loads without ROS)."""
+    if not _DESERIALIZE:
+        from rclpy.serialization import deserialize_message
+        _DESERIALIZE.append(deserialize_message)
+    return _DESERIALIZE[0]
+
+
 # ---- clock mapping -------------------------------------------------------------------------------------------------
 
 class ClockMap:
@@ -472,7 +483,7 @@ class ReplayNode:
         Such a message is held, in topic order, until `/clock` reaches its stamp, for at most HOLD_NS of receipt time; a stamp
         `/clock` does not reach in that time is delivered anyway and the sources' own future-stamp rule judges it.
         """
-        from rclpy.serialization import deserialize_message
+        deserialize_message = _deserialize_message()
 
         limit = self.clock.now_ns if until_ns is None else int(until_ns)
         count = 0
