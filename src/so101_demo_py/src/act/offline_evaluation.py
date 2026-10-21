@@ -91,6 +91,9 @@ def _dataset_episodes(root: Path) -> list:
 
 FREEZE_FIELDS = ("bundle_sha256", "dataset_manifest_sha256", "campaign_index_sha256",
                  "split_manifest_sha256", "calibration_sha256", "runtime_config_sha256")
+#: a freeze may pin the inference runtime config by its logic keys (`runtime_logic_sha256`: the timeouts and the device are not
+#: bound) instead of its file bytes (`runtime_config_sha256`, every freeze made before); exactly one of the two is present
+FREEZE_FIELDS_LOGIC = tuple("runtime_logic_sha256" if field == "runtime_config_sha256" else field for field in FREEZE_FIELDS)
 MIN_OFFLINE_TEST_EPISODES = 10
 
 
@@ -113,23 +116,32 @@ def load_freeze(freeze_path) -> dict:
         freeze = json.loads(target.read_bytes())
     except ValueError as error:
         raise ValueError("FREEZE_INVALID") from error
-    if not isinstance(freeze, dict) or set(freeze) != set(FREEZE_FIELDS):
+    if not isinstance(freeze, dict) or set(freeze) not in (set(FREEZE_FIELDS), set(FREEZE_FIELDS_LOGIC)):
         raise ValueError("FREEZE_INVALID")
-    for field in FREEZE_FIELDS:
+    fields = tuple(field for field in FREEZE_FIELDS_LOGIC if field in freeze) if "runtime_logic_sha256" in freeze else FREEZE_FIELDS
+    for field in fields:
         _sha256(freeze[field], "FREEZE_INVALID")
     paths_path = target.parent / "freeze-paths.json"
     if not paths_path.is_file():
         raise ValueError("FREEZE_PATHS_MISSING")
     paths = json.loads(paths_path.read_bytes())
-    if not isinstance(paths, dict) or set(paths) != set(FREEZE_FIELDS):
+    if not isinstance(paths, dict) or set(paths) != set(fields):
         raise ValueError("FREEZE_PATHS_INVALID")
-    for field in FREEZE_FIELDS:
+    for field in fields:
         recorded = Path(paths[field])
         if not recorded.is_absolute():
             raise ValueError("FREEZE_PATHS_INVALID")
         if not recorded.is_file():
             raise ValueError("FREEZE_FILE_MISSING")
-        if hashlib.sha256(recorded.read_bytes()).hexdigest() != freeze[field]:
+        if field == "runtime_logic_sha256":
+            from so101_demo.act.runtime_config import load_runtime_config, logic_sha256
+            try:
+                digest = logic_sha256(load_runtime_config(recorded))
+            except ValueError as error:
+                raise ValueError("FREEZE_DIGEST_MISMATCH") from error
+        else:
+            digest = hashlib.sha256(recorded.read_bytes()).hexdigest()
+        if digest != freeze[field]:
             raise ValueError("FREEZE_DIGEST_MISMATCH")
     return freeze
 
@@ -197,7 +209,7 @@ def evaluate_offline(manifest_path, bundle_path, freeze_path, output, *, policy_
                 "episode_count": len(per_episode), "valid_targets": valid_targets,
                 "per_episode": per_episode, "mean_mae_rad": overall,
                 "byte_weighted": False,
-                "freeze": {field: freeze[field] for field in FREEZE_FIELDS},
+                "freeze": dict(freeze),
                 "bundle_sha256": freeze["bundle_sha256"]}
     target_path = Path(output)
     if target_path.exists() or target_path.is_symlink():

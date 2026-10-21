@@ -7,6 +7,8 @@ described the present.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import yaml
@@ -40,3 +42,28 @@ def load_runtime_config(path) -> dict:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
             raise ValueError("RUNTIME_TIMEOUT_INVALID")
     return document
+
+
+#: the inference timeouts decide whether a reply is late (`PREFIX_LATE`), so a run may not have more of them than were qualified
+#: (outcome-risk class); device and queue depth are runtime only. Nothing else in the file is logic but its kind and the
+#: no-fallback rule.
+OUTCOME_RISK_KEYS = ("request_timeout_s", "max_reply_age_s")
+RUNTIME_ONLY_KEYS = ("device", "queue_depth")
+
+
+def logic_document(config: dict) -> dict:
+    """The part of a loaded inference runtime config that is logic: what the run identity binds (not the file bytes)."""
+    return {"schema_version": config["schema_version"], "kind": config["kind"],
+            "inference": {"allow_cpu_fallback": config["inference"]["allow_cpu_fallback"]}}
+
+
+def logic_sha256(config: dict) -> str:
+    return hashlib.sha256(json.dumps(logic_document(config), sort_keys=True, separators=(",", ":"),
+                                     allow_nan=False).encode()).hexdigest()
+
+
+def runtime_values(config: dict) -> dict:
+    """The outcome-risk and runtime-only values the run used: recorded for audit, never compared."""
+    inference = config["inference"]
+    return {"outcome_risk": {key: inference[key] for key in OUTCOME_RISK_KEYS},
+            "runtime_only": {key: inference[key] for key in RUNTIME_ONLY_KEYS}}

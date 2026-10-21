@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from so101_demo.act import rollout_config, runtime_config
 from so101_demo.cli import act_rollout_native as native
 from paths import PACKAGE_ROOT
 
@@ -87,8 +88,14 @@ def test_a_side_wrist_bundle_gives_a_headless_neckless_observation_and_binds_eve
     assert identity["bundle_sha256"] == _sha(tmp_path / "bundle" / "bundle.json")
     assert identity["policy_sha256"] == BUNDLE_SIDE_WRIST["policy_sha256"]
     assert identity["inputs_manifest_sha256"] == _sha(tmp_path / "inputs-manifest.json")
-    assert identity["runtime_yaml_sha256"] == _sha(PACKAGE_ROOT / "config/act/runtime.yaml")
-    assert identity["rollout_yaml_sha256"] == _sha(PACKAGE_ROOT / "config/act/rollout.yaml")
+    assert "runtime_yaml_sha256" not in identity and "rollout_yaml_sha256" not in identity
+    assert identity["runtime_logic_sha256"] == runtime_config.logic_sha256(runtime_config.load_runtime_config(
+        PACKAGE_ROOT / "config/act/runtime.yaml"))
+    assert identity["rollout_logic_sha256"] == rollout_config.logic_sha256(rollout_config.load_rollout_config(
+        PACKAGE_ROOT / "config/act/rollout.yaml"))
+    assert inputs.runtime_used["runtime_yaml_sha256"] == _sha(PACKAGE_ROOT / "config/act/runtime.yaml")
+    assert inputs.runtime_used["rollout_yaml_sha256"] == _sha(PACKAGE_ROOT / "config/act/rollout.yaml")
+    assert inputs.runtime_used["rollout"] == {"control": {"submit_lead_s": 0.03, "accept_timeout_s": 0.02}}
     assert identity["snapshot_sha256"] == "5" * 64 and identity["source_commit"] == "abc123def456"
     assert identity["gate_install"] == "/opt/gate-install" and identity["scenes_sha256"] == inputs.scenes["manifest_sha256"]
     assert inputs.substitution == SUBSTITUTION and inputs.bundle is not None and inputs.bundle_dir == tmp_path / "bundle"

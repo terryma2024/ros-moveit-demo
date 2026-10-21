@@ -250,6 +250,8 @@ class RolloutInputs:
     recorder_policy: dict | None = None
     #: the effective execution mode (`rollout_execution.ExecutionMode`); None is the bundle's frozen behaviour
     execution: object | None = None
+    #: file hashes and the outcome-risk / runtime-only values the run used (recorded in run.json, never compared)
+    runtime_used: dict | None = None
 
 
 def _plain(value):
@@ -398,7 +400,7 @@ def run_rollout(*, options, inputs, probes, composition_factory, episode_runner=
         "schema_version": 1, "kind": "ACT_ROLLOUT_RUN", "run_id": options.run_id, "group": group,
         "session_id": session_id, "scene_ids": [scene["scene_id"] for scene in scenes],
         "scenes_manifest_sha256": inputs.scenes.get("manifest_sha256"), "identity": dict(inputs.identity),
-        "execution": _execution_document(inputs),
+        "execution": _execution_document(inputs), "runtime_used": inputs.runtime_used,
         "joint_limit_clamp_tolerance_rad": inputs.settings.joint_limit_clamp_tolerance_rad,
         "observation": {**inputs.observation, "cameras": list(inputs.observation["cameras"])},
         "calibration": inputs.substitution, "preconditions": preconditions,
@@ -484,6 +486,8 @@ def load_inputs(args) -> RolloutInputs:
     from so101_demo.act.policy import observation_spec
     from so101_demo.act.rig_profile import rig_from_observation
     from so101_demo.act.rollout_activation import contact_activation_substitution
+    from so101_demo.act import rollout_config as rollout_values
+    from so101_demo.act import runtime_config as runtime_values
     from so101_demo.act.rollout_config import (
         camera_topics_for, controller_timing, load_rollout_config, rollout_settings)
     from so101_demo.act.rollout_scenes import verify_scene_document
@@ -518,8 +522,9 @@ def load_inputs(args) -> RolloutInputs:
     runtime_path = Path(args.runtime_config)
     runtime = load_runtime_config(runtime_path)
     identity = {"bundle_sha256": _sha256(bundle_dir / "bundle.json"), "policy_sha256": bundle["policy_sha256"],
-                "inputs_manifest_sha256": _sha256(manifest_path), "runtime_yaml_sha256": _sha256(runtime_path),
-                "rollout_yaml_sha256": _sha256(args.rollout_config), "snapshot_sha256": snapshot["snapshot_sha256"],
+                "inputs_manifest_sha256": _sha256(manifest_path),
+                "runtime_logic_sha256": runtime_values.logic_sha256(runtime),
+                "rollout_logic_sha256": rollout_values.logic_sha256(config), "snapshot_sha256": snapshot["snapshot_sha256"],
                 "source_commit": frozen.get("source_commit"), "gate_install": str(args.install_prefix),
                 "scenes_sha256": scenes.get("manifest_sha256")}
     # the execution mode is a LOGIC setting: refused here when invalid, and bound into the identity when it is an override, so
@@ -533,8 +538,11 @@ def load_inputs(args) -> RolloutInputs:
     # run with it can never be mixed with one without; absent keeps the identity of every earlier run unchanged
     if settings.joint_limit_clamp_tolerance_rad is not None:
         identity["joint_limit_clamp_tolerance_rad"] = settings.joint_limit_clamp_tolerance_rad
+    # what the run used of the files and is not in the identity: the file hashes and the outcome-risk and runtime-only values
+    runtime_used = {"runtime_yaml_sha256": _sha256(runtime_path), "rollout_yaml_sha256": _sha256(args.rollout_config),
+                    "runtime": runtime_values.runtime_values(runtime), "rollout": rollout_values.runtime_values(config)}
     return RolloutInputs(
-        settings=settings, snapshot_targets=snapshot["targets"], endpoint_policy=endpoint,
+        runtime_used=runtime_used, settings=settings, snapshot_targets=snapshot["targets"], endpoint_policy=endpoint,
         timing=controller_timing(frozen, config), rollout_config=config, observation=observation, scenes=scenes,
         substitution=contact_activation_substitution(receipt, proposal), identity=identity, bundle=bundle,
         bundle_dir=bundle_dir, runtime_config=runtime, frozen=frozen, manifest_path=manifest_path,
