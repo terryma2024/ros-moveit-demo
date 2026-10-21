@@ -5,6 +5,8 @@ the ledger checkpoint. Evidence and results belong in the ledger (`docs/experime
 
 Last updated: 2026-10-22 (CP-3770).
 
+**TRAIN-006 input (CP-3771):** the supplement is collected and sealed (EXP-670 QUALIFIED, EXP-671 3 of 3 committed). TRAIN-006 input is ready once the merge (overlap fix) and the LeRobot export are done: 103 episodes, 83 / 10 / 10.
+
 **Current goal (human, 2026-10-19): "4固定位点rollout成功".** All four standard points (task_start, forward_5cm, left_5cm,
 right_5cm) must succeed in closed-loop MuJoCo rollout. Plan:
 1. TRAIN-004 = TRAIN-003 config plus the interior idle trim (keep the last 20 rows), the prefetch thread, `cudnn.benchmark`, `channels_last` and torch.compile. **Running** since 2026-10-19 16:50Z (tmux `train004`, 52 samples/s, ETA about 5 h; CP-3745).

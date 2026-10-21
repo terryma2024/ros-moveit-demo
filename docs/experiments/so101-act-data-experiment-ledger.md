@@ -69,11 +69,51 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3770
+latest_checkpoint: CP-3771
 next_experiment: TRAIN-005 (compress_dwell) training, then the 4-point rollout (CP-3747). Before that, TRAIN-004 rollouts found 0 of 16 DONE (CP-3746): the policy holds at the rest/dwell pose. The coordinator decides the next change (see the CP-3746 diagnosis).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3771 — TRAIN-006 supplement under plan A: EXP-670 supplement qualification QUALIFIED (37 of 40), EXP-671 supplement formal frm-018 / frm-062 / frm-094 committed 3 of 3 after phase 2 (no retry round needed), both runs sealed, readback 0 problems; merge and export NOT done (later task)
+
+- Executed by a Sonnet 5.5 subagent for the coordinator. Debug dir /tmp/so101-debug-sup-1022 (retained until the report is read). `/tmp/so101-debug-mount-1021/HOST-BUSY` held for the whole task and removed at the end; fans 100 % during the runs, `nbfc set -a` afterwards. No change under src, scripts or third_party (`git diff 49859e739 HEAD -- src scripts third_party` empty). Commit `49859e73901c`, mount tree `/data/work/so101-build/mount/49859e73901c`, base `sha256:19a57e70...`, `check-image --preflight` re-run before the runs: PASS, 0 must failures, record sha256 `aecf5dad...` unchanged. Policy carry_b, cap 6 / gap 20 s / 6 processors, staged mode. GPU model and uuid equal to EXP-668.
+- **Why plan A (blockers found in the first attempt, reported before any run).** (1) `unified/admission.py:571` requires the report's `formal_split_manifest_sha256` to equal the run's manifest sha256, so a 3-row manifest cannot be admitted with the EXP-668 report (its contract binds the 103-row list). (2) `collection_merge.covered_scenes` counted every collected task, so the three INVALID scenes of EXP-669 overlapped any supplement (a separate writer fixes this on another branch: a source owns only its committed episodes). Human choice: A, a supplement qualification on a contract that binds the 3-row list, as EXP-621 did for EXP-622.
+- **Supplement list** `REG/act-prep-20261021/joint/lists/formal-3.scenes.json`, sha256 `200375373cf2c3fdd300afc2d281b5714fa97668d3133ae6194bfc0da6c3f38a`: the file layout, header fields and generator block of `formal-103.scenes.json` with `list` = `formal-supplement-3-joint`, `split_quota` = {train 2, offline_test 1} and exactly the rows of frm-018 (seed 218, train), frm-062 (seed 262, train) and frm-094 (seed 294, offline_test); the writer round-trips formal-103 to itself, and each row's text was checked to occur byte for byte in both files. Script `/tmp/so101-debug-sup-1022/mk_formal3.py`.
+- **Templates.** The existing mount-and-staged templates already derive from `w8q-qualification-sup` / `w8f-formal-sup` (a required `--formal-list`, any N, disjointness checks, waves of at most 20), so no new template copy was needed; every check was kept. Qualification `w8q-qualification-side-wrist-speed-staged-mount`, formal `w8f-formal-side-wrist-speed-staged-mount`, the latter authored with `--retry-invalid-max-rounds 3` (runtime-document.json holds 3).
+- **EXP-670 qualification** (inputs `REG/act-w8-inputs-20261021T224351Z`, run root `REG/act-w8-20261021T224351Z`, logs `R/run-logs/exp670`; 87 validation items, none failed; the contract names formal-3, qualification-40 `c0277c5a...`, functional-8 `daf1e9b2...`):
+
+  | Stage | rc | wall |
+  | --- | --- | --- |
+  | phase 1 | 0 | 1017 s |
+  | phase 2 | 0 | 686 s |
+  | finalize | 0 | 56 s |
+
+  Teacher 40/40, data VALID 37 of 40 (first-attempt INVALID 3, limit 5): qual-02 and qual-30 `OFFLINE_SOURCE_GAP` controller_state / topic loss, qual-16 `RECORDER_SOURCE_ALIGNMENT_SOURCE_OUTSIDE_TIMING_WINDOW; INPUT_STALE` (all known classes). Report **QUALIFIED**, reasons `[]`, `REG/act-w8-20261021T224351Z/host/qualification-report.json` sha256 `4d42ba670497ad15c4655b5b69cce474e440cbb18df49eca0f2d292afbf64ce4`; `verify-report.zsh` rc 0, status PASS, `formal_split_manifest_sha256` = the formal-3 sha. **The controlled identity (without gpu_uuid) and the environment equal those of the EXP-668 report** (compared by `cmpid.py`), so the merge tool's identity check will accept the pair. Wave-0 slot median 84.8 s.
+- **EXP-671 supplement formal** (inputs `REG/act-w8f-inputs-20261021T231930Z`, run root `REG/act-w8f-20261021T231930Z`, 3 scenes, one wave; 85 validation items, none failed; admitted with the EXP-670 report):
+
+  | Stage | rc | wall | receipt (entries) |
+  | --- | --- | --- | --- |
+  | phase 1 | 0 | 310 s | 01-phase1 |
+  | phase 2 | 0 | 241 s | 02-phase2 |
+  | retry rounds | not run | none needed, all VALID after phase 2 | none |
+  | finalize | 0 | 159 s | 03-finalize |
+
+  Receipts chained, 12 entries, bad 0; `docker ps -a` shows no container of the runs after every stage. Teacher 3/3 PASS, phase 2 VALID 3 of 3 (attempts 1 each), 3 processors started, none failed. `formal-result.zsh` rc 0, 10 of 10 items PASS, export gates pass for the 3 committed. **Committed: 3 of 3**, `REG/act-w8f-20261021T231930Z/collection-index.json` sha256 `3720bf0a30eda9616c274c90c9a6545ab2ec20c2939e8dd01f0bde0142aa579d` (schema 2, qualification false, 3 collected, 3 committed). The three scenes recorded VALID where they had failed in EXP-669 for topic loss and event loss (frm-018, frm-094) and for the oracle exclusion (frm-062): the same positions and seeds, a new recording.
+- **Mount inputs** recorded in both new inputs roots as `mount-inputs/MOUNT-INPUTS.json` plus `tree-manifest.jsonl` (6934 files, 482425945 bytes, manifest sha256 `69ce10189595911fee1ef3551a85d0d5aa78c2879ee6f57388d095124fbb00bb`, recomputed and equal to the CP-3770 value, so the tree is unchanged); each run also holds `host/mount-preflight.json`. The mount tree must not be deleted while these roots are sealed.
+- **Seal and readback.** `seal_roots.py` sealed four roots (registered in `REG/SEALED-ROOTS.json`; the gate root `R/gates/49859e73901c` was sealed in CP-3770):
+
+  | Root | Files | Bytes | Manifest sha256 |
+  | --- | --- | --- | --- |
+  | act-w8f-20261021T231930Z | 5277 | 1228478688 | 474618c308b05fdb58e260e34c650060c47ddce3837c49b34dd694a76d55e540 |
+  | act-w8f-inputs-20261021T231930Z | 37 | 1997184 | 01ed562e2bb0828a3746dd903a7d1e18e19a659eeaa03cfdd2268d4962b1284b |
+  | act-w8-20261021T224351Z | 50141 | 17199970697 | 373e8f67be8f8830014170a54cf937cc1778bbee0b306872573eb739e4197cfe |
+  | act-w8-inputs-20261021T224351Z | 49 | 2028820 | 5a9e0425caa16f43e2de622c0ab23a1249188d0f1252ef9864dd8128ecd01a87 |
+
+  `verify_sealed_roots.py` over the whole registry with 16 workers: TOTAL 1781848 entries, **problems 0**, errors 0 / extra 0 / missing 0 for every root, rc 0.
+- **Next (later task):** merge the sealed EXP-669 index (`6073db18...`, 100 committed) and this supplement index (`3720bf0a...`, 3 committed) with `act_merge_collections` once the overlap fix is merged (EXP-668 report `f2bf96cb...` for the first source, EXP-670 report `4d42ba67...` for the second, formal list `formal-103.scenes.json` sha256 `42ea6ada...`), then export. Expected: 103 episodes (83 train / 10 validation / 10 offline_test).
+- **Disk:** 91 GB free before, 73 GB after (the two runs 17.2 + 1.2 GB). Tests: none run (no src change).
+- **Deletion candidates (classified only, nothing deleted):** `*.mcap` bags of the sealed runs only after the export (sealed: needs authorisation); the exited container `so101-act-w8d-20261021T165352Z-teacher-g1` (EXP-7014, CP-3769); the CP-3770 candidates; /tmp/so101-debug-sup-1022, /tmp/so101-debug-q-mount-1022 and /tmp/so101-debug-mount-1021 after the report is read.
 
 ## CP-3770 — Mount-mode staged qualification EXP-668 QUALIFIED (37 of 40) and staged formal collection EXP-669: 100 of 103 committed, SEALED; the retry rounds could not run (rounds key not authored)
 
