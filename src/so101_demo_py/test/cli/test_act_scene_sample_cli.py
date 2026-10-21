@@ -119,3 +119,73 @@ def test_boundary_kinds_set_the_margin_rule_and_the_report_lists_the_rollout_poi
     document = json.loads((tmp_path / "scenes.json").read_text())
     assert document["generator"]["boundary_kinds"]["NW"] == "PLACE_TARGET"
     assert "taper" in document["generator"]["inward_margin_rule"]
+
+
+# --- joint mode (boundary design amendment 3) ---------------------------------------------------------------------
+def joint_inputs(tmp_path, name="out"):
+    arguments = inputs(tmp_path)
+    arguments = [a for a in arguments if a not in (str(tmp_path / "scenes.json"), "--scenes-output")]
+    arguments[arguments.index(str(tmp_path / "report.json"))] = str(tmp_path / (name + "-report.json"))
+    return arguments + ["--lists", "formal:103,qualification:40,functional:8", "--scenes-output-dir", str(tmp_path / name)]
+
+
+def test_joint_mode_writes_three_disjoint_lists_in_the_existing_format(tmp_path):
+    assert cli.main(joint_inputs(tmp_path), reach_call=planner()) == 0
+    directory = tmp_path / "out"
+    assert sorted(p.name for p in directory.iterdir()) == ["formal-103.scenes.json", "functional-8.scenes.json", "qualification-40.scenes.json"]
+    formal = read_scene_rows(directory / "formal-103.scenes.json")
+    qualification = read_scene_rows(directory / "qualification-40.scenes.json")
+    functional = read_scene_rows(directory / "functional-8.scenes.json")
+    assert [r["split"] for r in formal] == ["train"] * 83 + ["validation"] * 10 + ["offline_test"] * 10
+    assert {r["split"] for r in qualification} == {"qualification"} and {r["split"] for r in functional} == {"functional"}
+    assert [r["scene_id"] for r in qualification][:2] == ["qual-00", "qual-01"] and [r["scene_id"] for r in functional][:2] == ["fn-00", "fn-01"]
+    assert len(qualification) == 40 and len(functional) == 8 and len(formal) == 103
+    everything = formal + qualification + functional
+    assert len({r["scene_id"] for r in everything}) == 151 and len({r["seed"] for r in everything}) == 151
+    points = [tuple(r["cup_position_world_m"][:2]) for r in everything]
+    assert len(set(points)) == 151 and min(math.dist(a, b) for i, a in enumerate(points) for b in points[:i]) >= 0.004
+    for path in directory.iterdir():
+        document = json.loads(path.read_text())
+        assert document["kind"] == KIND and document["cup_z_m"] == 0.165
+        assert not [l for l in _literals(path.read_text()) if "e" in l.lower()]
+
+
+def _literals(text):
+    found = []
+    json.loads(text, parse_float=lambda literal: found.append(literal) or float(literal))
+    return found
+
+
+def test_joint_report_records_hashes_seeds_and_the_clearances(tmp_path):
+    cli.main(joint_inputs(tmp_path), reach_call=planner())
+    report = json.loads((tmp_path / "out-report.json").read_text())
+    assert report["mode"] == "joint" and report["scene_count"] == 151 and report["seed"] == 576020
+    for name, count in (("formal", 103), ("qualification", 40), ("functional", 8)):
+        entry = report["lists"][name]
+        assert entry["count"] == count and entry["sha256"] == hashlib.sha256(open(entry["path"], "rb").read()).hexdigest()
+        assert entry["nearest_pair_within_m"] >= 0.004 and min(entry["rollout_nearest_scene_m"].values()) >= 0.004
+    assert report["lists"]["formal"]["first_seed"] == 200 and report["lists"]["qualification"]["first_seed"] == 400 and report["lists"]["functional"]["first_seed"] == 600
+    assert min(report["nearest_pair_across_lists_m"].values()) >= 0.004 and report["nearest_pair_m"] >= 0.004
+
+
+def test_joint_mode_is_deterministic(tmp_path):
+    first, second = tmp_path / "a", tmp_path / "b"
+    first.mkdir(), second.mkdir()
+    cli.main(joint_inputs(first), reach_call=planner())
+    cli.main(joint_inputs(second), reach_call=planner())
+    for name in ("formal-103", "qualification-40", "functional-8"):
+        # the generator record names the state file path, which differs between the two directories; the rows are the data
+        assert read_scene_rows(first / "out" / f"{name}.scenes.json") == read_scene_rows(second / "out" / f"{name}.scenes.json")
+
+
+def test_joint_mode_refuses_bad_lists_and_existing_outputs(tmp_path):
+    arguments = joint_inputs(tmp_path)
+    arguments[arguments.index("--lists") + 1] = "qualification:40,functional:8"
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_LISTS_INVALID"):
+        cli.main(arguments, reach_call=planner())
+    arguments[arguments.index("--lists") + 1] = "formal:103,other:4"
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_LISTS_INVALID"):
+        cli.main(arguments, reach_call=planner())
+    cli.main(joint_inputs(tmp_path), reach_call=planner())
+    with pytest.raises(ValueError, match="OUTPUT_EXISTS"):
+        cli.main(joint_inputs(tmp_path), reach_call=planner())

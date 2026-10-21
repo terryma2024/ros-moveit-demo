@@ -82,3 +82,21 @@ The W and NW rays (and any other ray the old exclusion capped) are searched outw
 **Rollout points:** all four rollout points must be inside the region and at least 0.01 m from every reach or Teacher edge. Training scenes keep ≥ 0.004 m clearance from them.
 
 **New data range:** scenes between 0.045 and 0.060 m from the target are a new data range; the old formal set never went below 0.060 m.
+
+## Amendment 3 (2026-10-21, human decision: "Re-sample all lists jointly")
+
+The formal list of CP-3762 (`boundary-103`) is not disjoint from the old qualification list: 10 of its scenes are closer than 0.004 m to `qualification-40` (nearest 0.000651 m) and 2 to `functional-8`. Those two lists also come from the old triangle region and the old 0.060 m exclusion. The CP-3762 list is superseded, not deleted.
+
+**Decision:** one Poisson-disk sample of 151 points in the same region (amendments 1 and 2: exact 0.045 m exclusion, 0.01 m margin on reach edges, at least 0.004 m from the four rollout points), divided into:
+- 103 formal scenes (83 train, 10 validation, 10 offline_test, split spatially as before);
+- 40 qualification scenes (split `qualification`);
+- 8 functional scenes (split `functional`).
+
+**Constraints:**
+- every pair of the 151 points is at least the sample spacing apart, never below 0.004 m, and the spacing is maximised as before;
+- each list is spread over the region: the lists are taken from the smallest to the largest, a list of `n` takes one point from each of `n` k-means strata of the points still free (the one nearest the stratum centroid), and the largest list is the rest;
+- seeds are fixed: sampling seed 576020, row seeds 200+i (formal), 400+i (qualification), 600+i (functional).
+
+**Code:** `scene_sampling.sample_joint` and `assign_lists`; `act_scene_sample --lists formal:103,qualification:40,functional:8 --scenes-output-dir DIR` writes `formal-103.scenes.json`, `qualification-40.scenes.json` and `functional-8.scenes.json` plus one report (list sha256, seeds, clearances). Tests: counts, disjointness, spacing across all lists, spread against taking the first points, determinism, reachability filter, CLI format and report.
+
+**Consequence:** the staged qualification template takes the qualification and functional lists as arguments instead of pinning the old bytes; its other checks are unchanged.
