@@ -39,13 +39,14 @@ def all_phase1_attempts(run):
 
 class ContainerProcessorLauncher:
     def __init__(self, *, context, images, paths, registry, parallel_runtime, approved_inputs, config_paths,
-                 docker_runner=_docker, namespace_reader=read_container_namespace):
+                 docker_runner=_docker, namespace_reader=read_container_namespace, mount_build=None):
         if type(images) is not dict or set(images) != {"head", "teacher", "shard"}:
             raise ValueError("PROCESSOR_LAUNCHER_INVALID")
         self._common(context=context, paths=paths, registry=registry, parallel_runtime=parallel_runtime,
                      approved_inputs=approved_inputs, config_paths=config_paths)
         self.images = images
         self.docker_runner, self.namespace_reader = docker_runner, namespace_reader
+        self.mount_build = mount_build
 
     def _common(self, *, context, paths, registry, parallel_runtime, approved_inputs, config_paths):
         from so101_demo.cli.mujoco_batch.request import _load_runtime_config
@@ -72,7 +73,7 @@ class ContainerProcessorLauncher:
             service_token=token, startup_timeout_s=self.runtime.initializing_hard_timeout_s,
             status_timeout_s=self.runtime.heartbeat_timeout_s, max_frame_bytes=self.runtime.broker_max_frame_bytes,
             stop_timeout_s=self.runtime.worker_recovery_timeout_s, docker_runner=self.docker_runner,
-            namespace_reader=self.namespace_reader)
+            namespace_reader=self.namespace_reader, mount_build=self.mount_build)
 
     def __call__(self, *, slot, generation):
         context = self.context

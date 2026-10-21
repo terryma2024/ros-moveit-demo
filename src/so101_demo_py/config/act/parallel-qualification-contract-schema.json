@@ -170,6 +170,24 @@
         "gpu_uuid": {
           "type": "string",
           "pattern": "^GPU-[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"
+        },
+        "mount_build": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "root"
+          ],
+          "properties": {
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^/"
+            }
+          }
         }
       }
     },

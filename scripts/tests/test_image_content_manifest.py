@@ -499,3 +499,86 @@ def test_check_no_pyc_passes_when_only_base_pyc_exist(tmp_path, exclusions, caps
     capsys.readouterr()
     assert icm.main(["check-no-pyc", str(manifest), "--base", str(base_manifest)]) == 0
     assert "pyc_under_act=0 pyc_under_act_venv=0 pyc_site_packages_added=0" in capsys.readouterr().out
+
+
+# --- tree: the same rule for a directory (the mounted install and source trees) ---------------------------------------
+
+def make_tree(root, files, mtime=1_000_000):
+    import os
+    for relative, data in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        os.utime(path, (mtime, mtime))
+    return root
+
+
+def tree_hash(root, tmp_path, name="t.json"):
+    out = tmp_path / name
+    code = icm.main(["tree", str(root), "--output", str(out)])
+    return code, (json.loads(out.read_text())["tree_sha256"] if out.exists() else None)
+
+
+def test_tree_hash_ignores_mtimes_and_owners_but_not_content_mode_names_or_symlink_targets(tmp_path):
+    import os
+    a = make_tree(tmp_path / "a", {"lib/x.so": b"x", "share/p/package.xml": b"<p/>"}, mtime=1)
+    b = make_tree(tmp_path / "b", {"lib/x.so": b"x", "share/p/package.xml": b"<p/>"}, mtime=999)
+    assert tree_hash(a, tmp_path, "a.json") == tree_hash(b, tmp_path, "b.json") != (0, None)
+    (b / "lib/x.so").write_bytes(b"y")
+    assert tree_hash(a, tmp_path, "a2.json")[1] != tree_hash(b, tmp_path, "b2.json")[1]
+    (b / "lib/x.so").write_bytes(b"x")
+    original = (b / "lib/x.so").stat().st_mode & 0o777
+    os.chmod(b / "lib/x.so", 0o755)
+    assert tree_hash(a, tmp_path, "a3.json")[1] != tree_hash(b, tmp_path, "b3.json")[1]
+    os.chmod(b / "lib/x.so", original)
+    (b / "lib/link").symlink_to("x.so")
+    (a / "lib/link").symlink_to("other.so")
+    assert tree_hash(a, tmp_path, "a4.json")[1] != tree_hash(b, tmp_path, "b4.json")[1]
+    (a / "lib/link").unlink()
+    (a / "lib/link").symlink_to("x.so")
+    assert tree_hash(a, tmp_path, "a5.json")[1] == tree_hash(b, tmp_path, "b5.json")[1]
+
+
+def test_tree_hash_counts_empty_directories_and_rejects_bytecode_instead_of_skipping_it(tmp_path, capsys):
+    a = make_tree(tmp_path / "a", {"m.py": b"1"})
+    b = make_tree(tmp_path / "b", {"m.py": b"1"})
+    (b / "empty").mkdir()
+    assert tree_hash(a, tmp_path, "a.json")[1] != tree_hash(b, tmp_path, "b.json")[1]
+    make_tree(a, {"__pycache__/m.cpython-312.pyc": b"\x00"})
+    capsys.readouterr()
+    code, digest = tree_hash(a, tmp_path, "c.json")
+    assert code == 1 and digest is None
+    assert "__pycache__/m.cpython-312.pyc" in capsys.readouterr().out
+
+
+def test_tree_hash_refuses_special_files(tmp_path):
+    import os
+    a = make_tree(tmp_path / "a", {"m.py": b"1"})
+    os.mkfifo(a / "pipe")
+    assert icm.main(["tree", str(a), "--output", str(tmp_path / "o.json")]) == 2
+
+
+# --- check-no-project-code: a dependency base holds no so101_* code -----------------------------------------------------
+
+def test_check_no_project_code_flags_so101_packages_dist_info_and_source_copies(tmp_path, exclusions, capsys):
+    layer = [d("/opt"), d("/opt/venv"), f("/opt/venv/lib/python3.12/site-packages/so101_demo/__init__.py", b"1"),
+             f("/opt/venv/lib/python3.12/site-packages/so101_demo_py-0.1.0.dist-info/METADATA", b"2"),
+             f("/opt/so101_demo_py/setup.py", b"3"), f("/act/install/share/so101_teleop/package.xml", b"4"),
+             f("/usr/lib/python3/dist-packages/numpy/__init__.py", b"5")]
+    _, manifest = run_manifest(tmp_path, docker_archive([layer]), exclusions)
+    capsys.readouterr()
+    assert icm.main(["check-no-project-code", str(manifest)]) == 1
+    out = capsys.readouterr().out
+    assert "project_paths=4" in out
+    for path in ("site-packages/so101_demo/__init__.py", "so101_demo_py-0.1.0.dist-info/METADATA", "/opt/so101_demo_py/setup.py",
+                 "/act/install/share/so101_teleop/package.xml"):
+        assert path in out
+    assert "numpy" not in out
+
+
+def test_check_no_project_code_passes_on_a_clean_base(tmp_path, exclusions, capsys):
+    layer = [f("/opt/venv/lib/python3.12/site-packages/torch/__init__.py", b"1"), f("/act/bootstrap.bash", b"2"),
+             f("/etc/so101-not-a-package-dir/readme", b"3")]
+    _, manifest = run_manifest(tmp_path, docker_archive([layer]), exclusions)
+    capsys.readouterr()
+    assert icm.main(["check-no-project-code", str(manifest)]) == 0

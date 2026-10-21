@@ -48,3 +48,12 @@ def test_a_version_2_config_has_the_identity_without_the_gpu(tmp_path):
     identity = _collection_identity(PAYLOAD, config)
     assert set(identity) == {*PAYLOAD, "image_source_install"}
     assert _collection_identity(PAYLOAD, config | {"gpu_uuid": "GPU-other"}) == identity      # another GPU, the same identity
+
+
+def test_a_mounted_build_is_part_of_the_identity_and_an_image_config_has_none(tmp_path):
+    config = campaign_fixture(tmp_path)
+    assert "mount_build" not in _collection_identity(PAYLOAD, config)
+    mounted = dict(commit="a" * 40, root=str(tmp_path / ("a" * 12)))
+    assert _collection_identity(PAYLOAD, config | dict(mount_build=mounted))["mount_build"] == mounted
+    other = dict(commit="b" * 40, root=str(tmp_path / ("b" * 12)))
+    assert _collection_identity(PAYLOAD, config | dict(mount_build=other)) != _collection_identity(PAYLOAD, config | dict(mount_build=mounted))

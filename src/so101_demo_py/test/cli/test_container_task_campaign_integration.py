@@ -354,7 +354,7 @@ class World:
     pass
 
 
-def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, qualified=False):
+def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, qualified=False, mount=False):
     """A synthetic campaign for `plane` in ('W1', 'W8', 'FORMAL', 'SPOT'); returns everything the CLI is given and the doubles.
 
     `qualified` (FORMAL only) replaces the synthetic report file by a real report of a qualification run built under the same
@@ -364,6 +364,23 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
 
     world = World()
     root = tmp_path.resolve()
+    teacher_image, shard_image, report = shared.teacher_image, shared.shard_image, shared.report
+    world.mount_build = None
+    if mount:
+        # mount mode: one base image, the two trees' BUILD-COMMIT records as the image hashes, a passing environment check on file
+        from so101_demo.runtime.container_campaign import mount_build as mounts
+        commit = '0123456789abcdef0123456789abcdef01234567'
+        world.mount_build = mounts.MountBuild(commit=commit, root=root / 'mounted' / commit[:12])
+        for name in ('install', 'source'):
+            (world.mount_build.root / name).mkdir(parents=True)
+            (world.mount_build.root / name / 'BUILD-COMMIT').write_text(commit + '\n')
+        teacher_image = shard_image = dict(digest='sha256:' + 'e' * 64, **mounts.verify_records(world.mount_build))
+        report = dict(schema_version=1, kind='ACT_CONTAINER_IMAGE_READBACK', git_commit=commit, submodules={},
+            package_source_sha256=teacher_image['package_source_sha256'], install_sha256=teacher_image['install_sha256'],
+            runtime=dict(interpreter='/act/venv/bin/python', dependencies={'numpy': '1.26.4'},
+                module_origins={'so101_demo': str(world.mount_build.install) + '/so101_demo_py/x.py'},
+                package_prefixes={'so101_demo_py': str(world.mount_build.install) + '/so101_demo_py'}))
+    world.teacher_image, world.shard_image = teacher_image, shard_image
     world.root, world.plane, world.spot_check = root, plane, plane == 'SPOT'
     original = packages.get_package_share_directory
     monkeypatch.setattr(packages, 'get_package_share_directory',
@@ -382,14 +399,15 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
     world.collection.write_bytes(shared.collection_bytes)
     weights = inputs / 'teacher.pt'
     weights.write_bytes(b'teacher-weights')
-    service = dict(image=dict(shared.teacher_image), model=dict(model_id=_load_runtime_config(world.runtime).yolo_model_id,
+    service = dict(image=dict(teacher_image), model=dict(model_id=_load_runtime_config(world.runtime).yolo_model_id,
         weights=ref(weights), classes={'0': 'plastic_cup'}, score_threshold=.25), instances=3, torch_threads=1,
         torch_interop_threads=1, max_inflight_requests=8, max_frame_bytes=2**20, max_image_height=480,
         max_image_width=640, queue_timeout_s=.75, inference_timeout_s=1.25)
     world.service = service
     identity = dict(source_sha256=sha(world.source), runtime_config_sha256=sha(world.runtime),
         collection_config_sha256=sha(world.collection), contact_policy_fingerprint=shared.fingerprint, gpu_uuid=GPU,
-        image_source_install=dict(inference=shared.teacher_image, shard=shared.shard_image))
+        image_source_install=dict(inference=teacher_image, shard=shard_image),
+        **(dict(mount_build=world.mount_build.document()) if mount else {}))
     qualification_contract = None
     if plane == 'W1':
         world.scenes = write_json(inputs / 'functional-scenes.json', dict(scenarios=scene_rows('functional', 8, 100)))
@@ -423,19 +441,25 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
         assert plane == 'FORMAL'
         install_controlled_world(monkeypatch)
         (root / 'qualification').mkdir()
-        qualification = build_world(root / 'qualification', evidence_root=evidence, images=(shared.teacher_image, shared.shard_image),
+        qualification = build_world(root / 'qualification', evidence_root=evidence, images=(teacher_image, shard_image),
             source_bytes=world.source.read_bytes(), runtime_bytes=shared.runtime_bytes, collection_bytes=shared.collection_bytes,
             fingerprint=shared.fingerprint, formal_scenes=world.scenes)
         world.report = build_collection_qualification_report(qualification.run, contract=qualification.contract_path)
         world.qualification_world = qualification
     world.campaign = dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN', evidence_root=str(evidence),
         controlled_runtime=ref(world.runtime), head_service=service, teacher_service=service,
-        shard_image=dict(shared.shard_image), gpu_uuid=GPU, qualification_contract=qualification_contract,
+        shard_image=dict(shard_image), gpu_uuid=GPU, qualification_contract=qualification_contract,
+        **(dict(mount_build=world.mount_build.document()) if mount else {}),
         **(dict(max_concurrent_recordings=4, min_assignment_gap_s=.05) if plane in ('W8', 'FORMAL') else {}))
     world.campaign_path = write_json(inputs / 'campaign.json', world.campaign)
     world.docker = Docker()
     world.docker.report, world.docker.teacher_digest, world.docker.shard_digest = (
-        shared.report, shared.teacher_image['digest'], shared.shard_image['digest'])
+        report, teacher_image['digest'], shard_image['digest'])
+    if mount:
+        preflight = {'schema_version': 1, 'kind': 'MOUNT_PREFLIGHT', 'result': 'PASS', 'commit': world.mount_build.commit,
+            'base_image_id': shard_image['digest'], 'base_manifest_sha256': '9' * 64, 'install_record_sha256': shard_image['install_sha256'],
+            'must_failures': 0, 'warnings': 1, 'exceptions': {}, 'host': 'antzb'}
+        mounts.preflight_path(evidence, world.mount_build).write_text(json.dumps(preflight))
     world.log = []
     world.controls = {}
 
@@ -455,7 +479,7 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
             return dict(schema_version=1, kind=kind, request_id=request_id, service_generation=client.generation,
                         available=True, reason='')
         return dict(schema_version=1, kind='service_ready', request_id=request_id, service_generation=client.generation,
-            image_digest=shared.teacher_image['digest'], package_source_sha256=shared.teacher_image['package_source_sha256'],
+            image_digest=teacher_image['digest'], package_source_sha256=teacher_image['package_source_sha256'],
             model_id=settings['model']['model_id'], weights_sha256=settings['model']['weights']['sha256'],
             service_config_sha256=hashlib.sha256(canonical_json(settings)).hexdigest(), gpu_uuid=GPU,
             configured_instances=3, loaded_instances=3, ready=True)
@@ -608,6 +632,38 @@ def test_real_cli_builds_four_operation_owner(tmp_path, shared, monkeypatch, cap
     assert spies.lease() is None and spies.active_slots() == ()
     assert len(spies.workload.slot_registry.slots(active=False)) == 1
     assert (run_root / 'host/teacher-ready.json').is_file() and (run_root / 'collection-index.json').is_file()
+
+
+def test_mount_mode_runs_the_real_chain_over_a_mounted_build(tmp_path, shared, monkeypatch, capsys):
+    """The same W1 run with `mount_build` in the campaign config and the contract identity: admission accepts the identity, the Teacher and
+    the shard start from the base image with the trees mounted, the readbacks name the commit, and the run keeps the environment check."""
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1', polls_to_finish=2, mount=True)
+    Spies(monkeypatch)
+    controlled_verifier(monkeypatch)
+    code, out, err = run(world, capsys)
+    assert code == 0, err
+    mount, run_root = world.mount_build, world.evidence / 'run-one'
+    for launch in world.docker.runs(shard=False) + world.docker.runs(shard=True):
+        assert f'SO101_EXPECTED_COMMIT={mount.commit}' in launch and f'type=bind,src={mount.source},dst={mount.source},readonly' in launch
+        assert launch[launch.index(world.shard_image['digest']) + 1] == '/act/venv/bin/python'
+    execs = [call for call in world.docker.calls if call[:2] == ['docker', 'exec']]
+    assert execs and all(call[3] == '/act/bootstrap.bash' for call in execs)
+    assert [call[-1] for call in execs] == ['inference', 'shard']
+    teacher = json.loads((run_root / 'host/teacher-provenance.json').read_bytes())
+    shard = json.loads(next(run_root.glob('wave-0/w00/g1/actual-container-provenance.json')).read_bytes())
+    assert teacher['mount_build'] == shard['mount_build'] == mount.document()
+    assert teacher['provenance']['git_commit'] == shard['provenance']['git_commit'] == mount.commit
+    assert json.loads((run_root / 'host/mount-preflight.json').read_bytes())['result'] == 'PASS'
+
+
+def test_mount_mode_without_a_passing_environment_check_launches_nothing(tmp_path, shared, monkeypatch, capsys):
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1', polls_to_finish=2, mount=True)
+    Spies(monkeypatch)
+    controlled_verifier(monkeypatch)
+    from so101_demo.runtime.container_campaign import mount_build as mounts
+    mounts.preflight_path(world.evidence, world.mount_build).unlink()
+    code, out, err = run(world, capsys)
+    assert code != 0 and not world.docker.runs(shard=False) and not world.docker.runs(shard=True)
 
 
 def test_real_wave_verifier_refuses_unregistered_scripted_results_and_run_still_settles(tmp_path, shared, monkeypatch, capsys):

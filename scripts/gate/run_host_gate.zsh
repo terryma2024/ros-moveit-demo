@@ -3,7 +3,7 @@
 # Split layout: build/install/log/test-run/demo-run trees in $BUILD_ROOT/gates/<id>, results in the evidence gate dir $EVIDENCE_R/gates/<id>
 # with a build-root.txt pointer. Host values (paths, interpreters, workers, staged mode, memory scope) come from hosts/<host>.env. See README.md.
 #   run_host_gate.zsh [--host H] [--gate-suffix S] [--demo-workers N] [--no-isolation] [--full] [--serial] [--teleop-jobs N] [--plan]
-#                     [--no-rerun-known-flakes]
+#                     [--no-rerun-known-flakes] [--upstream-parallel|--no-upstream-parallel] [--upstream-sets-reference FILE]
 #     --host H         host config hosts/H.env; default: the host whose HOST_NAMES contains `hostname`; an unknown host is refused
 #     --full           run controller_manager / hardware_interface_testing tests even if the skip rule allows skipping
 #     --serial         demo pytest and colcon test one after the other, colcon parts one after the other, so101_teleop with ctest -j1
@@ -15,13 +15,19 @@
 #     --plan           print the skip decisions (ros2_control and joint_trajectory_controller) and exit; creates nothing
 #     --no-rerun-known-flakes
 #                      after a failed gate, do not do the one allowed rerun of failures listed in known-flakes.txt (default: rerun)
+#     --upstream-parallel / --no-upstream-parallel
+#                      run the upstream ros2_control / joint_trajectory_controller tests (when the decisions say run) in groups on their own CPUs
+#                      beside the demo and the other colcon parts, instead of switching the whole gate to serial; default: GATE_UPSTREAM_PARALLEL of
+#                      the host config (0). See README.md "Parallel upstream tests".
+#     --upstream-sets-reference FILE
+#                      compare the executed upstream test sets (upstream_groups.py sets) with those of a serial gate; a difference fails the gate
 # One new gate directory per commit under gates/<commit12>; refuses if it exists. The worktree and scripts/gate must be clean.
 set -o pipefail
 zmodload zsh/datetime
 FG=${0:A:h}
 WT=${FG:h:h}
 orig_args=("$@")
-FULL=0; SERIAL=0; PLAN=0; TELEOP_JOBS=6; SUFFIX=; DEMO_WORKERS_ARG=; DEMO_WORKERS_SET=0; ISOLATE=1; HOST_ARG=; RERUN=1
+FULL=0; SERIAL=0; PLAN=0; TELEOP_JOBS=6; SUFFIX=; DEMO_WORKERS_ARG=; DEMO_WORKERS_SET=0; ISOLATE=1; HOST_ARG=; RERUN=1; UP_ARG=; SETS_REF=
 while (( $# )); do
   case $1 in
     --host) shift; HOST_ARG=${1:-} ;;
@@ -34,6 +40,9 @@ while (( $# )); do
     --teleop-jobs) shift; TELEOP_JOBS=${1:-} ;;
     --rerun-known-flakes) RERUN=1 ;;
     --no-rerun-known-flakes) RERUN=0 ;;
+    --upstream-parallel) UP_ARG=1 ;;
+    --no-upstream-parallel) UP_ARG=0 ;;
+    --upstream-sets-reference) shift; SETS_REF=${1:-} ;;
     -h|--help) sed -n '2,/^set -o/p' $0 | sed '$d'; exit 0 ;;
     *) print -u2 "unknown argument: $1"; exit 2 ;;
   esac
@@ -43,6 +52,9 @@ source $FG/load_host.zsh && so101_load_host $HOST_ARG || exit 2
 ROOT=$EVIDENCE_ROOT
 R=$EVIDENCE_R
 (( DEMO_WORKERS_SET )) && DEMO_WORKERS=$DEMO_WORKERS_ARG
+UPSTREAM_PARALLEL_REQUESTED=${UP_ARG:-${GATE_UPSTREAM_PARALLEL:-0}}
+[[ $UPSTREAM_PARALLEL_REQUESTED == [01] ]] || { print -u2 "GATE_UPSTREAM_PARALLEL must be 0 or 1"; exit 2; }
+[[ -z $SETS_REF || -r $SETS_REF ]] || { print -u2 "--upstream-sets-reference: cannot read $SETS_REF"; exit 2; }
 STAGED=${GATE_STAGED:-0}
 [[ $TELEOP_JOBS == <1-> ]] || { print -u2 "--teleop-jobs needs a positive integer"; exit 2; }
 (( SERIAL )) && TELEOP_JOBS=1
@@ -51,6 +63,7 @@ STAGED=${GATE_STAGED:-0}
 
 BUILD=$FG/gate_build.zsh; DEMO=$FG/gate_demo_py.zsh
 for f in $BUILD $DEMO $FG/colcon_stage.zsh $FG/colcon_part.zsh $FG/ros2_control_decision.zsh $FG/jtc_decision.zsh $FG/rc_record.py $FG/rerun_known_flakes.zsh $FG/known_flakes.py; do test -r $f || exit 90; done
+for f in $FG/upstream_groups.py $FG/upstream-groups.txt $FG/upstream_stage.zsh $FG/upstream_slot.zsh; do test -r $f || exit 90; done
 test -r $FG/pytest-plugin/so101_pytest_worker_temp.py || exit 91
 cd $WT || exit 92
 
@@ -60,6 +73,8 @@ if (( PLAN )); then
   zsh $FG/ros2_control_decision.zsh /dev/stdout $FULL; plan_rc=$?
   print -r -- "--- joint_trajectory_controller upstream suite ---"
   zsh $FG/jtc_decision.zsh /dev/stdout $FULL || plan_rc=$?
+  print -r -- "--- upstream groups (GATE_UPSTREAM_PARALLEL=$UPSTREAM_PARALLEL_REQUESTED, share ${GATE_UPSTREAM_CPU_SHARE:-unset}) ---"
+  [[ -n ${GATE_UPSTREAM_CPU_SHARE:-} ]] && python3 -I $FG/upstream_groups.py cpus --groups $FG/upstream-groups.txt --share $GATE_UPSTREAM_CPU_SHARE
   exit $plan_rc
 fi
 
@@ -120,14 +135,22 @@ if [[ $jtc_decision == skip ]]; then export FAST_SKIP_JTC_UPSTREAM=1; else expor
 print -r -- "jtc_upstream_tests=$jtc_decision build_script=$BUILD"
 # The upstream ros2_control / joint_trajectory_controller suites are timing sensitive and flake under the concurrent mode (gate b13874eaabd5: 11 and 22
 # failures that pass serially). When either decision is "run", the gate switches to serial automatically (stages one after the other, teleop ctest -j1).
+# With the upstream groups (GATE_UPSTREAM_PARALLEL=1) the upstream suites get CPUs of their own instead, and nothing else is switched to serial.
+UPSTREAM_PARALLEL=0
 if [[ $decision == run || $jtc_decision == run ]] && (( ! SERIAL )); then
-  SERIAL=1; TELEOP_JOBS=1
-  print -r -- "auto_serial=1 (ros2_control=$decision jtc_upstream=$jtc_decision)"
+  if [[ $UPSTREAM_PARALLEL_REQUESTED == 1 ]]; then
+    UPSTREAM_PARALLEL=1
+    print -r -- "upstream_parallel=1 (ros2_control=$decision jtc_upstream=$jtc_decision)"
+  else
+    SERIAL=1; TELEOP_JOBS=1
+    print -r -- "auto_serial=1 (ros2_control=$decision jtc_upstream=$jtc_decision)"
+  fi
 fi
+export UPSTREAM_PARALLEL
 export TELEOP_JOBS
 (( SERIAL )) && export PARTS_SEQUENTIAL=1 || export PARTS_SEQUENTIAL=0
 # The settings of the stages, kept so that rerun_known_flakes.zsh can rerun a stage with the same environment.
-for v in ISOLATE_ROS DEMO_WORKERS DEMO_ROS_DOMAIN_ID TELEOP_ROS_DOMAIN_ID JTC_ROS_DOMAIN_ID FAST_SKIP_ROS2_CONTROL FAST_SKIP_JTC_UPSTREAM NO_OVERLAY TELEOP_JOBS PARTS_SEQUENTIAL; do
+for v in ISOLATE_ROS DEMO_WORKERS DEMO_ROS_DOMAIN_ID TELEOP_ROS_DOMAIN_ID JTC_ROS_DOMAIN_ID FAST_SKIP_ROS2_CONTROL FAST_SKIP_JTC_UPSTREAM NO_OVERLAY TELEOP_JOBS PARTS_SEQUENTIAL UPSTREAM_PARALLEL; do
   print -r -- "$v=${(P)v}"
 done > $GATE/stage-env.txt
 
@@ -151,22 +174,55 @@ run_stage() {  # run_stage <name> <command...>
   return $src
 }
 t_tests=$EPOCHSECONDS
-# Sequential stages when --serial, or when the host config says GATE_STAGED=1 (demo first, then colcon with its parts concurrent).
+pin=(); up_pkgs=()
+[[ $FAST_SKIP_ROS2_CONTROL == 1 ]] || up_pkgs+=(controller_manager hardware_interface_testing)
+[[ $FAST_SKIP_JTC_UPSTREAM == 1 ]] || up_pkgs+=(joint_trajectory_controller)
+if (( UPSTREAM_PARALLEL )); then
+  # The upstream groups get whole fastest cores each; every other stage is kept to the remaining CPUs so that nothing else runs on theirs.
+  GATE_UPSTREAM_CPU_SHARE=${GATE_UPSTREAM_CPU_SHARE:?GATE_UPSTREAM_CPU_SHARE (host config) is needed for GATE_UPSTREAM_PARALLEL=1}
+  python3 -I $FG/upstream_groups.py cpus --groups $FG/upstream-groups.txt --share $GATE_UPSTREAM_CPU_SHARE --packages ${(j:,:)up_pkgs} > $GATE/upstream-cpus.json || { print "upstream cpus failed"; exit 99; }
+  rest_cpus=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["rest"])' $GATE/upstream-cpus.json)
+  pin=(/usr/bin/taskset -c $rest_cpus)
+  export UPSTREAM_CPUS=$GATE/upstream-cpus.json GATE_TEST_RUN=$(mktemp -d $GATE_BUILD/test-run.XXXXXXXX)
+  cat $GATE/upstream-cpus.json
+  {
+    run_stage upstream zsh $FG/upstream_stage.zsh $GATE_TEST_RUN
+    # a crashed upstream stage must not leave colcon_stage waiting for upstream.done
+    test -e $GATE_TEST_RUN/upstream.done || { print -r -- 99 > $GATE_TEST_RUN/upstream.rc; : > $GATE_TEST_RUN/upstream.done; }
+  } &
+  pid_up=$!
+fi
+# Sequential stages when --serial, or when the host config says GATE_STAGED=1 (demo first, then colcon with its parts concurrent); the upstream groups, if any, run beside both.
 if (( SERIAL || STAGED )); then
-  run_stage demo zsh $DEMO; demo_rc=$?
-  run_stage colcon zsh $FG/colcon_stage.zsh; colcon_rc=$?
+  run_stage demo $pin zsh $DEMO; demo_rc=$?
+  run_stage colcon $pin zsh $FG/colcon_stage.zsh; colcon_rc=$?
 else
-  run_stage demo zsh $DEMO &
+  run_stage demo $pin zsh $DEMO &
   pid_demo=$!
-  run_stage colcon zsh $FG/colcon_stage.zsh &
+  run_stage colcon $pin zsh $FG/colcon_stage.zsh &
   pid_colcon=$!
   wait $pid_demo; demo_rc=$?
   wait $pid_colcon; colcon_rc=$?
+fi
+upstream_rc=-
+if (( UPSTREAM_PARALLEL )); then
+  wait $pid_up
+  upstream_rc=$(cat $GATE_TEST_RUN/upstream.rc)
 fi
 tests_wall=$(( EPOCHSECONDS - t_tests ))
 print -r -- "demo_rc=$demo_rc" | tee $GATE/stage-demo.txt
 print -r -- "colcon_rc=$colcon_rc" | tee $GATE/stage-colcon.txt
 cd $WT
+
+# --- the executed upstream test sets, and their comparison with a serial gate's (the parallel mode must run exactly the same tests) ---
+sets_rc=0
+if (( ${#up_pkgs} )); then
+  python3 -I $FG/upstream_groups.py sets --build-base $GATE_BUILD/build --packages ${(j:,:)up_pkgs} --out $GATE/upstream-sets.json || sets_rc=1
+  if [[ -n $SETS_REF ]]; then
+    python3 -I $FG/upstream_groups.py compare $SETS_REF $GATE/upstream-sets.json > $GATE/upstream-sets-compare.txt 2>&1 || sets_rc=1
+    print -r -- "upstream_sets_vs_reference rc=$sets_rc ($SETS_REF)"; head -5 $GATE/upstream-sets-compare.txt
+  fi
+fi
 
 # --- record for the skip rule of later gates ---
 python3 -I $FG/rc_record.py finish --decision $GATE/ros2-control-decision.json --gate $GATE --build-base $GATE_BUILD/build --colcon-rc $colcon_rc --tools-commit $tools_commit --out $GATE/ros2-control-tests.json
@@ -182,11 +238,11 @@ colcon_wall=$(cat $GATE/stage-colcon.wall 2>/dev/null)
 skipped=""; [[ $decision == skip ]] && skipped="controller_manager,hardware_interface_testing"
 [[ $jtc_decision == skip ]] && skipped="${skipped:+$skipped,}joint_trajectory_controller(upstream)"
 print -r -- "build_rc=$build_rc demo_rc=$demo_rc colcon_rc=$colcon_rc head_after=$(git rev-parse HEAD) dirty_after=$(git status --short | wc -l)" > $GATE/gates-result.txt
-print -r -- "fast_gate build_s=$build_wall demo_s=$demo_wall colcon_s=$colcon_wall tests_wall_s=$tests_wall total_s=$(( EPOCHSECONDS - t_all )) concurrent_stages=$(( 1 - SERIAL )) ros2_control_tests=$decision jtc_upstream_tests=$jtc_decision legacy_build=0 skipped_packages=${skipped:--} teleop_jobs=$TELEOP_JOBS full=$FULL serial=$SERIAL demo_workers=$DEMO_WORKERS concurrent=$(( 1 - SERIAL )) ccache_hits=$cc_hits ccache_misses=$cc_miss build_ccache=$cc_state gate_suffix=${SUFFIX:--}" > $GATE/fast-gate-timing.txt
+print -r -- "fast_gate build_s=$build_wall demo_s=$demo_wall colcon_s=$colcon_wall tests_wall_s=$tests_wall total_s=$(( EPOCHSECONDS - t_all )) concurrent_stages=$(( 1 - SERIAL )) ros2_control_tests=$decision jtc_upstream_tests=$jtc_decision legacy_build=0 skipped_packages=${skipped:--} teleop_jobs=$TELEOP_JOBS full=$FULL serial=$SERIAL demo_workers=$DEMO_WORKERS concurrent=$(( 1 - SERIAL )) upstream_parallel=$UPSTREAM_PARALLEL upstream_rc=$upstream_rc upstream_sets_rc=$sets_rc ccache_hits=$cc_hits ccache_misses=$cc_miss build_ccache=$cc_state gate_suffix=${SUFFIX:--}" > $GATE/fast-gate-timing.txt
 cat $GATE/gates-result.txt $GATE/fast-gate-timing.txt
 
 # --- the one allowed rerun of failures that are listed in known-flakes.txt ---
-first_rc=$(( demo_rc || colcon_rc ))
+first_rc=$(( demo_rc || colcon_rc || sets_rc ))
 final_rc=$first_rc
 rerun_state=not_needed; rerun_rc=-
 if (( first_rc != 0 )); then

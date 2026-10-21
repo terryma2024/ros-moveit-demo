@@ -1,33 +1,17 @@
-# The coordinator verifies the cached base ID and resulting layer ancestry.
-# Expected ID: sha256:5998505c1debdd1a3410ed6bd1aec8796ef3f82e3b3dc403bbc992423b6304fd.
+# The networked apt and pip steps live in the so101-campaign-shard-deps base (docker/campaign-shard-deps), pinned by ID in
+# scripts/images/base-image-ids.json, so this build runs with --network none like the inference build.
 #
-# Four stages. `deps` holds the apt and venv layers and is cache-keyed only by its own text.
-# `web` builds the so101_teleop web bundle (Bun install, then `tsc -b && vite build`). Its inputs are only the files under
-# src/so101_teleop/web, so a change elsewhere in the repository leaves the stage cached; the dependency install is a layer
-# of its own that depends on package.json and bun.lock alone.
-# `build` compiles the colcon closure in two layers: the rarely changing native packages first
-# (third_party and so101_quik), then the packages that change with the code (so101_mujoco_support,
-# so101_teleop, so101_demo_py). `final` is `deps` plus the complete read-only /act/source and the
-# finished /act/install; it never contains the build tree.
-FROM so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115 AS deps
-
-ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 YOLO_OFFLINE=true
-RUN apt-get update && apt-get install --yes --no-install-recommends \
-    build-essential cmake python3-dev python3-venv python3-colcon-common-extensions \
-    libboost-all-dev libeigen3-dev libfmt-dev libglfw3-dev libegl1-mesa-dev libtinyxml2-dev \
-    ros-jazzy-moveit ros-jazzy-moveit-configs-utils ros-jazzy-ros2-control ros-jazzy-ros2-controllers \
-    ros-jazzy-control-toolbox ros-jazzy-mujoco-vendor ros-jazzy-backward-ros \
-    ros-jazzy-ros-gz-interfaces ros-jazzy-tf2-geometry-msgs ros-jazzy-vision-msgs
-RUN apt-get install --yes --no-install-recommends \
-    ros-jazzy-ros2-control-cmake ros-jazzy-ros2-control-test-assets \
-    ros-jazzy-example-interfaces ros-jazzy-launch-testing-ros \
-    ros-jazzy-launch ros-jazzy-launch-testing ros-jazzy-launch-ros
-RUN python3 -m venv --system-site-packages /act/venv \
-    && printf '%s\n' 'import sys; sys.path[:0] = ["/act/install/lib/python3.12/site-packages", "/act/install/local/lib/python3.12/dist-packages", "/opt/ros/jazzy/lib/python3.12/site-packages", "/opt/venv/lib/python3.12/site-packages"]' \
-       > /act/venv/lib/python3.12/site-packages/act-runtime.pth \
-    && NO_PROXY="${NO_PROXY:+$NO_PROXY,}pypi.tuna.tsinghua.edu.cn" no_proxy="${no_proxy:+$no_proxy,}pypi.tuna.tsinghua.edu.cn" \
-       /act/venv/bin/python -m pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple pydantic==2.14.1 mujoco==3.12.0 colcon-override-check==0.0.1 pytest==7.4.4 pytest-xdist==3.8.0
+# Four stages. `deps` is that base. `web` builds the so101_teleop web bundle (Bun install, then `tsc -b && vite build`); its inputs are only
+# the files under src/so101_teleop/web, so a change elsewhere leaves the stage cached, and the dependency install is a layer of its own that
+# depends on package.json and bun.lock alone. `build` compiles the colcon closure in layers: the rarely changing native packages
+# first (third_party and so101_quik), then the packages that change with the code (so101_mujoco_support, so101_teleop,
+# so101_demo_py). `final` is `deps` plus the complete read-only /act/source and the finished /act/install; it never contains
+# the build tree.
+#
+# Same content for the same commit on every host (docs/superpowers/specs/2026-10-21-so101-image-content-identity-design.md):
+# no .pyc is generated (PIP_NO_COMPILE, PYTHONDONTWRITEBYTECODE, no compileall), the C++ compiler maps the build paths, and
+# the image build uses no ccache.
+FROM so101-campaign-shard-deps:ros-jazzy-yolo11n-v1 AS deps
 
 FROM deps AS web
 
@@ -48,7 +32,8 @@ RUN cd /act/build-source/src/so101_teleop/web && /act/build-tools/bun run build
 
 FROM deps AS build
 
-ENV PATH=/act/venv/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+ENV CCACHE_DISABLE=1 PYTHONHASHSEED=0 \
+    PATH=/act/venv/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     AMENT_PREFIX_PATH=/act/install:/opt/ros/jazzy
 
 # Native layer: only the files the third_party packages and so101_quik compile from.
@@ -64,8 +49,14 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; cd /ac
       --packages-select controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_3d_lidar mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins so101_clock_test_hardware so101_queued_state_publisher so101_quik \
       --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
       --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+      -DCMAKE_C_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_CXX_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER= \
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
       -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
+# rosidl_generator_c and rosidl_typesupport_introspection_c both write <msg>__type_support.c, and the install rule that should keep
+# only the headers has no EXCLUDE, so both copies are installed and the one that finished generating last wins: a race between two
+# builds of one commit. Nothing compiles the installed copies (the libraries come from the build tree). They are deleted right after
+# the packages that install them, because so101_demo_py writes debug-provenance-manifest.json with a hash of every installed file.
+RUN find /act/install/include -type f -name '*.c' -delete
 
 # Code layer: the sources that change. The web bundle comes from the `web` stage and Bun is not installed here.
 COPY source/scripts /act/build-source/scripts
@@ -75,9 +66,21 @@ RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; source
     /act/venv/bin/python -m pytest --version; \
     /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
       --build-base /act/build --install-base /act/install --merge-install \
-      --packages-select so101_mujoco_support so101_teleop so101_demo_py \
+      --packages-select so101_mujoco_support \
       --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
       --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+      -DCMAKE_C_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_CXX_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER= \
+      -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
+      -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON'
+RUN find /act/install/include -type f -name '*.c' -delete
+RUN /usr/bin/bash -c 'set -eo pipefail; source /opt/ros/jazzy/setup.bash; source /act/install/local_setup.bash; cd /act/build-source; \
+    /act/venv/bin/python -m pytest --version; \
+    /act/venv/bin/python -m colcon --log-base /act/build-log build --base-paths src third_party \
+      --build-base /act/build --install-base /act/install --merge-install \
+      --packages-select so101_teleop so101_demo_py \
+      --allow-overriding controller_manager hardware_interface_testing joint_state_broadcaster joint_trajectory_controller mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
+      --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+      -DCMAKE_C_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_CXX_FLAGS='\''-ffile-prefix-map=/act/build-source=/act/src -fdebug-prefix-map=/act/build-source=/act/src'\'' -DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER= \
       -DPython3_EXECUTABLE=/act/venv/bin/python -DPYTHON_EXECUTABLE=/act/venv/bin/python \
       -DFETCHCONTENT_SOURCE_DIR_LODEPNG=/act/source/build-deps/lodepng -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
       -DSO101_TELEOP_PREBUILT_WEB_DIST=ON'
@@ -105,9 +108,9 @@ ENV PATH=/act/venv/bin:/act/install/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/
 COPY source/src/so101_demo_py/docker/campaign-inference/bootstrap.bash /act/bootstrap.bash
 RUN chmod 0555 /act/bootstrap.bash && printf '%s\n' shard > /act/image-role \
     && chmod -R a+rX,a-w /act/install && chmod u+w /act/install/share \
-    && /act/bootstrap.bash /act/venv/bin/python -I -c 'from so101_demo.runtime.container_campaign.provenance import write_build_freeze; write_build_freeze("shard")' \
+    && /act/bootstrap.bash /act/venv/bin/python -B -I -c 'from so101_demo.runtime.container_campaign.provenance import write_build_freeze; write_build_freeze("shard")' \
     && chmod a-w /act/install/share /act/install/share/act-image-dependencies.json /act/provenance.json /act/image-role \
-    && /act/bootstrap.bash /act/venv/bin/python -I -m so101_demo.runtime.container_campaign.provenance
+    && /act/bootstrap.bash /act/venv/bin/python -B -I -m so101_demo.runtime.container_campaign.provenance
 
 WORKDIR /act
 ENTRYPOINT ["/act/bootstrap.bash", "/act/venv/bin/python", "-I", "-m", "so101_demo.runtime.container_campaign.image_bootstrap"]

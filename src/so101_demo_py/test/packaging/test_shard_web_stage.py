@@ -62,8 +62,9 @@ def test_build_stage_takes_the_bundle_from_the_web_stage_and_never_runs_bun() ->
     assert build.index(bundle) > source_copy
     colcon = [item for item in build if item.startswith("RUN") and "colcon" in item]
     assert "-DSO101_TELEOP_PREBUILT_WEB_DIST=ON" not in colcon[0]
-    assert "-DSO101_TELEOP_PREBUILT_WEB_DIST=ON" in colcon[1]
-    assert build.index(bundle) < build.index(colcon[1])
+    assert "-DSO101_TELEOP_PREBUILT_WEB_DIST=ON" not in colcon[1]      # so101_mujoco_support does not build the bundle
+    assert "-DSO101_TELEOP_PREBUILT_WEB_DIST=ON" in colcon[-1]         # the run that selects so101_teleop does
+    assert build.index(bundle) < build.index(colcon[-1])
     text = "\n".join(build)
     for word in ("build-deps/bun", "build-deps/node", "SO101_TELEOP_BUN", "build-tools"):
         assert word not in text, word

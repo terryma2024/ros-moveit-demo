@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 
 from so101_demo.runtime.act_instance.identity import fastdds_profile_environment, instance_environment
+from so101_demo.runtime.container_campaign.mount_build import INTERPRETER, container_environment, container_mounts
 from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX, _path, build_role_mounts
 from so101_demo.runtime.inference.config import _image, _open_regular, calibration_runtime_hash
 
@@ -100,9 +101,11 @@ SHARD_OOM_SCORE_ADJ = 900
 PROCESSOR_OOM_SCORE_ADJ = SHARD_OOM_SCORE_ADJ
 
 
-def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, uid, gid):
-    """The `docker run` argv of one role. A processor (phase 2) runs the shard image without a GPU, a Teacher socket or a ROS
-    identity: `gpu_uuid` must be None for it and a UUID for every other role."""
+def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, uid, gid, mount_build=None):
+    """The `docker run` argv of one role. With `mount_build` (a `MountBuild`) the image is the dependency-only base: the commit's
+    install and source trees are added as read-only bind mounts, the entry script checks their records against the commit, and the
+    command runs the image bootstrap through the base's interpreter (the base has no role file and no installed code of its own).
+    A processor (phase 2) runs the shard image without a GPU, a Teacher socket or a ROS identity: `gpu_uuid` must be None for it and a UUID for every other role."""
     try:
         _require(role in ("head", "teacher", "shard", "processor"))
         _require(type(image) is dict and set(image) == {"head", "teacher", "shard"})
@@ -141,6 +144,13 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
             _require(not any(character in str(path) for path in (mount.source, mount.target)
                              for character in (",", "\n", "\r")))
         environment = instance_private_environment(owned, gpu=role != "processor")
+        install_prefix = CONTAINER_INSTALL_PREFIX if mount_build is None else mount_build.package_prefix
+        if mount_build is not None:
+            for directory in (mount_build.install, mount_build.source):
+                _path(directory, directory=True)
+            for item in mounts:
+                _require(not item.source.is_relative_to(mount_build.root) and not mount_build.root.is_relative_to(item.source))
+            environment.extend(container_environment(mount_build))
         if role == "processor":
             _require(type(entry) is ProcessorLaunchArgs and entry.spec in host_paths["config_paths"])
             command = ["campaign_processor", "--spec", str(entry.spec)]
@@ -149,7 +159,7 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
             _require(entry.spec in host_paths["config_paths"])
             command = ["campaign_shard", "--spec", str(entry.spec)]
             environment.extend(instance_environment(mujoco_session_id=entry.mujoco_session_id))
-            environment.extend(fastdds_profile_environment(CONTAINER_INSTALL_PREFIX))
+            environment.extend(fastdds_profile_environment(install_prefix))
         else:
             _require(type(entry) is InferenceLaunchArgs and entry.config in host_paths["config_paths"])
             _require((entry.head_descriptor is not None) == (role == "head"))
@@ -171,6 +181,10 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
         for mount in mounts:
             value = f"type=bind,src={mount.source},dst={mount.target}"
             argv.extend(["--mount", value+(",readonly" if mount.read_only else "")])
+        if mount_build is not None:
+            for value in container_mounts(mount_build):
+                argv.extend(["--mount", value])
+            command = [INTERPRETER, "-I", "-B", "-m", "so101_demo.runtime.container_campaign.image_bootstrap", *command]
         if role in ("shard", "processor"):
             argv.extend(["--oom-score-adj", str(SHARD_OOM_SCORE_ADJ if role == "shard" else PROCESSOR_OOM_SCORE_ADJ)])
         return argv+[image["shard" if role == "processor" else role]["digest"]]+command

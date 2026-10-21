@@ -9,6 +9,11 @@ same content have the same `content_sha256` even when their timestamps differ.
     image_content_manifest.py manifest <tar|-> --exclusions FILE --output FILE
     image_content_manifest.py diff A.json B.json
     image_content_manifest.py check-no-pyc MANIFEST [--base BASE_MANIFEST]
+    image_content_manifest.py check-no-project-code MANIFEST
+    image_content_manifest.py tree DIR --output FILE
+
+`tree` applies the same rule to a directory (the install and source trees that are mounted into a container): the same entry fields
+without owners, and a `.pyc` file or `__pycache__` directory is a refusal, not something skipped.
 
 Standard library only. See scripts/images/README.md.
 """
@@ -25,6 +30,7 @@ import json
 import os
 import posixpath
 import re
+import stat
 import sys
 import tarfile
 
@@ -596,6 +602,74 @@ def cmd_check_no_pyc(args):
     return 1 if violations else 0
 
 
+# The home prefix is joined so that no script spells a host path literally (test_gate_tools.FORBIDDEN).
+PROJECT_CODE_ROOTS = ("/act/", "/opt/", "/usr/lib/", "/usr/local/", "/root/", "/" + "home/")
+
+
+def project_code_paths(content):
+    """Files under the runtime trees that have a path component starting with `so101` (a package, a dist-info, a source copy)."""
+    return sorted(path for path, entry in content["entries"].items()
+                  if entry["type"] in FILE_TYPES and path.startswith(PROJECT_CODE_ROOTS)
+                  and any(part.lower().startswith("so101") for part in path.split("/")))
+
+
+def cmd_check_no_project_code(args):
+    found = project_code_paths(load_manifest(args.manifest)["content"])
+    print(f"project_paths={len(found)}")
+    for path in found[:args.limit]:
+        print(f"project: {path}")
+    if len(found) > args.limit:
+        print(f"... {len(found) - args.limit} more")
+    return 1 if found else 0
+
+
+TREE_SCHEMA = "so101-tree-content-manifest/1"
+
+
+def tree_entries(root):
+    """Entries of a directory tree, keyed by the path relative to it: type, mode, and size plus sha256 or the symlink target.
+    Raises ImageManifestError for anything but files, directories and symlinks. Returns (entries, bytecode paths)."""
+    entries, bytecode = {}, []
+    root = os.path.abspath(root)
+    for directory, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames.sort()
+        relative_directory = os.path.relpath(directory, root)
+        for name in sorted(dirnames + filenames):
+            full = os.path.join(directory, name)
+            relative = name if relative_directory == "." else posixpath.join(relative_directory.replace(os.sep, "/"), name)
+            info = os.lstat(full)
+            mode = format(stat.S_IMODE(info.st_mode), "04o")
+            if name == "__pycache__" or name.endswith(".pyc"):
+                bytecode.append(relative)
+            if stat.S_ISLNK(info.st_mode):
+                entries[relative] = {"type": "symlink", "target": os.readlink(full)}
+            elif stat.S_ISDIR(info.st_mode):
+                entries[relative] = {"type": "dir", "mode": mode}
+            elif stat.S_ISREG(info.st_mode):
+                digest = hashlib.sha256()
+                with open(full, "rb") as stream:
+                    for chunk in iter(lambda: stream.read(CHUNK), b""):
+                        digest.update(chunk)
+                entries[relative] = {"type": "file", "mode": mode, "size": info.st_size, "sha256": digest.hexdigest()}
+            else:
+                raise ImageManifestError(f"{relative}: not a file, directory or symlink")
+    return entries, sorted(bytecode)
+
+
+def cmd_tree(args):
+    entries, bytecode = tree_entries(args.directory)
+    if bytecode:
+        print(f"bytecode in the tree: {len(bytecode)} path(s)")
+        for path in bytecode[:args.limit]:
+            print(f"pyc: {path}")
+        return 1
+    document = {"schema": TREE_SCHEMA, "entries": entries, "tree_sha256": sha256_hex(canonical_bytes({"entries": entries}))}
+    with open(args.output, "w") as stream:
+        stream.write(json.dumps(document, sort_keys=True, indent=1) + "\n")
+    print(f"tree_sha256 {document['tree_sha256']} ({len(entries)} entries)")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -613,6 +687,15 @@ def main(argv=None):
     pyc.add_argument("--base", help="base image manifest: site-packages .pyc files present there are not flagged")
     pyc.add_argument("--limit", type=int, default=50, help="paths to list (default 50)")
     pyc.set_defaults(handler=cmd_check_no_pyc)
+    project = commands.add_parser("check-no-project-code", help="fail when a dependency base holds so101_* code (packages, dist-info, source copies)")
+    project.add_argument("manifest")
+    project.add_argument("--limit", type=int, default=50)
+    project.set_defaults(handler=cmd_check_no_project_code)
+    tree = commands.add_parser("tree", help="write the content manifest of a directory tree; prints tree_sha256 (exit 1 when it holds bytecode)")
+    tree.add_argument("directory")
+    tree.add_argument("--output", required=True)
+    tree.add_argument("--limit", type=int, default=50)
+    tree.set_defaults(handler=cmd_tree)
     args = parser.parse_args(argv)
     try:
         return args.handler(args)

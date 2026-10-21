@@ -58,6 +58,8 @@ def read_document(path, *, limit=16*1024*1024):
 #: Present in the identity of a campaign that names its camera rig (sha256 of the rig profile, `act.rig_profile`); absent for every
 #: identity written before rig profiles existed, which is rig v1.
 RIG_IDENTITY_KEY = 'rig_profile_sha256'
+#: Present in the identity of a campaign run in mount mode (`{commit, root}` of the mounted build); absent in image mode.
+MOUNT_IDENTITY_KEY = 'mount_build'
 
 
 #: Identity version 2 (multi-host design Q3) has no `gpu_uuid`: the GPU is the environment of a run, recorded in the qualification report
@@ -67,8 +69,11 @@ ENVIRONMENT_IDENTITY_KEYS = frozenset({'gpu_uuid'})
 
 def validate_controlled_identity(identity):
     _require(type(identity) is dict)
-    version_keys = set(identity) - {RIG_IDENTITY_KEY}
+    version_keys = set(identity) - {RIG_IDENTITY_KEY, MOUNT_IDENTITY_KEY}
     _require(version_keys == IDENTITY_KEYS or version_keys == IDENTITY_KEYS - ENVIRONMENT_IDENTITY_KEYS)
+    if MOUNT_IDENTITY_KEY in identity:
+        from so101_demo.runtime.inference.config import validate_mount_build
+        validate_mount_build(identity[MOUNT_IDENTITY_KEY])
     for name in (version_keys | ({RIG_IDENTITY_KEY} & set(identity))) - {'image_source_install','gpu_uuid'}:
         _require(type(identity[name]) is str and re.fullmatch(r'[0-9a-f]{64}',identity[name]) is not None)
     images = identity['image_source_install']

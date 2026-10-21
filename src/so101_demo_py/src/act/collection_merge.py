@@ -178,6 +178,36 @@ def environment_of(report: dict) -> dict:
     return dict(gpu_uuid=report["controlled_identity"].get("gpu_uuid"), gpu_model=None)
 
 
+def _mount_preflights(parsed, reference):
+    """Mount mode (the identity names a mounted build): every source's run holds a passing environment check of that commit against that
+    base image, and all of them checked the same base image manifest. Image mode: None, and no source may hold one."""
+    from so101_demo.runtime.container_campaign.mount_build import PREFLIGHT_COPY, preflight_problem
+
+    mount = reference.get("mount_build")
+    found = {}
+    for item in parsed:
+        path = Path(item["run_root"]) / "host" / PREFLIGHT_COPY
+        if mount is None:
+            if path.exists():
+                raise MergeRefused(f"MERGE_IDENTITY_MISMATCH: {item['name']} holds a mount preflight but its identity names no mounted build")
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError) as error:
+            raise MergeRefused(f"MERGE_MOUNT_PREFLIGHT_MISSING: {item['name']}: {path}") from error
+        problem = preflight_problem(record, mount, reference["image_source_install"]["shard"])
+        if problem is not None:
+            raise MergeRefused(f"MERGE_MOUNT_PREFLIGHT_REFUSED: {item['name']}: {problem}")
+        found[item["name"]] = dict(host_label=record["host"], base_manifest_sha256=record["base_manifest_sha256"],
+                                   warnings=record["warnings"], exceptions=record["exceptions"], record_sha256=sha256_file(path))
+    if mount is None:
+        return None
+    manifests = {entry["base_manifest_sha256"] for entry in found.values()}
+    if len(manifests) != 1:
+        raise MergeRefused(f"MERGE_MOUNT_PREFLIGHT_REFUSED: the sources checked different base image manifests: {sorted(manifests)}")
+    return found
+
+
 # ---- the merge ---------------------------------------------------------------------------------------------------------------
 
 def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4):
@@ -217,6 +247,7 @@ def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4)
         if identity != reference:
             different = sorted(key for key in set(identity) | set(reference) if identity.get(key) != reference.get(key))
             raise MergeRefused(f"MERGE_IDENTITY_MISMATCH: source {number} differs from source 0 in {different}")
+    preflights = _mount_preflights(parsed, reference)
     owner = {}
     for item in parsed:
         for scene in sorted(item["scenes"]):
@@ -244,7 +275,8 @@ def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4)
             run_root=str(item["run_root"].resolve()), seal_manifest_sha256=item["seal"]["manifest_sha256"], sealed_files=item["entries"],
             host=source.host, **environment_of(item["report"]),
             qualification_report=str(report_path.resolve()), qualification_report_sha256=sha256_file(report_path),
-            scenes=len(item["scenes"]), committed=len(item["committed"])))
+            scenes=len(item["scenes"]), committed=len(item["committed"]),
+            **({} if preflights is None else dict(mount_preflight=preflights[item["name"]]))))
     index = dict(kind=INDEX_KIND, qualification=False, schema_version=max(versions), campaign_id="merged-" + stamp,
                  scene_count=len(formal), committed_episodes=merged,
                  provenance=dict(created=stamp, formal_list=str(Path(formal_list).resolve()),

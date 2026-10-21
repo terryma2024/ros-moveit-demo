@@ -161,12 +161,17 @@ def frozen_identity_problems(frozen, manifest_path, contract):
     return problems
 
 
-def _image_problem(document, image):
+def _image_problem(document, image, mount_build=None):
+    """Whether a container's recorded provenance is not the image of the identity. In mount mode (`mount_build` is the identity's
+    `{commit, root}`) the readback names that commit, its paths lie under the mounted install, and the record repeats the mount; in
+    image mode a record that names a mount is refused."""
     try:
         report = document['provenance']
         from so101_demo.runtime.container_campaign.provenance import _report
 
-        _report(report)
+        _report(report, '/act/install' if mount_build is None else mount_build['root'] + '/install')
+        if document.get('mount_build') != mount_build or (mount_build is not None and report['git_commit'] != mount_build['commit']):
+            return True
         return not (document['image_digest'] == image['digest']
                     and report['package_source_sha256'] == image['package_source_sha256']
                     and report['install_sha256'] == image['install_sha256'])
@@ -326,8 +331,26 @@ class _Run:
             self.mismatch('gpu_uuid')
         if config['teacher_service']['image'] != images['inference'] or config['shard_image'] != images['shard']:
             self.mismatch('image_source_install')
+        if config.get('mount_build') != self.identity.get('mount_build'):
+            self.mismatch('mount_build')
         if config['controlled_runtime']['sha256'] != self.identity['runtime_config_sha256']:
             self.mismatch('runtime_config_sha256')
+
+    def mount_preflight(self):
+        """Mount mode: the run holds a passing environment check of its commit against its base image; image mode holds none."""
+        from so101_demo.runtime.container_campaign.mount_build import PREFLIGHT_COPY, preflight_problem
+
+        mount, path = self.identity.get('mount_build'), self.run/'host'/PREFLIGHT_COPY
+        if mount is None:
+            if path.exists():
+                self.mismatch('mount_build')
+            return
+        try:
+            problem = preflight_problem(read_document(path), mount, self.identity['image_source_install']['shard'])
+        except _RUN_ERRORS:
+            problem = 'unreadable'
+        if problem is not None:
+            self.mismatch('mount_preflight')
 
     def services(self):
         images = self.identity['image_source_install']
@@ -358,7 +381,7 @@ class _Run:
         for path, image, launch_id in sources:
             try:
                 document = read_document(path)
-                if _image_problem(document, image):
+                if _image_problem(document, image, self.identity.get('mount_build')):
                     self.mismatch('image_source_install')
                 owner = owners.get(launch_id)
                 if owner is not None and document['container_id'] != owner['container_id']:
@@ -649,6 +672,7 @@ def recompute(run_root, contract_path, *, readback_workers=None, readback_timeou
     try:
         state.topology(registry)
         state.specs()
+        state.mount_preflight()
         state.services()
         state.frozen()
         state.waves()

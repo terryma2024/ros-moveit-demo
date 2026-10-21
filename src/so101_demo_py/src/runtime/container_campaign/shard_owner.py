@@ -1,6 +1,7 @@
 """Host ownership of one private shard, with durable intent and original stop proof."""
 
 import asyncio
+import functools
 import hashlib
 import json
 import math
@@ -45,7 +46,7 @@ class ContainerShardOwner:
                  approved_inputs, config_paths, service_token, startup_timeout_s,
                  status_timeout_s, max_frame_bytes, stop_timeout_s,
                  docker_runner=_docker, namespace_reader=read_container_namespace,
-                 monotonic_ns=time.monotonic_ns):
+                 monotonic_ns=time.monotonic_ns, mount_build=None):
         if (type(admitted_context) is not AdmittedCampaignContext
                 or type(launch) is not ContainerLaunch or launch.role != 'shard'
                 or type(entry) is not ShardLaunchArgs or type(registry) is not ContainerLaunchRegistry
@@ -66,7 +67,8 @@ class ContainerShardOwner:
         self.argv = build_container_argv(role='shard',image=images,gpu_uuid=admitted_context.physical_gpu_uuid,
             host_paths=dict(owned_root=self.root,approved_inputs=approved_inputs,config_paths=config_paths,
                 socket_roots=paths['socket_roots']|{'control':self.root/'control'},entry=entry),
-            container_name=launch.container_name,uid=os.getuid(),gid=os.getgid())
+            container_name=launch.container_name,uid=os.getuid(),gid=os.getgid(),mount_build=mount_build)
+        self.mount_build = mount_build
         if images['shard']['digest'] != launch.image_digest:
             raise ValueError('SHARD_OWNER_CONFIG_INVALID')
         self.image = dict(images['shard'])
@@ -163,11 +165,15 @@ class ContainerShardOwner:
             await self._wait_file(self.root/'runtime-ready.json',deadline)
             await self._wait_file(self.root/'stack-readiness.json',deadline)
             check_runtime_ready(self.root,generation=self.launch.launch_generation,process=binding.process)
-            actual = await asyncio.to_thread(read_container_provenance,cid,docker_runner=self.docker)
+            actual = await asyncio.to_thread(functools.partial(read_container_provenance,cid,docker_runner=self.docker,
+                **({} if self.mount_build is None else dict(mount_role='shard',install_root=str(self.mount_build.install)))))
             if (actual['image_digest'] != self.image['digest'] or any(
                     actual['provenance'][name] != self.image[name]
-                    for name in ('package_source_sha256','install_sha256'))):
+                    for name in ('package_source_sha256','install_sha256'))
+                    or (self.mount_build is not None and actual['provenance']['git_commit'] != self.mount_build.commit)):
                 raise ValueError('SHARD_IMAGE_PROVENANCE_CHANGED')
+            if self.mount_build is not None:
+                actual = dict(actual,mount_build=self.mount_build.document())
             _write(self.root/'actual-container-provenance.json',actual)
             await self._ensure_alive(deadline)
             self._runtime_ready = True

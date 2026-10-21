@@ -8,6 +8,7 @@ from so101_demo.runtime.act_instance.program import instance_id_for
 from so101_demo.runtime.act_instance.spec import SPEC_SCHEMA_VERSION,load_spec
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs
+from so101_demo.runtime.container_campaign.mount_build import mount_from_config
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch,ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.service_owner import _docker,_write
 from so101_demo.runtime.container_campaign.shard_owner import ContainerShardOwner,read_container_namespace
@@ -31,6 +32,7 @@ class ContainerShardLauncher:
         self.runtime=_load_runtime_config(validate_file_ref(parallel_runtime))
         self.approved_inputs,self.config_paths=approved_inputs,config_paths
         self.docker_runner,self.namespace_reader=docker_runner,namespace_reader
+        self.mount_build=mount_from_config(config)
         self._next_wave=0
         self._prepared={}
 
@@ -56,7 +58,7 @@ class ContainerShardLauncher:
             startup_timeout_s=self.runtime.initializing_hard_timeout_s,
             status_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
             stop_timeout_s=self.runtime.worker_recovery_timeout_s,
-            docker_runner=self.docker_runner,namespace_reader=self.namespace_reader)
+            docker_runner=self.docker_runner,namespace_reader=self.namespace_reader,mount_build=self.mount_build)
 
     def __call__(self,*,plan,endpoints,slots):
         wave=plan['wave_index']

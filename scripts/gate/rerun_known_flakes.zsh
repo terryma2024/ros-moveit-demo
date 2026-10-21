@@ -26,6 +26,9 @@ if [[ -r $G/stage-env.txt ]]; then
     [[ -v ${line%%=*} ]] || export "$line"
   done < $G/stage-env.txt
 fi
+# The rerun is one serial colcon stage in a run dir of its own: the upstream groups of a parallel gate do not take part (the stage would wait for them).
+export UPSTREAM_PARALLEL=0
+unset GATE_TEST_RUN
 export GATE=$G GATE_BUILD=$GB GATE_SCRATCH=$SCRATCH_ROOT/rerun-$ID
 mkdir -p $GATE_SCRATCH $G/rerun
 known=(${(f)"$(python3 -I $FG/known_flakes.py $FG/known-flakes.txt)"}) || { print -u2 "known-flakes.txt is malformed"; exit 3; }

@@ -250,6 +250,10 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
         # the camera rig is part of the controlled identity when the campaign names one; a config written before rig profiles
         # existed names none and its identity is the six keys it always had (rig v1)
         identity['rig_profile_sha256'] = campaign_config['rig_profile_sha256']
+    if 'mount_build' in campaign_config:
+        # mount mode: the commit and the root of the mounted build are part of what two hosts must agree on (the images then name the
+        # base image and the trees' record hashes); an image-mode config has no such key and its identity is unchanged
+        identity['mount_build'] = dict(campaign_config['mount_build'])
     return identity
 
 

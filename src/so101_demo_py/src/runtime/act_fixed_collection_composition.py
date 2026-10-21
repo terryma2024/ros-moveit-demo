@@ -206,6 +206,9 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
             config_paths=(Path(context.campaign_config_path),),
             **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
         if instance_launcher == 'native':
+            if 'mount_build' in config:
+                # mount mode mounts the build into containers; a native instance runs the Host's own install
+                raise ValueError('COLLECTION_MOUNT_BUILD_NEEDS_CONTAINER_LAUNCHER')
             launcher = NativeInstanceLauncher(**(native or {}), **shard_arguments)
         elif instance_launcher == 'container':
             launcher = ContainerShardLauncher(**shard_arguments)
@@ -231,12 +234,13 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
                             popen=edges.get('popen')))
                 limit = 1
             else:
+                from so101_demo.runtime.container_campaign.mount_build import mount_from_config
                 from so101_demo.runtime.container_campaign.processor_launcher import ContainerProcessorLauncher
                 processors = ContainerProcessorLauncher(context=context, paths=paths, registry=registry,
                     images=dict(head=config['head_service']['image'], teacher=config['teacher_service']['image'],
                                 shard=config['shard_image']),
                     parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
-                    config_paths=(Path(context.campaign_config_path),),
+                    config_paths=(Path(context.campaign_config_path),), mount_build=mount_from_config(config),
                     **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
                 limit = None
             processing = ProcessingScheduler(context=context, runtime=runtime, config=limits, root=paths['run'],

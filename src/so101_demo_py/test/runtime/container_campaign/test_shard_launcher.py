@@ -29,10 +29,13 @@ NS_FIELD = "ros" + "_namespace"
 GPU = 'GPU-28221cec-9d21-7753-fd5a-da645740df19'
 
 
-def prepared(tmp_path):
+def prepared(tmp_path, mount=None):
     paths = make_campaign_paths(tmp_path, 'campaign')
     campaign = campaign_fixture(tmp_path)
     campaign['gpu_uuid'] = GPU
+    if mount is not None:
+        campaign['shard_image'] = dict(campaign['teacher_service']['image'])
+        campaign['mount_build'] = mount.document()
     campaign_path = write_config(tmp_path, campaign)
     campaign_sha = hashlib.sha256(campaign_path.read_bytes()).hexdigest()
     runtime = tmp_path/'parallel.yaml'
@@ -104,5 +107,31 @@ def test_waves_must_be_prepared_in_order_with_the_admitted_slots(tmp_path):
         with pytest.raises(ValueError, match='COLLECTION_SHARD_WAVE_INVALID'):
             launcher(plan={'wave_index': 0}, endpoints={}, slots=(foreign,))
         assert not (paths['run']/'wave-0').exists()
+    finally:
+        registry.close()
+
+
+def test_a_mount_mode_config_makes_every_shard_owner_mounted(tmp_path):
+    commit = '0123456789abcdef0123456789abcdef01234567'
+    from so101_demo.runtime.container_campaign.mount_build import MountBuild
+    mount = MountBuild(commit=commit, root=tmp_path/'mounted'/commit[:12])
+    for name in ('install', 'source'):
+        (mount.root/name).mkdir(parents=True)
+        (mount.root/name/'BUILD-COMMIT').write_text(commit+'\n')
+    launcher, registry, slot, paths = prepared(tmp_path, mount)
+    try:
+        (owner,) = launcher(plan={'wave_index': 0}, endpoints={}, slots=(slot,))
+        assert owner.mount_build == mount
+        assert f'SO101_EXPECTED_COMMIT={commit}' in owner.argv and f'type=bind,src={mount.install},dst={mount.install},readonly' in owner.argv
+        assert owner.argv[owner.argv.index(launcher.config['shard_image']['digest']) + 1] == '/act/venv/bin/python'
+    finally:
+        registry.close()
+
+
+def test_an_image_mode_config_leaves_the_shard_owner_unmounted(tmp_path):
+    launcher, registry, slot, paths = prepared(tmp_path)
+    try:
+        (owner,) = launcher(plan={'wave_index': 0}, endpoints={}, slots=(slot,))
+        assert owner.mount_build is None and not [value for value in owner.argv if 'SO101_MOUNT' in value]
     finally:
         registry.close()

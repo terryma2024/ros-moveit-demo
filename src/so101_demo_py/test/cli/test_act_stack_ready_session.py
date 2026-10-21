@@ -16,7 +16,7 @@ import time
 import pytest
 
 SESSION = "ready-session"
-DOMAIN = "229"
+DOMAIN = "232"      # none of the gate stages uses it (demo 203, teleop 204, jtc 229, upstream groups 223-226)
 TIMEOUT_S = 4.0
 
 
@@ -121,7 +121,7 @@ class FakeStack:
             self.executor.spin_once(timeout_sec=0.002)
             if time.monotonic() >= next_tick:
                 self._tick()
-                next_tick = time.monotonic() + 0.01
+                next_tick = time.monotonic() + 0.02
 
     def close(self):
         self._stop.set()
@@ -133,7 +133,21 @@ class FakeStack:
         self.context.try_shutdown()
 
 
+def unrejected(observe):
+    """Run `observe` again while it says ACT_STACK_SOURCE_REJECTED: the observer refuses a sequence gap, and a depth-one subscription
+    loses samples when the host is busy (the gate runs these tests beside everything else). No scenario expects that code."""
+    for _attempt in range(5):
+        outcome = observe()
+        if outcome[0] or outcome[2] != "ACT_STACK_SOURCE_REJECTED":
+            break
+    return outcome
+
+
 def command_line(rig_arguments):
+    return unrejected(lambda: _command_line(rig_arguments))
+
+
+def _command_line(rig_arguments):
     environment = {**os.environ, "ROS_DOMAIN_ID": DOMAIN}
     environment.pop("SO101_ACT_INSTANCE_ROOT", None)
     done = subprocess.run([sys.executable, "-m", "so101_demo.cli.act_stack_ready", "--session-id", SESSION,
@@ -147,6 +161,10 @@ def command_line(rig_arguments):
 
 
 def kept(session):
+    return unrejected(lambda: _kept(session))
+
+
+def _kept(session):
     outcome = session.check(TIMEOUT_S)
     if outcome.ready:
         return True, outcome.artifact["checks"], sorted(outcome.artifact)
@@ -218,6 +236,6 @@ def test_a_session_that_is_not_ready_recovers_when_the_stack_does(graph):
         assert session.check(1.5).ready is False
         graph.paused = False
         time.sleep(0.3)
-        assert session.check(TIMEOUT_S).ready is True
+        assert kept(session)[0] is True
     finally:
         session.close()

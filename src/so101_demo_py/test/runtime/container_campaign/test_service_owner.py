@@ -17,7 +17,8 @@ from so101_teleop.unified.contracts import AdmittedCampaignContext
 
 
 def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False, refuse_stop=False, ready_drift=False,
-            roles=None, descriptor_given=None, descriptor_sha=None, rig_profile_sha256=None, head_weights_absent=False):
+            roles=None, descriptor_given=None, descriptor_sha=None, rig_profile_sha256=None, head_weights_absent=False,
+            mount_tree=None, preflight='pass'):
     """Collection (the default) launches Teacher only; `validation` launches Head and Teacher; `measurement` Head only.
 
     `roles`, `descriptor_given` and `descriptor_sha` override what the owner is built with, to probe its refusals."""
@@ -35,6 +36,20 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
     report = verify_image_freeze(manifest, source_root=source, install_root=install, runtime=runtime)
     image = dict(digest='sha256:'+'b'*64, package_source_sha256=report['package_source_sha256'],
                  install_sha256=report['install_sha256'])
+    if mount_tree is not None:
+        from so101_demo.runtime.container_campaign import mount_build as mounts
+        image = dict(digest='sha256:'+'b'*64, **mounts.verify_records(mount_tree))
+        report = dict(schema_version=1, kind='ACT_CONTAINER_IMAGE_READBACK', git_commit=mount_tree.commit, submodules={},
+            package_source_sha256=image['package_source_sha256'], install_sha256=image['install_sha256'],
+            runtime=dict(interpreter='/act/venv/bin/python', dependencies={'numpy':'1.26.4'},
+                module_origins={'so101_demo':str(mount_tree.install)+'/so101_demo_py/x.py'},
+                package_prefixes={'so101_demo_py':str(mount_tree.install)+'/so101_demo_py'}))
+        if preflight is not None:
+            record = {'schema_version':1,'kind':'MOUNT_PREFLIGHT','result':'PASS' if preflight == 'pass' else 'FAIL',
+                'commit':mount_tree.commit,'base_image_id':image['digest'],'base_manifest_sha256':'9'*64,
+                'install_record_sha256':image['install_sha256'],'must_failures':0 if preflight == 'pass' else 3,'warnings':2,
+                'exceptions':{},'host':'antzb'}
+            mounts.preflight_path(tmp_path, mount_tree).write_text(json.dumps(record))
     controlled = tmp_path/'runtime.json'
     controlled.write_text('{}')
     sha = hashlib.sha256(controlled.read_bytes()).hexdigest()
@@ -51,6 +66,8 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
             max_image_height=480, max_image_width=640, queue_timeout_s=10., inference_timeout_s=20.)
     if rig_profile_sha256 is not None:
         config['rig_profile_sha256'] = rig_profile_sha256
+    if mount_tree is not None:
+        config['mount_build'] = mount_tree.document()
     if head_weights_absent:
         # a rig without a head owns no head model: nothing of it is read
         (tmp_path/'head.pt').unlink()
@@ -341,4 +358,64 @@ def test_close_during_pending_docker_launch_waits_for_identity_and_single_cleanu
         asyncio.run(run())
     finally:
         release.set()
+        registry.close()
+
+
+def mounted_trees(tmp_path):
+    from so101_demo.runtime.container_campaign.mount_build import MountBuild
+
+    commit = '0123456789abcdef0123456789abcdef01234567'
+    mount = MountBuild(commit=commit, root=tmp_path/'mounted'/commit[:12])
+    for name in ('install', 'source'):
+        (mount.root/name).mkdir(parents=True)
+        (mount.root/name/'BUILD-COMMIT').write_text(commit+'\n')
+    return mount
+
+
+def test_a_mounted_teacher_starts_with_a_passing_preflight_and_records_the_mount(tmp_path):
+    mount = mounted_trees(tmp_path)
+    owner, registry, calls, containers = fixture(tmp_path, mount_tree=mount)
+    async def run():
+        await owner.start()
+        launch = next(argv for argv in calls if argv[:2] == ['docker','run'])
+        assert f'SO101_EXPECTED_COMMIT={mount.commit}' in launch
+        assert f'type=bind,src={mount.install},dst={mount.install},readonly' in launch
+        execs = [argv for argv in calls if argv[:2] == ['docker','exec']]
+        assert execs[0][3:] == ['/act/bootstrap.bash', '/act/venv/bin/python', '-I', '-B', '-m',
+                                'so101_demo.runtime.container_campaign.provenance', 'inference']
+        record = json.loads((owner.paths['host']/'teacher-provenance.json').read_text())
+        assert record['mount_build'] == mount.document() and record['provenance']['git_commit'] == mount.commit
+        assert json.loads((owner.paths['host']/'mount-preflight.json').read_text())['result'] == 'PASS'
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        registry.close()
+
+
+@pytest.mark.parametrize('preflight', [None, 'fail'])
+def test_a_mounted_start_without_a_passing_preflight_launches_nothing(tmp_path, preflight):
+    mount = mounted_trees(tmp_path)
+    owner, registry, calls, containers = fixture(tmp_path, mount_tree=mount, preflight=preflight)
+    async def run():
+        with pytest.raises(ValueError, match='SERVICE_OWNER_START_FAILED'):
+            await owner.start()
+    try:
+        asyncio.run(run())
+        assert not [argv for argv in calls if argv[:2] == ['docker','run']]
+    finally:
+        registry.close()
+
+
+def test_a_mounted_start_whose_tree_record_changed_launches_nothing(tmp_path):
+    mount = mounted_trees(tmp_path)
+    owner, registry, calls, containers = fixture(tmp_path, mount_tree=mount)
+    (mount.install/'BUILD-COMMIT').write_text('f'*40+'\n')
+    async def run():
+        with pytest.raises(ValueError, match='SERVICE_OWNER_START_FAILED'):
+            await owner.start()
+    try:
+        asyncio.run(run())
+        assert not [argv for argv in calls if argv[:2] == ['docker','run']]
+    finally:
         registry.close()
