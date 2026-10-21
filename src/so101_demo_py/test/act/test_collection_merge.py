@@ -46,18 +46,19 @@ def report(path, *, identity=None, status="QUALIFIED", gpu="GPU-a", model="RTX 5
     return path
 
 
-def make_source(tmp_path, name, scenes, committed=None, *, host=None, report_edit=None, extra_task=None, seal_it=True):
+def make_source(tmp_path, name, scenes, committed=None, *, host=None, report_edit=None, extra_task=None, seal_it=True,
+                attempts=None, without_evidence=()):
     """A sealed run root holding collection-index.json: `scenes` were collected, `committed` of them became episodes."""
     root = tmp_path / name
     root.mkdir()
     committed = list(scenes if committed is None else committed)
     episodes = [dict(kind="ACT_COMMITTED_EPISODE", schema_version=4, scene_id=scene, marker=name + scene) for scene in committed]
-    tasks = [dict(scene_id=scene, task_id="task-" + scene) for scene in scenes]
+    tasks = [dict(scene_id=scene, task_id="task-" + scene, **(attempts or {}).get(scene, {})) for scene in scenes]
     if extra_task:
         tasks.append(dict(scene_id=extra_task, task_id="task-extra"))
     (root / "collection-index.json").write_text(json.dumps(dict(
         schema_version=4, kind="act_collection_frozen_index", qualification=False, campaign_id=name, scene_count=len(scenes),
-        collected_tasks=tasks, committed_episodes=episodes, scenes_without_evidence=[])))
+        collected_tasks=tasks, committed_episodes=episodes, scenes_without_evidence=list(without_evidence))))
     (root / "host").mkdir()
     (root / "host/other.json").write_text(json.dumps(dict(name=name)))
     if seal_it:
@@ -72,7 +73,7 @@ def two(tmp_path):
     ids = [f"s{n:02d}" for n in range(6)]
     formal = scene_list(tmp_path / "formal.scenes.json", ids, {"s04": "validation", "s05": "offline_test"})
     a = make_source(tmp_path, "a", ids[:3], ids[:2], report_edit=dict(gpu="GPU-a"))
-    b = make_source(tmp_path, "b", ids[3:], report_edit=dict(gpu="GPU-b", model="RTX 5060 Ti"))
+    b = make_source(tmp_path, "b", ids[2:], report_edit=dict(gpu="GPU-b", model="RTX 5060 Ti"))
     return tmp_path, formal, a, b
 
 
@@ -89,9 +90,9 @@ def test_two_sealed_campaigns_merge_into_one_index_that_keeps_every_episode_as_i
     assert index["kind"] == "act_collection_frozen_index" and index["qualification"] is False
     assert index["campaign_id"] == "merged-20261021T120000Z" and index["scene_count"] == 6
     assert index["committed_episodes"] == sources[0]["committed_episodes"] + sources[1]["committed_episodes"]
-    assert [row["scene_id"] for row in manifest["episodes"]] == ["s00", "s01", "s03", "s04", "s05"]
+    assert [row["scene_id"] for row in manifest["episodes"]] == ["s00", "s01", "s02", "s03", "s04", "s05"]
     assert {row["scene_id"]: row["split"] for row in manifest["episodes"]} == {
-        "s00": "train", "s01": "train", "s03": "train", "s04": "validation", "s05": "offline_test"}
+        "s00": "train", "s01": "train", "s02": "train", "s03": "train", "s04": "validation", "s05": "offline_test"}
     assert all(row["status"] == "PASSED" for row in manifest["episodes"])
     records = index["provenance"]["sources"]
     assert [(r["host"], r["gpu_uuid"], r["gpu_model"]) for r in records] == [("a", "GPU-a", "RTX 5080"), ("b", "GPU-b", "RTX 5060 Ti")]
@@ -99,7 +100,7 @@ def test_two_sealed_campaigns_merge_into_one_index_that_keeps_every_episode_as_i
         assert record["index_sha256"] == sha256_file(source.index)
         assert record["qualification_report_sha256"] == sha256_file(source.qualification_report)
         assert record["seal_manifest_sha256"] and record["sealed_files"] == 2
-    assert [r["scenes"] for r in records] == [3, 3] and [r["committed"] for r in records] == [2, 3]
+    assert [r["scenes"] for r in records] == [3, 4] and [r["committed"] for r in records] == [2, 4]
     assert index["provenance"]["formal_list_sha256"] == sha256_file(formal)
 
 
@@ -134,11 +135,91 @@ def test_scene_sets_that_overlap_are_refused(tmp_path):
     refused("MERGE_SCENE_OVERLAP", [a, b], formal, "20261021T120000Z")
 
 
-def test_a_scene_collected_but_not_committed_still_counts_for_the_overlap(tmp_path):
+def test_a_scene_collected_but_not_committed_does_not_claim_the_scene(tmp_path):
     formal = scene_list(tmp_path / "f.json", ["s0", "s1", "s2"])
     a = make_source(tmp_path, "a", ["s0", "s1"], committed=["s0"])
-    b = make_source(tmp_path, "b", ["s2"], extra_task="s1")
+    b = make_source(tmp_path, "b", ["s1", "s2"])                    # the supplement commits the scene a did not
+    index, manifest = merge_collections([a, b], formal, "20261021T120000Z")
+    assert [row["scene_id"] for row in manifest["episodes"]] == ["s0", "s1", "s2"]
+
+
+def test_a_scene_committed_by_two_sources_is_refused_even_when_one_also_has_an_invalid_attempt(tmp_path):
+    formal = scene_list(tmp_path / "f.json", ["s0", "s1", "s2"])
+    a = make_source(tmp_path, "a", ["s0", "s1"])
+    b = make_source(tmp_path, "b", ["s1", "s2"])
     refused("MERGE_SCENE_OVERLAP", [a, b], formal, "20261021T120000Z")
+
+
+def test_a_hundred_plus_three_merge_passes_when_the_first_source_collected_the_three_as_invalid(tmp_path):
+    ids = [f"frm-{n:03d}" for n in range(103)]
+    bad = ["frm-018", "frm-062", "frm-094"]
+    formal = scene_list(tmp_path / "f.json", ids)
+    attempts = {"frm-018": dict(result_status="INVALID", act_data_status="INVALID", act_data_reason="QC_RATE"),
+                "frm-062": dict(result_status="INVALID", act_data_status="INVALID", act_data_reason="CONTACT"),
+                "frm-094": dict(result_status="FAILED", act_data_status="INVALID", act_data_reason="TIMEOUT")}
+    a = make_source(tmp_path, "a", ids, committed=[s for s in ids if s not in bad], attempts=attempts,
+                    without_evidence=[dict(scene_id="frm-094", state="FAULT", reason="PROCESSING")], report_edit=dict(gpu="GPU-a"))
+    b = make_source(tmp_path, "b", bad, report_edit=dict(gpu="GPU-b"))
+    index, manifest = merge_collections([a, b], formal, "20261021T120000Z")
+    assert len(index["committed_episodes"]) == 103 and sorted(r["scene_id"] for r in manifest["episodes"]) == sorted(ids)
+    records = index["provenance"]["sources"]
+    assert [r["committed"] for r in records] == [100, 3]
+    skipped = {entry["host"]: entry for entry in manifest["non_committed_attempts"]}
+    assert skipped["b"]["attempts"] == []
+    rows = skipped["a"]["attempts"]
+    assert [(r["scene_id"], r["status"], r["reason"]) for r in rows if r["from"] == "collected_tasks"] == [
+        ("frm-018", "INVALID", "QC_RATE"), ("frm-062", "INVALID", "CONTACT"), ("frm-094", "INVALID", "TIMEOUT")]
+    assert [(r["scene_id"], r["status"], r["reason"]) for r in rows if r["from"] == "scenes_without_evidence"] == [
+        ("frm-094", "FAULT", "PROCESSING")]
+    assert skipped["a"]["index_sha256"] == sha256_file(a.index)
+
+
+def test_the_merged_index_format_is_the_one_it_was(two):
+    tmp_path, formal, a, b = two
+    index, manifest = merge_collections([a, b], formal, "20261021T120000Z")
+    assert sorted(index) == ["campaign_id", "committed_episodes", "kind", "provenance", "qualification", "scene_count", "schema_version"]
+    assert sorted(index["provenance"]) == ["controlled_identity_sha256", "created", "formal_list", "formal_list_sha256", "sources"]
+    assert sorted(index["provenance"]["sources"][0]) == sorted([
+        "index", "index_sha256", "campaign_id", "index_schema_version", "run_root", "seal_manifest_sha256", "sealed_files", "host",
+        "gpu_uuid", "gpu_model", "qualification_report", "qualification_report_sha256", "scenes", "committed"])
+    assert sorted(manifest) == ["episodes", "non_committed_attempts"]
+    assert all(sorted(row) == ["scene_id", "split", "status"] for row in manifest["episodes"])
+
+
+def test_a_gap_after_the_committed_only_rule_is_refused(tmp_path):
+    formal = scene_list(tmp_path / "f.json", ["s0", "s1", "s2"])
+    a = make_source(tmp_path, "a", ["s0", "s1"], committed=["s0"])      # s1 was collected but never committed anywhere
+    b = make_source(tmp_path, "b", ["s2"])
+    refused("MERGE_UNION_NOT_FORMAL_LIST", [a, b], formal, "20261021T120000Z")
+
+
+def test_an_extra_committed_scene_after_the_committed_only_rule_is_refused(tmp_path):
+    formal = scene_list(tmp_path / "f.json", ["s0", "s1"])
+    a = make_source(tmp_path, "a", ["s0"])
+    b = make_source(tmp_path, "b", ["s1", "stranger"], committed=["s1", "stranger"])
+    refused("MERGE_SCENE_NOT_IN_FORMAL_LIST", [a, b], formal, "20261021T120000Z")
+
+
+def test_a_scene_outside_the_formal_list_that_was_only_collected_does_not_matter(tmp_path):
+    formal = scene_list(tmp_path / "f.json", ["s0", "s1"])
+    a = make_source(tmp_path, "a", ["s0"])
+    b = make_source(tmp_path, "b", ["s1"], extra_task="stranger")
+    merge_collections([a, b], formal, "20261021T120000Z")
+
+
+def test_a_source_that_committed_nothing_is_refused(tmp_path):
+    formal = scene_list(tmp_path / "f.json", ["s0", "s1"])
+    a = make_source(tmp_path, "a", ["s0", "s1"])
+    b = make_source(tmp_path, "b", ["s1"], committed=[])
+    refused("MERGE_INDEX_INVALID", [a, b], formal, "20261021T120000Z")
+
+
+def test_the_supplement_with_a_different_identity_is_refused(tmp_path):
+    ids = ["s0", "s1", "s2"]
+    formal = scene_list(tmp_path / "f.json", ids)
+    a = make_source(tmp_path, "a", ids, committed=["s0", "s1"])
+    b = make_source(tmp_path, "b", ["s2"], report_edit=dict(identity=dict(IDENTITY, source_sha256="9" * 64)))
+    refused("MERGE_IDENTITY_MISMATCH", [a, b], formal, "20261021T120000Z")
 
 
 def test_a_union_that_is_not_the_formal_list_is_refused(tmp_path):
@@ -271,9 +352,9 @@ def test_the_command_writes_the_index_and_the_manifest_once_and_changes_no_sourc
     assert cli.main(argv_for(tmp_path, formal, a, b, out)) == 0
     assert sorted(p.name for p in out.iterdir()) == ["collection-index.json", "manifest.json"]
     index = json.loads((out / "collection-index.json").read_text())
-    assert index["campaign_id"] == "merged-20261021T120000Z" and len(index["committed_episodes"]) == 5
+    assert index["campaign_id"] == "merged-20261021T120000Z" and len(index["committed_episodes"]) == 6
     assert [(p, p.read_bytes()) for s in (a, b) for p in Path(s.index).parent.rglob("*") if p.is_file()] == before
-    assert "merged 5 episodes of 6 scenes" in capsys.readouterr().out
+    assert "merged 6 episodes of 6 scenes" in capsys.readouterr().out
     assert cli.main(argv_for(tmp_path, formal, a, b, out)) == 2                  # the output exists
     assert "MERGE_OUTPUT_EXISTS" in capsys.readouterr().err
 
