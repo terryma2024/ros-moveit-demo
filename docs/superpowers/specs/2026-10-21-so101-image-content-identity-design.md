@@ -130,5 +130,5 @@ Sonnet writers, Opus review, fixture-only tests first, the repo gate, one writer
 | Q1 | Where to pin the networked shard steps | A separate shard-deps base image, built once and pinned by ID, rather than pinning apt and pip inside the shard build. Then the per-commit build is offline on both hosts. |
 | Q2 | Exclusion list | Start with the 5 globs above, keep only those the first determinism test proves variable, and never exclude inside `/act`, `/opt/ros`, `/usr/lib`, `/usr/bin` or `/act/venv`. |
 | Q3 | Image ID in identity | It moves to the environment class (per-host registration). `content_sha256` and the two in-image hashes are the logic identity. |
-| Q4 | `.pyc` handling | `SOURCE_DATE_EPOCH` with checked-hash `.pyc`; fall back to no-compile only if checked-hash still differs. |
+| Q4 | `.pyc` handling | **Decided: no `.pyc` is generated** (the human changed the recommendation). The draft had recommended `SOURCE_DATE_EPOCH` with checked-hash `.pyc`. |
 | Q5 | Order with other work | After antzb's item 1 (identity v2) is merged. Formal two-host collection before then uses the registry path (§5). |
