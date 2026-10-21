@@ -54,11 +54,75 @@ def _evaluated_points(ray, limit: boundary.KinematicLimit, reach: FivePoseReacha
     return evaluated
 
 
+def refine_limits(coarse: dict, centre, reach: FivePoseReachability, step_m: float) -> dict[str, boundary.RefinedLimit]:
+    """Lockstep refinement of every ray: unevaluated positions are collected and asked in one batch per pass."""
+
+    limits = {
+        name: boundary.KinematicLimit(ray["last_feasible_m"], ray["first_blocked_m"], ray["reason"])
+        for name, ray in coarse["rays"].items()
+    }
+    refined: dict[str, boundary.RefinedLimit] = {}
+    while len(refined) < len(limits):
+        misses = []
+        for name, limit in limits.items():
+            if name in refined:
+                continue
+            try:
+                refined[name] = boundary.refine_limit(name, centre, limit, reach.is_reachable, step_m=step_m)
+            except PoseNotEvaluatedError as error:
+                misses.append((error.x, error.y))
+        if misses:
+            reach.evaluate(misses)
+    return refined
+
+
+def refine(args, reach: FivePoseReachability) -> int:
+    coarse = json.loads(args.refine_from.read_text())
+    if coarse.get("kind") != LIMITS_KIND or set(coarse.get("rays", {})) != set(boundary.RAY_NAMES):
+        raise ValueError("BOUNDARY_LIMITS_INVALID")
+    centre = tuple(coarse["centre_xy"])
+    refined = refine_limits(coarse, centre, reach, args.refine_step_m)
+    document = {
+        "kind": LIMITS_KIND,
+        "schema_version": 2,
+        "centre_xy": list(centre),
+        "step_m": coarse["step_m"],
+        "refine_step_m": args.refine_step_m,
+        "place_exclusion_m": boundary.PLACE_EXCLUSION_M,
+        "refined_from": str(args.refine_from),
+        "reachability": {
+            "tool": "task_reachability --ik-backend native (five poses per position)",
+            "roles": [role for role, _dx, _dy in ROLES],
+            "keep_when": "all five poses REACHABLE",
+            "calls": reach.calls,
+        },
+        "rays": {
+            name: {
+                "last_feasible_m": refined[name].radius_m,
+                "coarse_last_feasible_m": coarse["rays"][name]["last_feasible_m"],
+                "first_blocked_m": coarse["rays"][name]["first_blocked_m"],
+                "limit_kind": refined[name].kind,
+                "reason": coarse["rays"][name]["reason"],
+                "refined_evaluated": [{"radius_m": r, "status": status} for r, status in refined[name].evaluated],
+            }
+            for name in boundary.RAY_NAMES
+        },
+        "pose_log": reach.pose_log,
+    }
+    write_new_json(args.output, document)
+    summary = {name: [refined[name].radius_m, refined[name].kind] for name in boundary.RAY_NAMES}
+    print(json.dumps({"output": str(args.output), "refined": summary}, sort_keys=True))
+    return 0
+
+
 def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     parser = argparse.ArgumentParser(prog="act_boundary_prefilter", description=__doc__)
     parser.add_argument("--output", type=Path, required=True, help="the r_kin JSON (written once)")
     parser.add_argument("--call-dir", type=Path, required=True, help="per-call points and evidence files (kept)")
     parser.add_argument("--reach-command", help="command prefix that runs task_reachability; points, evidence, session appended")
+    parser.add_argument("--refine-from", type=Path,
+                        help="a 1 cm limits file of this command: search the last 1 cm step of every ray at --refine-step-m instead")
+    parser.add_argument("--refine-step-m", type=float, default=boundary.REFINE_STEP_M)
     parser.add_argument("--centre", type=float, nargs=2, default=boundary.DEFAULT_CENTRE_XY, metavar=("X", "Y"))
     parser.add_argument("--step-m", type=float, default=boundary.DEFAULT_STEP_M)
     parser.add_argument("--max-radius-m", type=float, default=boundary.DEFAULT_MAX_RADIUS_M)
@@ -70,8 +134,10 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
         reach_call = CommandReachabilityCall(shlex.split(args.reach_command), args.call_dir)
     if args.output.exists() or args.output.is_symlink():
         raise ValueError(f"OUTPUT_EXISTS: {args.output}")
-    rays = boundary.ray_candidates(tuple(args.centre), 8, args.step_m, args.max_radius_m)
     reach = FivePoseReachability(reach_call)
+    if args.refine_from is not None:
+        return refine(args, reach)
+    rays = boundary.ray_candidates(tuple(args.centre), 8, args.step_m, args.max_radius_m)
     limits = compute_limits(rays, reach)
     document = {
         "kind": LIMITS_KIND,

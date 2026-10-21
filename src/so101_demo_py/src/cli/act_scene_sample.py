@@ -20,6 +20,7 @@ from so101_demo.act.five_pose_reachability import CommandReachabilityCall, FiveP
 from so101_demo.act.scene_list_format import CUP_Z_M, scene_document, scene_row, write_new_json
 
 SEED_BASE = 200
+DECIMALS_REPORT = 6
 SPLIT_ORDER = ("train", "validation", "offline_test")
 
 
@@ -69,18 +70,24 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     boundary_points = state.get("boundary_points")
     if not isinstance(boundary_points, dict):
         raise ValueError("SCENE_SAMPLE_BOUNDARY_NOT_FINISHED")
+    boundary_kinds = state.get("boundary_kinds")  # absent in states of the 1 cm search: every point is then reach-limited
     rollout = {s["point_id"]: tuple(s["xy"]) for s in rollout_scenes.load_standard_points(args.rollout_points)}
     counts = dict(zip(SPLIT_ORDER, args.split_counts))
     reach = FivePoseReachability(reach_call)
     sample = sample_with_reachability(
         {name: tuple(p) for name, p in boundary_points.items()}, rollout, reach,
         count=args.count, split_counts=counts, seed=args.seed, margin_m=args.inward_margin_m,
+        boundary_kinds=boundary_kinds,
     )
+    region = scene_sampling.Region(sample.polygon, args.inward_margin_m, vertex_scales=scene_sampling.vertex_scales(boundary_kinds))
     rows = build_rows(sample, args.scene_prefix)
     rejected = sum(1 for e in reach.pose_log if e["label"] == "true" and e["status"] != "REACHABLE")
     generator = {
         "seed": args.seed, "region": "polygon through the eight boundary points, eroded by the inward margin",
         "inward_margin_m": args.inward_margin_m, "min_spacing_m": sample.spacing_m,
+        "inward_margin_rule": "full margin on reach-limited edges, none on hard-limit edges, linear taper on mixed edges",
+        "place_exclusion_m": scene_sampling.boundary.PLACE_EXCLUSION_M,
+        "boundary_kinds": dict(zip(scene_sampling.boundary.RAY_NAMES, sample.boundary_kinds)),
         "min_spacing_floor_m": scene_sampling.MIN_SPACING_FLOOR_M,
         "boundary_state": str(args.state), "reachability_filter": "task_reachability, five poses, keep when all REACHABLE",
     }
@@ -91,6 +98,13 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
         "region_polygon": [list(p) for p in sample.polygon], "shrunk_region_polygon": [list(p) for p in sample.shrunk_polygon],
         "region_area_m2": sample.area_m2, "min_spacing_m": sample.spacing_m, "nearest_pair_m": round(min(pairs), 6),
         "split_counts": {s: sample.splits.count(s) for s in SPLIT_ORDER},
+        "boundary_kinds": dict(zip(scene_sampling.boundary.RAY_NAMES, sample.boundary_kinds)),
+        "place_exclusion_m": scene_sampling.boundary.PLACE_EXCLUSION_M,
+        "rollout_region": {
+            name: {"inside_region": region.contains((float(p[0]), float(p[1]))),
+                   "edge_distance_m": round(scene_sampling.distance_to_polygon_edge((float(p[0]), float(p[1])), sample.polygon), DECIMALS_REPORT)}
+            for name, p in rollout.items()
+        },
         "rollout_nearest_scene_m": sample.rollout_nearest_scene_m,
         "rollout_nearest_training_m": sample.rollout_nearest_training_m,
         "positions_rejected_by_reachability": rejected, "reachability_calls": reach.calls, "seed": args.seed,

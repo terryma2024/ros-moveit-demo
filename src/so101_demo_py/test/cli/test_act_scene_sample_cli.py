@@ -103,3 +103,19 @@ def test_an_unfinished_boundary_state_is_refused(tmp_path):
 
 def test_plain_decimals_replace_exponent_numbers():
     assert plain_decimal_json({"a": 1e-05, "b": [-2.5e-07, 0.5]}) == '{"a": 0.000010, "b": [-0.000000, 0.5]}'
+
+
+def test_boundary_kinds_set_the_margin_rule_and_the_report_lists_the_rollout_points(tmp_path):
+    arguments = inputs(tmp_path)
+    state = json.loads((tmp_path / "state.json").read_text())
+    state["boundary_kinds"] = {name: "PLACE_TARGET" if name in ("W", "NW") else "REACH" for name in RADII}
+    (tmp_path / "state.json").write_text(json.dumps(state))
+    assert cli.main(arguments, reach_call=planner()) == 0
+    report = json.loads((tmp_path / "report.json").read_text())
+    assert report["boundary_kinds"]["W"] == "PLACE_TARGET" and report["boundary_kinds"]["E"] == "REACH"
+    assert report["place_exclusion_m"] == 0.045
+    assert set(report["rollout_region"]) == {"task_start", "cup_test_forward_5cm", "cup_test_left_5cm", "cup_test_right_5cm"}
+    assert all(entry["inside_region"] and entry["edge_distance_m"] > 0 for entry in report["rollout_region"].values())
+    document = json.loads((tmp_path / "scenes.json").read_text())
+    assert document["generator"]["boundary_kinds"]["NW"] == "PLACE_TARGET"
+    assert "taper" in document["generator"]["inward_margin_rule"]

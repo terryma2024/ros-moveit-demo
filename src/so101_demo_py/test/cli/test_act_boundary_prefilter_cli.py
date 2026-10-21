@@ -32,7 +32,7 @@ def test_each_ray_stops_at_the_first_failing_five_pose_check_or_hard_limit(tmp_p
     assert rays["E"]["last_feasible_m"] == 0.07 and rays["E"]["first_blocked_m"] == 0.08
     assert rays["E"]["reason"] == "UNREACHABLE"
     assert rays["E"]["evaluated"][-1] == {"radius_m": 0.08, "xy": [0.1, -0.29], "status": "UNREACHABLE"}
-    assert rays["W"]["reason"] == "PLACE_TARGET" and rays["W"]["last_feasible_m"] == 0.05
+    assert rays["W"]["reason"] == "PLACE_TARGET" and rays["W"]["last_feasible_m"] == 0.08  # 0.045 m exclusion (amendment 2)
     assert (rays["S"]["reason"], rays["S"]["last_feasible_m"]) == ("TABLE_EDGE", 0.16)  # y reaches -0.45 at 0.16 m
     assert (rays["N"]["reason"], rays["N"]["last_feasible_m"]) == ("PEDESTAL", 0.15)
     assert rays["NE"]["last_feasible_m"] == 0.1  # x = 0.02 + 0.0707 * r, +0.01 offset still <= 0.105 at r = 0.10
@@ -53,3 +53,31 @@ def test_the_rays_are_evaluated_in_lockstep_batches(tmp_path):
     cli.main(["--output", str(tmp_path / "limits.json"), "--call-dir", str(tmp_path / "calls")], reach_call=counting)
     # one true batch per lockstep pass, never one call per point: far fewer calls than evaluated poses
     assert max(calls) >= 8 and len(calls) < sum(calls) / 4
+
+
+def test_the_refinement_mode_searches_the_last_centimetre_and_writes_a_new_limits_file(tmp_path, capsys):
+    coarse = tmp_path / "limits.json"
+    cli.main(["--output", str(coarse), "--call-dir", str(tmp_path / "calls")], reach_call=planner(0.105))
+    capsys.readouterr()
+    refined_path = tmp_path / "refined.json"
+    arguments = ["--refine-from", str(coarse), "--output", str(refined_path), "--call-dir", str(tmp_path / "calls2")]
+    assert cli.main(arguments, reach_call=planner(0.1105)) == 0
+    document = json.loads(refined_path.read_text())
+    rays = document["rays"]
+    assert document["kind"] == "ACT_BOUNDARY_KINEMATIC_LIMITS" and document["schema_version"] == 2
+    assert document["refine_step_m"] == 0.002 and document["place_exclusion_m"] == 0.045
+    assert (rays["E"]["coarse_last_feasible_m"], rays["E"]["last_feasible_m"], rays["E"]["limit_kind"]) == (0.07, 0.078, "REACH")
+    assert [e["status"] for e in rays["E"]["refined_evaluated"]] == ["REACHABLE"] * 4
+    assert rays["W"]["limit_kind"] == "PLACE_TARGET" and rays["W"]["coarse_last_feasible_m"] == 0.08
+    assert 0.08 < rays["W"]["last_feasible_m"] < 0.09  # the exact entry into the 0.045 m circle (0.0877 m)
+    assert rays["S"]["limit_kind"] == "TABLE_EDGE"
+    assert json.loads(capsys.readouterr().out)["refined"]["E"] == [0.078, "REACH"]
+    with pytest.raises(ValueError, match="OUTPUT_EXISTS"):
+        cli.main(arguments, reach_call=planner(0.1105))
+
+
+def test_the_refinement_mode_needs_limits_of_this_command(tmp_path):
+    (tmp_path / "bad.json").write_text(json.dumps({"kind": "other", "rays": {}}))
+    with pytest.raises(ValueError, match="BOUNDARY_LIMITS_INVALID"):
+        cli.main(["--refine-from", str(tmp_path / "bad.json"), "--output", str(tmp_path / "r.json"),
+                  "--call-dir", str(tmp_path / "c")], reach_call=planner(0.1))

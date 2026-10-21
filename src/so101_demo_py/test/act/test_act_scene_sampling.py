@@ -47,7 +47,7 @@ def test_region_membership_keeps_the_inward_margin_and_the_hard_limits():
     assert not region.contains((CENTRE[0] + 0.095, CENTRE[1]))  # inside the polygon but within 1 cm of the edge
     assert not region.contains((CENTRE[0] + 0.2, CENTRE[1]))
     place = sb.PLACE_TARGET_XY
-    assert not region.contains((place[0], place[1] - 0.05))  # inside the polygon, inside the place exclusion
+    assert not region.contains((place[0], place[1] - 0.04))  # inside the polygon, inside the 0.045 m place exclusion
 
 
 def test_the_sample_has_the_target_count_spacing_and_stays_in_the_region():
@@ -129,3 +129,68 @@ def test_a_rollout_point_inside_the_place_exclusion_is_outside_the_region():
 
 def _sample_with_rollout(rollout):
     return ss.sample_scenes(BOUNDARY, rollout, reachable=_everywhere)
+
+
+SQUARE = ((0.0, 0.0), (0.2, 0.0), (0.2, 0.2), (0.0, 0.2))
+
+
+def _no_hard_limits(x, y):
+    return None
+
+
+def test_a_reach_edge_is_shrunk_by_the_full_margin():
+    region = ss.Region(SQUARE, 0.01, _no_hard_limits, (1.0, 1.0, 1.0, 1.0))
+    assert not region.contains((0.1, 0.0099)) and region.contains((0.1, 0.0101))
+
+
+def test_a_vertex_capped_by_a_hard_limit_takes_no_margin_on_an_edge_between_two_such_vertices():
+    region = ss.Region(SQUARE, 0.01, _no_hard_limits, (1.0, 1.0, 0.0, 0.0))  # the top edge joins the two capped vertices
+    assert region.contains((0.1, 0.1999)) and region.contains((0.1, 0.2))
+    assert not region.contains((0.1, 0.0099))  # the bottom edge joins two reach vertices: still shrunk
+
+
+def test_a_mixed_edge_takes_the_full_margin_at_the_reach_end_and_none_at_the_capped_end():
+    region = ss.Region(SQUARE, 0.01, _no_hard_limits, (1.0, 1.0, 0.0, 0.0))  # the right edge: reach at y = 0, capped at y = 0.2
+    assert not region.contains((0.1999, 0.0))  # 0.1 mm from the edge, full margin applies at its reach end
+    assert region.contains((0.1999, 0.1999))  # at the capped end the edge takes no margin
+    assert region.contains((0.1991, 0.19))  # margin there is 0.0005, the point is 0.9 mm in
+    assert not region.contains((0.1999, 0.1))  # halfway the margin is 0.005 m
+
+
+def test_the_shrunk_polygon_follows_the_per_vertex_margins():
+    shrunk = ss.shrink_polygon(list(SQUARE), 0.01, (1.0, 1.0, 1.0, 1.0))
+    assert shrunk == [(0.01, 0.01), (0.19, 0.01), (0.19, 0.19), (0.01, 0.19)]
+    capped = ss.shrink_polygon(list(SQUARE), 0.01, (1.0, 1.0, 0.0, 0.0))
+    assert capped[2] == (0.2, 0.2) and capped[3] == (0.0, 0.2)  # the capped top edge is not moved at all
+    assert capped[0][1] == pytest.approx(0.01) and capped[1][1] == pytest.approx(0.01)
+
+
+def _ring(radius):
+    return {name: sb.point_on_ray(sb.PLACE_TARGET_XY, name, radius) for name in sb.RAY_NAMES}
+
+
+def test_a_point_just_outside_the_exclusion_is_inside_the_region_when_no_reach_edge_is_near():
+    kinds = {name: sb.LIMIT_PLACE_TARGET for name in sb.RAY_NAMES}  # every boundary point set by a hard limit
+    polygon = ss.boundary_polygon(_ring(0.1))
+    region = ss.Region(polygon, 0.01, vertex_scales=ss.vertex_scales(kinds))
+    tx, ty = sb.PLACE_TARGET_XY
+    assert region.contains((tx + 0.0453, ty))  # 0.3 mm outside the 0.045 m exclusion, no margin on top of it
+    assert not region.contains((tx + 0.0449, ty))
+    assert not ss.Region(polygon, 0.01).contains((tx + 0.0953, ty))  # control: a reach edge near the point does shrink
+
+
+def test_a_scene_is_never_sampled_inside_the_exclusion_and_the_kinds_are_recorded():
+    kinds = {name: sb.LIMIT_PLACE_TARGET for name in sb.RAY_NAMES}
+    tx, ty = sb.PLACE_TARGET_XY
+    rollout = {"a": (tx + 0.08, ty), "b": (tx - 0.08, ty), "c": (tx, ty + 0.08), "d": (tx, ty - 0.08)}
+    sample = ss.sample_scenes(_ring(0.1), rollout, reachable=_everywhere, boundary_kinds=kinds)
+    assert len(sample.points) == 103
+    assert all(math.hypot(x - tx, y - ty) >= 0.045 for x, y in sample.points)
+    assert min(math.hypot(x - tx, y - ty) for x, y in sample.points) < 0.055  # the ring just outside the exclusion is used
+    assert sample.boundary_kinds == (sb.LIMIT_PLACE_TARGET,) * 8
+    assert _sample().boundary_kinds == (sb.LIMIT_REACH,) * 8  # without kinds every point is reach-limited
+
+
+def test_the_kinds_must_name_all_eight_points():
+    with pytest.raises(ss.RegionInvalidError):
+        ss.vertex_scales({"E": sb.LIMIT_REACH})

@@ -25,18 +25,34 @@ _SEED_BASE = 300
 
 
 def _bracket(document: dict) -> boundary.Bracket:
-    return boundary.Bracket(**document)
+    return boundary.Bracket(**{**document, "ladder_m": tuple(document.get("ladder_m", ()))})
 
 
-def initial_state(limits: dict) -> dict:
-    """Round 0: every ray bracketed by its offline kinematic limit."""
+def initial_state(limits: dict, verified: dict | None = None) -> dict:
+    """Round 0: every ray bracketed by its offline limit.
+
+    ``verified`` maps a ray to the largest radius with an earlier Teacher PASS (the 1 cm rounds).  A ray whose offline
+    limit lies at most 1 cm beyond it is verified directly (refined radius, up to two 2 mm step-backs, then the
+    earlier radius); a ray further out is bisected between the earlier radius and the limit.  Without ``verified``
+    every ray is bisected from the centre.
+    """
 
     if limits.get("kind") != LIMITS_KIND or set(limits.get("rays", {})) != set(boundary.RAY_NAMES):
         raise ValueError("BOUNDARY_LIMITS_INVALID")
-    brackets = {
-        name: asdict(boundary.initial_bracket(name, limits["rays"][name]["last_feasible_m"]))
-        for name in boundary.RAY_NAMES
-    }
+    brackets = {}
+    for name in boundary.RAY_NAMES:
+        ray = limits["rays"][name]
+        radius, kind = ray["last_feasible_m"], ray.get("limit_kind", boundary.LIMIT_REACH)
+        earlier = None if verified is None else verified[name]
+        if earlier is None:
+            bracket = boundary.initial_bracket(name, radius, 0.0, kind)
+        elif radius < earlier - 1e-9:
+            raise ValueError(f"BOUNDARY_LIMIT_BELOW_VERIFIED: {name}")
+        elif radius - earlier <= boundary.STOP_BRACKET_M + 1e-9:
+            bracket = boundary.refined_bracket(name, earlier, radius, kind)
+        else:
+            bracket = boundary.initial_bracket(name, radius, earlier, kind)
+        brackets[name] = asdict(bracket)
     return {
         "kind": STATE_KIND,
         "schema_version": 1,
@@ -110,6 +126,13 @@ def apply_verdicts(pending: dict, verdicts: dict[str, dict]) -> dict:
     if is_finished(state):
         state["boundary_points"] = {
             name: list(boundary.point_on_ray(pending["centre_xy"], name, brackets[name]["boundary_m"]))
+            for name in boundary.RAY_NAMES
+        }
+        # A boundary at the offline limit keeps that limit's kind; anything below it was set by a Teacher failure, i.e. a
+        # reach-type edge (the sampler takes its inward margin there).
+        state["boundary_kinds"] = {
+            name: (brackets[name]["limit_kind"]
+                   if brackets[name]["boundary_m"] >= brackets[name]["ceiling_m"] - 1e-9 else boundary.LIMIT_REACH)
             for name in boundary.RAY_NAMES
         }
     return state

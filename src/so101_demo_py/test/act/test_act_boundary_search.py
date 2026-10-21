@@ -96,3 +96,55 @@ def test_repeat_failure_steps_back_and_a_finished_search_has_no_round():
 def test_limits_of_the_wrong_kind_are_refused():
     with pytest.raises(ValueError, match="BOUNDARY_LIMITS_INVALID"):
         bs.initial_state({"kind": "other", "rays": {}})
+
+
+def refined_limits():
+    rays = {name: {"last_feasible_m": 0.058, "limit_kind": "REACH"} for name in sb.RAY_NAMES}
+    rays["W"] = {"last_feasible_m": 0.087, "limit_kind": "PLACE_TARGET"}
+    rays["S"] = {"last_feasible_m": 0.05, "limit_kind": "REACH"}
+    return {"kind": bs.LIMITS_KIND, "centre_xy": list(sb.DEFAULT_CENTRE_XY), "rays": rays}
+
+
+VERIFIED = {name: 0.05 for name in sb.RAY_NAMES}
+
+
+def test_the_initial_state_picks_a_mode_per_ray_from_the_earlier_verified_radius():
+    state = bs.initial_state(refined_limits(), VERIFIED)
+    assert state["brackets"]["E"]["ladder_m"] == [0.058, 0.056, 0.054] or tuple(state["brackets"]["E"]["ladder_m"]) == (0.058, 0.056, 0.054)
+    assert state["brackets"]["W"]["ladder_m"] in ([], ()) and state["brackets"]["W"]["lo_m"] == 0.05  # bisection from 0.05
+    assert state["brackets"]["S"]["phase"] == "FINAL" and state["brackets"]["S"]["boundary_m"] == 0.05
+    with pytest.raises(ValueError, match="BOUNDARY_LIMIT_BELOW_VERIFIED: S"):
+        bs.initial_state(refined_limits(), {**VERIFIED, "S": 0.06})
+
+
+def test_a_verification_search_ends_with_boundary_points_and_their_limit_kinds():
+    state = bs.initial_state(refined_limits(), VERIFIED)
+    truth = {name: 0.058 for name in sb.RAY_NAMES}
+    truth["N"], truth["W"] = 0.055, 0.0685
+    rounds = 0
+    while True:
+        pending, scenes = bs.round_state(state)
+        if scenes is None:
+            break
+        rounds += 1
+        assert rounds <= 7
+        state = bs.apply_verdicts(pending, {p["scene_id"]: {"teacher_pass": p["radius_m"] <= truth[name] + 1e-9}
+                                            for name, p in pending["probes"].items()})
+        json.dumps(state)
+    brackets = state["brackets"]
+    assert brackets["E"]["boundary_m"] == 0.058 and state["boundary_kinds"]["E"] == "REACH"
+    assert brackets["N"]["boundary_m"] == 0.054 and brackets["N"]["boundary_source"] == "repeat_passed"
+    assert state["boundary_kinds"]["N"] == "REACH"  # a Teacher failure set it
+    assert brackets["W"]["boundary_m"] == 0.0685 and state["boundary_kinds"]["W"] == "REACH"
+    assert brackets["S"]["boundary_source"] == "coarse_unchanged"
+    assert set(state["boundary_points"]) == set(sb.RAY_NAMES) == set(state["boundary_kinds"])
+
+
+def test_a_ray_at_its_hard_limit_keeps_the_hard_limit_kind_when_the_teacher_passes():
+    state = bs.initial_state({**refined_limits(), "rays": {**refined_limits()["rays"], "W": {"last_feasible_m": 0.055, "limit_kind": "PLACE_TARGET"}}}, VERIFIED)
+    while True:
+        pending, scenes = bs.round_state(state)
+        if scenes is None:
+            break
+        state = bs.apply_verdicts(pending, {p["scene_id"]: {"teacher_pass": True} for p in pending["probes"].values()})
+    assert state["boundary_kinds"]["W"] == "PLACE_TARGET" and state["brackets"]["W"]["boundary_m"] == 0.055

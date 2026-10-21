@@ -22,6 +22,8 @@ def main(argv: list[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--limits", type=Path, help="act_boundary_prefilter output (first round)")
     source.add_argument("--state", type=Path, help="act_boundary_update output (later rounds)")
+    parser.add_argument("--verified-from", type=Path,
+                        help="with --limits: a finished state whose boundary radii are the earlier Teacher PASS points (verification rounds)")
     parser.add_argument("--scenes-output", type=Path, required=True, help="the round's scene list (written once)")
     parser.add_argument("--state-output", type=Path, required=True, help="the sidecar round state (written once)")
     args = parser.parse_args(argv)
@@ -30,7 +32,13 @@ def main(argv: list[str] | None = None) -> int:
         if target.exists() or target.is_symlink():
             raise ValueError(f"OUTPUT_EXISTS: {target}")
     if args.limits is not None:
-        state = boundary_search.initial_state(json.loads(args.limits.read_text()))
+        verified = None
+        if args.verified_from is not None:
+            earlier = json.loads(args.verified_from.read_text())
+            if not boundary_search.is_finished(earlier):
+                raise ValueError("BOUNDARY_VERIFIED_STATE_NOT_FINISHED")
+            verified = {name: bracket["boundary_m"] for name, bracket in earlier["brackets"].items()}
+        state = boundary_search.initial_state(json.loads(args.limits.read_text()), verified)
     else:
         state = json.loads(args.state.read_text())
     pending, scenes = boundary_search.round_state(state)

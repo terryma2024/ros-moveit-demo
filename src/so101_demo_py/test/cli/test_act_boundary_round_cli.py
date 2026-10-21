@@ -56,3 +56,24 @@ def test_a_pending_state_cannot_start_another_round(tmp_path):
     with pytest.raises(ValueError, match="BOUNDARY_STATE_NOT_UPDATED"):
         cli.main(["--state", str(tmp_path / "pending.json"), "--scenes-output", str(tmp_path / "s.json"),
                   "--state-output", str(tmp_path / "t.json")])
+
+
+def test_a_refined_limits_file_with_the_earlier_verified_state_starts_verification_and_bisection_rounds(tmp_path, capsys):
+    rays = {n: {"last_feasible_m": 0.058, "limit_kind": "REACH"} for n in ("E", "NE", "N", "NW", "W", "SW", "S", "SE")}
+    rays["W"] = {"last_feasible_m": 0.087, "limit_kind": "PLACE_TARGET"}
+    (tmp_path / "refined.json").write_text(json.dumps({"kind": bs.LIMITS_KIND, "centre_xy": [0.02, -0.29], "rays": rays}))
+    earlier = bs.initial_state(json.loads((tmp_path / "refined.json").read_text()))
+    for name in earlier["brackets"]:  # an earlier finished search with every boundary at 0.05
+        earlier["brackets"][name].update(phase="FINAL", boundary_m=0.05, boundary_verified=True)
+    (tmp_path / "earlier.json").write_text(json.dumps(earlier))
+    arguments = ["--limits", str(tmp_path / "refined.json"), "--verified-from", str(tmp_path / "earlier.json"),
+                 "--scenes-output", str(tmp_path / "s.json"), "--state-output", str(tmp_path / "t.json")]
+    assert cli.main(arguments) == 0
+    state = json.loads((tmp_path / "t.json").read_text())
+    assert state["probes"]["E"]["kind"] == "verify" and state["probes"]["E"]["radius_m"] == 0.058
+    assert state["probes"]["W"]["kind"] == "ceiling" and state["probes"]["W"]["radius_m"] == 0.087
+    unfinished = {**earlier, "brackets": {**earlier["brackets"], "E": {**earlier["brackets"]["E"], "phase": "SEARCH"}}}
+    (tmp_path / "unfinished.json").write_text(json.dumps(unfinished))
+    with pytest.raises(ValueError, match="BOUNDARY_VERIFIED_STATE_NOT_FINISHED"):
+        cli.main(["--limits", str(tmp_path / "refined.json"), "--verified-from", str(tmp_path / "unfinished.json"),
+                  "--scenes-output", str(tmp_path / "s2.json"), "--state-output", str(tmp_path / "t2.json")])

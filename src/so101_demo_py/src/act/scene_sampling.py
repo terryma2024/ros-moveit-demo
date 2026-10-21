@@ -2,8 +2,9 @@
 
 Design: docs/superpowers/specs/2026-10-20-so101-act-teacher-boundary-sampling-design.md (Step 2).
 
-Region: the polygon through the eight boundary points, eroded by the inward margin, minus the hard limits of
-``scene_boundary`` (table edge, pedestal, place-target exclusion).  Points are drawn by seeded Poisson-disk sampling
+Region: the polygon through the eight boundary points, eroded by the inward margin on its reach edges only (design
+amendments 1 and 2), minus the hard limits of ``scene_boundary`` (table edge, pedestal, the exact 0.045 m place-target
+exclusion).  Points are drawn by seeded Poisson-disk sampling
 (random sequential dart throwing) at the largest spacing that still yields the target count, never below the formal
 sampler's 0.004 m.  The four rollout points must lie inside the region and keep 0.004 m from every scene.  Splits are
 assigned spatially: validation and offline_test take one point from each of several k-means strata spread over the region.
@@ -68,11 +69,15 @@ def polygon_area(polygon: Sequence[Point]) -> float:
     return total / 2.0
 
 
-def _segment_distance(p: Point, a: Point, b: Point) -> float:
+def _segment_distance_and_t(p: Point, a: Point, b: Point) -> tuple[float, float]:
     dx, dy = b[0] - a[0], b[1] - a[1]
     length_squared = dx * dx + dy * dy
     t = 0.0 if length_squared == 0.0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length_squared))
-    return math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+    return math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy)), t
+
+
+def _segment_distance(p: Point, a: Point, b: Point) -> float:
+    return _segment_distance_and_t(p, a, b)[0]
 
 
 def distance_to_polygon_edge(p: Point, polygon: Sequence[Point]) -> float:
@@ -112,14 +117,18 @@ def require_simple_polygon(polygon: Sequence[Point]) -> None:
                 raise RegionInvalidError("REGION_INVALID: polygon edges cross")
 
 
-def shrink_polygon(polygon: Sequence[Point], margin_m: float) -> list[Point]:
-    """The polygon moved inward by ``margin_m`` (mitred offset of every edge), counter-clockwise.
+def shrink_polygon(polygon: Sequence[Point], margin_m: float, scales: Sequence[float] | None = None) -> list[Point]:
+    """The polygon moved inward (mitred offset of every edge), counter-clockwise.
 
-    Used for the report.  Membership of the region is decided by the exact distance to the edges
-    (``Region.contains``), which does not depend on the mitres staying valid.
+    ``scales`` has one factor per vertex (1.0 at a reach-limited vertex, 0.0 at a hard-limit vertex; default all 1.0):
+    the inward offset at a vertex is ``margin_m * scale``, and an edge is offset linearly between its two vertices.
+    Used for the report.  Membership of the region is decided by ``Region.contains``, which does not depend on the
+    mitres staying valid.
     """
 
-    ring = list(polygon) if polygon_area(polygon) > 0 else list(reversed(polygon))
+    reverse = polygon_area(polygon) <= 0
+    ring = list(reversed(polygon)) if reverse else list(polygon)
+    ring_scales = list(reversed(scales)) if (reverse and scales is not None) else (list(scales) if scales is not None else [1.0] * len(ring))
     require_simple_polygon(ring)
     count = len(ring)
     lines = []
@@ -127,7 +136,10 @@ def shrink_polygon(polygon: Sequence[Point], margin_m: float) -> list[Point]:
         (x1, y1), (x2, y2) = ring[i], ring[(i + 1) % count]
         length = math.hypot(x2 - x1, y2 - y1)
         nx, ny = -(y2 - y1) / length, (x2 - x1) / length  # left normal, inward for a counter-clockwise ring
-        lines.append(((x1 + nx * margin_m, y1 + ny * margin_m), (x2 - x1, y2 - y1)))
+        m1, m2 = margin_m * ring_scales[i], margin_m * ring_scales[(i + 1) % count]
+        start = (x1 + nx * m1, y1 + ny * m1)
+        end = (x2 + nx * m2, y2 + ny * m2)
+        lines.append((start, (end[0] - start[0], end[1] - start[1])))
     shrunk = []
     for i in range(count):
         (px, py), (dx, dy) = lines[i - 1]
@@ -143,7 +155,7 @@ def shrink_polygon(polygon: Sequence[Point], margin_m: float) -> list[Point]:
             shrunk[(i + 1) % count][0] - shrunk[i][0], shrunk[(i + 1) % count][1] - shrunk[i][1])
         if old[0] * new[0] + old[1] * new[1] <= 0.0:
             raise RegionInvalidError("REGION_INVALID: shrunk polygon collapsed")
-    if not 0.0 < polygon_area(shrunk) < polygon_area(ring):
+    if not 0.0 < polygon_area(shrunk) <= polygon_area(ring):
         raise RegionInvalidError("REGION_INVALID: shrunk polygon collapsed")
     return shrunk
 
@@ -155,11 +167,34 @@ class Region:
     polygon: tuple[Point, ...]
     margin_m: float = INWARD_MARGIN_M
     limit_check: Callable[[float, float], str | None] = boundary.hard_limit_violation
+    #: Per vertex: 1.0 when the boundary point is limited by reachability or a Teacher failure (``REACH``), 0.0 when a hard
+    #: limit set it.  Empty means every vertex is reach-limited (the margin all round).
+    vertex_scales: tuple[float, ...] = ()
+
+    def required_margin(self, p: Point) -> float:
+        """The inward margin a point must keep from the polygon: the largest over the edges.
+
+        Rule for the edges (amendment 1): the full ``margin_m`` applies on an edge whose two end vertices are both
+        reach-limited, none on an edge whose two ends are hard-limit-capped (the hard limit is applied exactly by
+        ``limit_check``).  A mixed edge changes character along its length, so its margin falls linearly from the full
+        value at the reach-limited end to zero at the hard-limit end: the margin is taken where the edge is a reach limit
+        and not where it is the exclusion.  The check uses the nearest point of the edge to ``p``.
+        """
+
+        count = len(self.polygon)
+        scales = self.vertex_scales or (1.0,) * count
+        worst = 0.0
+        for i in range(count):
+            distance, t = _segment_distance_and_t(p, self.polygon[i], self.polygon[(i + 1) % count])
+            need = self.margin_m * ((1.0 - t) * scales[i] + t * scales[(i + 1) % count])
+            worst = max(worst, need - distance)
+        return worst
 
     def contains(self, p: Point) -> bool:
+        # worst = the largest shortfall (required margin minus distance) over the edges; membership needs none
         return (
             point_in_polygon(p, self.polygon)
-            and distance_to_polygon_edge(p, self.polygon) >= self.margin_m - _EPS
+            and self.required_margin(p) <= _EPS
             and self.limit_check(p[0], p[1]) is None
         )
 
@@ -185,6 +220,16 @@ def _usable_area(region: Region) -> float:
         if region.contains((x0 + (i + 0.5) * _AREA_GRID_M, y0 + (j + 0.5) * _AREA_GRID_M))
     )
     return hits * _AREA_GRID_M * _AREA_GRID_M
+
+
+def vertex_scales(boundary_kinds: Mapping[str, str] | None) -> tuple[float, ...]:
+    """1.0 for a ``REACH`` boundary point, 0.0 for a hard-limit kind, in ray order; all 1.0 without kinds."""
+
+    if boundary_kinds is None:
+        return tuple(1.0 for _ in boundary.RAY_NAMES)
+    if set(boundary_kinds) != set(boundary.RAY_NAMES):
+        raise RegionInvalidError("REGION_INVALID: need a limit kind for each of the eight boundary points")
+    return tuple(1.0 if boundary_kinds[name] == boundary.LIMIT_REACH else 0.0 for name in boundary.RAY_NAMES)
 
 
 def boundary_polygon(boundary_points: Mapping[str, Point]) -> tuple[Point, ...]:
@@ -328,6 +373,7 @@ class SceneSample:
     shrunk_polygon: tuple[Point, ...]
     points: tuple[Point, ...]
     splits: tuple[str, ...]
+    boundary_kinds: tuple[str, ...]
     spacing_m: float
     area_m2: float
     rollout_nearest_scene_m: dict[str, float]
@@ -344,6 +390,7 @@ def sample_scenes(
     seed: int = DEFAULT_SEED,
     margin_m: float = INWARD_MARGIN_M,
     rollout_clearance_m: float = ROLLOUT_CLEARANCE_M,
+    boundary_kinds: Mapping[str, str] | None = None,
 ) -> SceneSample:
     """Sample ``count`` scenes inside the boundary polygon, spread evenly and split spatially.
 
@@ -352,7 +399,8 @@ def sample_scenes(
     """
 
     polygon = boundary_polygon(boundary_points)
-    region = Region(polygon, margin_m)
+    scales = vertex_scales(boundary_kinds)
+    region = Region(polygon, margin_m, vertex_scales=scales)
     for name, p in rollout_points.items():
         if not region.contains((float(p[0]), float(p[1]))):
             raise RolloutPointOutsideRegionError(f"ROLLOUT_POINT_OUTSIDE_REGION: {name}")
@@ -364,9 +412,10 @@ def sample_scenes(
     training = [p for p, s in zip(points, splits) if s == "train"]
     return SceneSample(
         polygon=polygon,
-        shrunk_polygon=tuple(shrink_polygon(polygon, margin_m)),
+        shrunk_polygon=tuple(shrink_polygon(polygon, margin_m, scales)),
         points=tuple(points),
         splits=tuple(splits),
+        boundary_kinds=tuple((boundary_kinds or {}).get(name, boundary.LIMIT_REACH) for name in boundary.RAY_NAMES),
         spacing_m=spacing,
         area_m2=round(region.area, DECIMALS),
         rollout_nearest_scene_m={

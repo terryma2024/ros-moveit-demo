@@ -47,11 +47,14 @@ def test_the_pedestal_footprint_is_grown_by_the_cup_radius_and_the_margin():
     assert sb.hard_limit_violation(0.1401, -0.1) is None
 
 
-def test_the_place_target_exclusion_is_60_mm_around_the_teacher_place_target():
+def test_the_place_target_exclusion_is_45_mm_around_the_teacher_place_target():
+    # design amendment 2: cup radius 0.04 m plus 5 mm; the retired 0.060 m is kept only as OLD_PLACE_EXCLUSION_M
+    assert sb.PLACE_EXCLUSION_M == 0.045 and sb.OLD_PLACE_EXCLUSION_M == 0.060
     tx, ty = sb.PLACE_TARGET_XY
-    assert sb.hard_limit_violation(tx, ty - 0.0599) == sb.LIMIT_PLACE_TARGET
-    assert sb.hard_limit_violation(tx, ty - 0.0601) is None
-    assert sb.hard_limit_violation(tx + 0.0601, ty) is None
+    assert sb.hard_limit_violation(tx, ty - 0.0449) == sb.LIMIT_PLACE_TARGET
+    assert sb.hard_limit_violation(tx, ty - 0.0451) is None
+    assert sb.hard_limit_violation(tx + 0.0451, ty) is None
+    assert sb.hard_limit_violation(tx, ty - 0.0603) is None  # left_5cm is 15 mm outside the exclusion
 
 
 def test_the_w_ray_hits_the_place_exclusion_before_the_table_edge():
@@ -59,7 +62,7 @@ def test_the_w_ray_hits_the_place_exclusion_before_the_table_edge():
     limit = sb.kinematic_limit(sb.ray_candidates()["W"], reachable)
     assert limit.reason == sb.LIMIT_PLACE_TARGET
     assert limit.last_feasible_m == pytest.approx(limit.first_blocked_m - 0.01)
-    assert limit.first_blocked_m == pytest.approx(0.06)
+    assert limit.first_blocked_m == pytest.approx(0.09)  # the W ray enters the 0.045 m circle at about 0.0877 m
 
 
 def test_kinematic_limit_stops_at_the_first_unreachable_point():
@@ -155,3 +158,124 @@ def test_teacher_pass_needs_all_four_conditions():
                        ("current_state", "ERROR"), ("failure", "TARGET_UNREACHABLE: x"), ("teacher_task_result", "PASS")):
         assert not sb.teacher_passed({**good, key: value})
     assert not sb.teacher_passed({})
+
+
+CENTRE = sb.DEFAULT_CENTRE_XY
+
+
+def _limit(last, blocked, reason=sb.REASON_UNREACHABLE):
+    return sb.KinematicLimit(last, blocked, reason)
+
+
+def _along(name, max_radius):
+    """A fake five-pose check: reachable while the radius from the centre along ``name`` is at most ``max_radius``."""
+
+    def reachable(x, y):
+        return math.hypot(x - CENTRE[0], y - CENTRE[1]) <= max_radius + 1e-9
+
+    return reachable
+
+
+def test_refinement_walks_the_last_centimetre_at_two_millimetres_and_keeps_the_reach_kind():
+    refined = sb.refine_limit("E", CENTRE, _limit(0.05, 0.06), _along("E", 0.0572))
+    assert (refined.radius_m, refined.kind) == (0.056, sb.LIMIT_REACH)
+    assert [status for _r, status in refined.evaluated] == ["REACHABLE", "REACHABLE", "REACHABLE", "UNREACHABLE"]
+
+
+def test_refinement_that_finds_nothing_beyond_the_coarse_point_keeps_it():
+    refined = sb.refine_limit("S", CENTRE, _limit(0.05, 0.06), _along("S", 0.0501))
+    assert (refined.radius_m, refined.kind) == (0.05, sb.LIMIT_REACH)
+
+
+def test_a_whole_reachable_last_step_ends_two_millimetres_before_the_unreachable_point():
+    refined = sb.refine_limit("N", CENTRE, _limit(0.12, 0.13), lambda x, y: True)
+    assert (refined.radius_m, refined.kind) == (0.128, sb.LIMIT_REACH)
+
+
+def test_an_exclusion_capped_ray_ends_at_the_exact_intersection_with_the_exclusion_circle():
+    coarse = sb.kinematic_limit(sb.ray_candidates(max_radius=0.2)["W"], lambda x, y: True)
+    assert coarse.reason == sb.LIMIT_PLACE_TARGET
+    refined = sb.refine_limit("W", CENTRE, coarse, lambda x, y: True)
+    x, y = sb.point_on_ray(CENTRE, "W", refined.radius_m)
+    assert refined.kind == sb.LIMIT_PLACE_TARGET
+    assert coarse.last_feasible_m < refined.radius_m < coarse.first_blocked_m
+    assert sb.hard_limit_violation(x, y) is None  # outside the circle ...
+    distance = math.hypot(x - sb.PLACE_TARGET_XY[0], y - sb.PLACE_TARGET_XY[1])
+    assert 0.045 - 1e-9 <= distance < 0.045 + 2e-6  # ... and on it, to six decimals
+    # a few micrometres further out is inside
+    inside = sb.point_on_ray(CENTRE, "W", refined.radius_m + 3e-6)
+    assert sb.hard_limit_violation(*inside) == sb.LIMIT_PLACE_TARGET
+
+
+def test_an_exclusion_capped_ray_that_becomes_unreachable_first_is_a_reach_limit():
+    coarse = sb.kinematic_limit(sb.ray_candidates(max_radius=0.2)["W"], lambda x, y: True)
+    refined = sb.refine_limit("W", CENTRE, coarse, _along("W", 0.0843))
+    assert (refined.radius_m, refined.kind) == (0.084, sb.LIMIT_REACH)
+
+
+def test_the_exclusion_entry_radius_is_none_when_the_ray_never_enters_the_circle():
+    assert sb.place_exclusion_entry_radius(CENTRE, "E") is None
+    assert sb.place_exclusion_entry_radius(CENTRE, "N") is None
+
+
+def test_a_table_edge_capped_ray_keeps_the_hard_limit_name():
+    coarse = sb.kinematic_limit(sb.ray_candidates(max_radius=0.4)["S"], lambda x, y: True)
+    refined = sb.refine_limit("S", CENTRE, coarse, lambda x, y: True)
+    assert refined.kind == sb.LIMIT_TABLE_EDGE and refined.radius_m >= coarse.last_feasible_m
+    assert sb.hard_limit_violation(*sb.point_on_ray(CENTRE, "S", refined.radius_m)) is None
+
+
+def _verify_run(bracket, verdicts):
+    probes = []
+    for passed in verdicts:
+        probe = sb.bisection_next(bracket)
+        probes.append((probe.kind, probe.radius_m))
+        bracket = sb.bisection_update(bracket, probe, passed)
+    return probes, bracket
+
+
+def test_a_refined_ray_is_verified_then_repeated():
+    bracket = sb.refined_bracket("E", 0.07, 0.078, sb.LIMIT_REACH)
+    probes, final = _verify_run(bracket, [True, True])
+    assert probes == [("verify", 0.078), ("repeat", 0.078)]
+    assert (final.phase, final.boundary_m, final.boundary_source) == (sb.PHASE_FINAL, 0.078, sb.SOURCE_REPEAT_PASSED)
+
+
+def test_a_failed_verification_steps_back_two_millimetres_and_verifies_again():
+    bracket = sb.refined_bracket("E", 0.07, 0.078, sb.LIMIT_REACH)
+    probes, final = _verify_run(bracket, [False, True, True])
+    assert probes == [("verify", 0.078), ("verify", 0.076), ("repeat", 0.076)]
+    assert final.boundary_m == 0.076 and final.failures == 1
+
+
+def test_a_failed_repeat_also_steps_back():
+    probes, final = _verify_run(sb.refined_bracket("E", 0.07, 0.078, sb.LIMIT_REACH), [True, False, True, True])
+    assert probes == [("verify", 0.078), ("repeat", 0.078), ("verify", 0.076), ("repeat", 0.076)]
+    assert final.boundary_m == 0.076
+
+
+def test_two_step_backs_are_the_most_then_the_one_centimetre_result_is_the_boundary():
+    bracket = sb.refined_bracket("E", 0.07, 0.078, sb.LIMIT_REACH)
+    probes, final = _verify_run(bracket, [False, False, False])
+    assert probes == [("verify", 0.078), ("verify", 0.076), ("verify", 0.074)]
+    assert (final.phase, final.boundary_m, final.boundary_source) == (sb.PHASE_FINAL, 0.07, sb.SOURCE_FALLBACK_1CM)
+    assert sb.bisection_next(final) is None
+
+
+def test_the_step_backs_never_go_down_to_or_below_the_one_centimetre_result():
+    bracket = sb.refined_bracket("E", 0.07, 0.073, sb.LIMIT_REACH)
+    assert bracket.ladder_m == (0.073, 0.071)
+    probes, final = _verify_run(bracket, [False, False])
+    assert probes == [("verify", 0.073), ("verify", 0.071)] and final.boundary_m == 0.07
+
+
+def test_a_ray_without_refinement_is_final_at_its_verified_radius():
+    bracket = sb.refined_bracket("S", 0.05, 0.05, sb.LIMIT_REACH)
+    assert (bracket.phase, bracket.boundary_m, bracket.boundary_source) == (sb.PHASE_FINAL, 0.05, sb.SOURCE_COARSE_UNCHANGED)
+
+
+def test_a_ray_found_far_beyond_its_verified_radius_is_bisected_from_that_radius():
+    bracket = sb.initial_bracket("W", 0.087, 0.05, sb.LIMIT_PLACE_TARGET)
+    probes, final = _verify_run(bracket, [False, True, True, True])
+    assert probes == [("ceiling", 0.087), ("midpoint", 0.0685), ("midpoint", 0.07775), ("repeat", 0.07775)]
+    assert final.boundary_m == 0.07775 and final.limit_kind == sb.LIMIT_PLACE_TARGET
