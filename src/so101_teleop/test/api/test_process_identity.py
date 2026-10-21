@@ -59,18 +59,33 @@ ARGV_TAIL = (
 
 
 def _spawn(argv: list[str], **kwargs) -> subprocess.Popen:
+    kwargs.setdefault("stdout", subprocess.DEVNULL)
     return subprocess.Popen(
         argv,
         start_new_session=True,
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         **kwargs,
     )
 
 
+SLEEP_PROGRAM = "import time; print('ready', flush=True); time.sleep(120)"
+
+
 def _sleep_child(*extra: str) -> subprocess.Popen:
-    return _spawn([sys.executable, "-c", "import time; time.sleep(120)", *extra])
+    """A sleeping child that has already executed its program.
+
+    Between fork and exec the child still carries the parent's command line, so an identity read
+    that races the exec sees a different command fingerprint than the next read.  The child
+    therefore prints one line once it runs, and this helper returns only after reading it.
+    """
+    process = _spawn(
+        [sys.executable, "-c", SLEEP_PROGRAM, *extra],
+        stdout=subprocess.PIPE,
+    )
+    assert process.stdout.readline() == b"ready\n", "child never reported it had executed"
+    process.stdout.close()
+    return process
 
 
 def _end(process: subprocess.Popen, timeout: float = 5.0) -> None:
@@ -328,7 +343,7 @@ def test_a_stopped_process_keeps_its_identity():
         deadline = time.monotonic() + 5.0
         while True:
             recorded = read_identity(process.pid)
-            if argv_matches(recorded, (sys.executable, "-c", "import time; time.sleep(120)")):
+            if argv_matches(recorded, (sys.executable, "-c", SLEEP_PROGRAM)):
                 break
             assert process.poll() is None and time.monotonic() < deadline
             time.sleep(0.01)
