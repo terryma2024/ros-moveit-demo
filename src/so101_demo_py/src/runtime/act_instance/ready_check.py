@@ -13,6 +13,7 @@ import os
 import threading
 import time
 
+from so101_demo.ros.kept_nodes import register_kept_ros_nodes
 from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
 
 #: how long the kept session looks for "ready" before the process is asked; a stack that is ready is ready within this
@@ -31,6 +32,7 @@ class KeptActStackReadyCheck(RepeatableActStackReadyProbe):
         self._lock = threading.Lock()
         self._session = None
         self._expected_checks = self._new_probe().expected_checks
+        register_kept_ros_nodes(self)
 
     def _new_session(self):
         from so101_demo.act.rig_profile import DEFAULT_RIG, load_rig_profile
@@ -45,6 +47,10 @@ class KeptActStackReadyCheck(RepeatableActStackReadyProbe):
             session, self._session = self._session, None
         if session is not None:
             session.close()
+
+    def release(self) -> None:
+        """Close the kept session before an inventory check of the domain (see `so101_demo.ros.kept_nodes`); the next call reopens it."""
+        self.close()
 
     def _kept_ready(self) -> bool:
         """True only for a ready verdict whose artifact the stack owner's own validation accepts."""

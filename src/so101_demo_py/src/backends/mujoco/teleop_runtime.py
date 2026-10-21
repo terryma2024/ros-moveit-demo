@@ -11,6 +11,7 @@ import time
 import rclpy
 from mujoco_ros2_control_msgs.srv import SetPause
 
+from ...ros.kept_nodes import register_kept_ros_nodes
 from ...ros.process_init import global_init_options, in_instance_process
 from .client import FreeJointResetOverride, JointResetOverride, MujocoRosClient
 from ...act.joints import act_joints_for
@@ -269,6 +270,7 @@ class RetainedEvidence:
         self._in_instance = in_instance
         self._lock = threading.Lock()
         self._scope = self._node = self._observer = self._client = None
+        register_kept_ros_nodes(self)
 
     def _open(self) -> None:
         scope = _RosScope()
@@ -285,6 +287,10 @@ class RetainedEvidence:
     def close(self) -> None:
         with self._lock:
             self._drop()
+
+    def release(self) -> None:
+        """Close the node before an inventory check of the domain (see `so101_demo.ros.kept_nodes`); the next read reopens it."""
+        self.close()
 
     def _drop(self) -> None:
         scope, node = self._scope, self._node
