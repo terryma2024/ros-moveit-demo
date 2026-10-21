@@ -16,17 +16,6 @@ import time
 import pytest
 
 SESSION = "ready-session"
-FIRST_DOMAIN, DOMAIN_COUNT = 205, 18     # 205..222: none of the gate stages (demo 203, teleop 204, jtc 229, upstream groups 223-226) or other tests (227, 230-232) uses them
-
-
-def domain_for(worker):
-    """The ROS domain of one xdist worker. Every parametrisation and both tests of this file run on a live graph with the same session id: two of them on one
-    domain at the same time see each other's publishers (sequence gaps, ACT_STACK_SOURCE_REJECTED), so each worker gets a domain of its own."""
-    number = int(worker[2:]) if worker.startswith("gw") and worker[2:].isdigit() else 0
-    return str(FIRST_DOMAIN + number % DOMAIN_COUNT)
-
-
-DOMAIN = domain_for(os.environ.get("PYTEST_XDIST_WORKER", "gw0"))
 TIMEOUT_S = 4.0
 
 
@@ -158,10 +147,10 @@ def command_line(rig_arguments):
 
 
 def _command_line(rig_arguments):
-    environment = {**os.environ, "ROS_DOMAIN_ID": DOMAIN}
+    environment = dict(os.environ)
     environment.pop("SO101_ACT_INSTANCE_ROOT", None)
     done = subprocess.run([sys.executable, "-m", "so101_demo.cli.act_stack_ready", "--session-id", SESSION,
-                           "--ros-domain-id", DOMAIN, "--timeout-s", str(TIMEOUT_S), *rig_arguments],
+                           "--ros-domain-id", os.environ["ROS_DOMAIN_ID"], "--timeout-s", str(TIMEOUT_S), *rig_arguments],
                           capture_output=True, text=True, env=environment, timeout=60)
     if done.returncode == 0:
         artifact = json.loads(done.stdout)
@@ -196,11 +185,10 @@ def scenarios():
 
 
 @pytest.fixture(params=["default_context", "instance_context"])
-def graph(request, monkeypatch, tmp_path):
+def graph(request, monkeypatch, tmp_path, isolated_ros_domain):
     import rclpy
     from so101_demo.act.rig_profile import DEFAULT_RIG
 
-    monkeypatch.setenv("ROS_DOMAIN_ID", DOMAIN)
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     if request.param == "instance_context":
         monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(tmp_path))
@@ -217,7 +205,7 @@ def test_the_kept_session_and_the_command_line_judge_every_scenario_alike(graph)
     from so101_demo.act.rig_profile import DEFAULT_RIG
     from so101_demo.cli.act_stack_ready import StackReadinessSession
 
-    session = StackReadinessSession(session_id=SESSION, ros_domain_id=int(DOMAIN), rig=DEFAULT_RIG)
+    session = StackReadinessSession(session_id=SESSION, ros_domain_id=int(os.environ["ROS_DOMAIN_ID"]), rig=DEFAULT_RIG)
     try:
         first = kept(session)
         assert first[0] is True, first            # the stand-in stack is ready before anything is broken
@@ -239,7 +227,7 @@ def test_a_session_that_is_not_ready_recovers_when_the_stack_does(graph):
     from so101_demo.act.rig_profile import DEFAULT_RIG
     from so101_demo.cli.act_stack_ready import StackReadinessSession
 
-    session = StackReadinessSession(session_id=SESSION, ros_domain_id=int(DOMAIN), rig=DEFAULT_RIG)
+    session = StackReadinessSession(session_id=SESSION, ros_domain_id=int(os.environ["ROS_DOMAIN_ID"]), rig=DEFAULT_RIG)
     try:
         graph.paused = True
         time.sleep(0.3)
@@ -250,9 +238,3 @@ def test_a_session_that_is_not_ready_recovers_when_the_stack_does(graph):
     finally:
         session.close()
 
-
-def test_each_xdist_worker_has_a_domain_of_its_own_and_none_that_another_stage_or_test_uses():
-    reserved = {203, 204, 223, 224, 225, 226, 227, 229, 230, 231, 232}
-    domains = [int(domain_for(f"gw{number}")) for number in range(DOMAIN_COUNT)]
-    assert len(set(domains)) == DOMAIN_COUNT and not reserved & set(domains) and max(domains) <= 232
-    assert domain_for("master") == domain_for("gw0") == str(FIRST_DOMAIN)

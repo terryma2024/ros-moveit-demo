@@ -445,17 +445,13 @@ def test_actual_audit_seal_rechecks_raw_scope_clocks_and_chunk_continuity(tmp_pa
 class _RealRosFixture:
     """Real rclpy: a publisher node spun on its own executor thread, and an adapter node left unspun."""
 
-    def __init__(self):
+    def __init__(self, domain):
         import threading
         import rclpy
         from rclpy.executors import SingleThreadedExecutor
         self.rclpy = rclpy
         self.context = rclpy.context.Context()
-        # An isolated DDS domain per xdist worker keeps parallel workers' topics apart.
-        import os
-        worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-        index = int(worker[2:]) if worker.startswith("gw") and worker[2:].isdigit() else 0
-        rclpy.init(context=self.context, domain_id=150 + index % 83)
+        rclpy.init(context=self.context, domain_id=domain)
         self.main_node = rclpy.create_node("so101_physics_rx_test_main", context=self.context)
         self.pub_node = rclpy.create_node("so101_physics_rx_test_pub", context=self.context)
         from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
@@ -496,8 +492,8 @@ class _RealRosFixture:
 
 
 @pytest.fixture
-def real_ros():
-    fixture = _RealRosFixture()
+def real_ros(isolated_ros_domain):
+    fixture = _RealRosFixture(isolated_ros_domain)
     try:
         yield fixture
     finally:

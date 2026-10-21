@@ -70,12 +70,11 @@ class FakeSimulator:
 
 
 @pytest.fixture
-def simulator(monkeypatch, tmp_path):
+def simulator(monkeypatch, tmp_path, isolated_ros_domain):
     import rclpy
 
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(tmp_path))
-    monkeypatch.setenv("ROS_DOMAIN_ID", "230")
     rclpy.try_shutdown()
     fake = FakeSimulator()
     yield fake

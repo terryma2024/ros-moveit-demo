@@ -6,6 +6,7 @@ the inventory does not know (POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_node
 one of them, so the process closes what it keeps before it samples.
 """
 
+import os
 import threading
 import time
 
@@ -13,7 +14,6 @@ import pytest
 
 from test_retained_evidence import FakeSimulator, SESSION
 
-DOMAIN = "227"
 INVENTORY_NODES = (
     ("arm_controller", "/"), ("gripper_controller", "/"), ("joint_state_broadcaster", "/"), ("move_group", "/"),
     ("robot_state_publisher", "/"), ("so101_base_to_camera_link", "/"),
@@ -62,12 +62,11 @@ class FakeWorker:
 
 
 @pytest.fixture
-def stack(monkeypatch, tmp_path):
+def stack(monkeypatch, tmp_path, isolated_ros_domain):
     import rclpy
 
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(tmp_path))
-    monkeypatch.setenv("ROS_DOMAIN_ID", DOMAIN)
     rclpy.try_shutdown()
     simulator, worker = FakeSimulator(node_name="mujoco_ros2_control_node"), FakeWorker()   # the simulator is the inventory's simulation node
     time.sleep(1.0)     # discovery
@@ -105,7 +104,7 @@ def kept_readiness_session(tmp_path):
     launch = sleeping(instance_stack_launch({"simulation_session_id": SESSION}, ros2=Path(sys.executable), stack_root=tmp_path / "stack",
                                             environment=dict(os.environ), rig=HEAD_WRIST_RIG, share=PACKAGE_ROOT))
     check = KeptActStackReadyCheck(launch, observer, make_session=lambda: StackReadinessSession(
-        session_id=SESSION, ros_domain_id=int(DOMAIN), rig=DEFAULT_RIG))
+        session_id=SESSION, ros_domain_id=int(os.environ["ROS_DOMAIN_ID"]), rig=DEFAULT_RIG))
     check._session = check._make_session()
     return check
 
