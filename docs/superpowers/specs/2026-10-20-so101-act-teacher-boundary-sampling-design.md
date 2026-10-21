@@ -50,3 +50,16 @@ A new formal scene list means a new qualification and a new formal collection. P
 | Q4 | Scene count and splits | about 103; 83 / 10 / 10; spatially stratified |
 | Q5 | Inward margin | 0.01 m |
 | Q6 | Run the boundary search now, before the optimisations land | Yes. It is exploration (debug campaign), not the formal re-collection. |
+
+## Amendment 1 (2026-10-21, human decision after CP-3761)
+
+The boundary search (EXP-642, EXP-643) found no Teacher failure. Every ray ended at its kinematic limit or at the place-target exclusion, measured in 1 cm steps. Sampling then stopped with `ROLLOUT_POINT_OUTSIDE_REGION`:
+- forward_5cm was 9.8 mm from the shrunk edge;
+- left_5cm is 0.0603 m from the place target, only 0.3 mm outside the 0.060 m exclusion.
+
+Human decision: "Margin only on reach edges".
+- The 0.01 m inward margin applies to edges set by reachability or Teacher success.
+- The place-target exclusion is applied exactly, at 0.060 m with no extra margin, as the formal sampler does.
+- Rays capped by the exclusion use the exact intersection with the exclusion circle as B_k.
+- Every ray is refined offline within its last 1 cm step, at 2 mm steps, with the same five-pose reachability. The refined B_k are then verified live with one Teacher round and one repeat.
+- Rollout-point clearance from every scene stays ≥ 0.004 m.
