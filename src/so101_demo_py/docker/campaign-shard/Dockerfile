@@ -40,8 +40,8 @@ COPY source/src/so101_demo_py/docker/campaign-shard/build-bun.bash /act/build-to
 COPY source/build-deps/bun /act/source/build-deps/bun
 COPY source/build-deps/node /act/source/build-deps/node
 COPY source/build-deps/bun-cache /act/build-source/build-deps/bun-cache
-RUN chmod 0555 /act/build-tools/bun && chmod -R a+rX,a-w /act/source && chmod -R u+w /act/build-source/build-deps \
-    && cd /act/build-source/src/so101_teleop/web && /act/build-tools/bun install
+# No recursive chmod over the cache: on the overlay filesystem it copies every one of the ~20000 cache entries up (40 s).
+RUN chmod 0555 /act/build-tools/bun && cd /act/build-source/src/so101_teleop/web && /act/build-tools/bun install
 # The rest of web/. The build context holds tracked files only, so node_modules and dist are never copied.
 COPY source/src/so101_teleop/web /act/build-source/src/so101_teleop/web
 RUN cd /act/build-source/src/so101_teleop/web && /act/build-tools/bun run build
