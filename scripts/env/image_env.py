@@ -191,6 +191,21 @@ def required_packages(manifest: dict, tree: Path, docker=run_docker) -> dict:
 # Comparison and plan (pure)
 # --------------------------------------------------------------------------
 
+HOST_SPECIFIC_PACKAGES = frozenset({"libxnvctrl0"})     # NVIDIA driver userland: the version follows the host's driver
+_ESM_SUFFIX = re.compile(r"[+~]esm\d+")
+
+
+def narrow_exception(name: str, image_version: str, host_version: str) -> str | None:
+    """Why this apt difference is only a warning, or None. Narrow: the same upstream version that differs only by an Ubuntu Pro ESM
+    suffix, or a host-specific package. The caller applies it only to packages outside the tree's dependency closure."""
+    if name in HOST_SPECIFIC_PACKAGES:
+        return "host-specific"
+    if (_ESM_SUFFIX.search(image_version) or _ESM_SUFFIX.search(host_version)) \
+            and base._split_version(image_version)[1] == base._split_version(host_version)[1]:
+        return "esm"
+    return None
+
+
 def compare(image: dict, host: dict, required: set[str], missing_libraries=frozenset()) -> list[dict]:
     rows: list[dict] = []
     row = base._row
@@ -204,7 +219,9 @@ def compare(image: dict, host: dict, required: set[str], missing_libraries=froze
             if name in required:
                 rows.append(row(MUST, f"apt:{name}", version, None, "missing-on-host"))
         elif have != version:
-            rows.append(row(MUST, f"apt:{name}", version, have, "newer" if base.compare_versions(have, version) > 0 else "older"))
+            relation = "newer" if base.compare_versions(have, version) > 0 else "older"
+            exempt = name not in required and narrow_exception(name, version, have)
+            rows.append(row(SHOULD if exempt else MUST, f"apt:{name}", version, have, f"{relation} ({exempt})" if exempt else relation))
     for name, version in host["apt"].items():
         if name not in image["apt"]:
             rows.append(row(SHOULD, f"apt:{name}", None, version, "host-only"))
