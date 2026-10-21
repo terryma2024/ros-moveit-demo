@@ -327,3 +327,55 @@ def test_the_mount_base_context_is_flat_and_may_use_the_network(repo, host):
         "Dockerfile", "apt-packages.txt", "bootstrap.bash", "inference-requirements.lock", "pip-requirements.lock"]
     assert Path(argv[argv.index("-f") + 1]) == context / "Dockerfile"
     assert not (build / "context/source/build-deps").exists()
+
+
+# --- start_mounted.zsh: the container flags of a mounted run ------------------------------------------------------------
+
+START = IMAGES / "start_mounted.zsh"
+
+
+def run_start(tmp_path, *extra, install=None):
+    install = install or (tmp_path / "mount" / "abc123def456" / "install")
+    install.mkdir(parents=True, exist_ok=True)
+    source = install.parent / "source"
+    source.mkdir(exist_ok=True)
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    docker = bin_dir / "docker"
+    docker.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$FAKE_DOCKER_ARGV"\n')
+    docker.chmod(docker.stat().st_mode | stat.S_IXUSR)
+    argv_file = tmp_path / "argv.txt"
+    done = subprocess.run(["zsh", str(START), "--image", "sha256:" + "a" * 64, "--install", str(install), "--source", str(source),
+                           "--out-dir", str(out), "--gpu", "GPU-1111", "--name", "t-mounted", "--domain-id", "181", *extra],
+                          capture_output=True, text=True,
+                          env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DOCKER_ARGV": str(argv_file)})
+    return done, (argv_file.read_text().splitlines() if argv_file.exists() else []), install, source, out
+
+
+def test_a_mounted_run_keeps_every_container_restriction_and_mounts_the_trees_read_only_at_their_own_path(tmp_path):
+    done, argv, install, source, out = run_start(tmp_path)
+    assert done.returncode == 0, done.stderr
+    assert argv[:2] == ["run", "--detach"]
+    for pair in (("--user", "1000:1000"), ("--cap-drop", "ALL"), ("--security-opt", "no-new-privileges"), ("--network", "none"),
+                 ("--ipc", "private"), ("--restart", "no"), ("--gpus", "device=GPU-1111"), ("--entrypoint", "/act/bootstrap.bash")):
+        assert pair[0] in argv and argv[argv.index(pair[0]) + 1] == pair[1], pair
+    assert "--read-only" in argv and "--privileged" not in argv
+    mounts = [argv[i + 1] for i, item in enumerate(argv) if item == "--mount"]
+    assert f"type=bind,src={install},dst={install},readonly" in mounts
+    assert f"type=bind,src={source},dst={source},readonly" in mounts
+    assert f"type=bind,src={out},dst={out}" in mounts                # the only writable mount
+    assert sum(1 for mount in mounts if not mount.endswith(",readonly")) == 1
+    environment = [argv[i + 1] for i, item in enumerate(argv) if item == "--env"]
+    assert f"SO101_MOUNT_INSTALL={install}" in environment and "ROS_DOMAIN_ID=181" in environment
+    assert "PYTHONDONTWRITEBYTECODE=1" in environment and "ROS_LOCALHOST_ONLY=1" in environment
+
+
+def test_a_mounted_run_refuses_a_missing_tree_or_a_relative_path(tmp_path):
+    missing = subprocess.run(["zsh", str(START), "--image", "sha256:x", "--install", "relative/install", "--source", "/tmp", "--out-dir", "/tmp",
+                              "--gpu", "G", "--name", "n", "--domain-id", "1"], capture_output=True, text=True)
+    assert missing.returncode == 2 and "MOUNT_PATH_NOT_ABSOLUTE" in missing.stderr
+    gone = subprocess.run(["zsh", str(START), "--image", "sha256:x", "--install", "/nonexistent/install", "--source", "/tmp", "--out-dir", "/tmp",
+                           "--gpu", "G", "--name", "n", "--domain-id", "1"], capture_output=True, text=True)
+    assert gone.returncode == 2 and "MOUNT_TREE_MISSING" in gone.stderr
