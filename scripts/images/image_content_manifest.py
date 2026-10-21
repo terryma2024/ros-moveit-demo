@@ -9,6 +9,7 @@ same content have the same `content_sha256` even when their timestamps differ.
     image_content_manifest.py manifest <tar|-> --exclusions FILE --output FILE
     image_content_manifest.py diff A.json B.json
     image_content_manifest.py check-no-pyc MANIFEST [--base BASE_MANIFEST]
+    image_content_manifest.py check-no-project-code MANIFEST
     image_content_manifest.py tree DIR --output FILE
 
 `tree` applies the same rule to a directory (the install and source trees that are mounted into a container): the same entry fields
@@ -601,6 +602,26 @@ def cmd_check_no_pyc(args):
     return 1 if violations else 0
 
 
+PROJECT_CODE_ROOTS = ("/act/", "/opt/", "/usr/lib/", "/usr/local/", "/root/", "/home/")
+
+
+def project_code_paths(content):
+    """Files under the runtime trees that have a path component starting with `so101` (a package, a dist-info, a source copy)."""
+    return sorted(path for path, entry in content["entries"].items()
+                  if entry["type"] in FILE_TYPES and path.startswith(PROJECT_CODE_ROOTS)
+                  and any(part.lower().startswith("so101") for part in path.split("/")))
+
+
+def cmd_check_no_project_code(args):
+    found = project_code_paths(load_manifest(args.manifest)["content"])
+    print(f"project_paths={len(found)}")
+    for path in found[:args.limit]:
+        print(f"project: {path}")
+    if len(found) > args.limit:
+        print(f"... {len(found) - args.limit} more")
+    return 1 if found else 0
+
+
 TREE_SCHEMA = "so101-tree-content-manifest/1"
 
 
@@ -665,6 +686,10 @@ def main(argv=None):
     pyc.add_argument("--base", help="base image manifest: site-packages .pyc files present there are not flagged")
     pyc.add_argument("--limit", type=int, default=50, help="paths to list (default 50)")
     pyc.set_defaults(handler=cmd_check_no_pyc)
+    project = commands.add_parser("check-no-project-code", help="fail when a dependency base holds so101_* code (packages, dist-info, source copies)")
+    project.add_argument("manifest")
+    project.add_argument("--limit", type=int, default=50)
+    project.set_defaults(handler=cmd_check_no_project_code)
     tree = commands.add_parser("tree", help="write the content manifest of a directory tree; prints tree_sha256 (exit 1 when it holds bytecode)")
     tree.add_argument("directory")
     tree.add_argument("--output", required=True)

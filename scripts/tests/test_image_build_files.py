@@ -132,6 +132,9 @@ def repo(tmp_path):
     for name, content in {"src/so101_demo_py/docker/campaign-shard-deps/Dockerfile": "FROM x\n",
                           "src/so101_demo_py/docker/campaign-shard-deps/apt-packages.txt": "a=1\n",
                           "src/so101_demo_py/docker/campaign-shard-deps/pip-requirements.lock": "b==1 \\\n    --hash=sha256:" + "0" * 64 + "\n",
+                          "src/so101_demo_py/docker/mount-base/Dockerfile": "FROM m\n",
+                          "src/so101_demo_py/docker/mount-base/bootstrap.bash": "true\n",
+                          "src/so101_demo_py/config/perception/inference-requirements.lock": "numpy==1\n",
                           "src/so101_demo_py/docker/campaign-shard/Dockerfile": "FROM y\n",
                           "src/so101_demo_py/docker/campaign-inference/Dockerfile": "FROM z\n",
                           "src/so101_demo_py/src/module.py": "x = 1\n", "scripts/tool.sh": "true\n", "README.md": "not copied\n"}.items():
@@ -284,3 +287,43 @@ def test_generated_c_sources_are_removed_before_the_package_that_hashes_the_inst
     assert build_stage.index(delete, support) < demo
     assert build_stage.index(delete) < support       # the first delete follows the native layer
     assert "-name '*.c'" not in text.split("FROM deps AS final")[1]
+
+
+# --- mount-base: dependency-only image for the host-built, mounted install tree --------------------------------------
+
+MOUNT = DOCKER / "mount-base"
+
+
+def test_the_mount_base_holds_dependencies_only_and_no_project_code():
+    text = instructions(MOUNT / "Dockerfile").replace("\\\n", " ")
+    assert re.search(r"^FROM \S+@sha256:[0-9a-f]{64}", text, re.M)
+    for forbidden in ("so101_demo", "so101_teleop", "so101_mujoco", "so101_quik", "/act/install", "/act/source", "COPY source", "COPY src"):
+        assert forbidden not in text, forbidden
+    assert "pip install --no-compile --no-deps --require-hashes" in text.replace("-m pip", "pip")
+    for fragment in ("mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu", "mirrors.tuna.tsinghua.edu.cn/ubuntu", "PYTHONDONTWRITEBYTECODE=1", "PIP_NO_COMPILE=1",
+                     "10_nvidia.json", "COPY bootstrap.bash /act/bootstrap.bash", "SO101_MOUNT_INSTALL"):
+        assert fragment in text, fragment
+    for pip_line in re.findall(r"pip install[^&\n]*", text):
+        assert "--no-compile" in pip_line, pip_line
+    layer = re.search(r"RUN find / -xdev -name '\*\.pyc'[^\n]*", text).group(0)
+    assert layer.index("pyc.before") < layer.index("apt-get install") < layer.index("comm -13")
+
+
+def test_the_mount_base_bootstrap_sources_ros_then_the_mounted_tree_with_its_prefix():
+    text = (MOUNT / "bootstrap.bash").read_text()
+    assert text.index("/opt/ros/jazzy/setup.bash") < text.index('source "$SO101_MOUNT_INSTALL/setup.bash"')
+    assert "COLCON_CURRENT_PREFIX=$SO101_MOUNT_INSTALL" in text and text.rstrip().endswith('exec "$@"')
+
+
+def test_the_mount_base_context_is_flat_and_may_use_the_network(repo, host):
+    done = prepare(repo, host, "mount-base", "", build_deps=False)
+    assert done.returncode == 0, done.stderr
+    build = built(host)
+    argv = json.loads((build / "argv.json").read_text())
+    assert argv[argv.index("--network") + 1] == "default"
+    assert argv[argv.index("-t") + 1] == "so101-mount-base:ros-jazzy-torch2.13.0-cu130-v1"
+    context = Path(argv[-1])
+    assert sorted(path.name for path in context.iterdir()) == [
+        "Dockerfile", "apt-packages.txt", "bootstrap.bash", "inference-requirements.lock", "pip-requirements.lock"]
+    assert Path(argv[argv.index("-f") + 1]) == context / "Dockerfile"
+    assert not (build / "context/source/build-deps").exists()

@@ -11,7 +11,7 @@ import subprocess
 # Run from the worktree to build (it reads `git ls-files` of the current directory). Host paths come from the arguments;
 # their defaults are the host values (scripts/gate/hosts/<host>.env, loaded by scripts/gate/load_host.zsh).
 parser=argparse.ArgumentParser()
-parser.add_argument('--role',choices=('inference','shard-deps','shard'),default='inference')
+parser.add_argument('--role',choices=('inference','shard-deps','shard','mount-base'),default='inference')
 parser.add_argument('--no-cache',action='store_true',help='docker build --no-cache: every layer is built again (the determinism acceptance builds twice this way)')
 parser.add_argument('--pin-shard-deps',default=None,help='sha256 image ID of the so101-campaign-shard-deps base when base-image-ids.json has none yet (a new base is pinned there once it is built and transferred)')
 parser.add_argument('--evidence-root',default=os.environ.get('EVIDENCE_R'),help='image-build-<T>/ and current-*-path.txt are written here (default $EVIDENCE_R)')
@@ -21,29 +21,37 @@ parser.add_argument('--bun-cache',default=os.environ.get('BUN_CACHE'),help='bun 
 parser.add_argument('--lodepng',default=os.environ.get('DEPS_FREEZE') and os.environ['DEPS_FREEZE']+'/build-deps/lodepng',help='lodepng source (default $DEPS_FREEZE/build-deps/lodepng)')
 args=parser.parse_args()
 role=args.role
-needs_build_deps=role!='shard-deps'      # the shard-deps base holds only apt and pip steps: no node, bun or lodepng
+needs_build_deps=role not in ('shard-deps','mount-base')      # the dependency bases hold only apt and pip steps: no node, bun or lodepng
 for name in ('evidence_root','native_build_deps','bun','bun_cache','lodepng') if needs_build_deps else ('evidence_root',):
     if not getattr(args,name):
         parser.error('--%s is required on this host (host value not set)'%name.replace('_','-'))
 root=Path(args.evidence_root)
 tools=Path(args.native_build_deps or '.')                  # node and the other build dependencies live here (not in git: binaries)
-pins=json.loads((Path(__file__).with_name('base-image-ids.json')).read_text())[role]
-base_tag=pins['tag']
-base_id=pins['id'] or args.pin_shard_deps
-assert base_id, 'DEPENDENCY_BASE_NOT_PINNED'
-assert pins['id'] is None or args.pin_shard_deps in (None,pins['id']), 'DEPENDENCY_BASE_PIN_CONFLICT'
-base = json.loads(subprocess.check_output(["docker", "image", "inspect", base_tag], text=True))[0]
-assert base["Id"] == base_id, "DEPENDENCY_BASE_IDENTITY_CHANGED"
+if role=='mount-base':
+    base=None        # built FROM a registry image pinned by digest in its Dockerfile; no local base to compare
+else:
+    pins=json.loads((Path(__file__).with_name('base-image-ids.json')).read_text())[role]
+    base_tag=pins['tag']
+    base_id=pins['id'] or args.pin_shard_deps
+    assert base_id, 'DEPENDENCY_BASE_NOT_PINNED'
+    assert pins['id'] is None or args.pin_shard_deps in (None,pins['id']), 'DEPENDENCY_BASE_PIN_CONFLICT'
+    base = json.loads(subprocess.check_output(["docker", "image", "inspect", base_tag], text=True))[0]
+    assert base["Id"] == base_id, "DEPENDENCY_BASE_IDENTITY_CHANGED"
 build = root / ("image-build-" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
 build.mkdir(mode=0o700)
 source = build / "context/source"
 source.mkdir(parents=True, mode=0o700)
 entries = {}
 DEPS_DIR = 'src/so101_demo_py/docker/campaign-shard-deps/'     # the whole build context of the shard-deps base
+MOUNT_DIR = 'src/so101_demo_py/docker/mount-base/'
+MOUNT_FILES = (MOUNT_DIR+'Dockerfile', MOUNT_DIR+'bootstrap.bash', DEPS_DIR+'apt-packages.txt', DEPS_DIR+'pip-requirements.lock',
+               'src/so101_demo_py/config/perception/inference-requirements.lock')      # flattened into the mount-base build context
 for name in subprocess.check_output(["git", "ls-files", "--recurse-submodules", "-z"]).decode().split("\0"):
     if not name or not name.startswith(("src/", "scripts/", "third_party/")):
         continue
     if role == 'shard-deps' and not name.startswith(DEPS_DIR):
+        continue
+    if role == 'mount-base' and name not in MOUNT_FILES:
         continue
     path = Path(name)
     if not path.is_file() and not path.is_symlink():
@@ -98,13 +106,19 @@ for line in subprocess.check_output(["git", "submodule", "status"], text=True).s
     submodules[fields[1]] = fields[0]
 (source / ".image-git.json").write_text(json.dumps(dict(git_commit=commit, submodules=submodules), sort_keys=True)+"\n")
 (build / "source-files.json").write_text(json.dumps(entries, sort_keys=True, indent=2)+"\n")
-(build / "base-image-inspect.json").write_text(json.dumps(base, sort_keys=True, indent=2)+"\n")
-# Only the shard-deps base reaches the network (apt and pip, pinned to exact versions and hashes); the images built from the
-# source snapshot run with --network none.
-tag = "so101-campaign-shard-deps:ros-jazzy-yolo11n-v1" if role == 'shard-deps' else "so101-campaign-"+role+":dispatch-2130aaf1-"+commit[:12]
-dockerfile = source / (DEPS_DIR + "Dockerfile") if role == 'shard-deps' else source / ("src/so101_demo_py/docker/campaign-"+role+"/Dockerfile")
-context = source / DEPS_DIR if role == 'shard-deps' else build / "context"
-argv = ["docker", "build", *(["--no-cache"] if args.no_cache else []), "--network", 'default' if role == 'shard-deps' else 'none', "--progress", "plain", "--iidfile", str(build / (role+".iid")),
+if base is not None:
+    (build / "base-image-inspect.json").write_text(json.dumps(base, sort_keys=True, indent=2)+"\n")
+if role == 'mount-base':
+    (build / "mount-context").mkdir()
+    for name in MOUNT_FILES:
+        shutil.copy2(source / name, build / "mount-context" / Path(name).name)
+# Only the dependency bases (shard-deps, mount-base) reach the network (apt and pip); the images built from the source snapshot run
+# with --network none.
+networked = role in ('shard-deps', 'mount-base')
+tag = {'shard-deps': "so101-campaign-shard-deps:ros-jazzy-yolo11n-v1", 'mount-base': "so101-mount-base:ros-jazzy-torch2.13.0-cu130-v1"}.get(role) or "so101-campaign-"+role+":dispatch-2130aaf1-"+commit[:12]
+dockerfile = source / (DEPS_DIR + "Dockerfile") if role == 'shard-deps' else build / "mount-context/Dockerfile" if role == 'mount-base' else source / ("src/so101_demo_py/docker/campaign-"+role+"/Dockerfile")
+context = source / DEPS_DIR if role == 'shard-deps' else build / "mount-context" if role == 'mount-base' else build / "context"
+argv = ["docker", "build", *(["--no-cache"] if args.no_cache else []), "--network", 'default' if networked else 'none', "--progress", "plain", "--iidfile", str(build / (role+".iid")),
         "-t", tag, "-f", str(dockerfile), str(context)]
 (build / "argv.json").write_text(json.dumps(argv, indent=2)+"\n")
 (root / "current-image-build-path.txt").write_text(str(build)+"\n")

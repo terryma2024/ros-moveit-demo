@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # Build the inference and shard campaign images from the worktree this script lives in.
 # usage: build_images.zsh [--host H] [--roles 'inference shard'] [--pin-shard-deps ID] [--no-cache]
-#   Host values (evidence root, build dependencies) come from scripts/gate/hosts/<host>.env. Roles: inference, shard-deps, shard.
+#   Host values (evidence root, build dependencies) come from scripts/gate/hosts/<host>.env. Roles: inference, shard-deps, shard, mount-base.
 #   The default builds inference and shard. shard-deps (the networked apt and pip base) is built on its own; the shard build starts
 #   from the image that scripts/images/base-image-ids.json pins (--pin-shard-deps supplies the ID while that file has none).
 set -o pipefail

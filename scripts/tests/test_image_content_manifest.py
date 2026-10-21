@@ -556,3 +556,29 @@ def test_tree_hash_refuses_special_files(tmp_path):
     a = make_tree(tmp_path / "a", {"m.py": b"1"})
     os.mkfifo(a / "pipe")
     assert icm.main(["tree", str(a), "--output", str(tmp_path / "o.json")]) == 2
+
+
+# --- check-no-project-code: a dependency base holds no so101_* code -----------------------------------------------------
+
+def test_check_no_project_code_flags_so101_packages_dist_info_and_source_copies(tmp_path, exclusions, capsys):
+    layer = [d("/opt"), d("/opt/venv"), f("/opt/venv/lib/python3.12/site-packages/so101_demo/__init__.py", b"1"),
+             f("/opt/venv/lib/python3.12/site-packages/so101_demo_py-0.1.0.dist-info/METADATA", b"2"),
+             f("/opt/so101_demo_py/setup.py", b"3"), f("/act/install/share/so101_teleop/package.xml", b"4"),
+             f("/usr/lib/python3/dist-packages/numpy/__init__.py", b"5")]
+    _, manifest = run_manifest(tmp_path, docker_archive([layer]), exclusions)
+    capsys.readouterr()
+    assert icm.main(["check-no-project-code", str(manifest)]) == 1
+    out = capsys.readouterr().out
+    assert "project_paths=4" in out
+    for path in ("site-packages/so101_demo/__init__.py", "so101_demo_py-0.1.0.dist-info/METADATA", "/opt/so101_demo_py/setup.py",
+                 "/act/install/share/so101_teleop/package.xml"):
+        assert path in out
+    assert "numpy" not in out
+
+
+def test_check_no_project_code_passes_on_a_clean_base(tmp_path, exclusions, capsys):
+    layer = [f("/opt/venv/lib/python3.12/site-packages/torch/__init__.py", b"1"), f("/act/bootstrap.bash", b"2"),
+             f("/etc/so101-not-a-package-dir/readme", b"3")]
+    _, manifest = run_manifest(tmp_path, docker_archive([layer]), exclusions)
+    capsys.readouterr()
+    assert icm.main(["check-no-project-code", str(manifest)]) == 0
