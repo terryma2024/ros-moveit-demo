@@ -5,7 +5,8 @@ seal manifest), the QUALIFIED report its formal run was admitted with, and a lab
 committed episode exactly as its source holds it (each one keeps its own `collection_evidence`, which names the original run root), so
 export and training read it like any other frozen index.
 
-Everything that can be refused is refused before anything is written. The refusal codes (each tested) are `MergeRefused` messages:
+Everything that can be refused is refused before anything is written. The refusal codes (each tested) are `MergeRefused` messages. A source owns exactly the scenes of its committed episodes; its uncommitted or INVALID attempts
+are listed in the manifest (`non_committed_attempts`) and claim nothing:
 
   MERGE_SOURCES_TOO_FEW, MERGE_SOURCE_INVALID, MERGE_FORMAL_LIST_INVALID, MERGE_OUTPUT_EXISTS,
   MERGE_INDEX_INVALID, MERGE_INDEX_NOT_FROZEN, MERGE_SOURCE_UNSEALED, MERGE_SOURCE_READBACK_FAILED, MERGE_INDEX_NOT_SEALED,
@@ -146,13 +147,35 @@ def _index_document(path, name):
 
 
 def covered_scenes(document, committed) -> set:
-    """Every scene the campaign handled: collected, committed or without evidence. Retry attempts name a scene more than once."""
+    """Every scene the campaign handled: collected, committed or without evidence. Retry attempts name a scene more than once.
+    Informational only: a source owns the scenes of its committed episodes (`owned_scenes`), not these."""
     scenes = {entry["scene_id"] for entry in committed}
     for name in ("collected_tasks", "scenes_without_evidence"):
         for item in document.get(name) or ():
             if isinstance(item, dict) and isinstance(item.get("scene_id"), str):
                 scenes.add(item["scene_id"])
     return scenes
+
+
+def owned_scenes(committed) -> set:
+    """The scenes a source owns: exactly those of its committed episodes."""
+    return {entry["scene_id"] for entry in committed}
+
+
+def non_committed_attempts(document, committed) -> list:
+    """The attempts of the source that did not become a committed episode of their scene, for the merge manifest only (they claim nothing):
+    `collected_tasks` rows (status: act_data_status, else result_status, else state; reason: act_data_reason) and `scenes_without_evidence`
+    rows (status: state; reason), in index order. Attempts of a scene the source did commit are not listed."""
+    owned = owned_scenes(committed)
+    rows = []
+    for name, status_keys, reason_key in (("collected_tasks", ("act_data_status", "result_status", "state"), "act_data_reason"),
+                                          ("scenes_without_evidence", ("state",), "reason")):
+        for item in document.get(name) or ():
+            if not isinstance(item, dict) or not isinstance(item.get("scene_id"), str) or item["scene_id"] in owned:
+                continue
+            status = next((item[key] for key in status_keys if item.get(key) is not None), None)
+            rows.append(dict(scene_id=item["scene_id"], status=status, reason=item.get(reason_key), **{"from": name}))
+    return rows
 
 
 def _report(path):
@@ -237,10 +260,11 @@ def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4)
             raise MergeRefused(f"MERGE_SOURCE_READBACK_FAILED: {name}: {len(problems)} problem(s), first: {problems[:5]}")
         report = _report(source.qualification_report)
         identities.append(comparable_identity(report))
-        scenes = covered_scenes(document, committed)
+        scenes = owned_scenes(committed)
         if not scenes:
-            raise MergeRefused(f"MERGE_INDEX_INVALID: {name} handled no scene")
+            raise MergeRefused(f"MERGE_INDEX_INVALID: {name} committed no scene")
         parsed.append(dict(source=source, name=name, document=document, committed=committed, scenes=scenes, report=report,
+                           handled=len(covered_scenes(document, committed)), attempts=non_committed_attempts(document, committed),
                            run_root=run_root, seal=record, entries=len(entries)))
     reference = identities[0]
     for number, identity in enumerate(identities[1:], start=1):
@@ -275,11 +299,12 @@ def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4)
             run_root=str(item["run_root"].resolve()), seal_manifest_sha256=item["seal"]["manifest_sha256"], sealed_files=item["entries"],
             host=source.host, **environment_of(item["report"]),
             qualification_report=str(report_path.resolve()), qualification_report_sha256=sha256_file(report_path),
-            scenes=len(item["scenes"]), committed=len(item["committed"]),
+            scenes=item["handled"], committed=len(item["committed"]),
             **({} if preflights is None else dict(mount_preflight=preflights[item["name"]]))))
     index = dict(kind=INDEX_KIND, qualification=False, schema_version=max(versions), campaign_id="merged-" + stamp,
                  scene_count=len(formal), committed_episodes=merged,
                  provenance=dict(created=stamp, formal_list=str(Path(formal_list).resolve()),
                                  formal_list_sha256=sha256_file(formal_list),
                                  controlled_identity_sha256=hashlib.sha256(canonical(reference)).hexdigest(), sources=records))
-    return index, {"episodes": manifest}
+    skipped = [dict(host=item["source"].host, index_sha256=sha256_file(item["source"].index), attempts=item["attempts"]) for item in parsed]
+    return index, {"episodes": manifest, "non_committed_attempts": skipped}
