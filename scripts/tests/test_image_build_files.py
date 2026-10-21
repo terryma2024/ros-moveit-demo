@@ -136,6 +136,7 @@ def repo(tmp_path):
                           "src/so101_demo_py/docker/mount-base/Dockerfile": "FROM m\n",
                           "src/so101_demo_py/docker/mount-base/bootstrap.bash": "true\n",
                           "src/so101_demo_py/docker/mount-base/check-mount-commit.bash": "true\n",
+                          "src/so101_demo_py/docker/mount-base/apt-pins.txt": "a=1\n",
                           "src/so101_demo_py/config/perception/inference-requirements.lock": "numpy==1\n",
                           "src/so101_demo_py/docker/campaign-shard/Dockerfile": "FROM y\n",
                           "src/so101_demo_py/docker/campaign-inference/Dockerfile": "FROM z\n",
@@ -327,7 +328,7 @@ def test_the_mount_base_context_is_flat_and_may_use_the_network(repo, host):
     assert argv[argv.index("-t") + 1] == "so101-mount-base:ros-jazzy-torch2.13.0-cu130-v1"
     context = Path(argv[-1])
     assert sorted(path.name for path in context.iterdir()) == [
-        "Dockerfile", "apt-packages.txt", "bootstrap.bash", "check-mount-commit.bash", "inference-requirements.lock", "pip-requirements.lock"]
+        "Dockerfile", "apt-packages.txt", "apt-pins.txt", "bootstrap.bash", "check-mount-commit.bash", "inference-requirements.lock", "pip-requirements.lock"]
     assert Path(argv[argv.index("-f") + 1]) == context / "Dockerfile"
     assert not (build / "context/source/build-deps").exists()
 
@@ -530,3 +531,14 @@ def test_both_host_files_give_the_proxy_and_the_no_proxy_list_for_the_mirrors():
         assert values["BUILD_PROXY"] == "http://127.0.0.1:10809"
         for mirror in ("mirrors.tuna.tsinghua.edu.cn", "pypi.tuna.tsinghua.edu.cn", "registry.npmmirror.com"):
             assert mirror in values["BUILD_NO_PROXY"].split(",")
+
+
+def test_the_mount_base_installs_the_apt_versions_of_the_build_host_from_a_sorted_pin_list():
+    pins = [line for line in (ROOT / "src/so101_demo_py/docker/mount-base/apt-pins.txt").read_text().splitlines() if line]
+    assert len(pins) > 500
+    assert all(re.fullmatch(r"[a-z0-9][a-z0-9+.-]+=[^\s=]+", line) for line in pins)
+    names = [line.split("=")[0] for line in pins]
+    assert names == sorted(names) and len(names) == len(set(names))
+    text = (ROOT / "src/so101_demo_py/docker/mount-base/Dockerfile").read_text()
+    assert "--allow-downgrades" in text and "$(cat /tmp/mount-base/apt-pins.txt)" in text
+    assert "COPY apt-packages.txt apt-pins.txt " in text

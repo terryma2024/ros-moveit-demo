@@ -1,7 +1,9 @@
 # Dependency-only image for running the host-built install tree: ROS, apt, torch and the pip set, no project code. The host's
 # `install` tree is bind-mounted read-only at SO101_MOUNT_INSTALL (docs/superpowers/specs/2026-10-21-so101-mount-build-images-design.md).
 #
-# Built once and pinned by ID. It reaches the network for apt (Tsinghua mirrors, current versions) and pip (Tsinghua PyPI, the PyTorch
+# The apt versions are those of the build host (apt-pins.txt: scripts/env/apt_pins.py generate, from `image_env.py capture-host` and the
+# package set of the previous image); a version the mirrors no longer offer is not pinned and apt takes the candidate (listed in
+# progress-mount-images.md). Built once and pinned by ID. It reaches the network for apt (Tsinghua mirrors, current versions) and pip (Tsinghua PyPI, the PyTorch
 # index for the CUDA wheels). Nothing under /act, /opt/venv or any site-packages is named so101_*: a test and a manifest check enforce it.
 # No .pyc: PIP_NO_COMPILE, PYTHONDONTWRITEBYTECODE, and the ones apt's package scripts compile are removed in the same layer.
 FROM docker.m.daocloud.io/library/ros:jazzy-ros-base-noble@sha256:2589a8fba5257307857890173c069852c2abf913a0be7970f172478baecb09e4
@@ -13,14 +15,14 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 
     PIP_DEFAULT_TIMEOUT=120 SOURCE_DATE_EPOCH=1704067200 PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 YOLO_OFFLINE=true \
     YOLO_CONFIG_DIR=/opt/ultralytics TORCH_HOME=/opt/torch-cache
 
-COPY apt-packages.txt pip-requirements.lock inference-requirements.lock /tmp/mount-base/
+COPY apt-packages.txt apt-pins.txt pip-requirements.lock inference-requirements.lock /tmp/mount-base/
 
 RUN find / -xdev -name '*.pyc' | sort > /tmp/mount-base/pyc.before \
     && sed -i -e 's|http://packages.ros.org/ros2/ubuntu|http://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu|' -e 's|^Types: deb deb-src$|Types: deb|' /etc/apt/sources.list.d/ros2.sources \
     && sed -i -e 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|' -e 's|http://security.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
-    && apt-get install --yes --no-install-recommends fonts-dejavu-core libgl1 libglib2.0-0 python3-pip python3-venv ros-jazzy-vision-msgs \
-         $(grep -v '^#' /tmp/mount-base/apt-packages.txt) \
+    && apt-get install --yes --no-install-recommends --allow-downgrades fonts-dejavu-core libgl1 libglib2.0-0 python3-pip python3-venv ros-jazzy-vision-msgs \
+         $(grep -v '^#' /tmp/mount-base/apt-packages.txt) $(cat /tmp/mount-base/apt-pins.txt) \
     && find / -xdev -name '*.pyc' | sort | comm -13 /tmp/mount-base/pyc.before - | xargs -r rm -f \
     && find / -xdev -type d -name __pycache__ -empty -delete \
     && rm -rf /var/lib/apt/lists/*

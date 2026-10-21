@@ -45,7 +45,7 @@ source.mkdir(parents=True, mode=0o700)
 entries = {}
 DEPS_DIR = 'src/so101_demo_py/docker/campaign-shard-deps/'     # the whole build context of the shard-deps base
 MOUNT_DIR = 'src/so101_demo_py/docker/mount-base/'
-MOUNT_FILES = (MOUNT_DIR+'Dockerfile', MOUNT_DIR+'bootstrap.bash', MOUNT_DIR+'check-mount-commit.bash', DEPS_DIR+'apt-packages.txt', DEPS_DIR+'pip-requirements.lock',
+MOUNT_FILES = (MOUNT_DIR+'Dockerfile', MOUNT_DIR+'bootstrap.bash', MOUNT_DIR+'check-mount-commit.bash', MOUNT_DIR+'apt-pins.txt', DEPS_DIR+'apt-packages.txt', DEPS_DIR+'pip-requirements.lock',
                'src/so101_demo_py/config/perception/inference-requirements.lock')      # flattened into the mount-base build context
 for name in subprocess.check_output(["git", "ls-files", "--recurse-submodules", "-z"]).decode().split("\0"):
     if not name or not name.startswith(("src/", "scripts/", "third_party/")):
