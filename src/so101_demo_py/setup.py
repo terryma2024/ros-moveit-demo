@@ -129,6 +129,10 @@ setup(
             "act_build_pick_place_validation_qualified_report = "
             "so101_demo.cli.act_build_pick_place_validation_qualified_report:main",
             "act_sample = so101_demo.cli.act_sample:main",
+            "act_boundary_prefilter = so101_demo.cli.act_boundary_prefilter:main",
+            "act_boundary_round = so101_demo.cli.act_boundary_round:main",
+            "act_boundary_update = so101_demo.cli.act_boundary_update:main",
+            "act_scene_sample = so101_demo.cli.act_scene_sample:main",
             "act_collect_parallel = so101_demo.cli.act_collect_parallel:main",
             "act_process_parallel = so101_demo.cli.act_process_parallel:main",
             "act_merge_collections = so101_demo.cli.act_merge_collections:main",
