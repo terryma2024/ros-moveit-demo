@@ -107,9 +107,11 @@ class PointGate:
         teacher_profile = self.dependencies.get("act_profile") is True
         rig = self.dependencies.get("rig")
         call = self.dependencies.get("observe_initial")
+        reader = self.dependencies.get("retained_evidence")
+        reader_arguments = {} if reader is None else {"read_evidence": reader}
         rig_arguments = {} if rig is None or rig.rig == DEFAULT_RIG.rig else {"rig": rig}
         value=(call(reset_receipt) if call is not None else observe_parallel_initial_gate(
-            reset_receipt, teacher_profile=teacher_profile, **rig_arguments))
+            reset_receipt, teacher_profile=teacher_profile, **rig_arguments, **reader_arguments))
         if type(value) is not InitialGateObservation:
             failures = ["type"]
         else:

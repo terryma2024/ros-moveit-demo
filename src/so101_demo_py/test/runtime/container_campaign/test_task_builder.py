@@ -428,6 +428,33 @@ def test_request_stop_is_idempotent_and_refuses_the_run_before_any_port_is_touch
     assert execution.runtime._physical_started is False
 
 
+def test_the_task_reads_evidence_through_one_retained_reader_that_shutdown_closes(env):
+    """Production default: the Teacher probe and the initial gate share the task's `RetainedEvidence`; it opens nothing at build."""
+    from so101_demo.backends.mujoco.teleop_runtime import RetainedEvidence
+    execution=build(env,evidence=None)
+    reader=execution._evidence_reader
+    assert type(reader) is RetainedEvidence and reader._node is None and reader._session_id==env.spec['simulation_session_id']
+    assert execution.ports.dependencies['retained_evidence'] is reader
+    closed=[]
+    reader.close=lambda:closed.append(1)
+    execution.request_stop()
+    execution.shutdown_owned()
+    assert closed==[1]
+
+
+def test_an_injected_evidence_reader_is_the_probe_only_and_is_closed_when_it_can_be(env):
+    closed=[]
+    class Reader:
+        def __call__(self,session):return SimpleNamespace(simulation_session_id=session,reset_epoch=2)
+        def close(self):closed.append(1)
+    reader=Reader()
+    execution=build(env,evidence=reader)
+    assert 'retained_evidence' not in execution.ports.dependencies and execution._evidence_reader is reader
+    execution.request_stop()
+    execution.shutdown_owned()
+    assert closed==[1]
+
+
 def lease_for(env,**changes):
     from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
     base=builder().local_lease(env.spec,'default',issued=time.monotonic(),deadline=time.monotonic()+600)

@@ -525,12 +525,16 @@ def observe_parallel_initial_gate(
     timeout_s: float = 5.0,
     teacher_profile: bool = False,
     rig=None,
+    read_evidence=None,
 ) -> InitialGateObservation:
-    """Collect fresh joint, goal, scene, graph and MuJoCo contact observations."""
+    """Collect fresh joint, goal, scene, graph and MuJoCo contact observations.
 
-    from so101_demo.backends.mujoco.teleop_runtime import current_evidence
+    `read_evidence` is the evidence reader (default: the one-shot `current_evidence`)."""
 
-    evidence = current_evidence(boundary.simulation_session_id, timeout_s=timeout_s)
+    if read_evidence is None:
+        from so101_demo.backends.mujoco.teleop_runtime import current_evidence as read_evidence
+
+    evidence = read_evidence(boundary.simulation_session_id, timeout_s=timeout_s)
     evidence_received = time.monotonic()
     if str(evidence.reset_epoch) != boundary.reset_epoch.removeprefix("reset-"):
         raise RuntimeError("POINT_INITIAL_GATE_RESET_EPOCH")

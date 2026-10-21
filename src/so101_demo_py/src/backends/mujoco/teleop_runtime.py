@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import sys
+import threading
 import time
 
 import rclpy
@@ -151,9 +152,14 @@ class _RosScope:
         self.context.try_shutdown()
 
 
-def _pause_snapshot(node, observer, timeout_s: float, scope: _RosScope | None = None):
+def _pause_snapshot(node, observer, timeout_s: float, scope: _RosScope | None = None, client=None,
+                    newer_than_call: bool = False):
+    """`newer_than_call`: only evidence received after this call began counts. A one-shot observer is new, so every sample it has
+    was received after the call began; an observer kept between calls holds the last sample of an earlier call, which says
+    nothing about the state now."""
     started_s = time.monotonic()
-    client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
+    if client is None:
+        client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
     ok = rclpy.ok if scope is None else scope.ok
     spin_once = rclpy.spin_once if scope is None else scope.spin_once
     service_deadline = time.monotonic() + timeout_s
@@ -201,8 +207,15 @@ def _pause_snapshot(node, observer, timeout_s: float, scope: _RosScope | None = 
             pause_accepted = pause_accepted or bool(response.success)
             future = None
         try:
-            evidence = observer.snapshot()
+            if newer_than_call:
+                record = observer.snapshot_with_receipt()
+                evidence = record.evidence
+            else:
+                evidence = observer.snapshot()
         except EvidenceStale:
+            stale_reads += 1
+            continue
+        if newer_than_call and record.received_monotonic_s < started_s:
             stale_reads += 1
             continue
         if evidence.paused:
@@ -237,6 +250,70 @@ def current_evidence(simulation_session_id: str, timeout_s: float = 5.0):
             node.destroy_node()
         finally:
             scope.close()
+
+
+class RetainedEvidence:
+    """`current_evidence` over a ROS context, node, observer and pause client that stay open between calls.
+
+    Every one-shot read pays for a new context, node, subscription and pause-service discovery (seconds under load), and one
+    task reads the evidence a handful of times. This keeps them for the task: each call still sends the pause request and
+    returns a fresh paused snapshot of the same session, so what it returns is what `current_evidence` returns. Only inside an
+    ACT instance process, where the scope is a private context; anywhere else, and on any failure of the retained path, the call
+    is the one-shot read (the retained parts are dropped first and reopened by the next call). A publisher sequence gap is
+    expected here (a depth-1 subscription that nobody spins between calls keeps only the newest sample) and is data
+    completeness, not a hazard; a reset in between shows as a rejection and ends up in the one-shot read as well."""
+
+    def __init__(self, simulation_session_id: str, *, one_shot=None, in_instance=in_instance_process) -> None:
+        self._session_id = simulation_session_id
+        self._one_shot = current_evidence if one_shot is None else one_shot
+        self._in_instance = in_instance
+        self._lock = threading.Lock()
+        self._scope = self._node = self._observer = self._client = None
+
+    def _open(self) -> None:
+        scope = _RosScope()
+        try:
+            node = scope.create_node("so101_teleop_mujoco_evidence_retained")
+        except BaseException:
+            scope.abandon()
+            raise
+        self._scope, self._node = scope, node
+        self._observer = MujocoWorldObserver(node, self._session_id, max_age_s=1.0, rebaseline_stale_join=True,
+                                             on_sequence_gap=lambda _previous, _current: None)
+        self._client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
+
+    def close(self) -> None:
+        with self._lock:
+            self._drop()
+
+    def _drop(self) -> None:
+        scope, node = self._scope, self._node
+        self._scope = self._node = self._observer = self._client = None
+        if node is not None:
+            try:
+                node.destroy_node()
+            except BaseException:
+                pass
+        if scope is not None:
+            try:
+                scope.close()
+            except BaseException:
+                pass
+
+    def __call__(self, simulation_session_id: str, timeout_s: float = 5.0):
+        if simulation_session_id != self._session_id or not self._in_instance():
+            return self._one_shot(simulation_session_id, timeout_s=timeout_s)
+        with self._lock:
+            try:
+                if self._node is None:
+                    self._open()
+                evidence = _pause_snapshot(self._node, self._observer, timeout_s, self._scope, self._client, newer_than_call=True)
+                if evidence.simulation_session_id != simulation_session_id:
+                    raise RuntimeError("atomic evidence session mismatch")
+                return evidence
+            except Exception:
+                self._drop()
+        return self._one_shot(simulation_session_id, timeout_s=timeout_s)
 
 
 def transactional_reset(
