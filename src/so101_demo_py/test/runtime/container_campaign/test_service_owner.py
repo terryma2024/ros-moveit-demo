@@ -95,6 +95,11 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
             if argv[2] not in containers:
                 return SimpleNamespace(returncode=1, stdout='[]', stderr='Error: No such object: '+argv[2])
             return SimpleNamespace(returncode=0, stdout=json.dumps([containers[argv[2]]]), stderr='')
+        if argv[:2] == ['docker','logs']:
+            if argv[-1] not in containers:
+                return SimpleNamespace(returncode=1, stdout='', stderr='Error: No such container: '+argv[-1])
+            return SimpleNamespace(returncode=0, stdout='2026-10-12T01:02:04.000Z out '+argv[-1][:8]+'\n',
+                                   stderr='2026-10-12T01:02:05.000Z err\n')
         if argv[:2] == ['docker','rm']:
             if argv[2] not in containers:
                 return SimpleNamespace(returncode=1, stdout='', stderr='cannot remove '+argv[2])

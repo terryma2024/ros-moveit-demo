@@ -757,12 +757,16 @@ class ContainerCampaignOwner:
                 entries.append(container_receipts.native_entry(item) if item['launch'].get('launcher','container')=='native'
                                else container_receipts.container_entry(item,document))
             runner=self.services.docker_runner
-            for entry in entries:                          # 2. removal
+            for entry in entries:                          # 2. the logs are saved first: a container whose logs are unsaved stays
+                if entry['launcher']=='container':
+                    entry['logs_path'],entry['logs_sha256']=container_receipts.save_logs(
+                        host,stage,entry['container_name'],runner,entry['container_id'])
+            for entry in entries:                          # 3. removal
                 if entry['launcher']=='container':
                     result=runner(['docker','rm',entry['container_id']])
                     if result.returncode!=0:
                         raise ValueError('STAGE_CONTAINER_REMOVE_FAILED: '+entry['launch_id'])
-            for entry in entries:                          # 3. nothing of the stage remains, by id and by name
+            for entry in entries:                          # 4. nothing of the stage remains, by id and by name
                 if entry['launcher']=='container':
                     for selector in ('id='+entry['container_id'],'name=^/'+entry['container_name']+'$'):
                         result=runner(['docker','ps','-a','-q','--no-trunc','--filter',selector])

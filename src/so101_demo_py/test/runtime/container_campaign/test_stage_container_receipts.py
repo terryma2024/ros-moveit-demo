@@ -212,3 +212,65 @@ def test_a_stage_that_did_not_complete_removes_nothing_and_writes_no_receipt(tmp
         drive_phase1(phase)
     assert receipt_names(phase) == [] and len(phase.world.containers) == 1
     assert json.loads((phase.owner.root / 'host/campaign-cleanup.json').read_text())['terminated'] is True
+
+
+# ---- the container logs are saved before the container is removed -------------------------------------------------------------
+
+def test_the_logs_are_saved_with_timestamps_before_the_container_is_removed(tmp_path, monkeypatch):
+    import hashlib
+    phase = staged_world(tmp_path, monkeypatch)
+    calls = [call[:2] + call[-1:] for call in phase.world.calls if call[:2] in (['docker', 'logs'], ['docker', 'rm'])]
+    assert [call[1] for call in calls] == ['logs', 'rm']
+    logs_call = next(call for call in phase.world.calls if call[:2] == ['docker', 'logs'])
+    assert '--timestamps' in logs_call
+    host = phase.owner.root / 'host'
+    entry, = container_receipts.read_receipts(host)[0]['containers']
+    assert entry['logs_path'] == 'container-logs/phase1/' + entry['container_name'] + '.log'
+    raw = (host / entry['logs_path']).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == entry['logs_sha256']
+    assert b'2026-10-12T01:02:04.000Z out' in raw and b'2026-10-12T01:02:05.000Z err' in raw
+    assert list((host / 'container-logs/phase1').glob('*.tmp*')) == []
+
+
+def test_logs_that_cannot_be_saved_keep_the_container_and_fail_the_stage(tmp_path, monkeypatch):
+    phase = staged_phase1_world(tmp_path, monkeypatch)
+    runner = phase.owner.services.docker_runner
+    phase.owner.services.docker_runner = lambda argv: (
+        SimpleNamespace(returncode=1, stdout='', stderr='logging driver gone') if argv[:2] == ['docker', 'logs'] else runner(argv))
+    drive_phase1(phase)
+    cleanup = json.loads((phase.owner.root / 'host/campaign-cleanup.json').read_text())
+    assert cleanup['terminated'] is False and 'STAGE_CONTAINER_LOGS_UNSAVED' in cleanup['container_receipt_error']
+    assert receipt_names(phase) == [] and len(phase.world.containers) == 1
+    assert [call for call in phase.world.calls if call[:2] == ['docker', 'rm']] == []
+
+
+def test_the_logs_of_the_stage_are_all_saved_before_any_container_is_removed(tmp_path, monkeypatch):
+    phase = retry_staged(tmp_path, monkeypatch)
+    stage(phase, 'phase2')
+    order = [call[1] for call in phase.world.calls if call[:2] in (['docker', 'logs'], ['docker', 'rm'])]
+    assert order == sorted(order)                       # 'logs' < 'rm': no rm precedes a logs call of its own stage
+
+
+def test_a_missing_log_is_refused(tmp_path, monkeypatch):
+    phase = staged_world(tmp_path, monkeypatch)
+    entry, = container_receipts.read_receipts(phase.owner.root / 'host')[0]['containers']
+    (phase.owner.root / 'host' / entry['logs_path']).unlink()
+    with pytest.raises(ValueError, match='STAGE_CONTAINER_RECEIPT_COVERAGE'):
+        stage(phase, 'phase2', close=False)
+
+
+def test_an_altered_log_is_refused(tmp_path, monkeypatch):
+    phase = staged_world(tmp_path, monkeypatch)
+    entry, = container_receipts.read_receipts(phase.owner.root / 'host')[0]['containers']
+    path = phase.owner.root / 'host' / entry['logs_path']
+    path.write_bytes(path.read_bytes() + b'x')
+    with pytest.raises(ValueError, match='STAGE_CONTAINER_RECEIPT_INVALID'):
+        stage(phase, 'phase2', close=False)
+
+
+@pytest.mark.parametrize('path', ['../../etc/passwd', '/etc/passwd'])
+def test_a_log_path_outside_the_log_directory_is_refused(tmp_path, monkeypatch, path):
+    phase = staged_world(tmp_path, monkeypatch)
+    rewrite(receipt(phase, 'containers-receipt-01-phase1.json'), lambda d: d['containers'][0].update(logs_path=path))
+    with pytest.raises(ValueError, match='STAGE_CONTAINER_RECEIPT_INVALID'):
+        stage(phase, 'phase2', close=False)

@@ -3,7 +3,8 @@
 A stage that finishes proves its own containers gone, because the next stage may not start while any container exists (the run script's
 "no container" precondition). At the end of a completed stage the owner (1) inspects each container of the stage again, independently of
 the settlement stored in the launch registry, and requires `exited` with an exit code, a finished-at time and the registered container
-id, (2) removes the containers and (3) proves that none of them remains. The result is one receipt beside the stage record:
+id, (2) saves each container's `docker logs --timestamps` (stdout and stderr) under `host/container-logs/<stage>/<container name>.log`
+before anything is removed, (3) removes the containers and (4) proves that none of them remains. The result is one receipt beside the stage record:
 
     host/containers-receipt-<NN>-<stage>.json     NN = 01, 02, ... in the order the stages ended
 
@@ -13,7 +14,7 @@ they never need a live container. A run that is not collected stage by stage wri
 
 Refusals: `STAGE_CONTAINER_RECEIPT_MISSING` (a completed stage has no receipt), `STAGE_CONTAINER_RECEIPT_INVALID` (not the receipt that was
 written, a broken sha chain or sequence, or bound to another stage record), `STAGE_CONTAINER_RECEIPT_NOT_TERMINATED` (an entry does not show
-exited, removed and absent) and `STAGE_CONTAINER_RECEIPT_COVERAGE` (a registered launch is covered by no receipt, or an entry disagrees
+exited, removed and absent, or has no log) and `STAGE_CONTAINER_RECEIPT_COVERAGE` (a registered launch is covered by no receipt, or an entry disagrees
 with the registry's settlement).
 """
 
@@ -103,6 +104,57 @@ def write_receipt(host, *, stage, stage_record_sha256, containers):
     return dict(document, sha256=_sha(path.read_bytes()))
 
 
+LOG_DIRECTORY = 'container-logs'
+
+
+def save_logs(host, stage, name, runner, container_id):
+    """Save `docker logs --timestamps` of a container atomically and durably; returns `(path relative to host, sha256)`.
+
+    Any failure raises `STAGE_CONTAINER_LOGS_UNSAVED`: the caller then removes nothing."""
+    try:
+        result = runner(['docker', 'logs', '--timestamps', container_id])
+        if result.returncode != 0:
+            raise ValueError('docker logs failed')
+        raw = (b'== stdout ==\n' + str(result.stdout).encode() + b'\n== stderr ==\n' + str(result.stderr).encode() + b'\n')
+        directory = Path(host) / LOG_DIRECTORY / stage
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        final = directory / f'{name}.log'
+        temporary = directory / f'{name}.log.tmp'
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, final)
+        handle = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(handle)
+        finally:
+            os.close(handle)
+        return f'{LOG_DIRECTORY}/{stage}/{name}.log', _sha(raw)
+    except (OSError, ValueError, AttributeError, TypeError) as error:
+        raise ValueError('STAGE_CONTAINER_LOGS_UNSAVED: ' + name) from error
+
+
+def _check_logs(host, entry):
+    """A container entry's saved log exists below `host/container-logs` and is the bytes it names."""
+    if entry['launcher'] != 'container':
+        return
+    relative, digest = entry.get('logs_path'), entry.get('logs_sha256')
+    if type(relative) is not str or type(digest) is not str:
+        raise ValueError('STAGE_CONTAINER_RECEIPT_INVALID')
+    base = (Path(host) / LOG_DIRECTORY).resolve()
+    path = (Path(host) / relative).resolve()
+    if Path(relative).is_absolute() or base not in path.parents:
+        raise ValueError('STAGE_CONTAINER_RECEIPT_INVALID')
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise ValueError('STAGE_CONTAINER_RECEIPT_COVERAGE') from error
+    if _sha(raw) != digest:
+        raise ValueError('STAGE_CONTAINER_RECEIPT_INVALID')
+
+
 def container_entry(record, observed):
     """The receipt entry of one container launch, from its registry record and the independent inspection `observed`."""
     launch = record['launch']
@@ -113,13 +165,15 @@ def container_entry(record, observed):
         raise ValueError('STAGE_CONTAINER_RECEIPT_NOT_TERMINATED')
     return dict(launch_id=launch['launch_id'], role=launch['role'], launcher='container', container_name=launch['container_name'],
                 container_id=observed['Id'], status='exited', exit_code=state['ExitCode'], finished_at=state['FinishedAt'],
-                inspect_sha256=document_sha256(observed), removed=False, absent_after_removal=False)
+                inspect_sha256=document_sha256(observed), logs_path=None, logs_sha256=None,
+                removed=False, absent_after_removal=False)
 
 
 def native_entry(record):
     return dict(launch_id=record['launch']['launch_id'], role=record['launch']['role'], launcher='native', container_name=None,
                 container_id=None, status=None, exit_code=None, finished_at=None,
-                inspect_sha256=document_sha256(record['exit_inspect']), removed=None, absent_after_removal=None)
+                inspect_sha256=document_sha256(record['exit_inspect']), logs_path=None, logs_sha256=None,
+                removed=None, absent_after_removal=None)
 
 
 def _entry_terminated(entry):
@@ -168,6 +222,7 @@ def verify_receipts(host, last_record, registry_records):
         for entry in receipt['containers']:
             if not _entry_terminated(entry):
                 raise ValueError('STAGE_CONTAINER_RECEIPT_NOT_TERMINATED')
+            _check_logs(host, entry)
             if entry['launch_id'] in entries:
                 raise ValueError('STAGE_CONTAINER_RECEIPT_COVERAGE')
             entries[entry['launch_id']] = entry
@@ -189,6 +244,7 @@ def covered_launches(host, registry_records):
         for entry in receipt['containers']:
             if not _entry_terminated(entry):
                 raise ValueError('STAGE_CONTAINER_RECEIPT_NOT_TERMINATED')
+            _check_logs(host, entry)
             record = by_launch.get(entry['launch_id'])
             if (record is None or record['owner'] is None or record['exit_inspect'] is None or not _agrees(entry, record)
                     or entry['launch_id'] in covered):

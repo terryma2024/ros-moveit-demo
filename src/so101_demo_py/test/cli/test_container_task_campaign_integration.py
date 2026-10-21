@@ -236,6 +236,7 @@ class Docker:
         self.fail_kill = set()
         self.fail_rm = set()
         self.refuse_rm = False
+        self.refuse_logs = False
         self.refuse_run = None
         self.specs = {}
 
@@ -247,6 +248,11 @@ class Docker:
             if argv[2] not in self.containers:
                 return SimpleNamespace(returncode=1, stdout='[]', stderr='Error: No such object: ' + argv[2])
             return SimpleNamespace(returncode=0, stdout=json.dumps([self.containers[argv[2]]]), stderr='')
+        if argv[:2] == ['docker', 'logs']:
+            if argv[-1] not in self.containers or self.refuse_logs:
+                return SimpleNamespace(returncode=1, stdout='', stderr='no logs for ' + argv[-1])
+            return SimpleNamespace(returncode=0, stdout='2026-10-12T01:02:04.000Z out ' + argv[-1][:8] + '\n',
+                                   stderr='2026-10-12T01:02:05.000Z err\n')
         if argv[:2] == ['docker', 'rm']:
             if argv[2] not in self.containers or self.refuse_rm or argv[2] in self.fail_rm:
                 return SimpleNamespace(returncode=1, stdout='', stderr='cannot remove ' + argv[2])

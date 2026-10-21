@@ -218,6 +218,9 @@ def test_phase_one_removes_its_containers_after_proving_them_exited_and_receipts
     assert {entry['role'] for entry in entries} == {'teacher', 'shard'}
     assert all(entry['status'] == 'exited' and entry['removed'] and entry['absent_after_removal'] and entry['finished_at']
                for entry in entries)
+    host = stopped.run_root / 'host'
+    for entry in entries:
+        assert entry['logs_path'] == f"container-logs/phase1/{entry['container_name']}.log" and (host / entry['logs_path']).is_file()
     assert receipts[0]['stage_record_sha256'] == stage_records.read_record(stopped.run_root / 'host', 'phase1')['sha256']
 
 
@@ -274,3 +277,18 @@ def test_phase_one_fails_the_cleanup_when_a_container_cannot_be_removed(tmp_path
     run_root = world.evidence / 'run-one'
     assert container_receipts.receipt_files(run_root / 'host') == [] and world.docker.containers
     assert 'STAGE_CONTAINER_REMOVE_FAILED' in json.loads((run_root / 'host/campaign-cleanup.json').read_text())['container_receipt_error']
+
+
+def test_phase_one_keeps_its_containers_when_their_logs_cannot_be_saved(tmp_path, shared, monkeypatch, capsys):
+    from so101_demo.cli.act_collect_parallel import main
+    world = make_world(tmp_path, shared, monkeypatch, plane='W1', polls_to_finish=2)
+    controlled_verifier(monkeypatch)
+    world.docker.refuse_logs = True
+    capsys.readouterr()
+    code = main(argv_for(world) + ['--stop-after-phase1'], edges=world.edges)
+    close_stores()
+    assert code == 1 and 'CAMPAIGN_CLEANUP_UNCONFIRMED' in capsys.readouterr().err
+    run_root = world.evidence / 'run-one'
+    assert container_receipts.receipt_files(run_root / 'host') == [] and world.docker.containers
+    assert 'STAGE_CONTAINER_LOGS_UNSAVED' in json.loads((run_root / 'host/campaign-cleanup.json').read_text())['container_receipt_error']
+    assert [call for call in world.docker.calls if call[:2] == ['docker', 'rm']] == []
