@@ -13,10 +13,12 @@ The planner itself is reached through an injected ``call(points_document) -> {po
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Mapping
+from typing import Callable, Iterable, Mapping, Sequence
 
 from so101_demo.act.scene_list_format import CUP_Z_M, write_new_json
 
@@ -58,6 +60,9 @@ class FivePoseReachability:
     call: ReachCall
     cup_z_m: float = CUP_Z_M
     batch_poses: int = DEFAULT_BATCH_POSES
+    #: Several planners (one per execution stack). The chunks of one ``_ask`` run at the same time, one chunk per planner at a
+    #: time; ids, cache and ``pose_log`` are filled in chunk order, so the outcome is the one a single planner would give.
+    pool: Sequence[ReachCall] | None = None
     pose_log: list[dict] = field(default_factory=list)
     _cache: dict[Pose, Verdict] = field(default_factory=dict)
     _calls: int = 0
@@ -68,9 +73,11 @@ class FivePoseReachability:
 
     def _ask(self, poses: list[Pose], label: str) -> None:
         todo = [pose for pose in dict.fromkeys(poses) if pose not in self._cache]
+        chunks = []
         for start in range(0, len(todo), self.batch_poses):
             chunk = todo[start:start + self.batch_poses]
-            ids = {f"p{len(self._cache) + i:05d}": pose for i, pose in enumerate(chunk)}
+            first = len(self._cache) + start
+            ids = {f"p{first + i:05d}": pose for i, pose in enumerate(chunk)}
             document = {
                 "schema_version": 1,
                 "points": [
@@ -78,8 +85,9 @@ class FivePoseReachability:
                     for pid, pose in ids.items()
                 ],
             }
-            self._calls += 1
-            verdicts = self.call(document)
+            chunks.append((ids, document))
+        self._calls += len(chunks)
+        for (ids, _document), verdicts in zip(chunks, self._answers([document for _ids, document in chunks])):
             if set(verdicts) != set(ids) or any(status == "UNKNOWN" for status, _ in verdicts.values()):
                 raise ReachabilityUnknownError(f"REACH_CALL_UNKNOWN: {label}")
             for pid, pose in ids.items():
@@ -88,6 +96,29 @@ class FivePoseReachability:
                     {"pose_id": pid, "x": pose[0], "y": pose[1], "status": verdicts[pid][0],
                      "first_failure_code": verdicts[pid][1], "label": label}
                 )
+
+    def _answers(self, documents: list[dict]) -> list[Mapping[str, Verdict]]:
+        if not self.pool or len(documents) < 2:
+            return [self.call(document) for document in documents]
+        idle: queue.Queue[ReachCall] = queue.Queue()
+        for member in self.pool:
+            idle.put(member)
+
+        def ask(document: dict) -> Mapping[str, Verdict]:
+            member = idle.get()
+            try:
+                return member(document)
+            finally:
+                idle.put(member)
+
+        with ThreadPoolExecutor(max_workers=len(self.pool)) as executor:
+            futures = [executor.submit(ask, document) for document in documents]
+            return [future.result() for future in futures]
+
+    def evaluate_true(self, positions: Iterable[Pose]) -> None:
+        """Evaluate only the true pose of every position (a pre-fetch; the offsets follow for the positions that are used)."""
+
+        self._ask([pose_key(x, y) for x, y in positions], "true")
 
     def evaluate(self, positions: Iterable[Pose]) -> None:
         """Evaluate all five poses of every position (true poses first, offsets only for the survivors)."""

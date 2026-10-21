@@ -21,6 +21,8 @@ from so101_demo.act.five_pose_reachability import CommandReachabilityCall, FiveP
 from so101_demo.act.scene_list_format import CUP_Z_M, scene_document, scene_row, write_new_json
 
 SEED_BASE = 200
+#: Deepest-draw multiple of the pre-fetched candidate cloud; set from the real planner rates (progress-goal2.md item 28).
+DEFAULT_PREFETCH_FACTOR = 2.0
 #: Joint mode (boundary design amendment 3): list name -> (scene id prefix, first row seed, split name of its rows; ``None`` = split spatially).
 JOINT_LISTS = {"formal": ("frm", 200, None), "qualification": ("qual", 400, "qualification"), "functional": ("fn", 600, "functional")}
 JOINT_SPLIT_LIST = "formal"
@@ -28,11 +30,30 @@ DECIMALS_REPORT = 6
 SPLIT_ORDER = ("train", "validation", "offline_test")
 
 
-def sample_with_reachability(boundary_points, rollout_points, reach: FivePoseReachability, **options):
+def _prefetch(reach: FivePoseReachability, boundary_points, rollout_points, missing, factor: float, options) -> None:
+    """Evaluate all five poses of the whole candidate cloud at once (see ``scene_sampling.candidate_cloud``).
+
+    The sample is a function of the per-position verdicts only, so this changes how many sampler passes and planner rounds
+    are needed, not the outcome. Without it every pass learns about the few positions its predecessor rejected and asks for
+    those in a new round: one planner round after the other, about a hundred passes for a formal list. With the cloud the
+    planner rounds are independent of each other (and run side by side on a pool); a position beyond the cloud makes the next
+    pass ask for a deeper one, so the cloud doubles its factor at every step instead of growing by a few positions.
+    """
+
+    cloud = scene_sampling.candidate_cloud(
+        boundary_points, rollout_points, missing, factor=factor, seed=options.get("seed", scene_sampling.DEFAULT_SEED),
+        margin_m=options.get("margin_m", scene_sampling.INWARD_MARGIN_M),
+        rollout_clearance_m=options.get("rollout_clearance_m", scene_sampling.ROLLOUT_CLEARANCE_M),
+        boundary_kinds=options.get("boundary_kinds"))
+    reach.evaluate(cloud)
+
+
+def sample_with_reachability(boundary_points, rollout_points, reach: FivePoseReachability, *, prefetch_factor: float = 0.0, **options):
     """Run the pure sampler until a pass asks the planner about nothing new.
 
     A pass answers an unevaluated position optimistically and records it; the recorded positions are then evaluated in
-    batches and the sampler runs again with the verdicts, so the final pass used only real verdicts.
+    batches and the sampler runs again with the verdicts, so the final pass used only real verdicts. With a
+    ``prefetch_factor`` the positions asked about are evaluated together with a cloud of candidates around them.
     """
 
     while True:
@@ -40,15 +61,13 @@ def sample_with_reachability(boundary_points, rollout_points, reach: FivePoseRea
         sample = scene_sampling.sample_scenes(boundary_points, rollout_points, reachable=reachable, **options)
         if not missing:
             return sample
+        if prefetch_factor > 0:
+            _prefetch(reach, boundary_points, rollout_points, missing, prefetch_factor, options)
+            prefetch_factor *= 2     # a miss after a cloud means the cloud was too shallow: the next one is twice as deep
         reach.evaluate(missing)
 
 
-def build_rows(sample: scene_sampling.SceneSample, prefix: str) -> list[dict]:
-    ordered = [(split, p) for split in SPLIT_ORDER for p, s in zip(sample.points, sample.splits) if s == split]
-    return [scene_row(f"{prefix}-{i:03d}", SEED_BASE + i, split, p) for i, (split, p) in enumerate(ordered)]
-
-
-def sample_joint_with_reachability(boundary_points, rollout_points, reach: FivePoseReachability, **options):
+def sample_joint_with_reachability(boundary_points, rollout_points, reach: FivePoseReachability, *, prefetch_factor: float = 0.0, **options):
     """``sample_with_reachability`` for ``scene_sampling.sample_joint``."""
 
     while True:
@@ -56,7 +75,15 @@ def sample_joint_with_reachability(boundary_points, rollout_points, reach: FiveP
         sample = scene_sampling.sample_joint(boundary_points, rollout_points, reachable=reachable, **options)
         if not missing:
             return sample
+        if prefetch_factor > 0:
+            _prefetch(reach, boundary_points, rollout_points, missing, prefetch_factor, options)
+            prefetch_factor *= 2     # a miss after a cloud means the cloud was too shallow: the next one is twice as deep
         reach.evaluate(missing)
+
+
+def build_rows(sample: scene_sampling.SceneSample, prefix: str) -> list[dict]:
+    ordered = [(split, p) for split in SPLIT_ORDER for p, s in zip(sample.points, sample.splits) if s == split]
+    return [scene_row(f"{prefix}-{i:03d}", SEED_BASE + i, split, p) for i, (split, p) in enumerate(ordered)]
 
 
 def parse_lists(text: str) -> dict[str, int]:
@@ -84,7 +111,7 @@ def build_joint_rows(sample: scene_sampling.JointSceneSample, name: str) -> list
     return [scene_row(f"{prefix}-{i:0{width}d}", seed_base + i, split, p) for i, (split, p) in enumerate(ordered)]
 
 
-def main_joint(args, reach_call) -> int:
+def main_joint(args, reach_calls) -> int:
     counts = parse_lists(args.lists)
     if args.scenes_output_dir is None:
         raise ValueError("SCENE_SAMPLE_OUTPUT_DIR_REQUIRED")
@@ -101,9 +128,9 @@ def main_joint(args, reach_call) -> int:
     split_counts = dict(zip(SPLIT_ORDER, args.split_counts))
     if sum(split_counts.values()) != counts[JOINT_SPLIT_LIST]:
         split_counts = {"train": counts[JOINT_SPLIT_LIST] - 20, "validation": 10, "offline_test": 10}
-    reach = FivePoseReachability(reach_call)
+    reach = FivePoseReachability(reach_calls[0], pool=reach_calls if len(reach_calls) > 1 else None)
     sample = sample_joint_with_reachability(
-        {name: tuple(p) for name, p in boundary_points.items()}, rollout, reach,
+        {name: tuple(p) for name, p in boundary_points.items()}, rollout, reach, prefetch_factor=args.prefetch_factor,
         list_counts=counts, split_list=JOINT_SPLIT_LIST, split_counts=split_counts, seed=args.seed,
         margin_m=args.inward_margin_m, boundary_kinds=boundary_kinds,
     )
@@ -158,13 +185,14 @@ def main_joint(args, reach_call) -> int:
             for name, p in rollout.items()
         },
         "positions_rejected_by_reachability": rejected, "reachability_calls": reach.calls, "seed": args.seed,
+        "reachability_pool_size": len(reach_calls),
     }
     write_new_json(args.report_output, report)
     print(json.dumps({"lists": sha256, "report": str(args.report_output), "min_spacing_m": sample.spacing_m}, sort_keys=True))
     return 0
 
 
-def main(argv: list[str] | None = None, *, reach_call=None) -> int:
+def main(argv: list[str] | None = None, *, reach_call=None, reach_pool=None) -> int:
     parser = argparse.ArgumentParser(prog="act_scene_sample", description=__doc__)
     parser.add_argument("--state", type=Path, required=True, help="finished boundary state with boundary_points")
     parser.add_argument("--rollout-points", type=Path, required=True, help="config/mujoco/rgbd_task_points.yaml")
@@ -173,7 +201,12 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     parser.add_argument("--scenes-output-dir", type=Path, help="joint mode: where <name>-<count>.scenes.json are written")
     parser.add_argument("--report-output", type=Path, required=True)
     parser.add_argument("--call-dir", type=Path, required=True, help="per-call points and evidence files (kept)")
-    parser.add_argument("--reach-command", help="command prefix that runs task_reachability; points, evidence, session appended")
+    parser.add_argument("--reach-command", action="append",
+                        help="command prefix that runs task_reachability; points, evidence, session appended. Repeat it for several "
+                             "execution stacks: the planner batches then run at the same time, one per stack")
+    parser.add_argument("--prefetch-factor", type=float, default=DEFAULT_PREFETCH_FACTOR,
+                        help="evaluate the true poses of all candidates up to this multiple of the deepest draw the sampler's first "
+                             "pass needs in one round (>= 1), 0 = off. The scenes are the same either way")
     parser.add_argument("--count", type=int, default=scene_sampling.DEFAULT_COUNT)
     parser.add_argument("--split-counts", type=int, nargs=3, metavar=("TRAIN", "VALIDATION", "OFFLINE_TEST"), default=(83, 10, 10))
     parser.add_argument("--seed", type=int, default=scene_sampling.DEFAULT_SEED)
@@ -181,12 +214,17 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     parser.add_argument("--scene-prefix", default="frm")
     args = parser.parse_args(argv)
 
+    if args.prefetch_factor != 0 and args.prefetch_factor < 1:
+        raise ValueError("SCENE_SAMPLE_PREFETCH_FACTOR_INVALID")
     if reach_call is None:
         if not args.reach_command:
             raise ValueError("SCENE_SAMPLE_REACHABILITY_PROBE_NOT_AVAILABLE")
-        reach_call = CommandReachabilityCall(shlex.split(args.reach_command), args.call_dir, session_prefix="sample")
+        reach_pool = [CommandReachabilityCall(shlex.split(command), args.call_dir, session_prefix="sample" if i == 0 else f"sample-s{i}")
+                      for i, command in enumerate(args.reach_command)]
+        reach_call = reach_pool[0]
+    reach_calls = list(reach_pool) if reach_pool else [reach_call]
     if args.lists is not None:
-        return main_joint(args, reach_call)
+        return main_joint(args, reach_calls)
     if args.scenes_output is None:
         raise ValueError("SCENE_SAMPLE_OUTPUT_REQUIRED")
     for target in (args.scenes_output, args.report_output):
@@ -199,9 +237,9 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     boundary_kinds = state.get("boundary_kinds")  # absent in states of the 1 cm search: every point is then reach-limited
     rollout = {s["point_id"]: tuple(s["xy"]) for s in rollout_scenes.load_standard_points(args.rollout_points)}
     counts = dict(zip(SPLIT_ORDER, args.split_counts))
-    reach = FivePoseReachability(reach_call)
+    reach = FivePoseReachability(reach_calls[0], pool=reach_calls if len(reach_calls) > 1 else None)
     sample = sample_with_reachability(
-        {name: tuple(p) for name, p in boundary_points.items()}, rollout, reach,
+        {name: tuple(p) for name, p in boundary_points.items()}, rollout, reach, prefetch_factor=args.prefetch_factor,
         count=args.count, split_counts=counts, seed=args.seed, margin_m=args.inward_margin_m,
         boundary_kinds=boundary_kinds,
     )
@@ -234,6 +272,7 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
         "rollout_nearest_scene_m": sample.rollout_nearest_scene_m,
         "rollout_nearest_training_m": sample.rollout_nearest_training_m,
         "positions_rejected_by_reachability": rejected, "reachability_calls": reach.calls, "seed": args.seed,
+        "reachability_pool_size": len(reach_calls),
     }
     write_new_json(args.scenes_output, document)
     write_new_json(args.report_output, report)

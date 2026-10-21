@@ -16,7 +16,7 @@ import math
 import random
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 
 from so101_demo.act import scene_boundary as boundary
 
@@ -243,6 +243,15 @@ def boundary_polygon(boundary_points: Mapping[str, Point]) -> tuple[Point, ...]:
 
 
 # --- Poisson-disk sampling -------------------------------------------------------------------------------------
+def _draws(region: Region, seed: int):
+    """The seeded stream of candidate points every dart-throwing rung restarts: it does not depend on any verdict."""
+
+    rng = random.Random(seed)
+    x0, x1, y0, y1 = region.bounding_box()
+    while True:
+        yield (round(rng.uniform(x0, x1), DECIMALS), round(rng.uniform(y0, y1), DECIMALS))
+
+
 def _dart_throwing(
     region: Region,
     count: int,
@@ -251,13 +260,12 @@ def _dart_throwing(
     keep_clear: Sequence[tuple[Point, float]],
     accept: Callable[[Point], bool],
 ) -> list[Point]:
-    rng = random.Random(seed)
-    x0, x1, y0, y1 = region.bounding_box()
+    stream = _draws(region, seed)
     points: list[Point] = []
     failures = draws = 0
     while len(points) < count and failures < _MAX_CONSECUTIVE_FAILURES and draws < _MAX_DRAWS:
         draws += 1
-        p = (round(rng.uniform(x0, x1), DECIMALS), round(rng.uniform(y0, y1), DECIMALS))
+        p = next(stream)
         if (
             not region.contains(p)
             or any(math.dist(p, q) < spacing_m for q in points)
@@ -307,6 +315,56 @@ def poisson_disk(
                 f"SAMPLING_CAPACITY: {len(points)} of {count} points fit at the {min_spacing_floor_m} m floor"
             )
         spacing = max(min_spacing_floor_m, spacing * _SPACING_DECAY)
+
+
+def candidate_cloud(
+    boundary_points: Mapping[str, Point],
+    rollout_points: Mapping[str, Point],
+    asked: Iterable[Point],
+    *,
+    seed: int = DEFAULT_SEED,
+    margin_m: float = INWARD_MARGIN_M,
+    rollout_clearance_m: float = ROLLOUT_CLEARANCE_M,
+    boundary_kinds: Mapping[str, str] | None = None,
+    factor: float = 2.0,
+) -> list[Point]:
+    """The points a reachability pre-fetch may evaluate in one go before the sampler runs.
+
+    Dart throwing draws the same seeded stream on every rung, whatever the verdicts; a verdict only decides which draws are
+    kept. So the points the sampler can ever ask about are draws of that stream that lie in the region and clear of the
+    rollout points. The cloud is those draws up to ``factor`` times the deepest draw of ``asked`` (the points an optimistic
+    first pass asked about), in draw order and without repeats. Real verdicts reject some draws, so the final sample reaches a
+    little deeper into the stream than the optimistic pass did; a point outside the cloud is simply evaluated later, the sample
+    does not depend on the cloud.
+    """
+
+    wanted = set(asked)
+    if not wanted:
+        return []
+    if factor < 1.0:
+        raise SceneSamplingError("CLOUD_FACTOR_INVALID")
+    region = Region(boundary_polygon(boundary_points), margin_m, vertex_scales=vertex_scales(boundary_kinds))
+    keep_clear = [((float(p[0]), float(p[1])), rollout_clearance_m) for p in rollout_points.values()]
+    stream = _draws(region, seed)
+    kept: list[tuple[int, Point]] = []
+    deepest = 0
+    for index in range(_MAX_DRAWS):
+        p = next(stream)
+        if p in wanted:
+            deepest = index + 1
+            wanted.discard(p)
+        if region.contains(p) and not any(math.dist(p, centre) < clearance for centre, clearance in keep_clear):
+            kept.append((index, p))
+        if not wanted:
+            break
+    limit = math.ceil(deepest * factor)
+    # the stream is the same one: continue past the deepest asked draw up to the limit
+    for index in range(index + 1, min(limit, _MAX_DRAWS)):
+        p = next(stream)
+        if region.contains(p) and not any(math.dist(p, centre) < clearance for centre, clearance in keep_clear):
+            kept.append((index, p))
+    cloud = [p for index, p in kept if index < limit]
+    return list(dict.fromkeys(cloud))
 
 
 # --- splits ----------------------------------------------------------------------------------------------------
