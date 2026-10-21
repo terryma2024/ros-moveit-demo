@@ -393,6 +393,24 @@ def test_a_mounted_teacher_starts_with_a_passing_preflight_and_records_the_mount
         registry.close()
 
 
+def test_a_mounted_teacher_gets_its_ultralytics_config_directory_in_its_private_tmp(tmp_path):
+    # The base image carries no /tmp/Ultralytics (the image path got one by accident); Ultralytics falls back to the working directory of a read-only
+    # root when YOLO_CONFIG_DIR does not exist, and the Teacher then fails with EXECUTOR_START_FAILED on /act/Ultralytics.
+    mount = mounted_trees(tmp_path)
+    owner, registry, calls, containers = fixture(tmp_path, mount_tree=mount)
+    async def run():
+        await owner.start()
+        config_dir = owner.paths['services']['teacher']/'tmp'/'ultralytics'
+        assert config_dir.is_dir() and oct(config_dir.stat().st_mode & 0o777) == '0o700'
+        launch = next(argv for argv in calls if argv[:2] == ['docker','run'])
+        assert f'YOLO_CONFIG_DIR={config_dir}' in launch
+        await owner.close()
+    try:
+        asyncio.run(run())
+    finally:
+        registry.close()
+
+
 @pytest.mark.parametrize('preflight', [None, 'fail'])
 def test_a_mounted_start_without_a_passing_preflight_launches_nothing(tmp_path, preflight):
     mount = mounted_trees(tmp_path)
