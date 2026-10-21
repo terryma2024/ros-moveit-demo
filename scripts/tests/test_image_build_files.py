@@ -86,6 +86,13 @@ def test_the_cpp_build_maps_build_paths_and_uses_no_ccache():
     assert "CCACHE_DISABLE=1" in text and "ccache" not in text.replace("CCACHE_DISABLE", "")
 
 
+def test_the_shard_build_fixes_the_python_hash_seed():
+    """rosidl orders referenced types and dependencies from Python sets: without a fixed seed two builds generate different
+    *_description.c, *_type_support.c and Cargo.toml files (found by the item 23 acceptance, 37 files)."""
+    build_stage = instructions(DOCKERFILES["shard"]).split("FROM deps AS final")[0]
+    assert "PYTHONHASHSEED=0" in build_stage
+
+
 # --- the pinned sets --------------------------------------------------------------------------------------------------
 
 def test_apt_packages_are_sorted_package_names_without_versions():

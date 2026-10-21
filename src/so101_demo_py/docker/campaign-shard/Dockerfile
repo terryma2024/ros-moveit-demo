@@ -13,7 +13,7 @@ FROM so101-campaign-shard-deps:ros-jazzy-yolo11n-v1 AS deps
 
 FROM deps AS build
 
-ENV CCACHE_DISABLE=1 \
+ENV CCACHE_DISABLE=1 PYTHONHASHSEED=0 \
     PATH=/act/build-tools:/act/source/build-deps/node/bin:/act/venv/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     SO101_TELEOP_BUN=/act/build-tools/bun \
     AMENT_PREFIX_PATH=/act/install:/opt/ros/jazzy

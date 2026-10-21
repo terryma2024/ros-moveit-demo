@@ -45,7 +45,7 @@ It did not work out of the box. Each failure below has a cause and a fix that th
   what must match.
 - **F6, the gate tree contains `.pyc` files and build paths.** `__pycache__` directories exist under `install`, and two generated
   `rosidl_generator_c` libraries embed the build path as a string. A content hash of that tree is only stable if the pyc files are
-  excluded or never written, and if the build path is the same on every host.
+  excluded or never written, and if the build path is the same on every host. Two image builds of one commit also differed in 37 generated files (rosidl `*_description.c`, `*_type_support.c`, `Cargo.toml`, and the type hashes in them) because rosidl orders referenced types from Python sets; the host build needs `PYTHONHASHSEED=0` too.
 
 ## Design
 
