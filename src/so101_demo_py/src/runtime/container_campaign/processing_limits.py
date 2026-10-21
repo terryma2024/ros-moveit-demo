@@ -14,6 +14,8 @@ All times are Host monotonic seconds, the unit of `AdmittedCampaignContext.deadl
 `collect_timeout_s + process_timeout_s` may not exceed the total, and neither may any of the three single values.
 """
 
+from so101_demo.runtime.inference.config import RUNTIME_DOCUMENT_KEYS
+
 DEFAULT_RESERVE_S = 1800
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_VERIFICATION_RESERVE_S = 600
@@ -25,8 +27,20 @@ MAX_DEFAULT_PROCESSORS = 12
 PROCESSOR_MEMORY_BYTES = 3 * 2**30
 
 
+def effective_limits(config, document=None):
+    """The campaign config with the keys of the run's runtime document laid over it (a version 1 config may still carry them).
+
+    A key named in both is refused: which value a run used must not depend on an overlay order. No document returns the config."""
+    if document is None:
+        return config
+    keys = [name for name in RUNTIME_DOCUMENT_KEYS if name in document]
+    if any(name in config for name in keys):
+        raise ValueError("CAMPAIGN_RUNTIME_KEY_CONFLICT")
+    return {**config, **{name: document[name] for name in keys}}
+
+
 def effective_batch_total_s(config, runtime_batch_hard_timeout_s):
-    """The campaign total and where it came from: the campaign config's `batch_hard_timeout_s` when present, else the runtime yaml's."""
+    """The campaign total and where it came from: the campaign limits' `batch_hard_timeout_s` when present, else the runtime yaml's."""
     if "batch_hard_timeout_s" in config:
         return config["batch_hard_timeout_s"], "campaign config"
     return runtime_batch_hard_timeout_s, "runtime yaml"

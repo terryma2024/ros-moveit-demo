@@ -205,3 +205,15 @@ def test_a_prepared_wave_closed_at_the_deadline_still_consumes_its_global_index(
     assert phase.world.made[1].closes >= 1
     assert result['retry']['recovered'] == 1
     assert [item['scene_id'] for item in result['task_faults']] == ['scene-20']
+
+
+def test_the_limits_come_from_the_runtime_document_and_are_recorded(tmp_path, monkeypatch):
+    phase = retry_world(tmp_path, monkeypatch)                       # the config says 2 rounds until the document takes the key over
+    owner = phase.owner
+    owner.config = {name: value for name, value in owner.config.items() if name != 'retry_invalid_max_rounds'}
+    owner.runtime_document = {'retry_invalid_max_rounds': 0, 'processor_count': 3}
+    result = drive(phase)
+    used = json.loads((owner.root / 'host/runtime-used.json').read_text())
+    assert used['values']['retry_invalid_max_rounds'] == 0 and used['values']['processor_count'] == 3
+    assert [call['round'] for call in phase.scheduler.calls] == [0]  # the round count came from the limits, not from the config
+    assert 'retry' not in result

@@ -236,7 +236,7 @@ class World(SimpleNamespace):
 
 def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEACHER_FAILED, qc_failed=QC_FAILED,
                 loss_failed=(), reassign=None, surplus_early=(), evidence_root=None, images=None, source_bytes=None,
-                runtime_bytes=None, collection_bytes=None, fingerprint='1'*64, formal_scenes=None):
+                runtime_bytes=None, collection_bytes=None, fingerprint='1'*64, formal_scenes=None, identity_version=1, campaign_extra=None):
     """Build the whole run under `base`; `install_controlled_qc` must already be active.
 
     The tuples are scene indexes of the controlled business outcomes (0-39): `no_pose` seals the manifest-free perception
@@ -277,7 +277,9 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
     source.write_bytes(source_bytes if source_bytes is not None else b'source: controlled\n')
     proposal = write_json(inputs/'contact-proposal.json', dict(policy_fingerprint=fingerprint))
     identity = dict(source_sha256=sha(source), runtime_config_sha256=sha(runtime), collection_config_sha256=sha(collection),
-        contact_policy_fingerprint=fingerprint, gpu_uuid=GPU, image_source_install=dict(inference=inference_image, shard=shard_image))
+        contact_policy_fingerprint=fingerprint, image_source_install=dict(inference=inference_image, shard=shard_image))
+    if identity_version == 1:
+        identity['gpu_uuid'] = GPU                       # version 2 leaves the GPU out of the identity (the environment)
     rule_refs = rules if rules is not None else write_synthetic_rules(inputs)
     contract_path = write_json(inputs/'gate.json', dict(schema_version=1, kind='ACT_PARALLEL_COLLECTION_GATE',
         qualification_run_id='gate-run', worker_count=8, scene_manifest=ref(scene_file), functional_manifest=ref(functional),
@@ -289,9 +291,9 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
         classes={'0': 'plastic_cup'}, score_threshold=.25), instances=3, torch_threads=1, torch_interop_threads=1,
         max_inflight_requests=8, max_frame_bytes=2**20, max_image_height=480, max_image_width=640, queue_timeout_s=.75,
         inference_timeout_s=1.25)
-    campaign_path = write_json(inputs/'campaign.json', dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN',
+    campaign_path = write_json(inputs/'campaign.json', dict(schema_version=identity_version, kind='ACT_CONTAINER_CAMPAIGN',
         evidence_root=str(root), controlled_runtime=ref(runtime), head_service=service, teacher_service=service,
-        shard_image=dict(shard_image), gpu_uuid=GPU, qualification_contract=ref(contract_path)))
+        shard_image=dict(shard_image), gpu_uuid=GPU, qualification_contract=ref(contract_path), **(campaign_extra or {})))
     config = load_campaign_config(campaign_path, roles=('teacher',))
     contract = validate_qualification_contract(json.loads(contract_raw), check_rules=rules is None)
     # ---- frozen inputs and per-scene scopes (controlled; see the module docstring) -----------------------------------------

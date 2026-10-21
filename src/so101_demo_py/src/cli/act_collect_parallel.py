@@ -51,7 +51,7 @@ from so101_demo.runtime.container_campaign.case_inputs import (
 )
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths, validate_registered_evidence_root
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
-from so101_demo.runtime.inference.config import load_campaign_config, validate_file_ref
+from so101_demo.runtime.inference.config import load_campaign_config, load_runtime_document, validate_file_ref
 from so101_teleop.unified.compose import compose_services
 from so101_teleop.unified.worker_slots import ActWorkerSlot
 
@@ -112,6 +112,10 @@ def _parser():
     parser.add_argument('--collection-config', type=Path, required=True)
     parser.add_argument('--runtime-config', type=Path, required=True)
     parser.add_argument('--campaign-config', type=Path, required=True)
+    parser.add_argument('--runtime-document', type=Path, default=None,
+                        help='the run\'s runtime values (worker counts, time limits, retry rounds): not part of the campaign identity')
+    parser.add_argument('--stop-after-phase1', action='store_true',
+                        help='stop once phase 1 is proven stopped and durable; phase 2 and the rest run as later stages (act_process_parallel)')
     parser.add_argument('--input-candidates', type=Path, required=True)
     parser.add_argument('--teacher-endpoint', type=Path, required=True)
     parser.add_argument('--teacher-execution-policy', type=Path, required=True)
@@ -145,7 +149,7 @@ def _inspector(docker_runner):
     return inspect
 
 
-def _preflight(args):
+def _preflight(args, path_options=_PATH_OPTIONS):
     """Pure checks of the arguments and the plane's contract; returns the resolved paths and the scene list to freeze."""
     if re.fullmatch(_ID, args.campaign_id) is None:
         raise ValueError('COLLECTION_CAMPAIGN_ID_INVALID')
@@ -162,7 +166,7 @@ def _preflight(args):
         raise ValueError('COLLECTION_RUN_CONTRACT_MISMATCH')
     if not (args.qualification or spot_check) and args.qualification_report is None:
         raise ValueError('EIGHT_WORKER_QUALIFICATION_REQUIRED')
-    resolved = {name: _regular(getattr(args, name)) for name in _PATH_OPTIONS}
+    resolved = {name: _regular(getattr(args, name)) for name in path_options}
     report = None if args.qualification_report is None else _regular(args.qualification_report)
     try:
         document = read_document(resolved['manifest'])
@@ -227,6 +231,8 @@ def main(argv=None, *, edges=None) -> int:
             raise ValueError(f'ACT_COLLECTION_UNIFIED_SERVICE_UNAVAILABLE: {services.act_error}')
         config_sha = _sha(resolved['campaign_config'])
         config = load_campaign_config(resolved['campaign_config'], roles=('teacher',), expected_sha256=config_sha)
+        runtime_document = (None if args.runtime_document is None
+                            else load_runtime_document(_regular(args.runtime_document)))
         registered = validate_registered_evidence_root(config['evidence_root'], config['evidence_root'],
                                                       registration=workload.root_registration)
         paths = make_campaign_paths(registered, args.run_id)
@@ -247,7 +253,7 @@ def main(argv=None, *, edges=None) -> int:
             runtime_config=resolved['runtime_config'], collection_config=resolved['collection_config'],
             campaign_config=resolved['campaign_config'], root=run, qualification=bool(args.qualification or spot_check),
             spot_check=spot_check, qualification_report=report, worker_count=args.worker_count,
-            instance_launcher=args.instance_launcher)
+            instance_launcher=args.instance_launcher, runtime_document=runtime_document)
         spec = prepare_collection_operation(arguments, services=services,
                                             contact_policy_fingerprint=binding['contact_policy_fingerprint'])
         parallel_runtime = collection_parallel_runtime(resolved['collection_config'])
@@ -268,7 +274,8 @@ def main(argv=None, *, edges=None) -> int:
             approved_disk_floor_bytes=binding['disk_floor_bytes'], docker_runner=edges.docker_runner,
             service_query=edges.service_query, namespace_reader=edges.namespace_reader,
             control_factory=edges.control_factory, instance_launcher=args.instance_launcher,
-            native=_native_edges(edges, args), admit_processor_slots=workload.admit_processor_slots)
+            native=_native_edges(edges, args), admit_processor_slots=workload.admit_processor_slots,
+            runtime_document=runtime_document, stop_after_phase1=args.stop_after_phase1)
     except Exception as error:  # noqa: BLE001 - admitted but not built: nothing was launched, so ask admission to settle
         return _settle_unbuilt(workload, context, run, error)
     cleanup = []
@@ -297,6 +304,8 @@ def main(argv=None, *, edges=None) -> int:
     retry = result.get('retry')
     if retry is not None:
         summary.update(retry_rounds=retry['rounds_run'], recovered=retry['recovered'])
+    if result.get('stop'):
+        summary['stop'] = result['stop']
     task_faults = result.get('task_faults')
     if task_faults:
         summary['task_faults'] = task_faults

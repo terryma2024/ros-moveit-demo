@@ -323,3 +323,31 @@ def test_the_health_and_disk_monitor_keeps_running_through_phase_two(tmp_path, m
         asyncio.run(run())
     finally:
         phase.world.registry.close()
+
+
+def test_stop_after_phase1_leaves_the_run_for_the_later_stages(tmp_path, monkeypatch):
+    import hashlib
+    from so101_demo.runtime.container_campaign import stage_records
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=8)
+    phase.owner.stop_after_phase1 = True
+
+    async def run():
+        result = await phase.owner.run(phase.world.manifest)
+        await phase.owner.close()
+        return result
+    try:
+        result = asyncio.run(run())
+    finally:
+        phase.world.registry.close()
+    host = phase.owner.root / 'host'
+    assert result['processing'] == 'PENDING' and result['stop'] == 'PHASE1_ONLY'
+    assert phase.scheduler.calls == [] and phase.order.count('syncfs') == 1       # phase 1 is durable, phase 2 never started
+    assert not (host / 'processing-result.json').exists() and not (host / 'campaign-result.json').exists()
+    assert not (phase.owner.root / 'collection-index.json').exists()
+    record = stage_records.read_record(host, stage_records.PHASE1)
+    assert record['previous'] is None and record['scene_count'] == 8 and record['qualification'] is False
+    assert record['phase1_result_sha256'] == hashlib.sha256((host / 'phase1-result.json').read_bytes()).hexdigest()
+    assert record['durability_sha256'] == hashlib.sha256((host / 'phase1-durability.json').read_bytes()).hexdigest()
+    assert record['campaign_config'] == dict(path=phase.owner.context.campaign_config_path,
+                                             sha256=phase.owner.context.campaign_config_sha256)
+    assert stage_records.require_previous(host, stage_records.PHASE2, logic=record['campaign_config'])['sha256'] == record['sha256']

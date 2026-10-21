@@ -204,6 +204,29 @@ def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_an
             ports.initial_gate(_lease(), reset)
 
 
+def test_initial_gate_reads_evidence_through_the_retained_reader_only_when_the_task_has_one(monkeypatch):
+    from so101_demo.runtime.parallel_ros_ports import point_gate
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    seen = []
+
+    def observe(boundary, **kwargs):
+        seen.append(kwargs)
+        raise RuntimeError("stop after the call")
+
+    monkeypatch.setattr(point_gate, "observe_parallel_initial_gate", observe)
+    reader = lambda session, timeout_s=5.0: None
+    for dependencies, expected in (({"retained_evidence": reader}, {"read_evidence": reader}), ({}, {})):
+        ports = ParallelRosRuntimePorts.for_test(
+            resources=SimpleNamespace(session_id="session-1"),
+            catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}}, observe_initial=None)
+        ports.dependencies.pop("observe_initial")   # the production path: `observe_parallel_initial_gate`
+        ports.dependencies.update(dependencies)
+        with pytest.raises(RuntimeError, match="stop after the call"):
+            ports.initial_gate(_lease(), SimpleNamespace(reset_epoch="reset-2"))
+        assert seen.pop() == {"teacher_profile": False, **expected}
+
+
 def test_initial_gate_rejection_names_every_failed_predicate_in_fixed_order():
     from so101_demo.runtime.parallel_ros_ports.observations import (
         InitialGateObservation,

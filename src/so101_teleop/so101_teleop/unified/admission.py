@@ -241,13 +241,30 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
     plane with its run contract, the formal plane with the qualification report's contract."""
     identity = {name: payload[name] for name in ('source_sha256', 'runtime_config_sha256',
                                                  'collection_config_sha256', 'contact_policy_fingerprint')}
-    identity.update(gpu_uuid=campaign_config['gpu_uuid'], image_source_install=dict(
+    identity.update(image_source_install=dict(
         inference=campaign_config['teacher_service']['image'], shard=campaign_config['shard_image']))
+    if campaign_config.get('schema_version', 1) == 1:
+        # identity version 1 carries the GPU; version 2 (campaign config version 2) has it as the environment of the run
+        identity['gpu_uuid'] = campaign_config['gpu_uuid']
     if 'rig_profile_sha256' in campaign_config:
         # the camera rig is part of the controlled identity when the campaign names one; a config written before rig profiles
         # existed names none and its identity is the six keys it always had (rig v1)
         identity['rig_profile_sha256'] = campaign_config['rig_profile_sha256']
     return identity
+
+
+def _check_envelope(qualified: dict, campaign_config: dict) -> None:
+    """A formal run may not load the system harder than its qualification did (identity version 2). Absent means unlimited: the
+    cap and the in-flight count are bounded by the 8 slots, the gap by 0."""
+    def effective(source, name, unlimited):
+        value = source.get(name)
+        return unlimited if value is None else value
+    for name, unlimited, code, more_is_heavier in (
+            ('max_concurrent_recordings', 8, 'RECORDINGS', True), ('max_tasks_in_flight', 8, 'IN_FLIGHT', True),
+            ('min_assignment_gap_s', 0, 'GAP', False)):
+        formal, allowed = effective(campaign_config, name, unlimited), effective(qualified, name, unlimited)
+        if (formal > allowed) if more_is_heavier else (formal < allowed):
+            raise ValueError('EIGHT_WORKER_QUALIFICATION_ENVELOPE_EXCEEDED:' + code)
 
 
 _ACT_START_KINDS = frozenset({"pick_place_validation_phase", "pick_place_validation_full", "act_collection_start"})
@@ -540,6 +557,12 @@ class UnifiedWorkloadService:
                     expected_identity=_collection_identity(payload, campaign_config))
             except (OSError, KeyError, TypeError, ValueError) as error:
                 raise ValueError('EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID') from error
+            if campaign_config['schema_version'] == 2 and proof.get('environment') != dict(
+                    gpu_uuid=campaign_config['gpu_uuid'], gpu_model=campaign_config.get('gpu_model')):
+                # identity version 2 leaves the GPU out of the identity: a formal run is admitted only on the GPU its qualification ran on
+                raise ValueError('EIGHT_WORKER_QUALIFICATION_ENVIRONMENT_MISMATCH')
+            if campaign_config.get('schema_version', 1) == 2:
+                _check_envelope(proof['envelope'], campaign_config)
             if (proof.get('status') != 'PASS' or proof['report_sha256'] != digest
                     or proof['formal_split_manifest_sha256'] != payload['manifest_sha256']):
                 raise ValueError('EIGHT_WORKER_QUALIFICATION_MISMATCH')
@@ -617,6 +640,7 @@ class UnifiedWorkloadService:
                 if (spec.kind == 'act_collection_start'
                         and spec.execution_generation != store.execution_generation(Domain.VALIDATION)+1):
                     raise ValueError('ACT_CONTAINER_GENERATION_STALE')
+                self._check_campaign_admission_order(store, spec, payload)
             # Reserve the complete child map before taking either durable resource.
             # Another registry user cannot create a collision between validation and
             # persistence, and a failed database/lease step rolls this map back.
@@ -671,6 +695,39 @@ class UnifiedWorkloadService:
                     self.gpu_arbiter.release(lease)
                     raise
                 return context
+
+    def _check_campaign_admission_order(self, store, spec, payload) -> None:
+        """One campaign id has exactly one FIRST admission; a later stage continues that run or is refused.
+
+        The first admission (phase 1, or a run in one piece; command id `collection-<id>`) is refused when the campaign id
+        already has a context (`CAMPAIGN_FIRST_ADMISSION_REPEATED`). A later stage (`collection-<id>-<stage>`, container
+        collection only) needs the first admission (`STAGE_FIRST_ADMISSION_MISSING`), the same run root and the same logic
+        document (`STAGE_RUN_ROOT_MISMATCH`), and the stage records of the run as that stage needs them (`STAGE_*` codes)."""
+        campaign_id = payload['campaign_id']
+        stage = None
+        if spec.kind == 'act_collection_start':
+            prefix = 'collection-' + campaign_id + '-'
+            if spec.command_id.startswith(prefix):
+                stage = spec.command_id[len(prefix):]
+                if re.fullmatch(r'phase2|retry-[1-9][0-9]*|finalize', stage) is None:
+                    raise ValueError('STAGE_NAME_INVALID')
+        rows = store._query_all("SELECT context_json FROM act_campaign_contexts WHERE campaign_id=?", (campaign_id,))
+        if stage is None:
+            if rows:
+                raise ValueError('CAMPAIGN_FIRST_ADMISSION_REPEATED')
+            return
+        if not rows:
+            raise ValueError('STAGE_FIRST_ADMISSION_MISSING')
+        for row in rows:
+            earlier = json.loads(row[0])
+            if (earlier.get('evidence_root') != str(Path(payload['evidence_root']))
+                    or earlier.get('registered_evidence_root') != payload.get('registered_evidence_root')
+                    or earlier.get('campaign_config_sha256') != payload.get('campaign_config_sha256')
+                    or earlier.get('workload_kind') != spec.kind):
+                raise ValueError('STAGE_RUN_ROOT_MISMATCH')
+        from so101_demo.runtime.container_campaign import stage_records
+        stage_records.check_before_admission(Path(payload['evidence_root']) / 'host', stage,
+                                             logic=dict(sha256=payload.get('campaign_config_sha256')))
 
     def admit_processor_slots(self, context: AdmittedCampaignContext, slots):
         """Reserve the phase-2 processor slots `(campaign, pNN, generation)` of an admitted container campaign.

@@ -110,6 +110,27 @@ def make_campaign_paths(root, run_id):
     return paths
 
 
+def existing_campaign_paths(root, run_id):
+    """The paths of a run that already exists (a later stage of a run collected stage by stage): the layout marker must be this
+    root's and this user's, and every directory `make_campaign_paths` made must still be there. Nothing is created."""
+    root = _path(root, directory=True)
+    if type(run_id) is not str or re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", run_id) is None:
+        raise ValueError("CAMPAIGN_RUN_ID_INVALID")
+    run = root / run_id
+    try:
+        if run.is_symlink() or _layout(run / "services" / "teacher") != run:
+            raise ValueError("layout")
+        paths = {"run": run, "host": run / "host", "measurement": run / "measurement",
+                 "live": run / "live", "services": {role: run / "services" / role for role in ("head", "teacher")},
+                 "socket_roots": {role: run / "ipc" / role for role in ("head", "teacher")}}
+        for path in (paths["host"], paths["measurement"], paths["live"], *paths["services"].values(),
+                     *paths["socket_roots"].values()):
+            _path(path, directory=True)
+    except (OSError, ValueError, KeyError) as error:
+        raise ValueError("CAMPAIGN_RUN_MISSING") from error
+    return paths
+
+
 def _layout(owned_root):
     for run in owned_root.parents:
         marker = run / ".campaign-layout.json"

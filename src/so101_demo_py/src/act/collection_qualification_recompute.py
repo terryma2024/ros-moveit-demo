@@ -184,12 +184,35 @@ class _Run:
         self.reasons = set()
         self.records = ()
         self.config = None
+        self.spec_gpus = set()
         self.processors = {}
         self.combined = None
         self.two_phase = False
 
     def mismatch(self, key):
         self.reasons.add('IDENTITY_MISMATCH:'+key)
+
+    def gpu(self):
+        """The GPU every original must name: the contract's (identity version 1) or the campaign config's (version 2, where the GPU
+        is the environment and the report records it)."""
+        if 'gpu_uuid' in self.identity:
+            return self.identity['gpu_uuid']
+        return None if self.config is None else self.config['gpu_uuid']
+
+    def envelope(self):
+        """Identity version 2: the load the campaign config allowed during the qualification (None = no such limit), which a formal
+        run may not exceed."""
+        if 'gpu_uuid' in self.identity:
+            return None
+        config = self.config or {}
+        return dict(max_concurrent_recordings=config.get('max_concurrent_recordings'),
+                    max_tasks_in_flight=config.get('max_tasks_in_flight'), min_assignment_gap_s=config.get('min_assignment_gap_s'))
+
+    def environment(self):
+        if 'gpu_uuid' in self.identity:
+            return None
+        config = self.config or {}
+        return dict(gpu_uuid=config.get('gpu_uuid'), gpu_model=config.get('gpu_model'))
 
     # ---- plan and rules ------------------------------------------------------------------------------------------------
 
@@ -272,8 +295,11 @@ class _Run:
                     for key in _SPEC_IDENTITY[1:]:
                         if business[key] != self.identity[key]:
                             self.mismatch(key)
-                    if spec['gpu_uuid'] != self.identity['gpu_uuid']:
-                        self.mismatch('gpu_uuid')
+                    if 'gpu_uuid' in self.identity:
+                        if spec['gpu_uuid'] != self.identity['gpu_uuid']:
+                            self.mismatch('gpu_uuid')
+                    else:
+                        self.spec_gpus.add(spec['gpu_uuid'])
                     self.spec[wave, worker] = spec
                 except _RUN_ERRORS:
                     self.reasons.add('SHARD_SPEC_INVALID:'+label)
@@ -295,7 +321,7 @@ class _Run:
             self.mismatch('campaign_contract')
         if config['evidence_root'] != self.layout['root']:
             self.mismatch('evidence_root')
-        if config['gpu_uuid'] != self.identity['gpu_uuid']:
+        if config['gpu_uuid'] != self.gpu() or any(value != config['gpu_uuid'] for value in self.spec_gpus):
             self.mismatch('gpu_uuid')
         if config['teacher_service']['image'] != images['inference'] or config['shard_image'] != images['shard']:
             self.mismatch('image_source_install')
@@ -315,7 +341,7 @@ class _Run:
             if (ready['image_digest'] != images['inference']['digest']
                     or ready['package_source_sha256'] != images['inference']['package_source_sha256']):
                 self.mismatch('image_source_install')
-            if ready['gpu_uuid'] != self.identity['gpu_uuid']:
+            if ready['gpu_uuid'] != self.gpu():
                 self.mismatch('gpu_uuid')
             if (ready['service_config_sha256'] != sha256(canonical_json(service))
                     or (self.config is not None and service != self.config['teacher_service'])):
@@ -593,8 +619,12 @@ def recompute(run_root, contract_path, *, readback_workers=None, readback_timeou
     except _RUN_ERRORS:
         logs = []
     reasons = sorted(state.reasons)
-    return dict(schema_version=1, kind=KIND, status='NOT_QUALIFIED' if reasons else 'QUALIFIED',
+    report = dict(schema_version=1, kind=KIND, status='NOT_QUALIFIED' if reasons else 'QUALIFIED',
         qualification_run_id=contract['qualification_run_id'], worker_count=8,
         controlled_identity=json.loads(canonical_json(contract['controlled_identity'])),
         contract=dict(path=str(Path(contract_path)), sha256=state.contract_sha), campaign_index=state.campaign_index,
         waves=state.wave_refs, quality=quality, resource_logs=logs, reasons=reasons)
+    if state.environment() is not None:
+        report['environment'] = state.environment()                # identity version 2: the GPU this host qualified on
+        report['envelope'] = state.envelope()                      # and the load it qualified under
+    return report

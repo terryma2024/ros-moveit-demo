@@ -1,0 +1,8 @@
+# Paths left out of the image content identity: <glob> | <reason> | <date added>
+# Each entry stays only if the same-host determinism test proves the path varies between builds.
+# A glob may not match inside /act, /opt/ros, /usr/lib, /usr/bin or /act/venv (image_content_manifest.py refuses it).
+/var/log/** | apt and dpkg logs may vary between builds | 2026-10-21
+/var/cache/** | package caches may vary between builds | 2026-10-21
+/var/lib/apt/lists/** | the apt index may vary between builds; the installed set is checked through /var/lib/dpkg/status | 2026-10-21
+/tmp/** | temporary files may vary between builds | 2026-10-21
+/root/.cache/** | user caches may vary between builds | 2026-10-21

@@ -133,6 +133,26 @@ def write_case_scopes(run, *, inputs_manifest, plane='formal'):
     return cases
 
 
+def read_case_scopes(run, *, inputs_manifest, plane='formal'):
+    """The case-input mapping of a run whose scopes were written by `write_case_scopes`: the same mapping, read back.
+
+    Every row of the bound scene list needs its scope file, valid for the frozen set; nothing is written."""
+    from so101_demo.act.collection_scope import read_collection_scope
+
+    mode, mode_code, _ = _plane(plane)
+    run = _run_root(run)
+    path, frozen = _frozen(run, inputs_manifest)
+    if frozen['mode'] != mode or 'scene_manifest' not in frozen:
+        raise ValueError(mode_code)
+    cases = {}
+    for row in frozen_scene_rows(frozen, path):
+        target = run / INPUTS_DIRECTORY / SCOPES_DIRECTORY / (row['scene_id'] + '.json')
+        scope = read_collection_scope(target, expected_inputs_sha256=frozen['inputs_sha256'], expected_mode=mode)
+        require_scope_for_inputs(scope, frozen, path)
+        cases[row['scene_id']] = dict(scope=_ref(target), inputs_manifest=dict(inputs_manifest))
+    return cases
+
+
 def campaign_binding(inputs_manifest, *, campaign_config, collection_config_sha256, scene_manifest_sha256, plane='formal'):
     """The values the campaign takes from the frozen set; refuses a set that is not this campaign's.
 

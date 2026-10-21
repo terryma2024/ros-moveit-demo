@@ -141,7 +141,7 @@ def test_shard_composition_gives_tasks_a_fresh_probe_per_call_and_keeps_the_star
         ros_domain_id=181,environment={'GZ_PARTITION':'session1'})
     ready,ready_check,stack=program().compose_stack(launch,observer)
     assert stack.ready_probe is ready and ready_check is not ready
-    assert type(ready_check) is RepeatableActStackReadyProbe
+    assert isinstance(ready_check,RepeatableActStackReadyProbe)   # the kept check: a kept session inside an instance, this probe otherwise
     assert ready_check.launch is launch and ready_check.executable==observer
     now=1_000_000_000_000
     document=json.dumps(dict(schema_version=1,session_id='session1',ros_domain_id=181,captured_monotonic_ns=now-10**9,

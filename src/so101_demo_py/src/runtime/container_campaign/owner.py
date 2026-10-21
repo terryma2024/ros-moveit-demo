@@ -16,10 +16,15 @@ from so101_demo.act.parallel_collection import plan_campaign_waves
 from so101_demo.act.parallel_collection_contracts import (
     read_document,scene_ids,validate_run_contract,
 )
+from so101_demo.runtime.container_campaign import stage_records
 from so101_demo.runtime.container_campaign.durability import sync_filesystem
 from so101_demo.runtime.container_campaign.processing_limits import (
-    check_phase_limits,phase1_deadline_s,phase2_deadline_s,retry_invalid_max_rounds,retry_round_plan,
+    check_phase_limits,effective_limits,phase1_deadline_s,phase2_deadline_s,retry_invalid_max_rounds,retry_round_plan,
 )
+from so101_demo.runtime.inference.config import RUNTIME_DOCUMENT_KEYS
+
+#: what a later stage's admission must equal in the phase-1 record: the inputs the run was admitted on
+STAGE_INPUTS=('source_sha256','manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint')
 from so101_demo.runtime.container_campaign.resource_log import (
     append_resource_log,check_disk_dispatch_guard,read_disk_free_bytes,
 )
@@ -40,12 +45,12 @@ class ContainerCampaignOwner:
     def __init__(self,*,admitted_context,config,root,service_owner,slots,manifest_path,
                  qualification,launcher,coordinator,verifier,monotonic_ns=time.monotonic_ns,
                  approved_disk_floor_bytes=0,disk_reader=read_disk_free_bytes,syncfs=sync_filesystem,processing=None,
-                 campaign_total_s=None):
+                 campaign_total_s=None,runtime_document=None,stop_after_phase1=False):
         root=Path(root)
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind!='act_collection_start'
                 or type(service_owner) is not ContainerServiceOwner or service_owner.context!=admitted_context
-                or service_owner.roles!=('teacher',) or service_owner.registry.records()
+                or service_owner.roles!=('teacher',) or (service_owner.stage is None and service_owner.registry.records())
                 or root.resolve(strict=True)!=root or str(root)!=admitted_context.evidence_root
                 or service_owner.paths['run']!=root or type(qualification) is not bool
                 or type(slots) is not tuple or len(slots)!=admitted_context.worker_count
@@ -65,6 +70,11 @@ class ContainerCampaignOwner:
         if hashlib.sha256(serialized).hexdigest()!=admitted_context.domain_session_map_sha256:
             raise ValueError('CAMPAIGN_OWNER_SLOT_MISMATCH')
         self.context,self.config,self.root=admitted_context,config,root
+        #: the run's runtime document (or None): `limits` is the campaign config with it laid over, the one source of every time
+        #: limit and count below
+        self.runtime_document=runtime_document
+        #: stop once phase 1 is proven stopped and durable; phase 2, the retry rounds and the finalize are later stages (`stage_records`)
+        self.stop_after_phase1=stop_after_phase1
         self.services,self.registry,self.slots=service_owner,service_owner.registry,slots
         self.manifest_path=Path(manifest_path)
         self.qualification,self.launcher,self.coordinator,self.verifier=qualification,launcher,coordinator,verifier
@@ -147,41 +157,49 @@ class ContainerCampaignOwner:
             self.stop_dispatch('CAMPAIGN_RUN_INTERRUPTED')
             raise
 
+    @property
+    def limits(self):
+        return effective_limits(self.config,self.runtime_document)
+
+    def _scene_plan(self,manifest):
+        """`(plane, scene ids, worker ids)` of the run, from the admitted manifest; the same for every stage of a run."""
+        actual=read_document(self.manifest_path)
+        if (hashlib.sha256(self.manifest_path.read_bytes()).hexdigest()!=self.context.manifest_sha256
+                or actual!=manifest):
+            raise ValueError('CAMPAIGN_MANIFEST_CHANGED')
+        if self.qualification:
+            plane,contract=validate_run_contract(actual)
+            if contract['worker_count']!=self.context.worker_count:
+                raise ValueError('CAMPAIGN_MANIFEST_INVALID')
+            # the gate plane is exactly 40 scenes; a functional contract was already closed to 8 or 16
+            ids=scene_ids(contract['scene_manifest'],count=40 if plane=='gate' else None)
+        else:
+            plane=None
+            rows=actual.get('scenarios')
+            if type(rows) is not list or not rows or any(type(row) is not dict for row in rows):
+                raise ValueError('CAMPAIGN_MANIFEST_INVALID')
+            ids=tuple(row['scene_id'] for row in rows)
+        return plane,ids,tuple(slot.worker_id for slot in self.slots)
+
     async def _run(self,manifest):
         monitor=None
         try:
-            retry_max=retry_invalid_max_rounds(self.config)
+            retry_max=retry_invalid_max_rounds(self.limits)
             if retry_max and self.qualification:
                 raise ValueError('CAMPAIGN_RETRY_QUALIFICATION_FORBIDDEN')
             if retry_max and self.processing is None:
                 raise ValueError('CAMPAIGN_RETRY_REQUIRES_PROCESSING')
-            actual=read_document(self.manifest_path)
-            if (hashlib.sha256(self.manifest_path.read_bytes()).hexdigest()!=self.context.manifest_sha256
-                    or actual!=manifest):
-                raise ValueError('CAMPAIGN_MANIFEST_CHANGED')
-            if self.qualification:
-                plane,contract=validate_run_contract(actual)
-                if contract['worker_count']!=self.context.worker_count:
-                    raise ValueError('CAMPAIGN_MANIFEST_INVALID')
-                # the gate plane is exactly 40 scenes; a functional contract was already closed to 8 or 16
-                ids=scene_ids(contract['scene_manifest'],count=40 if plane=='gate' else None)
-            else:
-                plane=None
-                rows=actual.get('scenarios')
-                if type(rows) is not list or not rows or any(type(row) is not dict for row in rows):
-                    raise ValueError('CAMPAIGN_MANIFEST_INVALID')
-                ids=tuple(row['scene_id'] for row in rows)
+            plane,ids,worker_ids=self._scene_plan(manifest)
             # the coordinator writes its collection mode into every task document: a spot check is a diagnostic-mode run, every other
             # plane a formal one
             expected_mode='preselected_target_diagnostic' if plane=='spot_check' else 'formal'
             if getattr(self.coordinator,'collection_mode','formal')!=expected_mode:
                 raise ValueError('CAMPAIGN_COLLECTION_MODE_MISMATCH')
-            worker_ids=tuple(slot.worker_id for slot in self.slots)
             # The time limits are checked before anything is launched. The 1 s tolerance covers the nanosecond rounding of the
             # admitted deadline.
             context=self.context
-            check_phase_limits(self.config,context.deadline_monotonic_s-context.admitted_at_monotonic_s+1.)
-            self.phase1_deadline_s=phase1_deadline_s(self.config,admitted_s=context.admitted_at_monotonic_s,
+            check_phase_limits(self.limits,context.deadline_monotonic_s-context.admitted_at_monotonic_s+1.)
+            self.phase1_deadline_s=phase1_deadline_s(self.limits,admitted_s=context.admitted_at_monotonic_s,
                 total_deadline_s=context.deadline_monotonic_s)
             setter=getattr(self.coordinator,'set_phase1_deadline',None)
             if callable(setter):
@@ -192,8 +210,11 @@ class ContainerCampaignOwner:
                 total=round(context.deadline_monotonic_s-context.admitted_at_monotonic_s,3)
             append_resource_log(self.root/'host/resources.jsonl',monotonic_ns=self.clock(),
                 observed={'campaign_total_s':total,
-                          'campaign_total_source':'campaign config' if 'batch_hard_timeout_s' in self.config else 'runtime yaml'},
+                          'campaign_total_source':'campaign config' if 'batch_hard_timeout_s' in self.limits else 'runtime yaml'},
                 missing={})
+            # the runtime values this run used: recorded, never compared with another stage's
+            _write(self.root/'host/runtime-used.json',dict(schema_version=1,kind='act_collection_runtime_used',
+                values={name:self.limits[name] for name in RUNTIME_DOCUMENT_KEYS if name in self.limits}))
             self._disk_guard()
             _write(self.root/'campaign-index.json',dict(schema_version=1,kind='act_collection_campaign_index',
                 qualification=self.qualification,scene_count=len(ids),waves=plans))
@@ -211,6 +232,8 @@ class ContainerCampaignOwner:
                     campaign_id=self.context.campaign_id,stop_reason=self.stop_reason or PHASE1_DEADLINE_REASON,
                     phase1_deadline_s=self.phase1_deadline_s,recorded_scenes=len(recorded),missing_scenes=missing))
             await self._finish_phase1(ids,completed)
+            if self.stop_after_phase1:
+                return self._stop_after_phase1(ids,completed,missing)
             phase2=await self.start_phase_two(completed)
             result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed)
             task_faults=[item for wave in completed for item in wave.get('faults',())]
@@ -370,7 +393,7 @@ class ContainerCampaignOwner:
                           'finalizing_hard_timeout_s','worker_recovery_timeout_s')}
                 admitted=getattr(self.processing,'_admitted',None)
                 processors=len(admitted) if admitted else self.phase2['processors']
-                estimate=retry_round_plan(self.config,now_s=self.clock()/1e9,total_deadline_s=self.context.deadline_monotonic_s,
+                estimate=retry_round_plan(self.limits,now_s=self.clock()/1e9,total_deadline_s=self.context.deadline_monotonic_s,
                     scene_count=len(candidates),worker_count=len(worker_ids),processor_count=processors,observed=observed,runtime=runtime)
                 if not estimate['fits']:
                     reason=estimate['reason']
@@ -410,6 +433,226 @@ class ContainerCampaignOwner:
                    status='ABORTED' if aborted is not None else 'COMPLETE',reason=aborted,decisions=decisions)
         return combined,retry,rounds
 
+    def _stop_after_phase1(self,ids,completed,missing):
+        """Leave the run at the end of phase 1: the phase-1 result (processing PENDING) and the stage record that phase 2 continues from."""
+        result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed,processing='PENDING',
+                    stop='PHASE1_ONLY')
+        task_faults=[item for wave in completed for item in wave.get('faults',())]
+        if task_faults:
+            result['task_faults']=[dict(scene_id=item['scene_id'],reason=item['reason']) for item in task_faults]
+        if missing:
+            result['missing_evidence']=missing
+        _write(self.root/'host/phase1-result.json',result)
+        host=self.root/'host'
+        stage_records.write_record(host,stage_records.PHASE1,dict(
+            campaign_id=self.context.campaign_id,qualification=self.qualification,scene_count=len(ids),waves=len(completed),
+            campaign_config=dict(path=self.context.campaign_config_path,sha256=self.context.campaign_config_sha256),
+            inputs={name:getattr(self.context,name) for name in STAGE_INPUTS},worker_count=self.context.worker_count,
+            images=dict(head=self.config['head_service']['image'],teacher=self.config['teacher_service']['image'],
+                        shard=self.config['shard_image']),
+            observed=dict(wave_wall_s=list(self._wave_wall_s),sync_s=self._sync_s,next_wave_index=self._next_wave_index),
+            phase1_result_sha256=hashlib.sha256((host/'phase1-result.json').read_bytes()).hexdigest(),
+            durability_sha256=hashlib.sha256((host/'phase1-durability.json').read_bytes()).hexdigest()))
+        return result
+
+    # ---- the later stages of a run collected stage by stage (`act_process_parallel`) ---------------------------------------------
+
+    def _stage_begin(self,stage,*,after=None):
+        """The checks every later stage makes before it touches anything; returns `(previous record, phase-1 result)`.
+
+        The record chain, the logic document, the admitted inputs, the images and the plane must be the ones phase 1 left. `after` is the
+        record a stage continues from when that is not fixed by the stage name (the finalize). The runtime values this stage uses are
+        recorded beside its record and never compared with another stage's."""
+        host=self.root/'host'
+        if stage.startswith('retry-') and self.qualification:
+            raise ValueError('STAGE_RETRY_ON_QUALIFICATION_RUN')
+        logic=dict(path=self.context.campaign_config_path,sha256=self.context.campaign_config_sha256)
+        if after is None:
+            previous=stage_records.require_previous(host,stage,logic=logic)
+        else:
+            if stage_records.record_path(host,stage).exists():
+                raise ValueError('STAGE_ALREADY_COMPLETE')
+            previous=stage_records.verify_chain(host,after,logic=logic)
+        first=stage_records.read_record(host,stage_records.PHASE1)
+        if (first['qualification']!=self.qualification or first['worker_count']!=self.context.worker_count
+                or any(first['inputs'].get(name)!=getattr(self.context,name) for name in STAGE_INPUTS)):
+            raise ValueError('STAGE_INPUTS_CHANGED')
+        images=dict(head=self.config['head_service']['image'],teacher=self.config['teacher_service']['image'],
+                    shard=self.config['shard_image'])
+        if first['images']!=images:
+            raise ValueError('STAGE_IMAGES_CHANGED')
+        raw=(host/'phase1-result.json').read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=first['phase1_result_sha256']:
+            raise ValueError('STAGE_PREVIOUS_RECORD_INVALID')
+        _write(host/f'runtime-used-{stage}.json',dict(schema_version=1,kind='act_collection_runtime_used',stage=stage,
+            values={name:self.limits[name] for name in RUNTIME_DOCUMENT_KEYS if name in self.limits}))
+        return previous,json.loads(raw)
+
+    async def stage_phase2(self,manifest):
+        """Phase 2 over the recorded waves of phase 1: the processor scheduler, then the stage record."""
+        plane,ids,worker_ids=self._scene_plan(manifest)
+        if self.processing is None:
+            raise ValueError('STAGE_PROCESSING_UNAVAILABLE')
+        check_phase_limits(self.limits,self.context.deadline_monotonic_s-self.context.admitted_at_monotonic_s+1.)
+        previous,first=self._stage_begin(stage_records.PHASE2)
+        summary=await self.start_phase_two(first['waves'])
+        host=self.root/'host'
+        result_path=host/'processing-result.json'
+        stage_records.write_record(host,stage_records.PHASE2,dict(
+            campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],
+            processing_result_sha256=hashlib.sha256(result_path.read_bytes()).hexdigest() if result_path.exists() else None,
+            processors=None if summary is None else summary.get('processors'),
+            observed=previous['observed']),previous=previous)
+        return dict(campaign_id=self.context.campaign_id,stage=stage_records.PHASE2,processing='PENDING_FINALIZE',phase2=summary)
+
+    def _stage_rounds(self,ids,first,upto):
+        """The recording rounds of the run so far: round 0 from phase 1, then every retry round that ran."""
+        rounds=[dict(recording_round=0,scene_ids=list(ids),waves=first['waves'])]
+        for number in range(1,upto+1):
+            path=self.root/'host'/f'retry-{number}-waves.json'
+            if path.exists():
+                rounds.append(json.loads(path.read_bytes()))
+        return rounds
+
+    async def stage_retry(self,manifest,number):
+        """One retry round: record the INVALID scenes with a passing Teacher again, process them, write the stage record.
+
+        The decision (a round may be skipped for time, disk or lack of candidates) is the all-in-one run's, written to the same
+        `host/retry-round-N.json`; a skipped or aborted round ends the retries: the next one is refused."""
+        stage=stage_records.retry_stage(number)
+        if self.qualification:
+            raise ValueError('STAGE_RETRY_ON_QUALIFICATION_RUN')
+        plane,ids,worker_ids=self._scene_plan(manifest)
+        maximum=retry_invalid_max_rounds(self.limits)
+        if type(number) is not int or not 1<=number<=maximum:
+            raise ValueError('STAGE_RETRY_ROUNDS_EXCEEDED')
+        if self.processing is None:
+            raise ValueError('STAGE_PROCESSING_UNAVAILABLE')
+        check_phase_limits(self.limits,self.context.deadline_monotonic_s-self.context.admitted_at_monotonic_s+1.)
+        previous,first=self._stage_begin(stage)
+        if previous.get('status','RUN')!='RUN':
+            raise ValueError('STAGE_RETRY_ROUND_OUT_OF_ORDER')           # the round before this one did not run
+        host=self.root/'host'
+        observed=previous['observed']
+        self._wave_wall_s,self._sync_s,self._next_wave_index=list(observed['wave_wall_s']),observed['sync_s'],observed['next_wave_index']
+        if hasattr(self.launcher,'_next_wave'):
+            self.launcher._next_wave=self._next_wave_index           # wave numbers continue where the earlier stages stopped
+        self.phase2=json.loads((host/'processing-result.json').read_bytes())
+        rounds=self._stage_rounds(ids,first,number-1)
+        provisional=getattr(self.verifier,'verify_rounds_provisional',None)
+        combine=provisional or self.verifier.verify_rounds
+        combined=await asyncio.to_thread(combine,rounds,list(ids))
+        monitor=None
+        status,reason_text=None,None
+        try:
+            candidates=[item['scene_id'] for item in combined['scenes'] if retry_candidate(item['recording_attempts'][-1])]
+            plans=plan_campaign_waves(candidates,worker_ids,plane=None,first_wave_index=self._next_wave_index,
+                                      recording_round=number) if candidates else []
+            reason=None
+            estimate=None
+            stop_reason=self.stop_reason or getattr(self.coordinator,'stop_reason',None)
+            if not candidates:
+                reason='NO_CANDIDATES'
+            elif stop_reason not in (None,PHASE1_DEADLINE_REASON):
+                reason='DISPATCH_STOPPED:'+stop_reason
+            else:
+                runtime=self.coordinator.config
+                runtime={name:getattr(runtime,name) for name in ('initializing_hard_timeout_s','executing_hard_timeout_s',
+                          'finalizing_hard_timeout_s','worker_recovery_timeout_s')}
+                admitted=getattr(self.processing,'_admitted',None)
+                processors=len(admitted) if admitted else self.phase2['processors']
+                estimate=retry_round_plan(self.limits,now_s=self.clock()/1e9,total_deadline_s=self.context.deadline_monotonic_s,
+                    scene_count=len(candidates),worker_count=len(worker_ids),processor_count=processors,
+                    observed=self._retry_observations(),runtime=runtime)
+                if not estimate['fits']:
+                    reason=estimate['reason']
+                largest=max((item['phase1'].get('recording_bytes',0) for item in combined['scenes'] if item['phase1']),default=0)
+                if reason is None and self.disk_reader(self.root)<self.approved_disk_floor_bytes+len(candidates)*largest:
+                    reason='RETRY_ROUND_DISK'
+            decision=dict(recording_round=number,candidates=candidates,plans=plans,estimate=estimate,
+                          status='RUN' if reason is None else 'SKIPPED',reason=reason)
+            _write(host/f'retry-round-{number}.json',decision)
+            status,reason_text=decision['status'],reason
+            if reason is None:
+                recording=dict(recording_round=number,scene_ids=candidates,waves=[])
+                self._recorded_waves=[]
+                monitor=asyncio.create_task(self._monitor())
+                try:
+                    endpoints=await self.services.start()
+                    self._reopen_recording(estimate['recording_deadline_s'])
+                    recording['waves']=await self._record_waves(plans,endpoints)
+                    await self._finish_phase1(candidates,recording['waves'],round=number)
+                    await self.start_phase_two(recording['waves'],round=number)
+                except Exception as error:
+                    cleanup=await asyncio.gather(*(shard.close() for shard in self.shards),return_exceptions=True)
+                    if (any(not isinstance(value,dict) or value.get('terminated') is not True for value in cleanup)
+                            or 'STOP_UNCONFIRMED' in str(error) or 'STOP_UNPROVEN' in str(error)
+                            or await asyncio.to_thread(self.registry.role_terminated,'shard',self.services.inspect_container) is not True):
+                        raise ValueError('CAMPAIGN_RETRY_STOP_UNCONFIRMED') from error
+                    recording['waves']=getattr(self,'_recorded_waves',[])
+                    status,reason_text='ABORTED',str(error)+('' if error.__cause__ is None else ': '+repr(error.__cause__))
+                _write(host/f'retry-{number}-waves.json',recording)
+        finally:
+            if monitor is not None:
+                monitor.cancel()
+                await asyncio.gather(monitor,return_exceptions=True)
+        stage_records.write_record(host,stage,dict(
+            campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],status=status,reason=reason_text,
+            observed=dict(wave_wall_s=list(self._wave_wall_s),sync_s=self._sync_s,next_wave_index=self._next_wave_index)),
+            previous=previous)
+        return dict(campaign_id=self.context.campaign_id,stage=stage,status=status,reason=reason_text)
+
+    async def stage_finalize(self,manifest):
+        """The campaign result and the frozen index from the combined per-scene proof, as the all-in-one run writes them."""
+        plane,ids,worker_ids=self._scene_plan(manifest)
+        combine=getattr(self.verifier,'verify_processing',None)
+        if self.processing is None or not callable(combine):
+            raise ValueError('STAGE_PROCESSING_UNAVAILABLE')
+        host=self.root/'host'
+        last=stage_records.last_completed(host)
+        if last is None or last['stage']==stage_records.PHASE1:
+            raise ValueError('STAGE_PREVIOUS_RECORD_MISSING')
+        previous,first=self._stage_begin(stage_records.FINALIZE,after=last)
+        completed=first['waves']
+        result=dict(campaign_id=self.context.campaign_id,scene_count=len(ids),waves=completed)
+        task_faults=[item for wave in completed for item in wave.get('faults',())]
+        if task_faults:
+            result['task_faults']=[dict(scene_id=item['scene_id'],reason=item['reason']) for item in task_faults]
+        retried=[stage_records.read_record(host,stage_records.retry_stage(number)) for number in range(1,stage_records.MAX_RETRY_ROUNDS+1)
+                 if stage_records.record_path(host,stage_records.retry_stage(number)).exists()]
+        if retried:
+            rounds=self._stage_rounds(ids,first,len(retried))
+            provisional=getattr(self.verifier,'verify_rounds_provisional',None)
+            first_pass=await asyncio.to_thread(provisional or self.verifier.verify_rounds,rounds[:1],list(ids))
+            initially_invalid={item['scene_id'] for item in first_pass['scenes'] if retry_candidate(item)}
+            combined=await asyncio.to_thread(self.verifier.verify_rounds,rounds,list(ids))
+            aborted=next((item['reason'] for item in retried if item['status']=='ABORTED'),None)
+            decisions=[json.loads((host/f'retry-round-{number}.json').read_bytes()) for number in range(1,len(retried)+1)]
+            recovered=sum(item['scene_id'] in initially_invalid and item['verdict']['export_eligible'] is True
+                          for item in combined['scenes'])
+            retry=dict(max_rounds=retry_invalid_max_rounds(self.limits),rounds_run=len(rounds)-1,recovered=recovered,
+                       status='ABORTED' if aborted is not None else 'COMPLETE',reason=aborted,decisions=decisions)
+            combined['retry']=retry
+            result['retry']=retry
+            result['waves']=[wave for recording in rounds for wave in recording['waves']]
+            result.pop('task_faults',None)
+        else:
+            combined=await asyncio.to_thread(combine,completed,list(ids))
+        known={item['scene_id'] for item in result.get('task_faults',())}
+        unfinished=[dict(scene_id=item['scene_id'],reason=item.get('reason') or item['state'])
+                    for item in combined['scenes'] if item['state'] in ('FAULT','MISSING') and item['scene_id'] not in known]
+        if unfinished:
+            result['task_faults']=[*result.get('task_faults',()),*unfinished]
+        _write(host/'campaign-result.json',build_campaign_result(self.context.campaign_id,len(ids),combined))
+        _write(self.root/'collection-index.json',build_frozen_index(campaign_id=self.context.campaign_id,
+            qualification=self.qualification,scene_count=len(ids),combined=combined))
+        result['processing']='COMPLETE'
+        stage_records.write_record(host,stage_records.FINALIZE,dict(
+            campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],
+            campaign_result_sha256=hashlib.sha256((host/'campaign-result.json').read_bytes()).hexdigest(),
+            collection_index_sha256=hashlib.sha256((self.root/'collection-index.json').read_bytes()).hexdigest()),previous=last)
+        return result
+
     async def _finish_phase1(self,ids,completed,*,round=0):
         """After the last phase-1 wave is verified: prove every shard stopped, then make the run root durable with one syncfs.
 
@@ -445,7 +688,7 @@ class ContainerCampaignOwner:
         if not rows:
             return None
         started=self.clock()/1e9
-        deadline=phase2_deadline_s(self.config,phase2_start_s=started,total_deadline_s=self.context.deadline_monotonic_s)
+        deadline=phase2_deadline_s(self.limits,phase2_start_s=started,total_deadline_s=self.context.deadline_monotonic_s)
         host=self.root/'host' if round==0 else self.root/'host'/f'retry-{round}'
         options={} if round==0 else dict(round=round,host_dir=host)
         summary=await self.processing.run(rows,deadline_s=deadline,**options)
@@ -481,5 +724,7 @@ class ContainerCampaignOwner:
         if processors:
             result['processors']=[value if type(value) is dict else dict(error_type=type(value).__name__,reason=str(value))
                                   for value in processors]
-        _write(self.root/'host/campaign-cleanup.json',result)
+        # a later stage keeps its own cleanup record beside the first process's (written once, never replaced)
+        stage=getattr(self.services,'stage',None)
+        _write(self.root/'host'/('campaign-cleanup.json' if stage is None else f'campaign-cleanup-{stage}.json'),result)
         return result

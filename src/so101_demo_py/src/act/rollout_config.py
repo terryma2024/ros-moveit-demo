@@ -6,6 +6,8 @@ and the Recorder read (`load_teacher_frozen_inputs`): nothing is defaulted here.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import yaml
@@ -101,3 +103,24 @@ def rollout_settings(frozen: dict, config: dict) -> RolloutSettings:
         stop_wait_s=execution["arm_stop_wait_s"],
         ready_wait_s=config["session_ready_wait_s"],
         joint_limit_clamp_tolerance_rad=config.get("joint_limit_clamp_tolerance_rad"))
+
+
+#: `control` (the lead and accept bounds) decides whether a reply is late, so it is the outcome-risk class: recorded, never bound.
+#: Every other key of the file is logic.
+OUTCOME_RISK_KEYS = ("control",)
+
+
+def logic_document(config: dict) -> dict:
+    """The parsed logic keys of a loaded rollout config: what the run identity binds (comments and the order of the file do
+    not matter, and the outcome-risk keys are not in it)."""
+    return {key: value for key, value in config.items() if key not in OUTCOME_RISK_KEYS}
+
+
+def logic_sha256(config: dict) -> str:
+    return hashlib.sha256(json.dumps(logic_document(config), sort_keys=True, separators=(",", ":"),
+                                     allow_nan=False).encode()).hexdigest()
+
+
+def runtime_values(config: dict) -> dict:
+    """The outcome-risk values the run used: recorded for audit, never compared."""
+    return {key: config[key] for key in OUTCOME_RISK_KEYS}

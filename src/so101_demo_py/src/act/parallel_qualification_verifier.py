@@ -77,7 +77,10 @@ def _qualification_run(report_path, registered_root) -> Path:
 def _closed_report(document):
     from .collection_qualification_recompute import KIND
 
-    if (type(document) is not dict or set(document) != _REPORT_KEYS or document["kind"] != KIND
+    if (type(document) is not dict or set(document) - {"environment", "envelope"} != _REPORT_KEYS or document["kind"] != KIND
+            or ("environment" in document) != ("envelope" in document)
+            or ("environment" in document) != (type(document.get("controlled_identity")) is dict
+                                               and "gpu_uuid" not in document["controlled_identity"])
             or type(document["schema_version"]) is not int or document["schema_version"] != 1
             or document["status"] not in ("QUALIFIED", "NOT_QUALIFIED")
             or type(document["worker_count"]) is not int or document["worker_count"] != 8
@@ -122,10 +125,14 @@ def verify_collection_qualification(report_path, *, registered_root, expected_id
         raise ValueError("COLLECTION_QUALIFICATION_RECOMPUTE_MISMATCH")
     if expected_identity is not None and recomputed["controlled_identity"] != expected_identity:
         raise ValueError("COLLECTION_QUALIFICATION_IDENTITY_MISMATCH")
-    return dict(kind="ACT_COLLECTION_QUALIFICATION_READBACK", schema_version=1, status="PASS",
+    proof = dict(kind="ACT_COLLECTION_QUALIFICATION_READBACK", schema_version=1, status="PASS",
                 report_sha256=hashlib.sha256(raw).hexdigest(), qualification_run_id=recomputed["qualification_run_id"],
                 run_root=str(run), controlled_identity=recomputed["controlled_identity"],
                 contract_sha256=recomputed["contract"]["sha256"],
                 scene_manifest_sha256=contract["scene_manifest"]["sha256"],
                 functional_manifest_sha256=contract["functional_manifest"]["sha256"],
                 formal_split_manifest_sha256=contract["formal_split_manifest"]["sha256"], task_count=40)
+    if "environment" in recomputed:
+        proof["environment"] = recomputed["environment"]            # identity version 2 only
+        proof["envelope"] = recomputed["envelope"]
+    return proof

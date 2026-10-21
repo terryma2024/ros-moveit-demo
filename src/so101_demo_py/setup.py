@@ -134,6 +134,8 @@ setup(
             "act_boundary_update = so101_demo.cli.act_boundary_update:main",
             "act_scene_sample = so101_demo.cli.act_scene_sample:main",
             "act_collect_parallel = so101_demo.cli.act_collect_parallel:main",
+            "act_process_parallel = so101_demo.cli.act_process_parallel:main",
+            "act_merge_collections = so101_demo.cli.act_merge_collections:main",
             "act_contact_spot_check = so101_demo.cli.act_contact_spot_check:main",
             "act_build_parallel_qualification_report = "
             "so101_demo.cli.act_build_parallel_qualification_report:main",

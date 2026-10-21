@@ -41,3 +41,10 @@ def test_identity_names_the_rig_profile_only_when_the_config_does(tmp_path):
     config = campaign_fixture(tmp_path)
     assert "rig_profile_sha256" not in _collection_identity(PAYLOAD, config)
     assert _collection_identity(PAYLOAD, config | dict(rig_profile_sha256="5" * 64))["rig_profile_sha256"] == "5" * 64
+
+
+def test_a_version_2_config_has_the_identity_without_the_gpu(tmp_path):
+    config = campaign_fixture(tmp_path) | {"schema_version": 2}
+    identity = _collection_identity(PAYLOAD, config)
+    assert set(identity) == {*PAYLOAD, "image_source_install"}
+    assert _collection_identity(PAYLOAD, config | {"gpu_uuid": "GPU-other"}) == identity      # another GPU, the same identity

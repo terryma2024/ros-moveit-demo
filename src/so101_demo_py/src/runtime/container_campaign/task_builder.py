@@ -282,6 +282,12 @@ def _current_evidence(session_id):
     return current_evidence(session_id)
 
 
+def _retained_evidence(session_id):
+    """The task's evidence reader: one ROS node and pause client kept for all its reads (see `RetainedEvidence`)."""
+    from so101_demo.backends.mujoco.teleop_runtime import RetainedEvidence
+    return RetainedEvidence(session_id)
+
+
 def _check_stack(stack,spec,root,output_root):
     try:
         outside=not Path(output_root).resolve().is_relative_to(root/'stack')
@@ -349,7 +355,7 @@ class CollectionTaskExecution:
     `run` is called on one thread, `request_stop` and `shutdown_owned` from others. Every fault carries the first cause."""
 
     def __init__(self,*,task_input,state,artifacts,resources,ports,teacher,runtime,workload,task,stack,clock,
-                 teacher_bound_s=None,recovery_timeout_s=None):
+                 teacher_bound_s=None,recovery_timeout_s=None,evidence_reader=None):
         self.task_input,self.state,self.artifacts,self.resources = task_input,state,artifacts,resources
         self.ports,self.teacher,self.runtime,self.workload = ports,teacher,runtime,workload
         self.task,self.stack,self.clock = task,stack,clock
@@ -367,6 +373,7 @@ class CollectionTaskExecution:
         self._deadline_hit=False
         self._shutdown_lock=threading.Lock()
         self._shutdown_result=None
+        self._evidence_reader=evidence_reader
     # ---- causes, guards and boundaries -------------------------------------------------------------------------------------
 
     def _note(self,code):
@@ -606,6 +613,12 @@ class CollectionTaskExecution:
                 proven=self._shutdown() is True
             except BaseException:
                 proven=False
+            close=getattr(self._evidence_reader,'close',None)
+            if callable(close):
+                try:
+                    close()   # the reader's own ROS context; a fact about this task's cleanup only if it fails to close
+                except BaseException:
+                    pass
             if proven:
                 self._shutdown_result=True
             return proven
@@ -712,10 +725,12 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
     artifacts=CollectionCaseArtifacts(worker_id=shard_spec['worker_id'],launch_generation=shard_spec['launch_generation'],
         worker_root=Path(output_root),case_inputs={scene:loaded.refs},clock=clock,task_id=task.task_id)
     resources=task_resources(shard_spec,task_root=artifacts.root)
+    reader=evidence or _retained_evidence(resources.session_id)
     ports=ActRosRuntimePorts(resources,catalog={scene:loaded.row},config=loaded.config,mode=RunMode.EXECUTE,
         broker_generation=resources.generation,dependencies=dict(act_profile=True,rig=loaded.rig,
             workspace_provider=artifacts.workspace,authorize=local_authorize(state),
             teacher_execution_policy=loaded.teacher_policy,
+            **({} if evidence else dict(retained_evidence=reader)),
             ready_probe=lambda requirements:_stack_ready(ports,ready_check))|dict(dependencies or {}))
     settings=loaded.campaign['teacher_service']
     model=settings['model']
@@ -725,7 +740,7 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
         classes=model['classes'],query_class_id='plastic_cup' if 'plastic_cup' in model['classes'].values() else 'cup',
         launch_generation=resources.generation,request_budget_s=settings['queue_timeout_s']+settings['inference_timeout_s'],
         context_probe=teacher_context_probe(state=state,ports=ports,resources=resources,
-            evidence=evidence or _current_evidence),perception_runner=perception_runner or ports.run_perception_chain)
+            evidence=reader),perception_runner=perception_runner or ports.run_perception_chain)
     kwargs=ports.kwargs()|dict(existing_stack=stack,native_owned_root=loaded.root,case_artifacts=artifacts,
         station_config=_borrowed_station,reserve_workspace=artifacts.reserve_workspace,
         episode_scope_path=loaded.refs['scope']['path'],episode_inputs_manifest=loaded.refs['inputs_manifest']['path'],
@@ -736,4 +751,5 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
     runtime=ContainerCollectionRuntime(resources,RunMode.EXECUTE,**kwargs)
     return CollectionTaskExecution(task_input=loaded,state=state,artifacts=artifacts,resources=resources,ports=ports,
         teacher=teacher,runtime=runtime,workload=ActFixedCollectionWorkload(scene_ids=(scene,)),task=task,
-        stack=stack,clock=clock,teacher_bound_s=teacher_bound_s,recovery_timeout_s=recovery_timeout_s)
+        stack=stack,clock=clock,teacher_bound_s=teacher_bound_s,recovery_timeout_s=recovery_timeout_s,
+        evidence_reader=reader)

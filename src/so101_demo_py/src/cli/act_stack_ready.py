@@ -195,6 +195,184 @@ def advance_controller_query(client, pending, controllers, *, now_s: float,
     return pending, controllers, next_query_s
 
 
+@dataclass(frozen=True, slots=True)
+class ReadinessCheck:
+    """One check's outcome: `report` is the failure document `main` prints on stderr, None when ready."""
+
+    ready: bool
+    artifact: dict | None
+    report: dict | None
+
+
+class StackReadinessSession:
+    """The observation `main` makes, over a context, node, service and action clients that can outlive one check.
+
+    A check creates its own world observer and its own joint and camera subscriptions and destroys them again, so every
+    sample it judges was received after the check began and its state is that of a new process; only what costs a process start,
+    a context and the graph discovery of the clients is kept. `main` is one check of a new session, so the command line and
+    a kept session judge by the same code."""
+
+    def __init__(self, *, session_id: str, ros_domain_id: int, rig=DEFAULT_RIG, stop_velocity_rad_s: float = 0.01) -> None:
+        from so101_demo.backends.mujoco.teleop_runtime import _RosScope
+
+        self.session_id, self.ros_domain_id = session_id, ros_domain_id
+        self.rig, self.stop_velocity_rad_s = rig, stop_velocity_rad_s
+        self._clients = None
+        self._scope = _RosScope()
+        try:
+            self._node = self._scope.create_node(f"act_stack_ready_{os.getpid()}")
+        except BaseException:
+            self._scope.abandon()
+            raise
+
+    def close(self) -> None:
+        """Release the node and the context. Never raises: it runs while a failure of the check is still propagating."""
+        node, self._node = self._node, None
+        for release in (lambda: node is not None and node.destroy_node(), self._scope.close):
+            try:
+                release()
+            except Exception:   # noqa: BLE001
+                pass
+
+    def _ensure_clients(self):
+        if self._clients is None:
+            from control_msgs.action import FollowJointTrajectory
+            from controller_manager_msgs.srv import ListControllers
+            from moveit_msgs.action import ExecuteTrajectory
+            from moveit_msgs.srv import ApplyPlanningScene, GetMotionPlan, GetPlanningScene
+            from rclpy.action import ActionClient
+
+            node = self._node
+            controller_client = node.create_client(ListControllers, "/controller_manager/list_controllers")
+            service_types = (ApplyPlanningScene, GetPlanningScene, GetMotionPlan)
+            service_clients = {name: node.create_client(kind, name)
+                               for name, kind in zip(_SERVICES, service_types, strict=True)}
+            required_actions = actions_for(self.rig)
+            action_types = (ExecuteTrajectory, *(FollowJointTrajectory for _ in required_actions[1:]))
+            action_clients = {name: ActionClient(node, kind, name)
+                              for name, kind in zip(required_actions, action_types, strict=True)}
+            self._clients = (controller_client, service_clients, action_clients)
+        return self._clients
+
+    def check(self, timeout_s: float) -> ReadinessCheck:
+        from controller_manager_msgs.srv import ListControllers
+        from rclpy.qos import qos_profile_sensor_data
+        from sensor_msgs.msg import Image, JointState
+        from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS, ordered_positions
+        from so101_demo.adapters.act.ros_observation import RGB_QOS
+        from so101_demo.backends.mujoco.observer import EvidenceStale, MujocoWorldObserver
+
+        rig, node, scope = self.rig, self._node, self._scope
+        measured_joints = ACT_JOINTS if rig.has_neck else ARM_JOINTS
+        world = MujocoWorldObserver(node, self.session_id, max_age_s=0.25, rebaseline_stale_join=True)
+        worlds: deque[dict] = deque(maxlen=2)
+        joints: deque[dict] = deque(maxlen=8)
+        rgb: dict[str, dict] = {}
+        bad_input = False
+
+        def joint_callback(message):
+            nonlocal bad_input
+            try:
+                if (len(message.name) != len(message.position)
+                        or len(message.name) != len(message.velocity)
+                        or len(set(message.name)) != len(message.name)):
+                    raise ValueError("joint shape")
+                stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
+                velocity = ordered_positions(dict(zip(message.name, message.velocity, strict=True)),
+                                             measured_joints)
+                ordered_positions(dict(zip(message.name, message.position, strict=True)),
+                                  measured_joints)
+                joints.append({"stamp_s": stamp, "received_s": time.monotonic(),
+                               "velocity": velocity})
+            except (TypeError, ValueError):
+                bad_input = True
+
+        def camera_callback(message, stream):
+            rgb[stream] = {
+                "stamp_s": message.header.stamp.sec + message.header.stamp.nanosec * 1e-9,
+                "received_s": time.monotonic(), "width": message.width,
+                "height": message.height, "encoding": message.encoding,
+                "step": message.step, "byte_count": len(message.data),
+            }
+
+        subscriptions = [node.create_subscription(
+            JointState, "/joint_states", joint_callback, qos_profile_sensor_data,
+        )]
+        for camera in rig.cameras:
+            subscriptions.append(node.create_subscription(
+                Image, camera.image_topic,
+                lambda msg, stream=camera.name: camera_callback(msg, stream), RGB_QOS,
+            ))
+        controller_client, service_clients, action_clients = self._ensure_clients()
+        controllers: dict[str, str] = {}
+        pending = None
+        next_controller_query_s = 0.0
+        latest = ActStackReadiness(False, "ACT_STACK_WORLD_SESSION_INVALID", None, {})
+        deadline = time.monotonic() + timeout_s
+        try:
+            while scope.ok() and time.monotonic() < deadline:
+                scope.spin_once(node, timeout_sec=0.01)
+                pending, controllers, next_controller_query_s = advance_controller_query(
+                    controller_client, pending, controllers, now_s=time.monotonic(),
+                    next_query_s=next_controller_query_s,
+                    request_factory=ListControllers.Request, required=controllers_for(rig),
+                )
+                try:
+                    current = world.snapshot_with_receipt()
+                    sample = current.evidence
+                    if not worlds or sample.simulation_step != worlds[-1]["step"]:
+                        worlds.append({
+                            "session_id": sample.simulation_session_id,
+                            "reset_epoch": sample.reset_epoch, "step": sample.simulation_step,
+                            "sim_time_s": sample.simulation_time_s, "paused": sample.paused,
+                            "received_s": current.received_monotonic_s,
+                        })
+                except EvidenceStale:
+                    pass
+                latest = evaluate_act_stack_readiness(
+                    session_id=self.session_id, ros_domain_id=self.ros_domain_id,
+                    now_s=time.monotonic(), worlds=worlds, joints=joints, rgb=rgb,
+                    controllers=controllers,
+                    services={name: client.service_is_ready()
+                              for name, client in service_clients.items()},
+                    actions={name: client.server_is_ready()
+                             for name, client in action_clients.items()},
+                    stop_velocity_rad_s=self.stop_velocity_rad_s, rig=rig,
+                )
+                if latest.ready and not bad_input and world.rejected_count == 0:
+                    return ReadinessCheck(True, latest.artifact, None)
+            failure = latest.failure_code
+            if bad_input or world.rejected_count:
+                failure = "ACT_STACK_SOURCE_REJECTED"
+            recent_joints = tuple(joints)[-8:]
+            joint_window = {
+                "count": len(recent_joints),
+                "span_s": (recent_joints[-1]["received_s"] - recent_joints[0]["received_s"]
+                           if recent_joints else None),
+                "latest_age_s": (time.monotonic() - recent_joints[-1]["received_s"]
+                                 if recent_joints else None),
+                "max_abs_velocity_rad_s": (
+                    max(abs(speed) for sample in recent_joints for speed in sample["velocity"])
+                    if recent_joints else None
+                ),
+            }
+            return ReadinessCheck(False, None, {
+                "ready": False, "failure_code": failure,
+                "checks": latest.checks, "world_rejected": world.rejected_count,
+                "world_rejection": world.last_rejection,
+                "bad_input": bad_input, "joint_window": joint_window})
+        finally:
+            # this check's own subscriptions and an unanswered query go; the clients and the node stay for the next check
+            for subscription in (*subscriptions, getattr(world, "_subscription", None)):
+                if subscription is not None:
+                    try:
+                        node.destroy_subscription(subscription)
+                    except Exception:   # noqa: BLE001 - the node's own destruction follows
+                        pass
+            if pending is not None:
+                _abandon(controller_client, pending.future)
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="act_stack_ready")
     parser.add_argument("--session-id", required=True)
@@ -211,131 +389,17 @@ def main(arguments: list[str] | None = None) -> int:
     if os.environ.get("ROS_DOMAIN_ID") != str(options.ros_domain_id):
         parser.error("--ros-domain-id must match ROS_DOMAIN_ID")
 
-    import rclpy
-    from control_msgs.action import FollowJointTrajectory
-    from controller_manager_msgs.srv import ListControllers
-    from moveit_msgs.action import ExecuteTrajectory
-    from moveit_msgs.srv import ApplyPlanningScene, GetMotionPlan, GetPlanningScene
-    from rclpy.action import ActionClient
-    from rclpy.qos import qos_profile_sensor_data
-    from sensor_msgs.msg import Image, JointState
-    from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS, ordered_positions
-    from so101_demo.adapters.act.ros_observation import RGB_QOS
-    measured_joints = ACT_JOINTS if rig.has_neck else ARM_JOINTS
-    from so101_demo.backends.mujoco.observer import EvidenceStale, MujocoWorldObserver
-
-    rclpy.init()
-    node = rclpy.create_node(f"act_stack_ready_{os.getpid()}")
-    world = MujocoWorldObserver(node, options.session_id, max_age_s=0.25,
-                                rebaseline_stale_join=True)
-    worlds: deque[dict] = deque(maxlen=2)
-    joints: deque[dict] = deque(maxlen=8)
-    rgb: dict[str, dict] = {}
-    bad_input = False
-
-    def joint_callback(message):
-        nonlocal bad_input
-        try:
-            if (len(message.name) != len(message.position)
-                    or len(message.name) != len(message.velocity)
-                    or len(set(message.name)) != len(message.name)):
-                raise ValueError("joint shape")
-            stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
-            velocity = ordered_positions(dict(zip(message.name, message.velocity, strict=True)),
-                                         measured_joints)
-            ordered_positions(dict(zip(message.name, message.position, strict=True)),
-                              measured_joints)
-            joints.append({"stamp_s": stamp, "received_s": time.monotonic(),
-                           "velocity": velocity})
-        except (TypeError, ValueError):
-            bad_input = True
-
-    def camera_callback(message, stream):
-        rgb[stream] = {
-            "stamp_s": message.header.stamp.sec + message.header.stamp.nanosec * 1e-9,
-            "received_s": time.monotonic(), "width": message.width,
-            "height": message.height, "encoding": message.encoding,
-            "step": message.step, "byte_count": len(message.data),
-        }
-
-    subscriptions = [node.create_subscription(
-        JointState, "/joint_states", joint_callback, qos_profile_sensor_data,
-    )]
-    for camera in rig.cameras:
-        subscriptions.append(node.create_subscription(
-            Image, camera.image_topic,
-            lambda msg, stream=camera.name: camera_callback(msg, stream), RGB_QOS,
-        ))
-    controller_client = node.create_client(ListControllers, "/controller_manager/list_controllers")
-    service_types = (ApplyPlanningScene, GetPlanningScene, GetMotionPlan)
-    service_clients = {name: node.create_client(kind, name)
-                       for name, kind in zip(_SERVICES, service_types, strict=True)}
-    required_actions = actions_for(rig)
-    action_types = (ExecuteTrajectory, *(FollowJointTrajectory for _ in required_actions[1:]))
-    action_clients = {name: ActionClient(node, kind, name)
-                      for name, kind in zip(required_actions, action_types, strict=True)}
-    controllers: dict[str, str] = {}
-    pending = None
-    next_controller_query_s = 0.0
-    latest = ActStackReadiness(False, "ACT_STACK_WORLD_SESSION_INVALID", None, {})
-    deadline = time.monotonic() + options.timeout_s
+    session = StackReadinessSession(session_id=options.session_id, ros_domain_id=options.ros_domain_id, rig=rig,
+                                    stop_velocity_rad_s=options.stop_velocity_rad_s)
     try:
-        while rclpy.ok() and time.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.01)
-            pending, controllers, next_controller_query_s = advance_controller_query(
-                controller_client, pending, controllers, now_s=time.monotonic(),
-                next_query_s=next_controller_query_s,
-                request_factory=ListControllers.Request, required=controllers_for(rig),
-            )
-            try:
-                current = world.snapshot_with_receipt()
-                sample = current.evidence
-                if not worlds or sample.simulation_step != worlds[-1]["step"]:
-                    worlds.append({
-                        "session_id": sample.simulation_session_id,
-                        "reset_epoch": sample.reset_epoch, "step": sample.simulation_step,
-                        "sim_time_s": sample.simulation_time_s, "paused": sample.paused,
-                        "received_s": current.received_monotonic_s,
-                    })
-            except EvidenceStale:
-                pass
-            latest = evaluate_act_stack_readiness(
-                session_id=options.session_id, ros_domain_id=options.ros_domain_id,
-                now_s=time.monotonic(), worlds=worlds, joints=joints, rgb=rgb,
-                controllers=controllers,
-                services={name: client.service_is_ready()
-                          for name, client in service_clients.items()},
-                actions={name: client.server_is_ready()
-                         for name, client in action_clients.items()},
-                stop_velocity_rad_s=options.stop_velocity_rad_s, rig=rig,
-            )
-            if latest.ready and not bad_input and world.rejected_count == 0:
-                print(json.dumps(latest.artifact, sort_keys=True), flush=True)
-                return 0
-        failure = latest.failure_code
-        if bad_input or world.rejected_count:
-            failure = "ACT_STACK_SOURCE_REJECTED"
-        recent_joints = tuple(joints)[-8:]
-        joint_window = {
-            "count": len(recent_joints),
-            "span_s": (recent_joints[-1]["received_s"] - recent_joints[0]["received_s"]
-                       if recent_joints else None),
-            "latest_age_s": (time.monotonic() - recent_joints[-1]["received_s"]
-                             if recent_joints else None),
-            "max_abs_velocity_rad_s": (
-                max(abs(speed) for sample in recent_joints for speed in sample["velocity"])
-                if recent_joints else None
-            ),
-        }
-        print(json.dumps({"ready": False, "failure_code": failure,
-                          "checks": latest.checks, "world_rejected": world.rejected_count,
-                          "world_rejection": world.last_rejection,
-                          "bad_input": bad_input, "joint_window": joint_window},
-                         sort_keys=True), file=sys.stderr)
-        return 1
+        outcome = session.check(options.timeout_s)
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        session.close()
+    if outcome.ready:
+        print(json.dumps(outcome.artifact, sort_keys=True), flush=True)
+        return 0
+    print(json.dumps(outcome.report, sort_keys=True), file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
