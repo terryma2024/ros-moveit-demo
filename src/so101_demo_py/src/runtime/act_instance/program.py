@@ -119,6 +119,10 @@ async def serve_instance(spec, runtime_config, layout, *, process, stack, ready,
         finally:
             for sig in signals:
                 loop.remove_signal_handler(sig)
+            close = getattr(ready_check,'close',None)
+            if callable(close):
+                try:close()   # the kept readiness session's context; the instance exit does not depend on it
+                except Exception:pass
             await asyncio.gather(*terminations,return_exceptions=True)
             await server.close()
     return 0 if executor.cleanup_confirmed and not failed else 1
@@ -128,15 +132,15 @@ def compose_stack(launch, observer):
     """The shard's stack owner and its probes: returns `(start_probe, ready_check, stack)`.
 
     The start probe is the single-use `InstalledActStackReadinessProbe` the stack owner consumes at start (its
-    `readiness_bytes` are the startup evidence). `ready_check` is the task gates' separate repeatable check, which builds
-    a fresh probe from the same launch and observer on every call and never touches the start probe."""
+    `readiness_bytes` are the startup evidence). `ready_check` is the task gates' separate repeatable check: a kept observation session inside the instance, and a
+    fresh probe from the same launch and observer for anything it does not itself prove ready; it never touches the start probe."""
     from so101_teleop.unified.act_stack import ActStackProcessOwner
-    from so101_teleop.unified.act_stack_probes import (
-        RepeatableActStackReadyProbe, RepeatableActStackStopProbe, RosGraphClearProbe)
+    from so101_teleop.unified.act_stack_probes import RepeatableActStackStopProbe, RosGraphClearProbe
+    from so101_demo.runtime.act_instance.ready_check import KeptActStackReadyCheck
     from so101_teleop.unified.pick_place_startup_issuer import InstalledActStackReadinessProbe
 
     ready = InstalledActStackReadinessProbe(launch,observer)
-    ready_check = RepeatableActStackReadyProbe(launch,observer)
+    ready_check = KeptActStackReadyCheck(launch,observer)
     stack = ActStackProcessOwner(launch,ready_probe=ready,
         stop_probe=RepeatableActStackStopProbe(launch,observer),graph_clear_probe=RosGraphClearProbe(launch))
     return ready,ready_check,stack
