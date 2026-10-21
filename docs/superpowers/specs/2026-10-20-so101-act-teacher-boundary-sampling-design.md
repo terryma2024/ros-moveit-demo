@@ -100,3 +100,13 @@ The formal list of CP-3762 (`boundary-103`) is not disjoint from the old qualifi
 **Code:** `scene_sampling.sample_joint` and `assign_lists`; `act_scene_sample --lists formal:103,qualification:40,functional:8 --scenes-output-dir DIR` writes `formal-103.scenes.json`, `qualification-40.scenes.json` and `functional-8.scenes.json` plus one report (list sha256, seeds, clearances). Tests: counts, disjointness, spacing across all lists, spread against taking the first points, determinism, reachability filter, CLI format and report.
 
 **Consequence:** the staged qualification template takes the qualification and functional lists as arguments instead of pinning the old bytes; its other checks are unchanged.
+
+**Result (CP-3764, sampler run with the reachability container, seed 576020, 15 reachability calls, 1626 s, 0 positions rejected):**
+
+| List | Count | sha256 | First row seed | Nearest pair inside the list |
+| --- | --- | --- | --- | --- |
+| formal | 103 (83 / 10 / 10) | `42ea6adae990bb7c7f239072b6b3e82b7ce9a95732e8eed90124f332879ea7a3` | 200 | 0.007586 m |
+| qualification | 40 | `c0277c5a618f9ee0bf130e225ba9c2ba848d0483e5ea4e90fd93a7407af58e0b` | 400 | 0.009827 m |
+| functional | 8 | `daf1e9b20a0decc4b7538aa9ce87b042def0bc019277cdc8b52ce2727d899eea` | 600 | 0.032681 m |
+
+Sample spacing 0.007582 m (every pair of all 151 points at least 0.007586 m apart, against the 0.004 m floor). The nearest pair across lists is qualification-formal at 0.007595 m. All four rollout points are inside the region; the nearest scene to each is at least 0.004208 m. Files: `REG/act-prep-20261021/joint/lists/`, report `joint-151.report.json`, plot `joint/plots/joint-scenes.png`.
