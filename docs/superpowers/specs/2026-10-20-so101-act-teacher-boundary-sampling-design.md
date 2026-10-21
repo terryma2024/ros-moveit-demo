@@ -63,3 +63,22 @@ Human decision: "Margin only on reach edges".
 - Rays capped by the exclusion use the exact intersection with the exclusion circle as B_k.
 - Every ray is refined offline within its last 1 cm step, at 2 mm steps, with the same five-pose reachability. The refined B_k are then verified live with one Teacher round and one repeat.
 - Rollout-point clearance from every scene stays ≥ 0.004 m.
+
+## Amendment 2 (2026-10-21, human decision: "我不想让left_5cm是个边界case")
+
+The place-target exclusion is reduced from 0.060 m to **0.045 m**.
+- **Basis:** the cup radius is 0.04 m, plus 5 mm. The starting cup never covers the target centre, and the start stays well outside the 0.02 m placement tolerance.
+- **Old constant:** the 0.060 m value was a sampler constant with no recorded physical basis, introduced in `generate_w8_scenes`.
+- **Effect on left_5cm:** at 0.0603 m from the target, it is then 1.5 cm inside the exclusion edge.
+
+The W and NW rays (and any other ray the old exclusion capped) are searched outward like the other rays:
+- the offline five-pose reachability first;
+- then live Teacher bisection and one repeat.
+
+**Margin:**
+- the 0.01 m inward margin applies to edges set by reachability or Teacher failure (amendment 1);
+- the 0.045 m exclusion is applied exactly.
+
+**Rollout points:** all four rollout points must be inside the region and at least 0.01 m from every reach or Teacher edge. Training scenes keep ≥ 0.004 m clearance from them.
+
+**New data range:** scenes between 0.045 and 0.060 m from the target are a new data range; the old formal set never went below 0.060 m.
