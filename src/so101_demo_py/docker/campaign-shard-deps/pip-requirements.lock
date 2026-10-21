@@ -1,0 +1,23 @@
+# Fully resolved packages that the shard image holds in /act/venv. Versions: the ai-station shard image (act-image-dependencies.json; glfw 2.10.2 is the
+# ai-station version, the other transitive pins come from the same resolution). Install: pip install --require-hashes --no-deps -r pip-requirements.lock
+# Hashes are of the wheels pip selects on linux x86_64 / CPython 3.12.
+absl-py==2.5.1 \
+    --hash=sha256:721200f2f0e9960f2ca9dc3a2a706b201f5f75d812c158f059cbbe29eeafbdb8
+colcon-override-check==0.0.1 \
+    --hash=sha256:6c07e828a99933aa6acd3312ad3b0d63896f33239b1d7022e8a6e8c04e122da2
+etils==1.14.0 \
+    --hash=sha256:b5df7341f54dbe1405a4450b2741207b4a8c279780402b45f87202b94dfc52b4
+execnet==2.1.2 \
+    --hash=sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec
+glfw==2.10.2 \
+    --hash=sha256:b860de3ca0686182483f98f3ddd12e660acf25b3e0d521450ec9a3f999f72a65
+mujoco==3.12.0 \
+    --hash=sha256:7ec16ce408871a0a9157cc556958ab66cd34db9fc1dccd3ef07717170163a4e0
+pydantic==2.14.1 \
+    --hash=sha256:9195d967ec791692a04438115466764fb8b9a27b31f14a760437694f40d6b454
+pydantic-core==2.50.1 \
+    --hash=sha256:93ba4e9d8210d941c200431a56b2c0400b131865947903937ed3ec5404307d2e
+pyopengl==3.1.10 \
+    --hash=sha256:794a943daced39300879e4e47bd94525280685f42dbb5a998d336cfff151d74f
+pytest-xdist==3.8.0 \
+    --hash=sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88
