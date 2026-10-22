@@ -1,6 +1,12 @@
 # SO-101 ACT: parallel closed-loop rollout — design
 
-Status: draft for human confirmation (2026-10-22). Nothing here is implemented yet.
+Status: design confirmed (2026-10-22); the implementation plan below waits for its own confirmation.
+
+Human decisions (2026-10-22, question tool), all on the recommended option:
+- P1: "容器分片，同采集".
+- P2: "每台主机 1 个策略服务".
+- P5 and the gate: "实测 N=1/2/4/6 + 时序门".
+- Phase 0: "先修再并行".
 
 ## Human request (2026-10-22)
 
@@ -105,6 +111,25 @@ At 25 % INVALID on one stack, parallel load will make it worse. Before the paral
    ledgered.
 5. **antzb.** The same steps, with its own cap. Cross-host check: the same setting on both hosts, timing gate per host,
    outcome sanity across the hosts.
+
+## Implementation plan (one Sonnet writer at a time; Opus review at each checkpoint)
+
+Rules for every task:
+- Fixture-only tests, written first.
+- Repo gate (`scripts/gate/run_host_gate.zsh`) green before any real run.
+- No source edit while a collection run imports the worktree.
+- HOST-BUSY flag for every GPU or stack run.
+- Evidence root: `$REG/act-rollout-parallel-<stamp>/`.
+
+| Task | Content | Tests and evidence | Checkpoint |
+|---|---|---|---|
+| T0a | Native tool: log per goal pair the wall send/accept times, the sim time, the controller, and the host load (loadavg, rollout-process CPU) into `steps.jsonl`. No behaviour change. | Unit: the fields are present and the timeout path is unchanged. Real: 2 native trials (ensembling M 0.01), after the current screen. | Opus reviews the latency data and names the cause. |
+| T0b | Fix the named cause. `accept_timeout_s` stays 0.02. | Unit for the fix. Real: 2 trials; the INVALID rate is compared with the 19/78 baseline. | Opus: fixed, or escalate to the human with evidence. |
+| T1 | `act_policy_service` (train venv): one bundle, Unix socket, `runtime/inference/codec.py` framing, FIFO, process record and stop proof, bundle sha and mode in every reply. Socket transport behind `ActInferenceProcess`. | Fake-policy fixtures for framing, timeout, stale reply, one-in-flight, and shutdown proof. | Opus code review. |
+| T2 | Workload kind `act_rollout`: spec, `shard_builder`, task builder for one episode (reset → gate → resume → loop → endpoint → stop), `/act/output` layout identical to native episodes. | Fixtures with fake ports. The episode files must match the native schema. | Opus code review. |
+| T3 | Host CLI `act_rollout_parallel`: (point × trial) queue, waves, gate (cap/gap as runtime parameters), barrier, receipts, INVALID re-queue, policy service lifecycle, preconditions, `table.md` / `summary.json`. | Fake-docker fixtures, as in collection tests. Gate green. | Opus code review. Push to `codex/so101-act-data-0917a`. |
+| T4 | Mount tree at the gated commit. Measure N = 1, 2, 4, 6 (4 points × 1 trial each, TRAIN-006 ensembling M 0.01). Native reference metrics from the existing TRAIN-006 runs. Timing gate at the chosen N plus 4 × 5 outcome sanity. | Timing tables and the ledger entry. | Opus: chosen N and gate verdict, reported to the human. |
+| T5 | antzb: the same as T4 with its own cap; cross-host check. | Ledger. | Opus. |
 
 ## Expected speed
 
