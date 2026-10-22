@@ -100,7 +100,8 @@ colcon_test() {
     --ctest-args $ca > $d/colcon-test-$tag.log 2>&1
   local crc=$?
   # several ctest phases of one package may start in the same minute and share Testing/<TAG>: keep each phase's Test.xml (result_sets.py preserve)
-  python3 -I $FG/result_sets.py preserve --build-base $GB/build --package $pkg --tag $tag > $d/preserve-$tag.log 2>&1 || crc=$(( crc ? crc : 99 ))
+  # (only the teleop part: its phases run one after the other; upstream groups share a package's Testing/ dir concurrently and are read per group)
+  if [[ $part == teleop ]]; then python3 -I $FG/result_sets.py preserve --build-base $GB/build --package $pkg --tag $tag > $d/preserve-$tag.log 2>&1 || crc=$(( crc ? crc : 99 )); fi
   print -r -- $crc > $d/colcon-test-$tag.rc; print -r -- $(( SECONDS - t0 )) > $d/colcon-test-$tag.elapsed
   return $crc
 }
