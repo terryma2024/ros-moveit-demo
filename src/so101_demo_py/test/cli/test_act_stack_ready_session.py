@@ -143,6 +143,49 @@ def unrejected(observe):
     return outcome
 
 
+def only_camera_freshness_differs(first, second):
+    """True when two outcomes (ready, checks, failure/keys) differ only in a `*_rgb` check (and the failure code that follows from it).
+
+    Under host load the 640x480 reliable image stream of one camera stalls for 0.5 to 1 s (measured: scratch-dev/gap/probe.py, 48 busy loops on 24 CPUs:
+    head camera arrival gaps up to 0.96 s, idle 0.13 s), longer than the readiness freshness (stamp within 0.25 s of the world, receipt within 1 s), so the two
+    independent observers of one scenario can read a camera as fresh at different instants. Everything else must agree exactly."""
+    if first[0] != second[0] or set(first[1]) != set(second[1]):
+        return False
+    flipped = {name for name in first[1] if first[1][name] != second[1][name]}
+    return bool(flipped) and all(name.endswith("_rgb") for name in flipped) and all(
+        first[1][name] == second[1][name] for name in first[1] if not name.endswith("_rgb"))
+
+
+def judged_alike(session, rig_arguments=()):
+    """(kept, command line) of one scenario; both are asked again (up to 5 times) while they differ only in a camera freshness check."""
+    for _attempt in range(5):
+        expected = command_line(list(rig_arguments))
+        actual = kept(session)
+        if actual == expected or not only_camera_freshness_differs(actual, expected):
+            break
+    return actual, expected
+
+
+def ready_again(session):
+    """A kept session reads ready as soon as the stack is; one stalled camera frame under host load is asked again (up to 5 times).
+
+    Only a not-ready outcome whose failing checks are all `*_rgb` freshness checks is asked again; any other failing check fails at once."""
+    for _attempt in range(5):
+        outcome = kept(session)
+        if outcome[0] is True or not all(name.endswith("_rgb") for name, ok in outcome[1].items() if ok is not True):
+            break
+    return outcome
+
+
+def test_only_a_camera_freshness_difference_is_asked_again():
+    base = {"mujoco_session": True, "head_rgb": True, "wrist_rgb": True}
+    assert only_camera_freshness_differs((False, base, "X"), (False, {**base, "head_rgb": False}, "Y")) is True
+    assert only_camera_freshness_differs((False, base, "X"), (False, {**base, "mujoco_session": False}, "X")) is False
+    assert only_camera_freshness_differs((False, base, "X"), (True, base, "X")) is False
+    assert only_camera_freshness_differs((False, base, "X"), (False, base, "X")) is False
+    assert only_camera_freshness_differs((False, {**base, "head_rgb": False, "mujoco_session": False}, "X"), (False, base, "X")) is False
+
+
 def command_line(rig_arguments):
     return unrejected(lambda: _command_line(rig_arguments))
 
@@ -215,12 +258,12 @@ def test_the_kept_session_and_the_command_line_judge_every_scenario_alike(graph)
         for name, damage, failure in scenarios():
             damage(graph)
             time.sleep(0.3)
-            expected = command_line([])
-            assert kept(session) == expected, name
+            actual, expected = judged_alike(session)
+            assert actual == expected, name
             assert (expected[0], expected[2] if failure else None) == (failure is None, failure), (name, expected)
             graph.restore()
             time.sleep(0.5)
-            assert kept(session)[0] is True, name     # a kept session is ready again as soon as the stack is
+            assert ready_again(session)[0] is True, name     # a kept session is ready again as soon as the stack is
     finally:
         session.close()
 
@@ -236,6 +279,6 @@ def test_a_session_that_is_not_ready_recovers_when_the_stack_does(graph):
         assert session.check(1.5).ready is False
         graph.paused = False
         time.sleep(0.3)
-        assert kept(session)[0] is True
+        assert ready_again(session)[0] is True
     finally:
         session.close()
