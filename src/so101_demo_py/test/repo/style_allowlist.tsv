@@ -71,6 +71,8 @@ wire	src/so101_demo_py/config/act/training-side-wrist.yaml	str	ResNet18_Weights.
 wire	src/so101_demo_py/config/act/training-side-wrist-004.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
 wire	src/so101_demo_py/config/act/training-side-wrist-005.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
 wire	src/so101_demo_py/config/act/training-side-wrist-005-bf16.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist-007a-bf16.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist-007b-bf16.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
 wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	base_motor_holder_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
 wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	base_so101_v2.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
 wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	motor_holder_so101_base_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
