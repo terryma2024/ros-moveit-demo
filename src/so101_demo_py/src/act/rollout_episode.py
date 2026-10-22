@@ -123,6 +123,12 @@ def _step_row(pending, **fields):
     return row
 
 
+def _service_fields(service):
+    """The policy service's account of a reply (queue wait, inference time, outcome), when the transport has one."""
+
+    return {} if not isinstance(service, dict) else {"service": service}
+
+
 def _goal_pair_fields(session):
     """The optional `goal_pair` diagnostics of the submission just made (T0a); {} when the session records none."""
 
@@ -147,7 +153,9 @@ def _resolve(loop, ports, session, sink, settings):
         loop.pending = None
         loop.counts["late_replies"] += 1
         sink.step(_step_row(pending, late=True, held=True, applied=False, reason=reason,
-                            reply_sim_s=session.sim_time(), reply_wall_s=ports.monotonic()))
+                            reply_sim_s=session.sim_time(), reply_wall_s=ports.monotonic(),
+                            **_service_fields(ports.inference.last_service if hasattr(ports.inference, "last_service")
+                                              else None)))
         return
     if not reply:
         return
@@ -184,7 +192,7 @@ def _resolve(loop, ports, session, sink, settings):
     row = _step_row(pending, late=False, reply_sim_s=reply_sim, reply_wall_s=reply_wall,
                     latency_wall_s=round(reply_wall - pending["submit_wall_s"], 6),
                     reply_age_s=reply.get("age_s"), chunk=[list(map(float, step)) for step in reply["actions"]],
-                    prefix=prefix, **extra)
+                    prefix=prefix, **_service_fields(reply.get("service")), **extra)
     try:
         goal = session.submit_prefix(prefix)
     except ValueError as error:

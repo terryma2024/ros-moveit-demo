@@ -39,6 +39,7 @@ import sys
 import time
 
 from so101_demo.act.rollout_episode import run_episode
+from so101_demo.act.rollout_shared import warm_up_policy  # noqa: F401 - the shared definition; re-exported for callers of this module
 from so101_demo.act.rollout_execution import DEFAULT_ENSEMBLING_M, resolve_execution
 
 PRECONDITIONS = ("no_container", "unified_store_idle", "ros_graph_empty", "no_instance_process", "no_gpu_process")
@@ -152,28 +153,6 @@ def import_preflight(*, importer=importlib.import_module) -> None:
             raise RuntimeError(f"ROLLOUT_IMPORT_PREFLIGHT_FAILED: {name}: {error}") from error
     if modules["torch"].cuda.is_available() is not True:
         raise RuntimeError("ROLLOUT_IMPORT_PREFLIGHT_FAILED: torch.cuda is not available")
-
-
-def warm_up_policy(policy, observation: dict, *, calls: int = 3, monotonic=time.monotonic) -> list:
-    """Run the model on synthetic observations of the bundle's shapes before the first episode; returns the call latencies.
-
-    The first call of a CUDA model costs far more than the frozen `max_reply_age_s`, so without this the first request of a run
-    would always be refused as stale. Nothing of the result is used; the policy is reset afterwards, so no model state reaches
-    the first episode."""
-
-    import numpy as np
-
-    sample = {"sim_time_s": 0.0, "state": [0.0] * observation["state_dim"]}
-    height, width, _channels = observation["image_shape"]
-    for camera in observation["cameras"]:
-        sample[camera] = np.zeros((height, width, 3), dtype=np.uint8)
-    latencies = []
-    for _ in range(calls):
-        started = monotonic()
-        policy.infer(sample)
-        latencies.append(round(monotonic() - started, 6))
-    policy.reset()
-    return latencies
 
 
 # ---- the owned root and the environment ----------------------------------------------------------------------------------

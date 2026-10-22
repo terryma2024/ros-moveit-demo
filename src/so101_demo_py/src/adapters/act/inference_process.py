@@ -27,6 +27,8 @@ class ActInferenceProcess:
         self.clock = clock
         self.pending = None
         self.closed = False
+        #: the transport's account of the most recent reply it delivered (the policy service's timing); None for an in-process model
+        self.last_service = None
 
     def submit(self, observation: dict, *, sequence: int) -> int:
         """Admit one request; a second request while one is in flight is refused, not queued."""
@@ -40,6 +42,7 @@ class ActInferenceProcess:
         if self.pending is not None:
             raise ValueError("INFERENCE_REQUEST_IN_FLIGHT")
         deadline = self.clock() + float(self.inference["request_timeout_s"])
+        self.last_service = None
         self.transport.send({"sequence": sequence, "observation": observation})
         self.pending = {"sequence": sequence, "deadline": deadline}
         return sequence
@@ -56,6 +59,8 @@ class ActInferenceProcess:
             if self.clock() >= self.pending["deadline"]:
                 raise ValueError("INFERENCE_TIMEOUT")
             return {}
+        if isinstance(reply, dict) and isinstance(reply.get("service"), dict):
+            self.last_service = reply["service"]
         if not isinstance(reply, dict) or "sequence" not in reply or "actions" not in reply:
             raise ValueError("INFERENCE_REPLY_INVALID")
         if reply["sequence"] != self.pending["sequence"]:
@@ -67,7 +72,10 @@ class ActInferenceProcess:
         if age > float(self.inference["max_reply_age_s"]):
             raise ValueError("INFERENCE_REPLY_STALE")
         self.pending = None
-        return {"sequence": reply["sequence"], "actions": reply["actions"], "age_s": age}
+        accepted = {"sequence": reply["sequence"], "actions": reply["actions"], "age_s": age}
+        if self.last_service is not None:
+            accepted["service"] = self.last_service
+        return accepted
 
     def abandon(self) -> None:
         """Give up the in-flight request after `poll` refused its reply (timeout or stale), so the next one can be submitted.
