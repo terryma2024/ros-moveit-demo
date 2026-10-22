@@ -99,6 +99,8 @@ colcon_test() {
     --build-base $GB/build --install-base $GB/install --event-handlers console_direct+ \
     --ctest-args $ca > $d/colcon-test-$tag.log 2>&1
   local crc=$?
+  # several ctest phases of one package may start in the same minute and share Testing/<TAG>: keep each phase's Test.xml (result_sets.py preserve)
+  python3 -I $FG/result_sets.py preserve --build-base $GB/build --package $pkg --tag $tag > $d/preserve-$tag.log 2>&1 || crc=$(( crc ? crc : 99 ))
   print -r -- $crc > $d/colcon-test-$tag.rc; print -r -- $(( SECONDS - t0 )) > $d/colcon-test-$tag.elapsed
   return $crc
 }
