@@ -32,6 +32,7 @@ from .joints import clamp_positions
 from .policy import to_action_prefix
 from .rollout_execution import PREFIX_END_TOLERANCE_S, ChunkEnsembler, default_mode
 from .rollout_targets import evaluate_rollout_endpoint, rollout_targets
+from .service_telemetry import sample_from_row, summarize_service
 
 #: Reply refusals of the inference boundary that mean "the answer came too late to describe the present".
 LATE_REPLY_ERRORS = ("INFERENCE_TIMEOUT", "INFERENCE_REPLY_STALE")
@@ -97,6 +98,8 @@ class _Loop:
             self.ensembler = ChunkEnsembler(execution.ensemble_m, execution.chunk_size)
         self.sequence = 0
         self.pending = None
+        #: one sample per reply that carries the policy service's account (empty for an in-process model)
+        self.service_samples = []
         self.outcome = None
         self.first_state = None
         self.arm_max = 0.0
@@ -129,6 +132,12 @@ def _service_fields(service):
     return {} if not isinstance(service, dict) else {"service": service}
 
 
+def _note_service(loop, row):
+    sample = sample_from_row(row)
+    if sample is not None:
+        loop.service_samples.append(sample)
+
+
 def _goal_pair_fields(session):
     """The optional `goal_pair` diagnostics of the submission just made (T0a); {} when the session records none."""
 
@@ -152,10 +161,11 @@ def _resolve(loop, ports, session, sink, settings):
         ports.inference.abandon()
         loop.pending = None
         loop.counts["late_replies"] += 1
-        sink.step(_step_row(pending, late=True, held=True, applied=False, reason=reason,
-                            reply_sim_s=session.sim_time(), reply_wall_s=ports.monotonic(),
-                            **_service_fields(ports.inference.last_service if hasattr(ports.inference, "last_service")
-                                              else None)))
+        row = _step_row(pending, late=True, held=True, applied=False, reason=reason,
+                        reply_sim_s=session.sim_time(), reply_wall_s=ports.monotonic(),
+                        **_service_fields(getattr(ports.inference, "last_service", None)))
+        sink.step(row)
+        _note_service(loop, row)
         return
     if not reply:
         return
@@ -193,6 +203,7 @@ def _resolve(loop, ports, session, sink, settings):
                     latency_wall_s=round(reply_wall - pending["submit_wall_s"], 6),
                     reply_age_s=reply.get("age_s"), chunk=[list(map(float, step)) for step in reply["actions"]],
                     prefix=prefix, **_service_fields(reply.get("service")), **extra)
+    _note_service(loop, row)
     try:
         goal = session.submit_prefix(prefix)
     except ValueError as error:
@@ -472,6 +483,8 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
         except Exception as error:
             retire_errors.append("RETIRE_UNCONFIRMED: " + _text(error))
     result["counts"] = dict(loop.counts)
+    if loop.service_samples:
+        result["service"] = summarize_service(loop.service_samples)
     result["motion"] = {"max_arm_displacement_rad": round(loop.arm_max, 9), **({} if loop.no_neck_state else {"neck_deviation_max": round(loop.neck_max, 9)}),
                         "no_motion_threshold_rad": settings.no_motion_threshold_rad}
     if loop.pending is not None:

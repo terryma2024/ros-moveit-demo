@@ -83,14 +83,14 @@ class ActExecutionAdapter:
         return None if count is None else count()
 
     def _open_pair(self,sequence,start,send_sim_s):
+        # Plain values only: nothing here may take time on the send path (no port call, no /proc read); the in-flight counts and the
+        # load sample are taken when the pair is closed.
         pair=dict(sequence=sequence,target_start_sim_s=start,send_sim_s=send_sim_s,goal_ids=dict.fromkeys(CONTROLLERS),
             send_wall_s=dict.fromkeys(CONTROLLERS),accept_wall_s=dict.fromkeys(CONTROLLERS),
             accept_latency_s=dict.fromkeys(CONTROLLERS),accept_thread=dict.fromkeys(CONTROLLERS),
-            in_flight_before_send={name:self._safely(self._in_flight,port)
-                                   for name,port in zip(CONTROLLERS,(self.arm,self.gripper),strict=True)},
-            decision_thread=threading.current_thread().name,load=self._safely(self._load_sampler.sample),
+            in_flight_at_check=None,decision_thread=threading.current_thread().name,load=None,
             outcome=None,late_controller=None,check_wall_s=None,check_sim_s=None,accept_sim_s=None,
-            load_at_check=None,late_arrival_latency_s={})
+            late_arrival_latency_s={})
         self.pair_log.append(pair); self.last_pair=pair
         return pair
 
@@ -120,7 +120,11 @@ class ActExecutionAdapter:
         else:
             late=[name for name,result in zip(CONTROLLERS,responses,strict=True) if result is not True]
             pair['late_controller']=None if not late else ('both' if len(late)==2 else late[0])
-            pair['load_at_check']=self._safely(self._load_sampler.sample)
+        # sampled here, after the decision, so that nothing is added between the goals being sent and their acceptance being read;
+        # the counts include this pair's own two goals while they are unfinished
+        pair['in_flight_at_check']={name:self._safely(self._in_flight,port)
+                                    for name,port in zip(CONTROLLERS,(self.arm,self.gripper),strict=True)}
+        pair['load']=self._safely(self._load_sampler.sample)
         self._refresh_pair(pair)
 
     def goal_response_summary(self):

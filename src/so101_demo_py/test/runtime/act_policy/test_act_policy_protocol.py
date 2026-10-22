@@ -103,7 +103,7 @@ def test_queries_and_service_replies_are_closed_kinds():
     query = {"schema_version": 1, "kind": "policy_ready_query", "request_id": "q1"}
     assert protocol.decode_frame(protocol.encode_frame(query, b"", max_frame_bytes=LIMIT), max_frame_bytes=LIMIT)[0] == query
     health = {"schema_version": 1, "kind": "policy_health", "request_id": "q2", "service_generation": "g1",
-              "available": True, "reason": "", "inflight": 0, "served": 4, "refused": 1}
+              "available": True, "reason": "", "inflight": 0, "served": 4, "refused": 1, "consecutive_errors": 0}
     assert protocol.validate_message(health) == health
     with pytest.raises(ValueError, match="POLICY_SERVICE_REPLY_INVALID"):
         protocol.validate_message(dict(health, extra=1))
@@ -154,3 +154,58 @@ def test_an_oversize_header_declaration_is_refused_before_it_is_buffered():
     finally:
         left.close()
         right.close()
+
+
+def test_the_frame_sent_in_place_is_byte_identical_to_the_joined_frame():
+    head = np.arange(72, dtype=np.uint8).reshape(4, 6, 3)
+    wrist = (np.arange(72, dtype=np.uint8)[::-1]).reshape(4, 6, 3).copy()
+    observation = {"sim_time_s": 2, "state": [0.0] * 8, "head": head, "wrist": wrist}
+    description, payload = protocol.pack_observation(observation, cameras=("head", "wrist"))
+    description_views, views = protocol.pack_observation_views(observation, cameras=("head", "wrist"))
+    assert description_views == description
+    document = request(observation=description)
+    joined = protocol.encode_frame(document, payload, max_frame_bytes=LIMIT)
+    prefix, buffers = protocol.encode_frame_parts(document, views, max_frame_bytes=LIMIT)
+    assert prefix + b"".join(bytes(view) for view in buffers) == joined
+    # the buffers are the arrays' own memory: no copy was made to build them
+    assert np.shares_memory(np.frombuffer(views[0], dtype=np.uint8), head)
+    assert np.shares_memory(np.frombuffer(views[1], dtype=np.uint8), wrist)
+
+
+def test_a_non_contiguous_image_is_made_contiguous_and_still_sent_right():
+    wide = np.arange(4 * 12 * 3, dtype=np.uint8).reshape(4, 12, 3)
+    sliced = wide[:, ::2, :]                                     # not contiguous
+    description, views = protocol.pack_observation_views({"sim_time_s": 0, "state": [0.0], "head": sliced}, cameras=("head",))
+    assert bytes(views[0]) == np.ascontiguousarray(sliced).tobytes() and description["images"][0]["shape"] == [4, 6, 3]
+
+
+def test_a_partial_send_continues_where_it_stopped_and_the_receiver_gets_the_whole_frame():
+    import threading
+    import time
+
+    left, right = socket.socketpair()
+    left.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
+    big = np.random.default_rng(1).integers(0, 255, (60, 80, 3), dtype=np.uint8)
+    observation = {"sim_time_s": 1, "state": [0.0] * 8, "head": big, "wrist": big[::-1].copy()}
+    description, views = protocol.pack_observation_views(observation, cameras=("head", "wrist"))
+    document = request(observation=description)
+    expected = protocol.encode_frame(document, b"".join(bytes(view) for view in views), max_frame_bytes=LIMIT)
+    prefix, buffers = protocol.encode_frame_parts(document, views, max_frame_bytes=LIMIT)
+    received = bytearray()
+
+    def read():
+        while len(received) < len(expected):
+            time.sleep(0.001)                                    # slower than the sender
+            received.extend(right.recv(1500))
+    reader = threading.Thread(target=read)
+    reader.start()
+    protocol.send_frame_parts(left, prefix, buffers)
+    reader.join(10)
+    left.close()
+    right.close()
+    assert bytes(received) == expected
+
+
+def test_a_payload_of_the_wrong_total_length_is_refused_when_encoding_parts():
+    with pytest.raises(ValueError, match="POLICY_FRAME_INVALID"):
+        protocol.encode_frame_parts(request(), [bytes(10)], max_frame_bytes=LIMIT)

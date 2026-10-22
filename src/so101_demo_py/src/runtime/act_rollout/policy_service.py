@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import threading
 import time
 
 from so101_demo.runtime.act_policy.service import process_record, write_json
@@ -58,6 +59,11 @@ class PolicyServiceOwner:
         self.socket = self.socket_dir / "policy.sock"
         self.record_dir = self.home / "record"
         self.process = None
+        #: `stop()` (an interrupted run) sets this and waits for `start()` to end; `start()` then kills what it started
+        self._abort = threading.Event()
+        self._start_lock = threading.Lock()
+        self.unhealthy_reason = None
+        self.start_failed = False
         self.record = self.ready = self.stop_result = None
         self._streams = []
 
@@ -82,6 +88,12 @@ class PolicyServiceOwner:
             raise PolicyServiceError("POLICY_SERVICE_DIRECTORY_NOT_NEW")
 
     def start(self):
+        with self._start_lock:
+            return self._start()
+
+    def _start(self):
+        if self._abort.is_set():
+            raise PolicyServiceError("POLICY_SERVICE_START_ABORTED")
         if self.process is not None:
             raise PolicyServiceError("POLICY_SERVICE_ALREADY_STARTED")
         self.prepare()
@@ -98,19 +110,34 @@ class PolicyServiceOwner:
         ready = self.record_dir / "ready.json"
         try:
             while not ready.exists():
+                if self._abort.is_set():
+                    raise PolicyServiceError("POLICY_SERVICE_START_ABORTED")
                 if self.process.poll() is not None:
                     raise PolicyServiceError(f"POLICY_SERVICE_EXITED_BEFORE_READY: {self.process.returncode}")
                 if self.clock() >= deadline:
                     raise PolicyServiceError("POLICY_SERVICE_READY_TIMEOUT")
                 self.sleep(0.1)
-            self.record = _read_json(self.record_dir / "process-record.json")
-            self.ready = _read_json(ready)
+            self.record = self._read_until(self.record_dir / "process-record.json", deadline)
+            self.ready = self._read_until(ready, deadline)
             self._check_started()
         except BaseException:
+            self.start_failed = True
             self.kill()
             raise
         write_json(self.home / "host-start.json", {"record": self.record, "ready": self.ready, "pid": self.process.pid})
         return self.ready
+
+    def _read_until(self, path, deadline):
+        """The JSON in `path`, parsed again until it parses or the start deadline passes (a writer that is not atomic is half read)."""
+        while True:
+            try:
+                return _read_json(path)
+            except (ValueError, OSError) as error:
+                if self.process.poll() is not None:
+                    raise PolicyServiceError(f"POLICY_SERVICE_EXITED_BEFORE_READY: {self.process.returncode}") from error
+                if self.clock() >= deadline:
+                    raise PolicyServiceError(f"POLICY_SERVICE_RECORD_UNREADABLE: {path.name}") from error
+                self.sleep(0.02)
 
     def _check_started(self):
         record, ready, expected = self.record, self.ready, self.expected
@@ -129,16 +156,29 @@ class PolicyServiceOwner:
     # ---- while it runs -----------------------------------------------------------------------------------------------------
 
     def healthy(self):
-        """True only while the started process is alive, is still the process that was proved, and answers a health query."""
-        if self.process is None or self.process.poll() is not None or self.record is None:
-            return False
+        """True only while the started process is alive, is still the process that was proved, and its health probe says so.
+
+        The probe returns True, or says why not (a string, or just a falsy value); `unhealthy_reason` keeps the first reason."""
+        reason = self._unhealthy()
+        if reason is not None and self.unhealthy_reason is None:
+            self.unhealthy_reason = reason
+        return reason is None
+
+    def _unhealthy(self):
+        if self.process is None or self.record is None:
+            return "NOT_STARTED"
+        if self.process.poll() is not None:
+            return f"PROCESS_EXITED: {self.process.returncode}"
         try:
             live = self.identity_of(self.record["pid"])
             if any(self.record[name] != live[name] for name in ("pgid", "start_ticks", "argv_sha256")):
-                return False
-            return self.health_probe is None or self.health_probe() is True
-        except (OSError, ValueError, KeyError):
-            return False
+                return "PROCESS_IDENTITY_CHANGED"
+            if self.health_probe is None:
+                return None
+            answer = self.health_probe()
+            return None if answer is True else (answer if isinstance(answer, str) and answer else "HEALTH_PROBE_FALSE")
+        except (OSError, ValueError, KeyError) as error:
+            return f"HEALTH_CHECK_ERROR: {type(error).__name__}: {error}"[:200]
 
     # ---- stop --------------------------------------------------------------------------------------------------------------
 
@@ -156,6 +196,12 @@ class PolicyServiceOwner:
 
     def stop(self):
         """Stop the service this owner started and prove it; `confirmed` only with a clean exit and the service's own proof."""
+        # an interrupted run: let a start in progress notice, kill what it started and return, before the stop is judged
+        self._abort.set()
+        with self._start_lock:
+            return self._stop()
+
+    def _stop(self):
         if self.stop_result is not None:
             return self.stop_result
         errors, forced, code = [], False, None
@@ -189,12 +235,44 @@ class PolicyServiceOwner:
             raw = (self.record_dir / "stop-proof.json").read_bytes()
             proof, proof_sha = json.loads(raw), hashlib.sha256(raw).hexdigest()
         except (OSError, ValueError):
-            errors.append("POLICY_SERVICE_STOP_PROOF_MISSING")
+            if not self.start_failed:
+                errors.append("POLICY_SERVICE_STOP_PROOF_MISSING")
         if proof is not None and (proof.get("terminated") is not True or proof.get("pid") != process.pid):
             errors.append("POLICY_SERVICE_STOP_PROOF_UNCONFIRMED")
-        if code != 0:
+        if code != 0 and not self.start_failed:
             errors.append(f"POLICY_SERVICE_EXIT_CODE: {code}")
+        if code is None:
+            errors.append("POLICY_SERVICE_STILL_RUNNING")
+        # A service that never became ready has no stop proof to give: it is stopped when the process is gone (its start killed it,
+        # or it exited by itself), and the start failure is the run's fault.
         self.stop_result = {"confirmed": not errors and not forced, "started": True, "pid": process.pid, "exit_code": code,
-                            "forced": forced, "stop_proof_sha256": proof_sha, "stop_proof": proof, "errors": errors}
+                            "forced": forced, "start_failed": self.start_failed, "stop_proof_sha256": proof_sha,
+                            "stop_proof": proof, "errors": errors}
         write_json(self.home / "host-stop.json", self.stop_result)
         return self.stop_result
+
+
+def service_health_probe(client, *, max_consecutive_errors=3, max_unanswered=3):
+    """The health probe of a running service: it answers a `policy_health_query` with `available` true and fewer than
+    `max_consecutive_errors` replies in a row that said the service or the request is wrong.
+
+    A service that faulted (`available` false: every request is answered INFRA_ERROR) or that answers a run of errors is unhealthy at
+    once. A query that gets no answer is unhealthy after `max_unanswered` in a row (one slow answer is not a fault)."""
+    unanswered = {"count": 0}
+
+    def probe():
+        try:
+            reply = client.query("policy_health_query", timeout_s=2.0)
+        except (OSError, ValueError, TimeoutError) as error:
+            unanswered["count"] += 1
+            if unanswered["count"] >= max_unanswered:
+                return f"HEALTH_QUERY_UNANSWERED: {unanswered['count']} in a row: {type(error).__name__}"
+            return True
+        unanswered["count"] = 0
+        if reply["available"] is not True:
+            return f"POLICY_SERVICE_FAULT: {reply['reason']}"
+        if reply["consecutive_errors"] >= max_consecutive_errors:
+            return f"POLICY_SERVICE_ERRORS: {reply['consecutive_errors']} replies in a row were errors"
+        return True
+    return probe
+

@@ -41,6 +41,7 @@ import json
 from pathlib import Path
 import re
 import secrets
+import subprocess
 import sys
 import time
 from types import SimpleNamespace
@@ -49,7 +50,7 @@ from typing import Callable
 from so101_demo.act.rollout_execution import DEFAULT_ENSEMBLING_M
 from so101_demo.act.rollout_shared import load_inputs
 from so101_demo.runtime.act_rollout.coordinator import RolloutCoordinator
-from so101_demo.runtime.act_rollout.owner import EXIT_REFUSED, RolloutCampaignOwner
+from so101_demo.runtime.act_rollout.owner import EXIT_REFUSED, EXIT_RUN_FAULT, RolloutCampaignOwner
 from so101_demo.runtime.act_rollout.plan import build_units
 from so101_demo.runtime.act_rollout.policy_service import PolicyServiceOwner
 from so101_demo.runtime.act_rollout.shard_launcher import WORKLOAD_KIND, RolloutShardLauncher
@@ -57,6 +58,7 @@ from so101_demo.runtime.act_rollout.task_builder import identity_sha256
 from so101_demo.runtime.container_campaign.mount_build import mount_from_config
 from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX, CONTAINER_POLICY_SOCKET, make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
+from so101_demo.runtime.container_campaign.task_control import ContainerTaskControl
 from so101_demo.runtime.container_campaign.service_owner import _docker
 from so101_demo.runtime.container_campaign.shard_owner import read_container_namespace
 from so101_demo.runtime.inference.config import calibration_runtime_hash, load_campaign_config
@@ -92,6 +94,7 @@ class Edges:
     environ: dict | None = None
     clock: Callable = time.monotonic
     sleep: Callable = asyncio.sleep       # the coordinator's polling sleep (a test advances a fake clock with it)
+    monitor_interval_s: float = 1.0       # how often the policy service's health and the deadline are looked at
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -134,6 +137,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--policy-queue-timeout-s", type=float, default=1.0)
     parser.add_argument("--policy-inference-timeout-s", type=float, default=0.5)
     parser.add_argument("--policy-warm-up-calls", type=int, default=3)
+    parser.add_argument("--policy-max-consecutive-errors", type=int, default=3,
+                        help="stop the run as a policy service fault after this many replies in a row that were errors")
     parser.add_argument("--policy-start-timeout-s", type=float, default=300.0)
     parser.add_argument("--policy-stop-timeout-s", type=float, default=30.0)
     return parser
@@ -159,11 +164,32 @@ def check_preconditions(probes: dict) -> dict:
     return evidence
 
 
-def default_probes(unified_state_root, gpu_probe=None) -> dict:
-    from so101_demo.cli.act_rollout_native import container_probe, gpu_probe as host_gpu_probe, instance_process_probe, unified_store_probe
+def gpu_processes(gpu_uuid, *, run=subprocess.run):
+    """``(none, ["pid, name", ...])``: the compute processes on the configured GPU only.
+
+    Another GPU's processes are not this run's business, so `nvidia-smi` is asked for the device of each row and the rows of other
+    devices are dropped. A device name that cannot be read is an error, never "none"."""
+    result = run(["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,process_name", "--format=csv,noheader"],
+                 capture_output=True, text=True, timeout=30, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"nvidia-smi failed: {str(result.stderr).strip()[:200]}")
+    rows = []
+    for line in str(result.stdout).splitlines():
+        if not line.strip():
+            continue
+        device, _separator, rest = line.partition(",")
+        if not rest.strip():
+            raise RuntimeError(f"nvidia-smi row without a device: {line[:100]}")
+        if device.strip().lower() == gpu_uuid.lower():
+            rows.append(rest.strip())
+    return (not rows), rows
+
+
+def default_probes(unified_state_root, gpu_probe) -> dict:
+    from so101_demo.cli.act_rollout_native import container_probe, instance_process_probe, unified_store_probe
 
     return {"no_container": container_probe, "unified_store_idle": lambda: unified_store_probe(unified_state_root),
-            "no_instance_process": instance_process_probe, "no_gpu_process": gpu_probe or host_gpu_probe}
+            "no_instance_process": instance_process_probe, "no_gpu_process": gpu_probe}
 
 
 def only_own_gpu_process(probe, policy_pid):
@@ -203,7 +229,7 @@ def check_arguments(args):
         raise Refused("ROLLOUT_EVIDENCE_ROOT_INVALID")
     if args.shards < 1 or args.trials < 1 or args.max_invalid_retries < 0:
         raise Refused("ROLLOUT_COUNTS_INVALID")
-    for name in ("max_concurrent_episodes", "max_tasks_in_flight", "limit", "policy_max_inflight"):
+    for name in ("max_concurrent_episodes", "max_tasks_in_flight", "limit", "policy_max_inflight", "policy_max_consecutive_errors"):
         value = getattr(args, name)
         if value is not None and value < 1:
             raise Refused(f"ROLLOUT_COUNTS_INVALID: {name}")
@@ -270,27 +296,75 @@ def prepare(args, edges):
     if calibration_runtime_hash(config["controlled_runtime"]["path"]) != config["controlled_runtime"]["sha256"]:
         raise Refused("ROLLOUT_CONTROLLED_RUNTIME_DRIFT")
     rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
-    return config, mount, install_prefix, inputs, units, rig
+    pythonpath = args.policy_pythonpath or (None if mount is None else mount.package_prefix / "lib/python3.12/site-packages")
+    if pythonpath is None:
+        raise Refused("ROLLOUT_POLICY_PYTHONPATH_REQUIRED")
+    if not Path(args.policy_python).is_file():
+        raise Refused("ROLLOUT_POLICY_PYTHON_MISSING")
+    return config, mount, install_prefix, inputs, units, rig, pythonpath
+
+
+class FirstAssignmentMarker:
+    """Marks the held-out group opened, once, when the first task has been sent to a shard (never before: a run that fails to start
+    must not use up the one opening of `rollout_test` per policy). An uncertain exchange counts as sent."""
+
+    def __init__(self, path, document):
+        self.path, self.document, self.done = Path(path), document, False
+
+    def __call__(self):
+        if not self.done:
+            self.done = True
+            self.path.parent.mkdir(mode=0o700, exist_ok=True)
+            self.path.write_text(json.dumps(self.document) + "\n")
+
+    def wrap(self, factory):
+        marker = self
+
+        class MarkingControl:
+            def __init__(self, control):
+                self._control = control
+
+            def __getattr__(self, name):
+                return getattr(self._control, name)
+
+            async def assign_task(self, task):
+                try:
+                    return await self._control.assign_task(task)
+                finally:
+                    marker()
+        return lambda shard: MarkingControl(factory(shard))
 
 
 def run(args, edges: Edges, *, log=print) -> int:
-    config, mount, install_prefix, inputs, units, rig = prepare(args, edges)
+    """Refusals (`Refused`, exit 2) come only from `prepare` and the preconditions, before anything exists; once the run directory
+    exists, any other failure is exit 6 and the stops are proven by the owner."""
+    config, mount, install_prefix, inputs, units, rig, pythonpath = prepare(args, edges)
     policy_sha = inputs.identity["policy_sha256"]
     marker = None
     if args.group == "rollout_test":
-        marker = Path(args.evidence_root) / "rollout-test-opened" / f"{policy_sha[:12]}.json"
-        if marker.exists():
+        marker = FirstAssignmentMarker(Path(args.evidence_root) / "rollout-test-opened" / f"{policy_sha[:12]}.json",
+                                       {"policy_sha256": policy_sha, "run_id": args.run_id, "units": len(units)})
+        if marker.path.exists():
             raise Refused("ROLLOUT_TEST_ALREADY_OPENED")
-    probes = edges.probes or default_probes(args.unified_state_root, edges.gpu_probe)
+    gpu_probe = edges.gpu_probe or (lambda: gpu_processes(config["gpu_uuid"]))
+    probes = edges.probes or default_probes(args.unified_state_root, gpu_probe)
     preconditions = check_preconditions(probes)
+    try:
+        return _run_started(args, edges, log, config, mount, install_prefix, inputs, units, rig, pythonpath, marker, probes,
+                            gpu_probe, preconditions)
+    except Exception as error:      # noqa: BLE001 - the directory exists: a run fault, not a refusal
+        print(f"ROLLOUT_RUN_FAULT: {type(error).__name__}: {error}", file=sys.stderr)
+        return EXIT_RUN_FAULT
+
+
+def _run_started(args, edges, log, config, mount, install_prefix, inputs, units, rig, pythonpath, marker, probes, gpu_probe,
+                 preconditions):
+    policy_sha = inputs.identity["policy_sha256"]
     bundle_sha256 = inputs.identity["bundle_sha256"]
     paths = make_campaign_paths(args.evidence_root, args.run_id)
     run_root = paths["run"]
     group_root = run_root / args.group
     group_root.mkdir(mode=0o700)
-    if marker is not None:
-        marker.parent.mkdir(mode=0o700, exist_ok=True)
-        marker.write_text(json.dumps({"policy_sha256": policy_sha, "run_id": args.run_id, "units": len(units)}) + "\n")
     parallel_runtime = _ref(args.parallel_runtime_config)
     from so101_demo.cli.mujoco_batch.request import _load_runtime_config
     from so101_demo.runtime.inference.config import validate_file_ref
@@ -336,12 +410,16 @@ def run(args, edges: Edges, *, log=print) -> int:
             approved_inputs=approved_inputs(args, config, mount, args.parallel_runtime_config), config_paths=(),
             docker_runner=docker, namespace_reader=edges.namespace_reader or read_container_namespace)
         launcher = (edges.launcher_factory or RolloutShardLauncher)(**launcher_arguments)
-        pythonpath = args.policy_pythonpath or (None if mount is None else mount.package_prefix / "lib/python3.12/site-packages")
-        if pythonpath is None:
-            raise Refused("ROLLOUT_POLICY_PYTHONPATH_REQUIRED")
+        from so101_demo.runtime.act_policy.client import PolicyClient
+        from so101_demo.runtime.act_rollout.policy_service import service_health_probe
+
+        health_probe = edges.health_probe or service_health_probe(
+            PolicyClient(socket_path=run_root / "ipc" / "policy" / "policy.sock", client_id="host-health",
+                         bundle_sha256=bundle_sha256, policy_sha256=policy_sha, cameras=tuple(inputs.observation["cameras"]),
+                         max_frame_bytes=1 << 20, service_generation=generation),
+            max_consecutive_errors=args.policy_max_consecutive_errors)
         optional = {name: value for name, value in (("popen", edges.popen), ("identity_of", edges.identity_of),
-                                                    ("signal_process", edges.signal_process),
-                                                    ("health_probe", edges.health_probe), ("environ", edges.environ))
+                                                    ("signal_process", edges.signal_process), ("environ", edges.environ))
                     if value is not None}
         policy = PolicyServiceOwner(
             run=run_root, python=args.policy_python, pythonpath=pythonpath, bundle_dir=args.bundle_dir, gpu_uuid=config["gpu_uuid"],
@@ -352,27 +430,32 @@ def run(args, edges: Edges, *, log=print) -> int:
             max_inflight=args.policy_max_inflight or args.shards + 2, queue_timeout_s=args.policy_queue_timeout_s,
             inference_timeout_s=args.policy_inference_timeout_s, warm_up_calls=args.policy_warm_up_calls,
             undeclared_cameras=tuple(_undeclared_cameras(args.rollout_config)), start_timeout_s=args.policy_start_timeout_s,
-            stop_timeout_s=args.policy_stop_timeout_s, command=edges.policy_command, **optional)
+            stop_timeout_s=args.policy_stop_timeout_s, command=edges.policy_command, health_probe=health_probe, **optional)
         scene_manifest = _ref(args.scenes)
+        control_factory = edges.control_factory or (lambda shard: ContainerTaskControl(owner=shard))
+        if marker is not None:
+            control_factory = marker.wrap(control_factory)
 
         def coordinator_factory(*, context, units):
             return RolloutCoordinator(rollout=description, units=units, context=context, config=runtime,
                                       scene_manifest=scene_manifest, max_recording_shards=args.max_concurrent_episodes,
                                       max_tasks_in_flight=args.max_tasks_in_flight, clock=edges.clock, sleep=edges.sleep,
-                                      min_assignment_gap_s=args.min_assignment_gap_s or None,
-                                      **({} if edges.control_factory is None else {"control_factory": edges.control_factory}))
+                                      min_assignment_gap_s=args.min_assignment_gap_s or None, control_factory=control_factory)
+
+        checks = []
 
         def gpu_check(owner):
-            ok, processes = only_own_gpu_process(edges.gpu_probe or probes["no_gpu_process"], owner.process.pid)
-            (run_root / "host" / "gpu-after-policy-start.json").write_text(
-                json.dumps({"only_the_policy_service": ok, "policy_pid": owner.process.pid, "processes": processes}) + "\n")
+            """On the configured GPU the only compute process is the policy service: after it starts and before every wave."""
+            ok, processes = only_own_gpu_process(gpu_probe, owner.process.pid)
+            checks.append({"only_the_policy_service": ok, "policy_pid": owner.process.pid, "processes": processes})
+            (run_root / "host" / "gpu-checks.json").write_text(json.dumps(checks) + "\n")
             if not ok:
                 raise Refused("ROLLOUT_PRECONDITION_FAILED: no_gpu_process: another compute process is on the GPU")
 
         owner = RolloutCampaignOwner(
             context=context, run=run_root, registry=registry, launcher=launcher, coordinator_factory=coordinator_factory,
             policy=policy, units=units, rollout=description, options=args, docker_runner=docker, inspect_container=inspect,
-            clock=edges.clock, gpu_check=gpu_check)
+            clock=edges.clock, gpu_check=gpu_check, monitor_interval_s=edges.monitor_interval_s)
 
         async def drive():
             try:

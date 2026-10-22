@@ -124,7 +124,7 @@ def test_an_accepted_pair_records_the_timing_fields():
     assert pair["accept_latency_s"]["arm"] == pytest.approx(0.004)
     assert pair["accept_latency_s"]["gripper"] == pytest.approx(0.011)
     assert pair["accept_thread"] == {"arm": "act-rollout-spin", "gripper": "MainThread"}
-    assert pair["in_flight_before_send"] == {"arm": 2, "gripper": 2}
+    assert pair["in_flight_at_check"] == {"arm": 2, "gripper": 2}
     assert pair["load"]["loadavg"] == [1.0, 2.0, 3.0] and pair["load"]["cpu_delta_s"] == 0.25
     assert pair["check_sim_s"] == pytest.approx(clock.sim) and pair["accept_sim_s"] == pair["check_sim_s"]
     assert pair["decision_thread"] == threading.current_thread().name
@@ -150,7 +150,7 @@ def test_a_timeout_pair_names_the_late_controller_and_keeps_the_error_and_the_ti
     assert pair["outcome"] == "timeout" and pair["late_controller"] == "gripper"
     assert pair["accept_wall_s"]["gripper"] is None and pair["accept_wall_s"]["arm"] == 10.003
     assert pair["check_wall_s"] >= 10.02 and pair["load"]["loadavg"] == [1.0, 2.0, 3.0]
-    assert pair["load_at_check"]["cpu_process_s"] == 1.5
+    assert pair["load"]["cpu_process_s"] == 1.5
 
 
 def test_both_controllers_late_and_a_rejection_are_named():
@@ -351,3 +351,27 @@ def test_a_timeout_abort_row_carries_the_pair_and_the_verdict_stays_invalid(monk
     failed = [row for row in sink.steps if row.get("reason") == "goal response timeout"]
     assert len(failed) == 1 and failed[0]["goal_pair"]["late_controller"] == "gripper" and failed[0]["held"] is True
     assert result["goal_response"] == Failing.summary
+
+
+def test_nothing_but_plain_values_is_taken_before_the_goals_are_sent():
+    """T0a must not add time to the send path: the in-flight counts and the load sample come after the decision."""
+    clock, events = Clock(), []
+
+    class Recording(TimedPort):
+        def send(self, goal):
+            events.append("send")
+            return super().send(goal)
+
+        def unfinished_goals(self):
+            events.append("in_flight")
+            return 1
+
+    class RecordingLoad(FakeLoad):
+        def sample(self):
+            events.append("load")
+            return super().sample()
+
+    adapter = build(Recording(clock, accept_at=10.002), Recording(clock, accept_at=10.003), clock, RecordingLoad())
+    submit(adapter)
+    assert events[:2] == ["send", "send"] and set(events[2:]) == {"in_flight", "load"}
+    assert adapter.last_pair["in_flight_at_check"] == {"arm": 1, "gripper": 1}

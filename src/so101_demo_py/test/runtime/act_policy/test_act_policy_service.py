@@ -296,3 +296,60 @@ def test_the_process_record_names_this_process():
     record = process_record()
     assert record["pid"] == os.getpid() and record["pgid"] == os.getpgrp()
     assert record["start_ticks"] > 0 and len(record["argv_sha256"]) == 64
+
+
+def test_a_queued_request_whose_deadline_has_passed_is_dropped_without_a_model_call(rig):
+    served = rig(queue_timeout_s=30.0)
+    served.model.gate = threading.Event()
+    first = threading.Thread(target=lambda: served.client("a").infer(observation(stamp=1.0), sequence=1, deadline_ns=deadline(20)))
+    first.start()
+    assert served.model.entered.wait(5)
+    description, payload = protocol.pack_observation(observation(stamp=9.0), cameras=("head", "wrist"))
+    stale = {"schema_version": 1, "kind": "policy_request", "request_id": "b-r1", "client_id": "b", "sequence": 2,
+             "deadline_monotonic_ns": time.monotonic_ns() + 100_000_000, "observation": description}
+    ticket = served.service.submit(stale, payload, served.service.reserve())
+    time.sleep(0.3)                                  # the client has stopped waiting; the request is still in the queue
+    served.model.gate.set()
+    first.join(10)
+    assert ticket.done.wait(5)
+    assert ticket.response["outcome"] == "QUEUE_TIMEOUT" and ticket.response["reason"] == "REQUEST_DEADLINE_EXCEEDED"
+    assert ticket.response["actions"] is None and ticket.response["timing"]["started_monotonic_ns"] is None
+    assert [call["sim_time_s"] for call in served.model.calls] == [1.0]
+    assert served.service.outcomes["QUEUE_TIMEOUT"] == 1
+    served.service.release(ticket)
+
+
+def test_a_request_that_waited_past_the_services_own_limit_says_so_in_its_reason(rig):
+    served = rig(queue_timeout_s=0.05)
+    served.model.gate = threading.Event()
+    first = threading.Thread(target=lambda: served.client("a").infer(observation(stamp=1.0), sequence=1, deadline_ns=deadline(20)))
+    first.start()
+    assert served.model.entered.wait(5)
+    description, payload = protocol.pack_observation(observation(stamp=9.0), cameras=("head", "wrist"))
+    waiting = {"schema_version": 1, "kind": "policy_request", "request_id": "b-r1", "client_id": "b", "sequence": 2,
+               "deadline_monotonic_ns": time.monotonic_ns() + 60 * 10**9, "observation": description}
+    ticket = served.service.submit(waiting, payload, served.service.reserve())
+    time.sleep(0.2)
+    served.model.gate.set()
+    first.join(10)
+    assert ticket.done.wait(5) and ticket.response["reason"] == "QUEUE_DEADLINE_EXCEEDED"
+    served.service.release(ticket)
+
+
+def test_the_health_reply_counts_consecutive_service_errors_not_refusals_for_load(rig):
+    served = rig()
+
+    def health():
+        return served.client().query("policy_health_query")["consecutive_errors"]
+    assert health() == 0
+    served.model.error = ValueError("POLICY_ACTION_INVALID")
+    for expected in (1, 2):
+        assert served.client().infer(observation(), sequence=expected, deadline_ns=deadline())["outcome"] == "MODEL_ERROR"
+        assert health() == expected
+    served.model.error = None
+    assert served.client().infer(observation(), sequence=3, deadline_ns=deadline())["outcome"] == "OK"
+    assert health() == 0
+    description, _payload = protocol.pack_observation(observation(), cameras=("head", "wrist"))
+    served.service.immediate({"request_id": "x-r1", "client_id": "x", "sequence": 9,
+                              "observation": {"sim_time_s": 0.0}}, "QUEUE_FULL", "MAX_INFLIGHT_REQUESTS")
+    assert health() == 0

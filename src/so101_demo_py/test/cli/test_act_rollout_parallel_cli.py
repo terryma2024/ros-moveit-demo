@@ -56,7 +56,7 @@ class CliWorld(World):
 
 
 class Setup:
-    def __init__(self, tmp_path, monkeypatch):
+    def __init__(self, tmp_path, monkeypatch, mode="ok"):
         self.tmp = tmp_path
         self.evidence = tmp_path / "evidence"
         self.evidence.mkdir()
@@ -87,8 +87,9 @@ class Setup:
             probes={name: (lambda name=name: (self.probe_calls.append(name), (True, []))[1]) for name in cli.PRECONDITIONS},
             gpu_probe=lambda: self.gpu, docker_runner=lambda argv: self.docker_calls.append(argv),
             inputs_loader=self.inputs, launcher_factory=self.world.launcher_factory,
-            control_factory=self.world.control_factory, policy_command=[sys.executable, str(service), "--mode", "ok"],
-            clock=self.world.clock, sleep=self.world.clock.sleep)
+            control_factory=self.world.control_factory, policy_command=[sys.executable, str(service), "--mode", mode],
+            health_probe=lambda: True,                       # the fake service answers no health query; a test names the probe
+            clock=self.world.clock, sleep=self.world.clock.sleep, monitor_interval_s=0.005)
 
     def inputs(self, arguments):
         self.loaded_with = arguments
@@ -126,7 +127,8 @@ def test_a_run_makes_the_files_and_the_exit_code_of_a_clean_parallel_rollout(set
     run = setup.evidence / "run-1"
     assert (run / "run.json").is_file() and (run / "summary.json").is_file() and (run / "table.md").is_file()
     summary = read(setup, "summary.json")
-    assert summary["totals"] == {"done": 4, "valid": 4, "invalid_attempts": 0, "invalid_exhausted": 0, "not_run": 0, "units": 4}
+    assert summary["totals"] == {"done": 4, "valid": 4, "invalid_attempts": 0, "invalid_exhausted": 0, "retry_not_run": 0,
+                                 "not_run": 0, "units": 4}
     assert summary["runtime"]["shards"] == 2 and summary["runtime"]["trials"] == 2 and summary["policy_service"]["stop_confirmed"]
     assert summary["cleanup_terminated"] is True and summary["fault"] is None and summary["exit_code"] == 0
     document = read(setup, "run.json")
@@ -136,7 +138,8 @@ def test_a_run_makes_the_files_and_the_exit_code_of_a_clean_parallel_rollout(set
     assert document["rig_profile_sha256"] and len(document["run_identity_sha256"]) == 64
     assert read(setup, "services/policy/host-stop.json")["confirmed"] is True
     assert read(setup, "services/policy/host-start.json")["ready"]["bundle_sha256"] == BUNDLE
-    assert read(setup, "host/gpu-after-policy-start.json")["only_the_policy_service"] is True
+    checks = read(setup, "host/gpu-checks.json")
+    assert [item["only_the_policy_service"] for item in checks] == [True, True]       # after the start, and before the one wave
     assert (run / "host" / "containers-receipt-01-rollout.json").is_file()
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["exit_code"] == 0
     assert setup.probe_calls == list(cli.PRECONDITIONS)
@@ -203,7 +206,7 @@ def test_another_compute_process_on_the_gpu_after_the_service_starts_stops_the_r
     summary = read(setup, "summary.json")
     assert "another compute process" in summary["fault"] and summary["policy_service"]["stop_confirmed"] is True
     assert setup.world.launches == []
-    assert read(setup, "host/gpu-after-policy-start.json")["only_the_policy_service"] is False
+    assert read(setup, "host/gpu-checks.json")[-1]["only_the_policy_service"] is False
 
 
 def test_the_gpu_check_after_the_start_accepts_the_service_itself():
@@ -273,3 +276,75 @@ def test_approved_inputs_leave_out_what_the_mounted_build_already_shows_and_coll
     from so101_demo.runtime.container_campaign.mount_build import MountBuild
     kept = cli.approved_inputs(args, {"controlled_runtime": {"path": str(controlled)}}, MountBuild("a" * 40, root), parallel)
     assert set(kept) == {frozen, bundle, controlled, parallel}
+
+
+def test_the_held_out_group_is_not_used_up_by_a_run_that_never_assigned_a_task(tmp_path, monkeypatch):
+    run = Setup(tmp_path, monkeypatch, mode="exit_early")
+    assert run.run("--trials", "1", group="rollout_test") == EXIT_START_FAILED
+    assert not (run.evidence / "rollout-test-opened").exists() and run.world.documents == {}
+
+
+def test_the_held_out_group_is_marked_after_the_first_task_is_sent_and_not_before(setup):
+    states = []
+    marker = setup.evidence / "rollout-test-opened" / f"{POLICY[:12]}.json"
+    setup.world.on_assign = lambda: states.append(marker.exists())
+    assert setup.run("--trials", "1", group="rollout_test") == EXIT_OK
+    assert states == [False] and marker.is_file()
+
+
+def test_the_policy_interpreter_path_is_refused_before_anything_is_created_or_marked(setup, capsys):
+    argv = setup.argv("--trials", "1", group="rollout_test")
+    index = argv.index("--policy-pythonpath")
+    del argv[index:index + 2]
+    assert cli.main(argv, edges=setup.edges) == 2
+    assert "ROLLOUT_POLICY_PYTHONPATH_REQUIRED" in capsys.readouterr().err
+    assert not (setup.evidence / "run-1").exists() and not (setup.evidence / "rollout-test-opened").exists()
+    argv = setup.argv()
+    argv[argv.index("--policy-python") + 1] = str(setup.tmp / "no-such-python")
+    assert cli.main(argv, edges=setup.edges) == 2 and not (setup.evidence / "run-1").exists()
+
+
+def test_a_failure_after_the_run_directory_exists_is_not_a_refusal(setup, capsys):
+    def broken(**_):
+        raise RuntimeError("cannot build the launcher")
+    setup.edges.launcher_factory = broken
+    assert setup.run() == cli.EXIT_RUN_FAULT
+    assert "ROLLOUT_RUN_FAULT: RuntimeError: cannot build the launcher" in capsys.readouterr().err
+    assert (setup.evidence / "run-1").is_dir()
+
+
+def test_a_faulted_service_ends_the_run_with_the_policy_fault_code_and_no_new_assignment(tmp_path, monkeypatch):
+    run = Setup(tmp_path, monkeypatch)
+    run.edges.health_probe = lambda: True if not run.world.documents else "POLICY_SERVICE_FAULT: POLICY_MODEL_FAILED: RuntimeError"
+    assert run.run("--shards", "1") == 5
+    summary = json.loads((run.evidence / "run-1" / "summary.json").read_text())
+    assert summary["exit_code"] == 5 and summary["policy_fault"].startswith("ROLLOUT_POLICY_SERVICE_UNHEALTHY: POLICY_SERVICE_FAULT")
+    assert len(run.world.documents) == 1 and summary["totals"]["invalid_attempts"] == 0
+    assert summary["policy_service"]["stop_confirmed"] is True
+
+
+def test_without_an_explicit_probe_the_run_asks_the_service_itself_and_an_unanswering_service_is_a_policy_fault(tmp_path, monkeypatch):
+    run = Setup(tmp_path, monkeypatch)
+    run.edges.health_probe = None                    # the production probe: a policy_health_query over the socket
+    assert run.run("--shards", "1") == 5             # the fake service holds no socket: three unanswered queries in a row
+    assert "HEALTH_QUERY_UNANSWERED" in json.loads((run.evidence / "run-1" / "summary.json").read_text())["policy_fault"]
+
+
+def test_the_gpu_check_looks_only_at_the_configured_device():
+    def smi(*rows, code=0):
+        return lambda argv, **_: SimpleNamespace(returncode=code, stdout="\n".join(rows) + "\n", stderr="boom")
+    uuid = "GPU-28221cec-9d21-7753-fd5a-da645740df19"
+    other = "GPU-11111111-2222-3333-4444-555555555555"
+    free, rows = cli.gpu_processes(uuid, run=smi(f"{other}, 4242, python", f"{other}, 99, trainer"))
+    assert free is True and rows == []                                  # a job on the other GPU is not this run's business
+    free, rows = cli.gpu_processes(uuid, run=smi(f"{uuid}, 4242, python", f"{other}, 99, trainer", f"{uuid.lower()}, 7, x"))
+    assert free is False and rows == ["4242, python", "7, x"]
+    assert cli.gpu_processes(uuid, run=smi())[0] is True
+    with pytest.raises(RuntimeError, match="nvidia-smi failed"):
+        cli.gpu_processes(uuid, run=smi(code=9))
+    with pytest.raises(RuntimeError, match="without a device"):
+        cli.gpu_processes(uuid, run=smi("4242"))
+
+
+def test_the_policy_consecutive_error_bound_is_a_runtime_parameter_checked_before_anything_exists(setup):
+    assert setup.run("--policy-max-consecutive-errors", "0") == 2 and not (setup.evidence / "run-1").exists()

@@ -41,10 +41,14 @@ FAKE_SERVICE = textwrap.dedent('''
         signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
     if args.mode == "never_ready":
         time.sleep(60)
+    if args.mode == "partial_ready":
+        (record_dir / "ready.json").write_text('{"ready": tr')     # a reader that polls must not take this for the record
+        time.sleep(0.4)
     bundle = "%s" if args.mode != "wrong_bundle" else "f" * 64
-    (record_dir / "ready.json").write_text(json.dumps({"ready": True, "service_generation": args.generation,
+    (record_dir / "ready.json.tmp").write_text(json.dumps({"ready": True, "service_generation": args.generation,
         "bundle_sha256": bundle, "policy_sha256": "%s", "cameras": ["head", "wrist"], "state_dim": 8,
         "image_shape": [4, 6, 3], "socket": args.socket, "pid": os.getpid()}))
+    os.replace(record_dir / "ready.json.tmp", record_dir / "ready.json")
     while not stop["flag"]:
         time.sleep(0.02)
     (record_dir / "stop-proof.json").write_text(json.dumps({"terminated": args.mode != "unclean", "pid": os.getpid()}))
@@ -90,7 +94,8 @@ def test_a_service_that_exits_before_it_is_ready_is_a_start_failure(tmp_path):
     served = owner(tmp_path, mode="exit_early")
     with pytest.raises(PolicyServiceError, match="POLICY_SERVICE_EXITED_BEFORE_READY: 3"):
         served.start()
-    assert served.stop()["confirmed"] is False
+    stopped = served.stop()                              # it is gone: stopped; the start failure is the run's fault
+    assert stopped["confirmed"] is True and stopped["start_failed"] is True and stopped["exit_code"] == 3
 
 
 def test_a_service_that_is_never_ready_is_killed_at_the_start_timeout(tmp_path):
@@ -98,7 +103,7 @@ def test_a_service_that_is_never_ready_is_killed_at_the_start_timeout(tmp_path):
     with pytest.raises(PolicyServiceError, match="POLICY_SERVICE_READY_TIMEOUT"):
         served.start()
     assert served.process.poll() is not None
-    assert served.stop()["confirmed"] is False
+    assert served.stop()["confirmed"] is True and served.stop_result["start_failed"] is True
 
 
 def test_a_service_for_another_bundle_is_refused_and_killed(tmp_path):
@@ -172,3 +177,97 @@ def test_the_environment_is_a_minimal_allowlist(tmp_path):
     assert set(environment) == {"PATH", "HOME", "PYTHONPATH", "CUDA_VISIBLE_DEVICES", "PYTHONNOUSERSITE", "PYTHONDONTWRITEBYTECODE",
                                 "TMPDIR", "TMP", "TEMP"}
     assert environment["PYTHONPATH"] == str(PYTHONPATH) and environment["CUDA_VISIBLE_DEVICES"] == "GPU-x"
+
+
+def test_a_ready_record_that_is_read_half_written_is_read_again_until_it_parses(tmp_path):
+    served = owner(tmp_path, mode="partial_ready")
+    ready = served.start()
+    try:
+        assert ready["ready"] is True and served.healthy() is True
+    finally:
+        served.stop()
+
+
+def test_an_interrupt_during_the_start_ends_the_start_kills_the_child_and_the_stop_is_judged_after(tmp_path):
+    import threading
+
+    served = owner(tmp_path, mode="never_ready", start_timeout_s=30.0)
+    outcome = {}
+
+    def start():
+        try:
+            served.start()
+        except PolicyServiceError as error:
+            outcome["error"] = str(error)
+    thread = threading.Thread(target=start)
+    thread.start()
+    for _ in range(500):
+        if served.process is not None:
+            break
+        time.sleep(0.01)
+    result = served.stop()                              # what an interrupted run does
+    thread.join(10)
+    assert not thread.is_alive() and "POLICY_SERVICE_START_ABORTED" in outcome["error"]
+    assert served.process.poll() is not None and result["confirmed"] is True and result["start_failed"] is True
+    with pytest.raises(PolicyServiceError, match="POLICY_SERVICE_START_ABORTED"):
+        served.start()                                  # a stopped owner starts nothing
+
+
+def test_a_stop_before_any_start_is_trivially_confirmed_and_a_later_start_is_refused(tmp_path):
+    served = owner(tmp_path)
+    assert served.stop() == {"confirmed": True, "started": False, "errors": []}
+    with pytest.raises(PolicyServiceError, match="POLICY_SERVICE_START_ABORTED"):
+        served.start()
+
+
+def test_the_first_reason_a_service_is_unhealthy_is_kept(tmp_path):
+    answers = iter(["POLICY_SERVICE_FAULT: x", "OTHER"])
+    served = owner(tmp_path, health_probe=lambda: next(answers))
+    served.start()
+    try:
+        assert served.healthy() is False and served.unhealthy_reason == "POLICY_SERVICE_FAULT: x"
+        assert served.healthy() is False and served.unhealthy_reason == "POLICY_SERVICE_FAULT: x"
+    finally:
+        served.stop()
+
+
+class HealthClient:
+    def __init__(self, *replies):
+        self.replies = list(replies)
+
+    def query(self, kind, timeout_s):
+        assert kind == "policy_health_query"
+        reply = self.replies.pop(0)
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
+
+
+def health(available=True, consecutive_errors=0, reason=""):
+    return {"available": available, "consecutive_errors": consecutive_errors, "reason": reason}
+
+
+def test_the_service_health_probe_stops_a_faulted_service_that_is_still_alive():
+    from so101_demo.runtime.act_rollout.policy_service import service_health_probe
+
+    probe = service_health_probe(HealthClient(health(), health(available=False, reason="POLICY_MODEL_FAILED: RuntimeError")))
+    assert probe() is True
+    assert probe() == "POLICY_SERVICE_FAULT: POLICY_MODEL_FAILED: RuntimeError"
+
+
+def test_the_service_health_probe_stops_on_a_run_of_error_replies_but_not_on_refusals_for_load():
+    from so101_demo.runtime.act_rollout.policy_service import service_health_probe
+
+    probe = service_health_probe(HealthClient(health(consecutive_errors=2), health(consecutive_errors=3)), max_consecutive_errors=3)
+    assert probe() is True
+    assert probe() == "POLICY_SERVICE_ERRORS: 3 replies in a row were errors"
+
+
+def test_the_service_health_probe_tolerates_one_unanswered_query_but_not_three_in_a_row():
+    from so101_demo.runtime.act_rollout.policy_service import service_health_probe
+
+    slow = TimeoutError("late")
+    probe = service_health_probe(HealthClient(slow, health(), slow, slow, slow), max_unanswered=3)
+    assert probe() is True and probe() is True                       # one unanswered, then answered: the count starts again
+    assert probe() is True and probe() is True
+    assert probe().startswith("HEALTH_QUERY_UNANSWERED: 3 in a row")

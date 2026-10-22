@@ -37,3 +37,21 @@ def test_without_an_account_the_rows_are_unchanged():
     sink = Sink()
     _run(Ports(), sink)
     assert sink.steps and all("service" not in row for row in sink.steps)
+
+
+def test_the_episode_result_counts_the_services_replies_by_outcome_and_gives_the_three_times():
+    ports = Ports(script=("ok", "stale", "ok", "ok"))
+    ports.inference = ServiceInference(ports.clock, ("ok", "stale", "ok", "ok"))
+    sink = Sink()
+    result = _run(ports, sink)
+    summary = result["service"]
+    rows = [row for row in sink.steps if row.get("service")]
+    assert summary["replies"] == len(rows) and summary["replies"] > 0
+    assert summary["outcomes"] == {"OK": sum(1 for row in rows if row["service"]["outcome"] == "OK"),
+                                   "QUEUE_TIMEOUT": sum(1 for row in rows if row["service"]["outcome"] == "QUEUE_TIMEOUT")}
+    assert summary["queue_wait_ms"]["p50"] == 1.25 and summary["inference_ms"]["max"] == 8.5
+    assert summary["round_trip_s"]["n"] == len(rows) and summary["round_trip_s"]["max"] >= summary["round_trip_s"]["p50"]
+
+
+def test_an_in_process_model_leaves_no_service_summary_in_the_result():
+    assert "service" not in _run(Ports(), Sink())

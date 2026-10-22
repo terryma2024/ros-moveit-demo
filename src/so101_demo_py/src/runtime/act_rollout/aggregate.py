@@ -10,39 +10,50 @@ from __future__ import annotations
 from so101_demo.runtime.act_rollout.plan import FINAL_VERDICTS
 
 NOT_RUN = "NOT_RUN"
+#: the last attempt was INVALID and its retry was queued but the run stopped before it ran: not an exhausted retry budget
+RETRY_NOT_RUN = "RETRY_NOT_RUN"
 
 
-def cell_verdict(attempts) -> str:
-    """The verdict of a (point, trial): its last attempt, INVALID when none gave a result, NOT_RUN when none was made."""
+def cell_verdict(attempts, retry_not_run=False) -> str:
+    """The verdict of a (point, trial): its last attempt, INVALID when none gave a result, NOT_RUN when none was made,
+    RETRY_NOT_RUN when the last attempt was INVALID and its retry never ran because the run stopped."""
     if not attempts:
         return NOT_RUN
+    if retry_not_run and attempts[-1]["verdict"] == "INVALID":
+        return RETRY_NOT_RUN
     return attempts[-1]["verdict"]
 
 
-def point_counts(trials) -> dict:
-    """`{done, valid, invalid_attempts, trials, cells}` of one point over its trials (a list of attempt lists)."""
+def point_counts(trials, retry_not_run=()) -> dict:
+    """`{done, valid, invalid_attempts, trials}` of one point over its trials (a list of attempt lists; `retry_not_run` the
+    indexes of the trials whose retry never ran)."""
     done = valid = invalid = 0
-    for attempts in trials:
+    for index, attempts in enumerate(trials):
         invalid += sum(1 for attempt in attempts if attempt["verdict"] == "INVALID")
-        final = cell_verdict(attempts)
+        final = cell_verdict(attempts, index in retry_not_run)
         if final in FINAL_VERDICTS:
             valid += 1
             done += 1 if final == "DONE" else 0
     return {"done": done, "valid": valid, "invalid_attempts": invalid, "trials": len(trials)}
 
 
-def build_summary(*, run_id, group, points, trials, attempts, header) -> dict:
-    """`attempts` maps `(point, trial)` to its attempts in order; `header` carries the run's identity and runtime values."""
+def build_summary(*, run_id, group, points, trials, attempts, header, retry_not_run=frozenset()) -> dict:
+    """`attempts` maps `(point, trial)` to its attempts in order; `header` carries the run's identity and runtime values;
+    `retry_not_run` holds the `(point, trial)` keys whose queued retry never ran."""
     per_point = {}
     for point in points:
         cells = [list(attempts.get((point, trial), ())) for trial in range(1, trials + 1)]
-        per_point[point] = dict(point_counts(cells), verdicts=[cell_verdict(cell) for cell in cells])
-    units = [dict(point_id=point, trial=trial, final_verdict=cell_verdict(attempts.get((point, trial), ())),
+        skipped = {index for index, trial in enumerate(range(1, trials + 1)) if (point, trial) in retry_not_run}
+        per_point[point] = dict(point_counts(cells, skipped),
+                                verdicts=[cell_verdict(cell, index in skipped) for index, cell in enumerate(cells)])
+    units = [dict(point_id=point, trial=trial,
+                  final_verdict=cell_verdict(attempts.get((point, trial), ()), (point, trial) in retry_not_run),
                   attempts=list(attempts.get((point, trial), ())))
              for trial in range(1, trials + 1) for point in points]
     totals = dict(done=sum(item["done"] for item in per_point.values()), valid=sum(item["valid"] for item in per_point.values()),
                   invalid_attempts=sum(item["invalid_attempts"] for item in per_point.values()),
                   invalid_exhausted=sum(1 for unit in units if unit["final_verdict"] == "INVALID"),
+                  retry_not_run=sum(1 for unit in units if unit["final_verdict"] == RETRY_NOT_RUN),
                   not_run=sum(1 for unit in units if unit["final_verdict"] == NOT_RUN), units=len(units))
     return dict(header, schema_version=1, kind="ACT_ROLLOUT_PARALLEL_SUMMARY", run_id=run_id, group=group, points=list(points),
                 trials=trials, per_point=per_point, totals=totals, units=units)
@@ -60,6 +71,7 @@ def render_table(summary: dict) -> str:
     totals = summary["totals"]
     lines += ["", f"Totals: {totals['done']} DONE of {totals['valid']} valid attempts over {totals['units']} (point, trial) cells; "
                   f"{totals['invalid_attempts']} INVALID attempts, {totals['invalid_exhausted']} cells never gave a result, "
+                  f"{totals['retry_not_run']} cells whose retry never ran (the run stopped first), "
                   f"{totals['not_run']} never run.", ""]
     failures, invalid = [], []
     for unit in summary["units"]:

@@ -73,6 +73,7 @@ def test_the_service_writes_its_records_serves_a_request_and_proves_its_stop(tmp
         assert record["pid"] == os.getpid() and record["kind"] == "ACT_POLICY_SERVICE_PROCESS"
         assert record["generation"] == "gen-test" and record["start_ticks"] > 0
         ready = json.loads((tmp_path / "record" / "ready.json").read_text())
+        assert not list((tmp_path / "record").glob("*.tmp"))                  # written atomically: no half file is left
         assert ready["ready"] is True and ready["bundle_sha256"] == BUNDLE_SHA and ready["policy_sha256"] == POLICY_SHA
         assert ready["cameras"] == ["head", "wrist"] and len(ready["warm_up_s"]) == 2 and ready["max_inflight"] == 2
         assert ready["socket"] == str(tmp_path / "ipc" / "policy.sock") and ready["socket_inode"] > 0

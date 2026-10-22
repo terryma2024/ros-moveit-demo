@@ -19,7 +19,7 @@ from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.runtime.act_rollout import task_builder
 from so101_demo.runtime.act_rollout.coordinator import RolloutCoordinator
 from so101_demo.runtime.act_rollout.owner import (
-    EXIT_INVALID, EXIT_OK, EXIT_START_FAILED, EXIT_STOP_UNCONFIRMED, RolloutCampaignOwner)
+    EXIT_INVALID, EXIT_OK, EXIT_POLICY_FAULT, EXIT_RUN_FAULT, EXIT_START_FAILED, EXIT_STOP_UNCONFIRMED, RolloutCampaignOwner)
 from so101_demo.runtime.act_rollout.plan import build_units
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths
 from so101_demo.runtime.container_campaign.task_contracts import InstanceStatus, TaskStatus
@@ -123,6 +123,8 @@ class Instance:
     async def assign_task(self, task):
         document = json.loads(Path(task.inputs_ref.path).read_text())
         self.world.documents[task.task_id] = document
+        if getattr(self.world, "on_assign", None) is not None:
+            self.world.on_assign()
         self.world.running += 1
         self.world.max_running = max(self.world.max_running, self.world.running)
         self.delivered[task.task_id] = 0
@@ -152,6 +154,7 @@ class Policy:
         self.process = SimpleNamespace(pid=4242)
         self.stop_result = None
         self.healthy_answers = []
+        self.unhealthy_reason = None
 
     def start(self):
         if self.world.policy_error is not None:
@@ -159,7 +162,10 @@ class Policy:
         return {"ready": True, "bundle_sha256": "a" * 64}
 
     def healthy(self):
-        return self.healthy_answers.pop(0) if self.healthy_answers else True
+        answer = self.healthy_answers.pop(0) if self.healthy_answers else True
+        if answer is not True:
+            self.unhealthy_reason = answer if isinstance(answer, str) else None
+        return answer is True
 
     def stop(self):
         self.world.policy_stopped += 1
@@ -233,6 +239,14 @@ class World:
         names = ("episode.json", "endpoint.json", "steps.jsonl", "world.jsonl", "stop-proof.json")
         for name in names:
             (episode / name).write_text("{}\n")
+        rows = [{"sequence": 0, "applied": True, "latency_wall_s": 0.020,
+                 "service": {"outcome": "OK", "queue_wait_ms": 1.0, "inference_ms": 10.0}},
+                {"sequence": 1, "applied": True, "latency_wall_s": 0.030,
+                 "service": {"outcome": "OK", "queue_wait_ms": 3.0, "inference_ms": 12.0}},
+                {"sequence": 2, "late": True, "submit_wall_s": 5.0, "reply_wall_s": 5.4,
+                 "service": {"outcome": "QUEUE_TIMEOUT", "queue_wait_ms": 90.0, "inference_ms": None}},
+                {"sequence": 3, "skipped": True}]
+        (episode / "steps.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
         (episode / "episode.json").write_text(json.dumps({
             "kind": "ACT_ROLLOUT_EPISODE", "run_id": "run-1", "attempt_id": unit_id,
             "verdict": behaviour.get("episode_verdict", verdict), "result": {"motion": {"max_arm_displacement_rad": 0.75}}}))
@@ -242,6 +256,7 @@ class World:
                   "verdict": verdict, "done": verdict == "DONE", "reason": reason, "status": "COMPLETED", "retire_errors": [],
                   "elapsed_wall_s": 120.5, "task_wall_s": 130.0, "counts": {"applied": 10, "clamped_steps": 0},
                   "clamped_steps": 0, "evidence": [f"episode/{name}" for name in names], "goal_response": {"pairs": 10},
+                  "service": {"replies": 3, "outcomes": {"OK": 2, "QUEUE_TIMEOUT": 1}},
                   "stop_confirmed": True}
         write_task_result(shard.root / "output", task_id, result)
         return False
@@ -270,7 +285,7 @@ def test_every_unit_runs_in_one_wave_and_the_run_is_proven_stopped(world):
     owner, cleanup, summary = go(world)
     assert world.launches == [(0, ("w00", "w01"), 2)]
     assert summary["exit_code"] == EXIT_OK and summary["totals"] == {
-        "done": 4, "valid": 4, "invalid_attempts": 0, "invalid_exhausted": 0, "not_run": 0, "units": 4}
+        "done": 4, "valid": 4, "invalid_attempts": 0, "invalid_exhausted": 0, "retry_not_run": 0, "not_run": 0, "units": 4}
     assert cleanup["terminated"] is True and cleanup["policy_service"]["confirmed"] is True and world.policy_stopped == 1
     assert sorted(world.closed) == ["wave-0-w00-g1", "wave-0-w01-g1"]
     verified = json.loads((world.run / "host" / "wave-0-verified.json").read_text())
@@ -294,12 +309,14 @@ def test_the_task_documents_carry_the_run_the_unit_and_the_policy_endpoint(world
     assert (document["scene_id"], document["point_id"], document["trial"], document["attempt_number"],
             document["attempt_id"]) == ("task_start-t1-a1", "task_start", 1, 1, "task_start-t1-a1")
     assert document["group"] == "rollout_standard" and document["worker_id"] == "w00" and document["launch_generation"] == 1
-    assert document["policy"]["client_id"] == "w00-g1" and document["policy"]["socket_path"] == "/act/ipc/policy/policy.sock"
+    # the client id names the attempt, so the service's request rows join to episodes
+    assert document["policy"]["client_id"] == "w00-g1-task_start-t1-a1"
+    assert document["policy"]["socket_path"] == "/act/ipc/policy/policy.sock"
     assert document["execution"] == {"execution_prefix": None, "temporal_ensembling": 0.01}
     assert document["inputs"]["install_prefix"] == "/i" and document["preconditions"] == {"no_container": {"ok": True, "detail": []}}
     assert set(document) == task_builder._FIELDS
     other = world.documents["wave-0-w01-forward_5cm-t1-a1"]
-    assert other["policy"]["client_id"] == "w01-g1"
+    assert other["policy"]["client_id"] == "w01-g1-forward_5cm-t1-a1"
     journal = json.loads((world.run / "host/wave-0/task-journal/wave-0-w00-task_start-t1-a1/assigned.json").read_text())
     assert journal["task"]["deadline_monotonic_s"] <= world.context.deadline_monotonic_s
 
@@ -373,28 +390,83 @@ def test_a_policy_service_that_does_not_start_launches_nothing_and_still_proves_
     assert summary["totals"]["not_run"] == 4
 
 
-def test_an_unhealthy_policy_service_stops_the_dispatch_and_the_rest_is_not_run(world):
-    world.policy.healthy_answers = [False]
-    owner = world.owner(sleep=asyncio.sleep, monitor_interval_s=0.001)
-    # the fake instances answer instantly in fake time, so hold the first status poll until the monitor has looked
-    original = Instance.get_status
+def test_a_faulted_policy_service_stops_the_dispatch_and_the_run_reports_the_fault_not_a_pile_of_invalid_attempts(tmp_path, runtime):
+    world = World(tmp_path, runtime, shards=1, trials=3)
+    world.policy.healthy_answers = [True, "POLICY_SERVICE_FAULT: POLICY_MODEL_FAILED: RuntimeError"]
+    owner, cleanup, summary = go(world, monitor_interval_s=0.005)
+    assert owner.dispatch_stopped == "ROLLOUT_CLOSING" or owner.dispatch_stopped == "ROLLOUT_POLICY_SERVICE_UNHEALTHY"
+    assert summary["exit_code"] == EXIT_POLICY_FAULT
+    assert summary["policy_fault"] == "ROLLOUT_POLICY_SERVICE_UNHEALTHY: POLICY_SERVICE_FAULT: POLICY_MODEL_FAILED: RuntimeError"
+    assert len(world.documents) == 1                                   # the task in flight finished; nothing new was assigned
+    assert summary["totals"]["not_run"] == 5 and summary["totals"]["invalid_attempts"] == 0
+    assert cleanup["terminated"] is True and world.policy_stopped == 1
 
-    async def slow(self, task_id=None):
-        await asyncio.sleep(0.02)
-        return await original(self, task_id)
-    Instance.get_status = slow
-    try:
-        async def drive():
-            try:
-                await owner.run()
-            finally:
-                return await owner.close()
-        cleanup = asyncio.run(drive())
-    finally:
-        Instance.get_status = original
+
+def test_a_fault_of_the_run_that_is_not_the_policy_service_has_its_own_exit_code(world):
+    owner = world.owner()
+    owner.fault = "ROLLOUT_INSTANCE_EXECUTION_FAULT: something"
+    cleanup = asyncio.run(_drive(owner))
     summary = owner.finish(cleanup, header={})
-    assert owner.dispatch_stopped in ("ROLLOUT_POLICY_SERVICE_UNHEALTHY", "ROLLOUT_CLOSING")
-    assert summary["exit_code"] != EXIT_OK
+    assert summary["exit_code"] == EXIT_RUN_FAULT
+
+
+def test_the_gpu_is_checked_after_the_start_and_before_every_wave_and_a_failed_check_leaves_the_retry_not_run(world):
+    world.script["forward_5cm-t2-a1"] = {"verdict": "INVALID", "reason": "CONTROLLER_PAIR_FAILED: goal response timeout"}
+    calls = []
+
+    def gpu_check(policy):
+        calls.append(len(world.launches))
+        if len(calls) == 3:                                             # start, wave 0, then the wave that would retry
+            raise ValueError("ROLLOUT_PRECONDITION_FAILED: no_gpu_process: another compute process is on the GPU")
+    owner, cleanup, summary = go(world, gpu_check=gpu_check)
+    assert calls == [0, 0, 1] and len(world.launches) == 1
+    cell = next(unit for unit in summary["units"] if unit["point_id"] == "forward_5cm" and unit["trial"] == 2)
+    assert [attempt["verdict"] for attempt in cell["attempts"]] == ["INVALID"] and cell["final_verdict"] == "RETRY_NOT_RUN"
+    assert summary["totals"]["retry_not_run"] == 1 and summary["totals"]["invalid_exhausted"] == 0
+    assert summary["totals"]["done"] == 3 and summary["exit_code"] == EXIT_RUN_FAULT
+    assert "another compute process" in summary["fault"]
+    assert "retry_not_run" in json.dumps(summary["totals"]) and "never ran" in (world.run / "table.md").read_text()
+
+
+def test_the_run_reports_what_the_policy_service_did_for_every_episode_and_for_the_run(world):
+    owner, cleanup, summary = go(world)
+    attempt = summary["units"][0]["attempts"][0]
+    assert attempt["service"] == {"replies": 3, "outcomes": {"OK": 2, "QUEUE_TIMEOUT": 1}}
+    service = summary["service"]
+    assert service["replies"] == 12 and service["outcomes"] == {"OK": 8, "QUEUE_TIMEOUT": 4}
+    assert service["queue_wait_ms"]["n"] == 12 and service["queue_wait_ms"]["max"] == 90.0 and service["queue_wait_ms"]["p50"] == 3.0
+    assert service["inference_ms"]["n"] == 8 and service["inference_ms"]["p50"] == 11.0
+    assert service["round_trip_s"]["n"] == 12 and service["round_trip_s"]["max"] == pytest.approx(0.4)
+    verified = json.loads((world.run / "host" / "wave-0-verified.json").read_text())
+    assert all("service_samples" not in item for item in verified["units"])      # samples are kept in memory only
+
+
+def test_an_interrupt_while_the_policy_service_is_starting_still_stops_it(world):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    class Slow(Policy):
+        def start(self):
+            started.set()
+            assert release.wait(10)
+            raise RuntimeError("POLICY_SERVICE_START_ABORTED")
+
+        def stop(self):
+            release.set()                       # what the real owner does: tell a start in progress to end, then judge the stop
+            return super().stop()
+    world.policy = Slow(world)
+
+    async def interrupted():
+        owner = world.owner(policy=world.policy)
+        task = asyncio.create_task(owner.run())
+        while not started.is_set():
+            await asyncio.sleep(0.001)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        return owner, await owner.close()
+    owner, cleanup = asyncio.run(interrupted())
+    assert world.policy_stopped == 1 and cleanup["terminated"] is True and world.launches == []
 
 
 def test_a_shard_whose_stop_is_not_proven_stops_the_run_unconfirmed(world):

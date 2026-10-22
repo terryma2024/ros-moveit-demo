@@ -51,7 +51,9 @@ class PolicyClient:
             return f"{self.client_id}-r{self._counter}"
 
     def exchange(self, document, payload, deadline_ns):
-        frame = protocol.encode_frame(document, payload, max_frame_bytes=self.max_frame_bytes)
+        """`payload` is the bytes of the images or a list of buffers (sent in place with `sendmsg`, never joined)."""
+        buffers = [payload] if isinstance(payload, (bytes, bytearray, memoryview)) else list(payload)
+        head, views = protocol.encode_frame_parts(document, buffers, max_frame_bytes=self.max_frame_bytes)
         directory = open_socket_parent(self.socket_path)
         try:
             info = os.stat(self.socket_path.name, dir_fd=directory, follow_symlinks=False)
@@ -67,7 +69,7 @@ class PolicyClient:
                         connection.connect(transport_address(self.socket_path, directory))
                     else:
                         try:
-                            connection.sendall(frame)
+                            protocol.send_frame_parts(connection, head, views)
                         except (BrokenPipeError, ConnectionResetError):
                             pass        # a full service answers from the header and closes: read its one reply
                 response, _ = protocol.receive_frame(connection, deadline_monotonic_ns=deadline_ns,
@@ -80,7 +82,7 @@ class PolicyClient:
 
     def infer(self, observation, *, sequence, deadline_ns):
         """The validated `policy_response` for one observation, whatever its outcome."""
-        description, payload = protocol.pack_observation(observation, cameras=self.cameras)
+        description, payload = protocol.pack_observation_views(observation, cameras=self.cameras)
         request = {"schema_version": protocol.SCHEMA_VERSION, "kind": "policy_request",
                    "request_id": self._new_request_id(), "client_id": self.client_id, "sequence": sequence,
                    "deadline_monotonic_ns": deadline_ns, "observation": description}
@@ -101,10 +103,13 @@ class PolicyClient:
 class SocketInferenceTransport:
     """`ActInferenceProcess` transport over one worker thread that exchanges requests with the policy service."""
 
-    def __init__(self, client, *, request_timeout_s, monotonic=time.monotonic, monotonic_ns=time.monotonic_ns):
+    def __init__(self, client, *, request_timeout_s, max_reply_age_s=None, monotonic=time.monotonic,
+                 monotonic_ns=time.monotonic_ns):
         if not isinstance(client, PolicyClient) and not callable(getattr(client, "infer", None)):
             raise ValueError("INFERENCE_TRANSPORT_INVALID")
         self.client, self.request_timeout_s = client, float(request_timeout_s)
+        #: a reply older than this is refused by the boundary, so the client stops waiting then (never later than the request timeout)
+        self.reply_window_s = min(self.request_timeout_s, self.request_timeout_s if max_reply_age_s is None else float(max_reply_age_s))
         self.monotonic, self.monotonic_ns = monotonic, monotonic_ns
         self._requests = queue.Queue()
         self._lock = threading.Lock()
@@ -123,7 +128,7 @@ class SocketInferenceTransport:
     def _answer(self, request):
         """The reply for one request, or None when nothing is to be delivered (the boundary's own deadline decides)."""
         sequence = request["sequence"]
-        deadline_ns = self.monotonic_ns() + int(self.request_timeout_s * 1e9)
+        deadline_ns = request["sent_ns"] + int(self.reply_window_s * 1e9)
         try:
             response = self.client.infer(request["observation"], sequence=sequence, deadline_ns=deadline_ns)
         except TimeoutError:
@@ -158,7 +163,8 @@ class SocketInferenceTransport:
     def send(self, request: dict) -> None:
         if self._closed:
             raise ValueError("INFERENCE_PROCESS_CLOSED")
-        job = {"sequence": request["sequence"], "observation": request["observation"], "sent_s": self.monotonic()}
+        job = {"sequence": request["sequence"], "observation": request["observation"], "sent_s": self.monotonic(),
+               "sent_ns": self.monotonic_ns()}
         with self._lock:
             self._latest, self._reply = request["sequence"], None
         self._requests.put(job)

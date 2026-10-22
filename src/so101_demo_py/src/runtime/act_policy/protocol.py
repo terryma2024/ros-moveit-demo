@@ -162,6 +162,8 @@ def validate_response(document):
 
 
 _QUERY_KINDS = ("policy_ready_query", "policy_health_query")
+#: outcomes that say the service or the request is wrong; a refusal for load (full, late) is not one of them
+ERROR_OUTCOMES = frozenset({"MODEL_ERROR", "INFRA_ERROR", "INPUT_INVALID"})
 
 
 def validate_query(document):
@@ -195,9 +197,9 @@ def validate_service_reply(document):
             _require(type(document["ready"]) is bool)
         else:
             _require(document["kind"] == "policy_health")
-            _keys(document, common + ("available", "reason", "inflight", "served", "refused"))
+            _keys(document, common + ("available", "reason", "inflight", "served", "refused", "consecutive_errors"))
             _require(type(document["available"]) is bool and type(document["reason"]) is str)
-            for name in ("inflight", "served", "refused"):
+            for name in ("inflight", "served", "refused", "consecutive_errors"):
                 _int(document[name])
         _require(document["schema_version"] == SCHEMA_VERSION)
         _ident(document["request_id"])
@@ -301,6 +303,58 @@ def receive_frame(connection, *, deadline_monotonic_ns, max_frame_bytes):
     if extra:
         raise ValueError("POLICY_FRAME_INVALID: overlong")
     return document, payload
+
+
+def encode_frame_parts(document, payloads, *, max_frame_bytes):
+    """The frame of `encode_frame` as `(head, buffers)`: the two size words and the header in `head`, the payload left in place.
+
+    The bytes on the wire are identical to `encode_frame(document, b"".join(payloads))`; the images are not copied to build it."""
+    _limit(max_frame_bytes)
+    try:
+        document = validate_message(document)
+        views = [memoryview(item).cast("B") if memoryview(item).format != "B" or memoryview(item).ndim != 1 else memoryview(item)
+                 for item in payloads]
+        if sum(len(view) for view in views) != _expected_payload(document):
+            raise ValueError("payload")
+        header = canonical_json(document)
+    except (ValueError, TypeError, IpcError) as error:
+        raise ValueError("POLICY_FRAME_INVALID: header or payload") from error
+    size = 4 + len(header) + sum(len(view) for view in views)
+    if size > max_frame_bytes:
+        raise ValueError("POLICY_FRAME_INVALID: body size")
+    return struct.pack(">II", size, len(header)) + header, views
+
+
+def send_frame_parts(connection, head, buffers):
+    """Send `head` and then every buffer with `sendmsg`, without joining them; handles a partial send."""
+    pending = [memoryview(head)] + [view for view in buffers if len(view)]
+    while pending:
+        sent = connection.sendmsg(pending)
+        while sent:
+            first = pending[0]
+            if sent >= len(first):
+                sent -= len(first)
+                pending.pop(0)
+            else:
+                pending[0] = first[sent:]
+                sent = 0
+
+
+def pack_observation_views(observation, *, cameras):
+    """`(description, buffers)` like `pack_observation`, with the images' own memory as the buffers (no copy of a contiguous array)."""
+    import numpy as np
+
+    images, buffers = [], []
+    for name in cameras:
+        array = observation[name]
+        if (not isinstance(array, np.ndarray) or array.dtype != np.uint8 or array.ndim != 3 or array.shape[2] != 3
+                or min(array.shape) <= 0):
+            raise ValueError("POLICY_OBSERVATION_IMAGE_INVALID")
+        array = np.ascontiguousarray(array)          # a no-op for a contiguous array
+        images.append({"name": name, "shape": list(array.shape), "byte_length": int(array.size)})
+        buffers.append(memoryview(array).cast("B"))
+    return ({"sim_time_s": float(observation["sim_time_s"]), "state": [float(value) for value in observation["state"]],
+             "images": images}, buffers)
 
 
 def pack_observation(observation, *, cameras):

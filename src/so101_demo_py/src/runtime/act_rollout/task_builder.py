@@ -309,6 +309,8 @@ def task_result(document, result, names, *, wall_s):
         "task_wall_s": round(wall_s, 6), "counts": counts, "clamped_steps": counts.get("clamped_steps", 0),
         "evidence": [f"episode/{name}" for name in names],
         "goal_response": result.get("goal_response"),
+        #: the policy service's account of this episode's replies: counts by outcome, queue wait, model time, round trip
+        "service": result.get("service"),
         "stop_confirmed": (result.get("stop") or {}).get("confirmed") is True}
     return summary
 
@@ -327,7 +329,10 @@ def real_ports(*, shard_spec, document, inputs, scene, stack, task_dir, files, p
     if getattr(stack.launch, "rig", rig.rig) != rig.rig:
         raise ValueError("ROLLOUT_BORROWED_STACK_RIG_MISMATCH")
     resources = rollout_resources(shard_spec, task_root=task_dir)
-    transport = SocketInferenceTransport(policy_client, request_timeout_s=inputs.runtime_config["inference"]["request_timeout_s"])
+    inference_config = inputs.runtime_config["inference"]
+    # the client stops waiting for a reply when the boundary would refuse it as too old (and never after the request timeout)
+    transport = SocketInferenceTransport(policy_client, request_timeout_s=inference_config["request_timeout_s"],
+                                         max_reply_age_s=inference_config["max_reply_age_s"])
     inference = ActInferenceProcess(config=inputs.runtime_config, transport=transport, clock=time.monotonic)
     runner = make_policy_runner(inputs, RemotePolicy())
     runtime = ActRosRuntimePorts(resources, catalog={scene["scene_id"]: {"cup_position_world_m": scene["cup_position_world_m"]}},
@@ -344,7 +349,10 @@ def real_ports(*, shard_spec, document, inputs, scene, stack, task_dir, files, p
                               rig_profile=stack.launch.rig_profile)
     ports = NativeEpisodePorts(runtime=runtime, lease=lease, scene=scene, directory=files.directory, inputs=inputs,
                                environment=dict(os.environ), binding=binding, runner=runner, inference=inference,
-                               transport=transport, pilot_factory=pilot, recording_dir=None)
+                               transport=transport, pilot_factory=pilot,
+                               # as natively: the recorder works beside the episode (its process manifest stays there) and its raw
+                               # directory is moved into the episode directory when the recorder has closed the bag
+                               recording_dir=Path(task_dir) / "recordings" / document["attempt_id"])
     return SimpleNamespace(ports=ports, inference=inference, transport=transport, runtime=runtime, binding=binding, lease=lease)
 
 

@@ -28,7 +28,7 @@ import threading
 import time
 
 from so101_demo.runtime.act_policy.service import (
-    PolicyService, PolicyUnixServer, process_record, write_json)
+    PolicyService, PolicyUnixServer, process_record, write_json, write_json_atomic)
 
 DEFAULT_LEGACY_CAMERAS = ("head", "wrist")
 
@@ -119,7 +119,7 @@ def serve(args, *, policy_factory=default_policy_factory, stop=None, install_sig
     stop = threading.Event() if stop is None else stop
     args.record_dir.mkdir(mode=0o700)
     record = process_record()
-    write_json(args.record_dir / "process-record.json", {
+    write_json_atomic(args.record_dir / "process-record.json", {
         "schema_version": 1, "kind": "ACT_POLICY_SERVICE_PROCESS", **record, "socket": str(args.socket),
         "record_dir": str(args.record_dir), "bundle_dir": str(args.bundle_dir), "generation": args.generation,
         "gpu_uuid": args.gpu_uuid, "started_wall_ns": time.time_ns()})
@@ -152,7 +152,8 @@ def serve(args, *, policy_factory=default_policy_factory, stop=None, install_sig
         service.start()
         server.start()
         ready = service.query({"schema_version": 1, "kind": "policy_ready_query", "request_id": "startup"})
-        write_json(args.record_dir / "ready.json", dict(ready, socket=str(args.socket), socket_inode=server.socket_inode))
+        # atomically: the Host polls for this file and must never read half of it
+        write_json_atomic(args.record_dir / "ready.json", dict(ready, socket=str(args.socket), socket_inode=server.socket_inode))
         stop.wait()
         code = 0
     except Exception as error:      # noqa: BLE001 - reported in the stop proof; the service is stopped below either way

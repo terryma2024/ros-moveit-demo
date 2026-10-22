@@ -22,7 +22,8 @@ class RolloutInstanceDispatch(InstanceDispatch):
     def task_document(self, task_id, scene_id):
         rollout = self.rollout
         unit = rollout["units"][scene_id]
-        policy = dict(rollout["policy"], client_id=f"{self.worker_id}-g{self.generation}")
+        # the client id names the attempt, so every request row of the policy service joins to an episode
+        policy = dict(rollout["policy"], client_id=f"{self.worker_id}-g{self.generation}-{scene_id}")
         return dict(schema_version=1, kind=task_builder.KIND, task_id=task_id, worker_id=self.worker_id,
                     launch_generation=self.generation, wave_id=self.wave_id, scene_id=scene_id, point_id=unit.point_id,
                     group=unit.group, trial=unit.trial, attempt_number=unit.attempt_number, attempt_id=unit.unit_id,

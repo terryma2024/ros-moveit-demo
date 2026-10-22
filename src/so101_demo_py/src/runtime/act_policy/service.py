@@ -85,6 +85,7 @@ class PolicyService:
         self._fault_reason = "NOT_STARTED"
         self._worker = None
         self.outcomes = Counter()
+        self.consecutive_errors = 0
         self.max_inflight_seen = 0
         self.warm_up_s = list(identity.get("warm_up_s", []))
 
@@ -135,6 +136,11 @@ class PolicyService:
     def _count(self, request, outcome, timing):
         with self._lock:
             self.outcomes[outcome] += 1
+            # a run of replies that say the service or the request is wrong; an OK reply ends it, a refusal for load does not count
+            if outcome == "OK":
+                self.consecutive_errors = 0
+            elif outcome in protocol.ERROR_OUTCOMES:
+                self.consecutive_errors += 1
         if self.audit is not None:
             try:
                 self.audit({"request_id": request["request_id"], "client_id": request["client_id"],
@@ -215,12 +221,15 @@ class PolicyService:
                 if ticket.done.is_set() or ticket.abandoned:
                     continue
                 now = self.clock()
-                limit = min(ticket.timing["queued_monotonic_ns"] + int(self.queue_timeout_s * 1e9),
-                            ticket.request["deadline_monotonic_ns"])
                 if not self._available:
                     self._finish(ticket, "INFRA_ERROR", self._fault_reason)
                     continue
-                if now >= limit:
+                # A request that is too old to describe the present is dropped here, without a model call: its own deadline
+                # (the client no longer waits) or the longest wait the service allows.
+                if now >= ticket.request["deadline_monotonic_ns"]:
+                    self._finish(ticket, "QUEUE_TIMEOUT", "REQUEST_DEADLINE_EXCEEDED")
+                    continue
+                if now >= ticket.timing["queued_monotonic_ns"] + int(self.queue_timeout_s * 1e9):
                     self._finish(ticket, "QUEUE_TIMEOUT", "QUEUE_DEADLINE_EXCEEDED")
                     continue
                 ticket.state = "RUNNING"
@@ -269,7 +278,7 @@ class PolicyService:
                 return protocol.validate_service_reply(base | {
                     "kind": "policy_health", "available": self._available, "reason": self._fault_reason,
                     "inflight": len(self._slots), "served": self.outcomes["OK"],
-                    "refused": self.outcomes["QUEUE_FULL"]})
+                    "refused": self.outcomes["QUEUE_FULL"], "consecutive_errors": self.consecutive_errors})
             identity = self.identity
             return protocol.validate_service_reply(base | {
                 "kind": "policy_ready", "bundle_sha256": identity["bundle_sha256"], "policy_sha256": identity["policy_sha256"],
@@ -427,6 +436,20 @@ def process_record(pid=None):
     cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
     return {"pid": pid, "pgid": int(fields[2]), "start_ticks": int(fields[19]),
             "argv_sha256": hashlib.sha256(cmdline).hexdigest()}
+
+
+def write_json_atomic(path, document):
+    """Create `path` (a new file) so that a reader sees all of it or none: written and synced as `<name>.tmp`, then renamed."""
+    path = Path(path)
+    temporary = path.with_name(path.name + ".tmp")
+    write_json(temporary, document)
+    os.rename(temporary, path)
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return path
 
 
 def write_json(path, document):

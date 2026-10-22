@@ -183,3 +183,33 @@ def test_a_boundary_over_the_real_socket_and_service_returns_the_models_chunk(tm
         process.close()
     finally:
         rig.close()
+
+
+def test_the_client_stops_waiting_when_the_boundary_would_refuse_the_reply_and_never_later_than_the_request_timeout():
+    for max_age, expected in ((0.3, 0.3), (None, 0.5), (0.9, 0.5)):
+        client = FakeClient([response()])
+        transport = SocketInferenceTransport(client, request_timeout_s=0.5, max_reply_age_s=max_age)
+        before = time.monotonic_ns()
+        transport.send({"sequence": 1, "observation": observation()})
+        after = time.monotonic_ns()
+        while not client.calls:
+            time.sleep(0.001)
+        _sequence, deadline_ns = client.calls[0]
+        assert before + int(expected * 1e9) <= deadline_ns <= after + int(expected * 1e9)
+        transport.close()
+
+
+def test_the_deadline_counts_from_the_send_not_from_when_the_worker_gets_to_it():
+    gate = threading.Event()
+    client = FakeClient([lambda sequence: (gate.wait(5), response())[1], response()])
+    transport = SocketInferenceTransport(client, request_timeout_s=0.5, max_reply_age_s=0.3)
+    transport.send({"sequence": 1, "observation": observation()})
+    while not client.calls:
+        time.sleep(0.001)
+    transport.send({"sequence": 2, "observation": observation()})        # queued behind a slow exchange
+    time.sleep(0.2)
+    gate.set()
+    while len(client.calls) < 2:
+        time.sleep(0.001)
+    assert client.calls[1][1] - time.monotonic_ns() < 0.15e9              # most of its window was spent waiting its turn
+    transport.close()

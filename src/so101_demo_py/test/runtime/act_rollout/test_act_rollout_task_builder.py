@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from so101_demo.act.rig_profile import DEFAULT_RIG
 from so101_demo.act.rollout_shared import EpisodeFiles, RolloutInputs, episode_document
 from so101_demo.runtime.act_instance.identity import INSTANCE_ROOT_ENV, SIMULATION_SESSION_ENV
 from so101_demo.runtime.act_rollout import task_builder
@@ -67,7 +68,7 @@ class World:
                      "rollout_identity": {"run_identity_sha256": identity_sha256(self.identity), "scenes_sha256": SCENES,
                                           "policy_sha256": POLICY, "bundle_sha256": self.policy_bundle_sha}}
         self.stack = SimpleNamespace(launch=SimpleNamespace(ros_domain_id=181, session_id=SESSION,
-                                                            evidence_root=self.root / "stack", rig="head_wrist",
+                                                            evidence_root=self.root / "stack", rig=DEFAULT_RIG.rig,
                                                             rig_profile=None), process=None)
         monkeypatch.setenv("ROS_DOMAIN_ID", "181")
         monkeypatch.setenv("MUJOCO_GL", "egl")
@@ -106,7 +107,8 @@ class World:
             settings=SETTINGS, snapshot_targets=SNAPSHOT_TARGETS, endpoint_policy=_endpoint_policy(), timing={},
             rollout_config={}, observation=dict(OBSERVATION), substitution={"substituted_by": "receipt"},
             scenes={"groups": {"rollout_standard": [SCENE]}, "manifest_sha256": SCENES}, identity=dict(self.identity),
-            runtime_config={"inference": {"request_timeout_s": 0.5}}, recorder_policy={"ready_timeout_s": 1.0})
+            runtime_config={"inference": {"device": "cuda", "request_timeout_s": 0.5, "max_reply_age_s": 0.3}},
+            recorder_policy={"ready_timeout_s": 1.0})
 
     def edges(self, **changes):
         world = self
@@ -265,7 +267,7 @@ def test_an_environment_that_drifted_from_the_instance_identity_is_refused(world
 
 def test_the_borrowed_stack_must_be_this_shards_stack_and_alive(world):
     other = SimpleNamespace(launch=SimpleNamespace(ros_domain_id=181, session_id="another", evidence_root=world.root / "stack",
-                                                   rig="head_wrist", rig_profile=None), process=None)
+                                                   rig=DEFAULT_RIG.rig, rig_profile=None), process=None)
     with pytest.raises(ValueError, match="ROLLOUT_BORROWED_STACK_MISMATCH"):
         world.build(stack=other)
     dead = SimpleNamespace(launch=world.stack.launch, process=SimpleNamespace(poll=lambda: 1))
@@ -357,3 +359,130 @@ def test_the_resources_keep_task_data_in_the_task_directory_and_the_rest_under_t
     assert resources.ros_log_dir == world.root / "ros-logs" and resources.temp_dir == world.root / "tmp"
     assert resources.environment["ROS_DOMAIN_ID"] == "181" and "SO101_ACT_INSTANCE_ROOT" in resources.environment
     assert os.environ.get(INSTANCE_ROOT_ENV) == str(world.root)
+
+
+class FakePilot:
+    """The recorder as the episode sees it: its own directory holds the process manifest and `raw/`."""
+
+    def __init__(self, directory):
+        self.directory, self.root, self.ready, self.failure = Path(directory), Path(directory) / "raw", False, None
+
+    def start(self):
+        self.root.mkdir(parents=True)
+        (self.directory / "owned-runtime-processes.json").write_text("{}")
+        (self.root / "bag-probe-trace.jsonl").write_text("{}\n")
+        (self.root / "ready.json").write_text("{}")
+        self.ready = True
+
+    def finish(self):
+        return {"ready": True, "failure": None}
+
+
+class FakeBinding:
+    def shutdown(self):
+        pass
+
+
+class FakeRuntime:
+    instances = []
+
+    def __init__(self, resources, **keywords):
+        self.resources, self.keywords = resources, keywords
+        FakeRuntime.instances.append(self)
+
+    def close_runtime(self):
+        pass
+
+
+def listing(root):
+    return sorted(str(path.relative_to(root)) for path in Path(root).rglob("*") if path.is_file())
+
+
+@pytest.fixture
+def fake_ros(monkeypatch):
+    import so101_demo.adapters.act.rollout_ros as rollout_ros
+    import so101_demo.runtime.act_ros_runtime as ros_runtime
+
+    FakeRuntime.instances = []
+    monkeypatch.setattr(rollout_ros, "RclpyBinding", FakeBinding)
+    monkeypatch.setattr(ros_runtime, "ActRosRuntimePorts", FakeRuntime)
+    monkeypatch.setattr(task_builder, "make_policy_runner", lambda inputs, policy: SimpleNamespace(policy=policy))
+    monkeypatch.setattr(task_builder, "pilot_factory_for", lambda **keywords: FakePilot)
+    return FakeRuntime
+
+
+def real_parts(world, fake_ros, monkeypatch):
+    document = world.document()
+    inputs = world.inputs(None)
+    scene = dict(SCENE)
+    task_dir = world.root / "output" / "tasks" / "wave-0-w00-unit-1"
+    task_dir.mkdir(parents=True)
+    files = EpisodeFiles(task_dir / "episode")
+    client = SimpleNamespace(query=lambda *a, **k: None, infer=lambda *a, **k: None)
+    parts = task_builder.real_ports(shard_spec=world.spec, document=document, inputs=inputs, scene=scene, stack=world.stack,
+                                    task_dir=task_dir, files=files, policy_client=client, clock=time.monotonic)
+    return parts, task_dir, files, scene, document, inputs
+
+
+def test_the_real_ports_are_built_over_the_shard_runtime_the_socket_transport_and_the_native_episode_ports(world, fake_ros, monkeypatch):
+    parts, task_dir, files, scene, document, inputs = real_parts(world, fake_ros, monkeypatch)
+    try:
+        (runtime,) = fake_ros.instances
+        assert parts.runtime is runtime and runtime.resources.worker_root == task_dir
+        assert runtime.resources.session_id == SESSION and runtime.resources.ros_domain_id == 181
+        assert runtime.keywords["catalog"] == {scene["scene_id"]: {"cup_position_world_m": scene["cup_position_world_m"]}}
+        assert runtime.keywords["config"] is None and runtime.keywords["mode"].name == "EXECUTE"
+        assert runtime.keywords["broker_generation"] == 1
+        assert runtime.keywords["dependencies"]["act_profile"] is True and runtime.keywords["dependencies"]["rig"].rig == DEFAULT_RIG.rig
+        lease = parts.lease
+        assert (lease.worker_id, lease.worker_generation, lease.point_id, lease.attempt_id, lease.lease_generation) == (
+            "w00", 1, scene["scene_id"], "unit-1-a1", 1)
+        assert lease.batch_id == "campaign-wave-0"
+        assert lease.lease_deadline_monotonic_s - lease.lease_issued_monotonic_s == pytest.approx(
+            inputs.settings.execution_deadline_s + 600.0)
+        # the policy sits behind the unchanged boundary, over the socket transport, with the reply window of the frozen config
+        assert parts.inference.transport is parts.transport and parts.transport.reply_window_s == 0.3
+        assert parts.transport.request_timeout_s == 0.5
+        ports = parts.ports
+        assert ports.runtime is runtime and ports.lease is lease and ports.directory == files.directory
+        assert ports.recording_dir == task_dir / "recordings" / "unit-1-a1"
+        assert ports.binding is parts.binding and ports.scene == scene
+        assert ports.runner.policy.__class__.__name__ == "RemotePolicy"
+    finally:
+        parts.transport.close()
+
+
+def test_a_borrowed_stack_of_another_rig_than_the_bundles_is_refused(world, fake_ros, monkeypatch):
+    world.stack.launch.rig = "side_wrist"
+    with pytest.raises(ValueError, match="ROLLOUT_BORROWED_STACK_RIG_MISMATCH"):
+        real_parts(world, fake_ros, monkeypatch)
+
+
+def test_the_shard_episode_directory_holds_exactly_what_a_native_one_does(world, fake_ros, monkeypatch, tmp_path):
+    from so101_demo.act.rollout_shared import NativeEpisodePorts
+
+    parts, task_dir, files, scene, document, inputs = real_parts(world, fake_ros, monkeypatch)
+    parts.transport.close()
+    shard_pilot = parts.ports.start_recorder(scene)
+    shard_pilot.finish()
+    # what the native composition does for the same attempt: the recorder beside the episode, the raw directory moved in
+    native_directory = tmp_path / "native" / "episodes" / "unit-1-a1"
+    EpisodeFiles(native_directory)                           # the row files a native episode starts with
+    native = NativeEpisodePorts(runtime=None, lease=None, scene=scene, directory=native_directory, inputs=inputs, environment={},
+                                binding=None, runner=None, inference=None, transport=None, pilot_factory=FakePilot,
+                                recording_dir=tmp_path / "native" / "output" / "recordings" / "unit-1-a1")
+    native.start_recorder(scene).finish()
+    assert listing(files.directory) == listing(native_directory) == [
+        "events.jsonl", "raw/bag-probe-trace.jsonl", "raw/ready.json", "steps.jsonl", "world.jsonl"]
+    # and the process manifest stays beside the episode, in both
+    assert listing(task_dir / "recordings") == ["unit-1-a1/owned-runtime-processes.json"]
+    assert listing(tmp_path / "native" / "output") == ["recordings/unit-1-a1/owned-runtime-processes.json"]
+
+
+def test_the_task_result_carries_the_services_account_of_the_episode(world):
+    result = world.build().run()
+    assert "service" in result and result["service"] is None            # the fake session has no service; the key is always there
+    summary = {"replies": 2, "outcomes": {"OK": 2}}
+    shaped = task_builder.task_result(world.document(), {"verdict": "DONE", "done": True, "reason": None, "status": "COMPLETED",
+                                                         "timing": {"wall_s": 1.0}, "service": summary}, ["episode.json"], wall_s=2.0)
+    assert shaped["service"] == summary

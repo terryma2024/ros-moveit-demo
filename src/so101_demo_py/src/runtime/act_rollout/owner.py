@@ -23,11 +23,16 @@ import json
 from pathlib import Path
 import time
 
+from so101_demo.act.service_telemetry import sample_from_row, summarize_service
 from so101_demo.runtime.act_rollout import aggregate
 from so101_demo.runtime.container_campaign import container_receipts, stage_records
 from so101_demo.runtime.container_campaign.service_owner import _write
 
 EXIT_OK, EXIT_INVALID, EXIT_REFUSED, EXIT_STOP_UNCONFIRMED, EXIT_START_FAILED = 0, 1, 2, 3, 4
+#: the policy service faulted (or answered a run of errors) while the run was going: dispatch stopped, and what ran is kept
+EXIT_POLICY_FAULT = 5
+#: anything else that went wrong after the run directory existed (2 is for a refusal before anything started)
+EXIT_RUN_FAULT = 6
 STAGE = "rollout"
 
 
@@ -69,6 +74,8 @@ class RolloutCampaignOwner:
         self._started = self.clock()
         self._cleanup = None
         self.not_run = []
+        self.policy_fault = None
+        self.service_samples = []
 
     # ---- dispatch ----------------------------------------------------------------------------------------------------------
 
@@ -86,6 +93,8 @@ class RolloutCampaignOwner:
                 if self.clock() >= self.context.deadline_monotonic_s:
                     self.stop_dispatch("ROLLOUT_CAMPAIGN_DEADLINE_EXPIRED")
                 elif not await asyncio.to_thread(self.policy.healthy):
+                    reason = getattr(self.policy, "unhealthy_reason", None) or "HEALTH_CHECK_FAILED"
+                    self.policy_fault = self.policy_fault or f"ROLLOUT_POLICY_SERVICE_UNHEALTHY: {reason}"[:300]
                     self.stop_dispatch("ROLLOUT_POLICY_SERVICE_UNHEALTHY")
                 await self.sleep(self.monitor_interval_s)
         except asyncio.CancelledError:
@@ -118,10 +127,14 @@ class RolloutCampaignOwner:
 
     async def _waves(self):
         pending = list(self.units)
+        self.not_run = list(pending)
         wave = 0
         while pending:
             if not self.dispatch_allowed():
                 break
+            if self.gpu_check is not None:
+                # nobody else may have taken the GPU since the last wave
+                await asyncio.to_thread(self.gpu_check, self.policy)
             count = min(self.options.shards, len(pending))
             worker_ids = tuple(f"w{index:02d}" for index in range(count))
             context = replace(self.context, worker_count=count)
@@ -153,11 +166,15 @@ class RolloutCampaignOwner:
             self.waves.append(dict(wave_index=wave, shards=count, units=[record["unit_id"] for record in records],
                                    wall_s=round(self.clock() - started, 3)))
             pending = self._settle_wave(records, by_id)
+            self.not_run = list(pending)
+            if (self.dispatch_stopped is None and not outcome["infra_errors"]
+                    and all(record["state"] == "NOT_RUN" for record in records)):
+                self.stop_dispatch("ROLLOUT_WAVE_MADE_NO_PROGRESS")        # never queue the same units again and again
+                self.fault = self.fault or "ROLLOUT_WAVE_MADE_NO_PROGRESS"
             if outcome["infra_errors"]:
                 self.stop_dispatch("ROLLOUT_INSTANCE_EXECUTION_FAULT")
                 self.fault = self.fault or "ROLLOUT_INSTANCE_EXECUTION_FAULT: " + json.dumps(outcome["infra_errors"][:3])[:250]
             wave += 1
-        self.not_run = list(pending)
 
     # ---- verification ------------------------------------------------------------------------------------------------------
 
@@ -181,7 +198,9 @@ class RolloutCampaignOwner:
                 continue
             record = records[row["task_id"]]["collected"]
             try:
-                verified.append(dict(base, **self._check_collected(unit, row, record)))
+                checked = self._check_collected(unit, row, record)
+                self.service_samples.extend(checked.pop("service_samples"))       # kept in memory, not in the wave record
+                verified.append(dict(base, **checked))
             except (OSError, ValueError, KeyError, TypeError) as error:
                 verified.append(dict(base, state="FAULT", verdict="INVALID",
                                      reason=f"ROLLOUT_RESULT_UNVERIFIED: {type(error).__name__}: {error}"[:300]))
@@ -213,7 +232,21 @@ class RolloutCampaignOwner:
                     elapsed_wall_s=result["elapsed_wall_s"], task_wall_s=result["task_wall_s"], counts=result["counts"],
                     clamped_steps=result["clamped_steps"], stop_confirmed=result["stop_confirmed"],
                     retire_errors=result["retire_errors"], goal_response=result.get("goal_response"),
-                    max_arm_displacement_rad=motion.get("max_arm_displacement_rad"), evidence=evidence)
+                    max_arm_displacement_rad=motion.get("max_arm_displacement_rad"), evidence=evidence,
+                    service=result.get("service"), service_samples=self._service_samples(task_dir))
+
+    def _service_samples(self, task_dir):
+        """One sample per step row that carries the policy service's account: the outcome, the queue wait, the model time and
+        the client's round trip (the run's statistics are computed from these, not from the episodes' statistics)."""
+        samples = []
+        steps = Path(task_dir) / "episode" / "steps.jsonl"
+        if steps.is_file():
+            for line in steps.read_text().splitlines():
+                if '"service"' in line:
+                    sample = sample_from_row(json.loads(line))
+                    if sample is not None:
+                        samples.append(sample)
+        return samples
 
     def _settle_wave(self, records, by_id):
         """Record each attempt; the units to run again are the INVALID ones with attempts left."""
@@ -239,8 +272,9 @@ class RolloutCampaignOwner:
                     handle.write(_line({"search_locked": True, "done": record["done"], "interventions": 0,
                                         "elapsed_wall_s": record["elapsed_wall_s"], "scene_id": unit.point_id,
                                         "evidence": evidence}))
+        # a unit that did not run stays queued, and so does a retry: if the run stops, they are reported as not run
         not_run = [by_id[record["unit_id"]] for record in records if record["state"] == "NOT_RUN"]
-        return again + not_run if self.dispatch_allowed() else again
+        return again + not_run
 
     # ---- close and results -------------------------------------------------------------------------------------------------
 
@@ -285,15 +319,23 @@ class RolloutCampaignOwner:
     def finish(self, cleanup, *, header):
         """Write summary.json and table.md; return the run's summary and exit code."""
         trials = max(unit.trial for unit in self.units)
+        retry_not_run = frozenset(unit.key for unit in self.not_run if unit.attempt_number > 1)
         summary = aggregate.build_summary(run_id=self.rollout["run_id"], group=self.group, points=self.points, trials=trials,
-                                          attempts=self.attempts, header=dict(
+                                          attempts=self.attempts, retry_not_run=retry_not_run, header=dict(
                                               header, waves=self.waves, policy_service=self._policy_header(),
+                                              service=summarize_service(self.service_samples),
+                                              policy_fault=self.policy_fault,
                                               cleanup_terminated=cleanup["terminated"], fault=self.fault,
                                               dispatch_stopped=self.dispatch_stopped,
                                               wall_s=round(self.clock() - self._started, 3)))
         totals = summary["totals"]
-        if self.exit_code == EXIT_OK and (self.fault is not None or totals["invalid_exhausted"] or totals["not_run"]):
-            self.exit_code = EXIT_INVALID
+        if self.policy_fault is not None and self.exit_code in (EXIT_OK, EXIT_START_FAILED):
+            self.exit_code = EXIT_POLICY_FAULT              # a service that faulted says more than the wave it fenced
+        if self.exit_code == EXIT_OK:
+            if self.fault is not None:
+                self.exit_code = EXIT_RUN_FAULT
+            elif totals["invalid_exhausted"] or totals["not_run"] or totals["retry_not_run"]:
+                self.exit_code = EXIT_INVALID
         if not cleanup["terminated"] or (cleanup["receipt"] or "").startswith("ERROR"):
             self.exit_code = EXIT_STOP_UNCONFIRMED
         summary["exit_code"] = self.exit_code

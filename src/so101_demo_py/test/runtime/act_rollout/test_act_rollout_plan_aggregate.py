@@ -64,7 +64,8 @@ def test_the_last_attempt_decides_the_cell_and_invalid_attempts_are_counted_apar
                                                  "verdicts": ["DONE", "FAILED"]}
     assert result["per_point"]["forward_5cm"] == {"done": 0, "valid": 1, "invalid_attempts": 2, "trials": 2,
                                                   "verdicts": ["INVALID", "NO_MOTION"]}
-    assert result["totals"] == {"done": 1, "valid": 3, "invalid_attempts": 3, "invalid_exhausted": 1, "not_run": 0, "units": 4}
+    assert result["totals"] == {"done": 1, "valid": 3, "invalid_attempts": 3, "invalid_exhausted": 1, "retry_not_run": 0,
+                                "not_run": 0, "units": 4}
     assert result["kind"] == "ACT_ROLLOUT_PARALLEL_SUMMARY" and result["runtime"] == {"shards": 4}
     assert [unit["final_verdict"] for unit in result["units"]] == ["DONE", "INVALID", "FAILED", "NO_MOTION"]   # trial-major
 
@@ -97,3 +98,19 @@ def test_a_table_without_failures_or_invalid_attempts_has_only_the_matrix_and_th
     result = summary({("task_start", 1): [attempt(1, "DONE", elapsed_wall_s=1.0)]}, points=("task_start",), trials=1)
     text = aggregate.render_table(result)
     assert "Failures" not in text and "INVALID attempts (" not in text and text.endswith("\n")
+
+
+def test_an_invalid_attempt_whose_retry_never_ran_is_not_an_exhausted_retry_budget():
+    attempts = {("task_start", 1): [attempt(1, "INVALID", "goal response timeout")],
+                ("task_start", 2): [attempt(1, "INVALID", "A"), attempt(2, "INVALID", "B")],
+                ("forward_5cm", 1): [attempt(1, "DONE")], ("forward_5cm", 2): [attempt(1, "DONE")]}
+    result = aggregate.build_summary(run_id="r", group="rollout_standard", points=("task_start", "forward_5cm"), trials=2,
+                                     attempts=attempts, header={}, retry_not_run=frozenset({("task_start", 1)}))
+    assert result["per_point"]["task_start"]["verdicts"] == ["RETRY_NOT_RUN", "INVALID"]
+    assert result["totals"]["retry_not_run"] == 1 and result["totals"]["invalid_exhausted"] == 1
+    assert result["per_point"]["task_start"]["invalid_attempts"] == 3          # the INVALID attempts that happened still count
+    assert "1 cells whose retry never ran (the run stopped first)" in aggregate.render_table(result)
+    # a cell that is not INVALID is never relabelled
+    kept = aggregate.build_summary(run_id="r", group="g", points=("p",), trials=1, attempts={("p", 1): [attempt(1, "DONE")]},
+                                   header={}, retry_not_run=frozenset({("p", 1)}))
+    assert kept["units"][0]["final_verdict"] == "DONE"
