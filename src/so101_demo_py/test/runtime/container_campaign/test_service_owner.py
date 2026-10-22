@@ -92,7 +92,7 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
         requested_device='cuda', allow_cpu_fallback=False, torch_threads=1, torch_interop_threads=1,
         torch_version='2.13.0+cu130', ultralytics_version='8.4.115')))
     registry = ContainerLaunchRegistry(paths['host']/'launches.sqlite3')
-    calls, containers = [], {}
+    calls, containers, started = [], {}, {}
 
     def docker(argv):
         calls.append(argv)
@@ -101,20 +101,39 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
             if role == 'teacher' and fail_teacher:
                 return SimpleNamespace(returncode=1, stdout='', stderr='injected Docker launch failure')
             digit = '1' if role == 'head' else '2'
-            starts = sum(1 for value in containers.values() if value['Name'].endswith(role+'-g1') or '-'+role+'-g1-' in value['Name'])
+            starts = started.get(role, 0)                                         # removed containers still count: ids are never reused
+            started[role] = starts + 1
             cid = digit*64 if starts == 0 else digit*63+format(starts, 'x')            # a later start is a new container
             containers[cid] = dict(Id=cid, Image=image['digest'], Name='/'+argv[argv.index('--name')+1],
                 State=dict(StartedAt='2026-10-12T01:02:03.123Z', Running=True, Restarting=False,
                            Pid=500, Status='running', ExitCode=0))
             return SimpleNamespace(returncode=0, stdout=cid+'\n', stderr='')
         if argv[:2] == ['docker','inspect']:
+            if argv[2] not in containers:
+                return SimpleNamespace(returncode=1, stdout='[]', stderr='Error: No such object: '+argv[2])
             return SimpleNamespace(returncode=0, stdout=json.dumps([containers[argv[2]]]), stderr='')
+        if argv[:2] == ['docker','logs']:
+            if argv[-1] not in containers:
+                return SimpleNamespace(returncode=1, stdout='', stderr='Error: No such container: '+argv[-1])
+            return SimpleNamespace(returncode=0, stdout='2026-10-12T01:02:04.000Z out '+argv[-1][:8]+'\n',
+                                   stderr='2026-10-12T01:02:05.000Z err\n')
+        if argv[:2] == ['docker','rm']:
+            if argv[2] not in containers:
+                return SimpleNamespace(returncode=1, stdout='', stderr='cannot remove '+argv[2])
+            del containers[argv[2]]
+            return SimpleNamespace(returncode=0, stdout=argv[2]+'\n', stderr='')
+        if argv[:3] == ['docker','ps','-a']:
+            selector = argv[argv.index('--filter')+1]
+            kind, value = selector.split('=', 1)
+            found = [cid for cid, item in containers.items()
+                     if (cid.startswith(value) if kind == 'id' else item['Name'] == '/'+value.strip('^$').lstrip('/'))]
+            return SimpleNamespace(returncode=0, stdout=''.join(cid+'\n' for cid in found), stderr='')
         if argv[:2] == ['docker','exec']:
             return SimpleNamespace(returncode=0, stdout=json.dumps(report), stderr='')
         if argv[:2] == ['docker','kill']:
             assert argv[2:4] == ['--signal','TERM']
             if not refuse_stop:
-                containers[argv[4]]['State'].update(Running=False, Pid=0, Status='exited')
+                containers[argv[4]]['State'].update(Running=False, Pid=0, Status='exited', FinishedAt='2026-10-12T01:05:03.123Z')
             return SimpleNamespace(returncode=0, stdout=argv[4]+'\n', stderr='')
         pytest.fail(f'Unexpected external Docker command {argv}')
 

@@ -253,7 +253,7 @@ def test_the_stage_starts_every_group_on_its_cpus_in_its_own_domain_and_finishes
         assert (run / "upstream-spec" / f"{group}.tsv.taskset").read_text().startswith(f"-c {cpus} zsh")
     assert "joint_trajectory_controller\tR\t^test_trajectory_actions$" in (run / "upstream-spec" / "slow-jtc.tsv").read_text()
     other = (run / "upstream-spec" / "other.tsv").read_text().splitlines()
-    assert [row.split("\t")[1] for row in other] == ["controller_manager", "hardware_interface_testing", "joint_trajectory_controller"]
+    assert [row.split("\t")[1] for row in other] == ["hardware_interface_testing", "joint_trajectory_controller", "controller_manager"]
 
 
 @needs_zsh
@@ -282,3 +282,13 @@ def test_skipped_decisions_leave_out_their_packages(stage):
     assert packages == {"joint_trajectory_controller"}
     nothing = run_stage(FAST_SKIP_ROS2_CONTROL="1", FAST_SKIP_JTC_UPSTREAM="1")
     assert nothing.returncode == 0 and (run / "upstream.done").exists()
+
+
+@needs_zsh
+@pytest.mark.parametrize("last,now,expected", [(0, 100, 0), (30, 40, 20), (44, 50, 10), (46, 50, 70), (59, 60, 60)])
+def test_the_minute_rule_waits_for_the_first_tag_minute_after_the_last_start_plus_margin(last, now, expected):
+    base = 1_700_000_040          # a whole minute
+    env = {k: v for k, v in os.environ.items() if k != "UPSTREAM_SLOT_GAP_S"}
+    out = subprocess.run([ZSH, "-c", f"source {GATE / 'upstream_slot.zsh'}; upstream_slot_delay {base + last} {base + now}"], env=env,
+                         capture_output=True, text=True)
+    assert int(out.stdout.strip()) == expected, out.stderr

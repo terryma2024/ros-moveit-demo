@@ -193,7 +193,7 @@ def stop_evidence(spec, owner, process):
 
 def inspect_document(owner):
     return dict(Id=owner.container_id, Image=owner.image_digest, State=dict(StartedAt=owner.docker_started_at,
-        Running=False, Restarting=False, Pid=0, Status='exited', ExitCode=0))
+        Running=False, Restarting=False, Pid=0, Status='exited', ExitCode=0, FinishedAt='2026-10-12T01:09:09.123456789Z'))
 
 
 def provenance_document(owner, image):

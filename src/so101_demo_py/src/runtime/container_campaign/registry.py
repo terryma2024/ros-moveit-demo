@@ -244,27 +244,33 @@ class ContainerLaunchRegistry:
                                          (canonical_json(inspect_document).decode(), launch_id))
             return True
 
-    def all_terminated(self, inspect_container, inspect_native=None):
+    def all_terminated(self, inspect_container, inspect_native=None, *, exclude=frozenset()):
         """Re-prove every launch's stop. `inspect_container(container_id)` reads a container; `inspect_native(record)` reads
         a native instance's exit document, and without it a native record is re-proved from the exit document stored when
-        its owner settled it (what an independent reader of a finished run has)."""
+        its owner settled it (what an independent reader of a finished run has).
+
+        `exclude` names launches whose termination a stage receipt already proves and whose containers were removed with it
+        (`container_receipts`); they must still be bound and settled but are not inspected again."""
         with self._lock:
             records = self.records()
             if not records or any(item['owner'] is None or item['exit_inspect'] is None for item in records):
                 return False
+            records = [item for item in records if item['launch']['launch_id'] not in exclude]
             try:
                 return all(self.prove_terminated(item['launch']['launch_id'], self._exit_document(
                     item, inspect_container, inspect_native)) for item in records)
             except (OSError, ValueError, RuntimeError, KeyError):
                 return False
 
-    def role_terminated(self, role, inspect_container, inspect_native=None):
+    def role_terminated(self, role, inspect_container, inspect_native=None, *, exclude=frozenset()):
         """Re-prove the stop of every launch of one role (the end of phase 1 proves the shards while the services still run). A
-        role with no launch is vacuously proven; a launch that was never bound or never settled is not."""
+        role with no launch is vacuously proven; a launch that was never bound or never settled is not.
+        `exclude` as in `all_terminated`."""
         with self._lock:
             records = [item for item in self.records() if item['launch']['role'] == role]
             if any(item['owner'] is None or item['exit_inspect'] is None for item in records):
                 return False
+            records = [item for item in records if item['launch']['launch_id'] not in exclude]
             try:
                 return all(self.prove_terminated(item['launch']['launch_id'], self._exit_document(
                     item, inspect_container, inspect_native)) for item in records)

@@ -20,6 +20,8 @@
 #                      run the upstream ros2_control / joint_trajectory_controller tests (when the decisions say run) in groups on their own CPUs
 #                      beside the demo and the other colcon parts, instead of switching the whole gate to serial; default: GATE_UPSTREAM_PARALLEL of
 #                      the host config (0). See README.md "Parallel upstream tests".
+#     --results-reference FILE
+#                      compare every package's test ids and results (result_sets.py) with those of a serial gate; a difference fails the gate
 #     --upstream-sets-reference FILE
 #                      compare the executed upstream test sets (upstream_groups.py sets) with those of a serial gate; a difference fails the gate
 #     --teleop-xdist / --no-teleop-xdist
@@ -33,7 +35,7 @@ zmodload zsh/datetime
 FG=${0:A:h}
 WT=${FG:h:h}
 orig_args=("$@")
-FULL=0; SERIAL=0; PLAN=0; TELEOP_JOBS=6; SUFFIX=; DEMO_WORKERS_ARG=; DEMO_WORKERS_SET=0; ISOLATE=1; HOST_ARG=; RERUN=1; UP_ARG=; SETS_REF=; TX_ARG=; TSETS_REF=
+FULL=0; SERIAL=0; PLAN=0; TELEOP_JOBS=6; SUFFIX=; DEMO_WORKERS_ARG=; DEMO_WORKERS_SET=0; ISOLATE=1; HOST_ARG=; RERUN=1; UP_ARG=; SETS_REF=; TX_ARG=; TSETS_REF=; RES_REF=
 while (( $# )); do
   case $1 in
     --host) shift; HOST_ARG=${1:-} ;;
@@ -52,6 +54,7 @@ while (( $# )); do
     --teleop-xdist) TX_ARG=1 ;;
     --no-teleop-xdist) TX_ARG=0 ;;
     --teleop-sets-reference) shift; TSETS_REF=${1:-} ;;
+    --results-reference) shift; RES_REF=${1:-} ;;
     -h|--help) sed -n '2,/^set -o/p' $0 | sed '$d'; exit 0 ;;
     *) print -u2 "unknown argument: $1"; exit 2 ;;
   esac
@@ -63,6 +66,7 @@ R=$EVIDENCE_R
 (( DEMO_WORKERS_SET )) && DEMO_WORKERS=$DEMO_WORKERS_ARG
 UPSTREAM_PARALLEL_REQUESTED=${UP_ARG:-${GATE_UPSTREAM_PARALLEL:-0}}
 [[ $UPSTREAM_PARALLEL_REQUESTED == [01] ]] || { print -u2 "GATE_UPSTREAM_PARALLEL must be 0 or 1"; exit 2; }
+[[ -z $RES_REF || -r $RES_REF ]] || { print -u2 "--results-reference: cannot read $RES_REF"; exit 2; }
 [[ -z $SETS_REF || -r $SETS_REF ]] || { print -u2 "--upstream-sets-reference: cannot read $SETS_REF"; exit 2; }
 TELEOP_XDIST=${TX_ARG:-${GATE_TELEOP_XDIST:-0}}
 [[ $TELEOP_XDIST == [01] ]] || { print -u2 "GATE_TELEOP_XDIST must be 0 or 1"; exit 2; }
@@ -241,6 +245,13 @@ python3 -I $FG/teleop_pytest.py sets --results $GATE_BUILD/build/so101_teleop/te
 if [[ -n $TSETS_REF ]]; then
   python3 -I $FG/teleop_pytest.py compare $TSETS_REF $GATE/teleop-sets.json > $GATE/teleop-sets-compare.txt 2>&1 || sets_rc=1
   print -r -- "teleop_sets_vs_reference rc=$sets_rc ($TSETS_REF)"; head -5 $GATE/teleop-sets-compare.txt
+fi
+
+# --- every package's test ids and results (result_sets.py), and their comparison with a serial gate's ---
+python3 -I $FG/result_sets.py collect --build-base $GATE_BUILD/build --out $GATE/result-sets.json > $GATE/result-sets-summary.txt 2>&1 || sets_rc=1
+if [[ -n $RES_REF ]]; then
+  python3 -I $FG/result_sets.py compare $RES_REF $GATE/result-sets.json > $GATE/result-sets-compare.txt 2>&1 || sets_rc=1
+  print -r -- "result_sets_vs_reference rc=$sets_rc ($RES_REF)"; head -5 $GATE/result-sets-compare.txt
 fi
 
 # --- record for the skip rule of later gates ---

@@ -16,7 +16,7 @@ from so101_demo.act.parallel_collection import plan_campaign_waves
 from so101_demo.act.parallel_collection_contracts import (
     read_document,scene_ids,validate_run_contract,
 )
-from so101_demo.runtime.container_campaign import stage_records
+from so101_demo.runtime.container_campaign import container_receipts,stage_records
 from so101_demo.runtime.container_campaign.durability import sync_filesystem
 from so101_demo.runtime.container_campaign.processing_limits import (
     check_phase_limits,effective_limits,phase1_deadline_s,phase2_deadline_s,retry_invalid_max_rounds,retry_round_plan,
@@ -75,6 +75,8 @@ class ContainerCampaignOwner:
         self.runtime_document=runtime_document
         #: stop once phase 1 is proven stopped and durable; phase 2, the retry rounds and the finalize are later stages (`stage_records`)
         self.stop_after_phase1=stop_after_phase1
+        #: the stage a later process of a run collected stage by stage runs (set by its `stage_*`); phase 1 is `stop_after_phase1`
+        self._stage=None
         self.services,self.registry,self.slots=service_owner,service_owner.registry,slots
         self.manifest_path=Path(manifest_path)
         self.qualification,self.launcher,self.coordinator,self.verifier=qualification,launcher,coordinator,verifier
@@ -418,7 +420,7 @@ class ContainerCampaignOwner:
                 cleanup=await asyncio.gather(*(shard.close() for shard in self.shards),return_exceptions=True)
                 if (any(not isinstance(value,dict) or value.get('terminated') is not True for value in cleanup)
                         or 'STOP_UNCONFIRMED' in str(error) or 'STOP_UNPROVEN' in str(error)
-                        or await asyncio.to_thread(self.registry.role_terminated,'shard',self.services.inspect_container) is not True):
+                        or await asyncio.to_thread(self._shards_proven) is not True):
                     raise ValueError('CAMPAIGN_RETRY_STOP_UNCONFIRMED') from error
                 recording['waves']=getattr(self,'_recorded_waves',[])
                 aborted=str(error)
@@ -484,12 +486,15 @@ class ContainerCampaignOwner:
         raw=(host/'phase1-result.json').read_bytes()
         if hashlib.sha256(raw).hexdigest()!=first['phase1_result_sha256']:
             raise ValueError('STAGE_PREVIOUS_RECORD_INVALID')
+        # Every container an earlier stage started is proven gone by that stage's receipt; none is needed alive, none is inspected again.
+        container_receipts.verify_receipts(host,previous,self.registry.records())
         _write(host/f'runtime-used-{stage}.json',dict(schema_version=1,kind='act_collection_runtime_used',stage=stage,
             values={name:self.limits[name] for name in RUNTIME_DOCUMENT_KEYS if name in self.limits}))
         return previous,json.loads(raw)
 
     async def stage_phase2(self,manifest):
         """Phase 2 over the recorded waves of phase 1: the processor scheduler, then the stage record."""
+        self._stage=stage_records.PHASE2
         plane,ids,worker_ids=self._scene_plan(manifest)
         if self.processing is None:
             raise ValueError('STAGE_PROCESSING_UNAVAILABLE')
@@ -520,6 +525,7 @@ class ContainerCampaignOwner:
         The decision (a round may be skipped for time, disk or lack of candidates) is the all-in-one run's, written to the same
         `host/retry-round-N.json`; a skipped or aborted round ends the retries: the next one is refused."""
         stage=stage_records.retry_stage(number)
+        self._stage=stage
         if self.qualification:
             raise ValueError('STAGE_RETRY_ON_QUALIFICATION_RUN')
         plane,ids,worker_ids=self._scene_plan(manifest)
@@ -587,7 +593,7 @@ class ContainerCampaignOwner:
                     cleanup=await asyncio.gather(*(shard.close() for shard in self.shards),return_exceptions=True)
                     if (any(not isinstance(value,dict) or value.get('terminated') is not True for value in cleanup)
                             or 'STOP_UNCONFIRMED' in str(error) or 'STOP_UNPROVEN' in str(error)
-                            or await asyncio.to_thread(self.registry.role_terminated,'shard',self.services.inspect_container) is not True):
+                            or await asyncio.to_thread(self._shards_proven) is not True):
                         raise ValueError('CAMPAIGN_RETRY_STOP_UNCONFIRMED') from error
                     recording['waves']=getattr(self,'_recorded_waves',[])
                     status,reason_text='ABORTED',str(error)+('' if error.__cause__ is None else ': '+repr(error.__cause__))
@@ -604,6 +610,7 @@ class ContainerCampaignOwner:
 
     async def stage_finalize(self,manifest):
         """The campaign result and the frozen index from the combined per-scene proof, as the all-in-one run writes them."""
+        self._stage=stage_records.FINALIZE
         plane,ids,worker_ids=self._scene_plan(manifest)
         combine=getattr(self.verifier,'verify_processing',None)
         if self.processing is None or not callable(combine):
@@ -657,7 +664,7 @@ class ContainerCampaignOwner:
         """After the last phase-1 wave is verified: prove every shard stopped, then make the run root durable with one syncfs.
 
         Phase 1 writes the raw bags without fsync; nothing that reads them (phase 2) may start before this record exists."""
-        proven=await asyncio.to_thread(self.registry.role_terminated,'shard',self.services.inspect_container)
+        proven=await asyncio.to_thread(self._shards_proven)
         if proven is not True:
             self.stop_dispatch('CAMPAIGN_PHASE1_STOP_UNPROVEN')
             raise ValueError('CAMPAIGN_PHASE1_STOP_UNPROVEN')
@@ -699,6 +706,84 @@ class ContainerCampaignOwner:
         self.phase2=summary
         return summary
 
+    # ---- the containers of a stage collected stage by stage: proven, removed and receipted by the stage itself ----------------------
+
+    def _staged_stage(self):
+        """The stage this process runs when the run is collected stage by stage, else None (the all-in-one path)."""
+        stage=self._stage or getattr(self.services,'stage',None)
+        if stage is None and self.stop_after_phase1:
+            return stage_records.PHASE1
+        return stage
+
+    def _covered(self):
+        """Launches an earlier stage's receipt proves gone; empty for a run that is not collected stage by stage."""
+        if self._staged_stage() is None:
+            return frozenset()
+        return frozenset(container_receipts.covered_launch_ids(self.root/'host'))
+
+    def _shards_proven(self):
+        covered=self._covered()
+        if not covered:
+            return self.registry.role_terminated('shard',self.services.inspect_container)
+        return self.registry.role_terminated('shard',self.services.inspect_container,exclude=covered)
+
+    def _prove_stage_containers(self):
+        """`(confirmed, receipt name or error)` for the launches no receipt covers yet, which are this process's own.
+
+        A stage that completed (its record exists, written last) re-inspects each container independently, removes it and proves it
+        absent, then writes its receipt. A stage that did not complete only re-proves its own launches, as the all-in-one path does,
+        and removes nothing: its containers stay for inspection."""
+        stage=self._staged_stage()
+        host=self.root/'host'
+        try:
+            covered=self._covered()
+            records=self.registry.records()
+            mine=[item for item in records if item['launch']['launch_id'] not in covered]
+            if not records:
+                return False,'no launch registered'
+            if any(item['owner'] is None or item['exit_inspect'] is None for item in mine):
+                return False,'a launch was never bound or settled'
+            completed=stage_records.record_path(host,stage).exists()
+            if completed and container_receipts.has_receipt(host,stage):
+                return all(self.registry.prove_terminated(item['launch']['launch_id'],self._live_document(item)) for item in mine),None
+            if not completed:
+                return all(self.registry.prove_terminated(item['launch']['launch_id'],self._live_document(item)) for item in mine),None
+            entries=[]
+            observed=[]
+            for item in mine:                              # 1. independent inspection of every container of the stage
+                document=self._live_document(item)
+                self.registry.prove_terminated(item['launch']['launch_id'],document)
+                observed.append((item,document))
+                entries.append(container_receipts.native_entry(item) if item['launch'].get('launcher','container')=='native'
+                               else container_receipts.container_entry(item,document))
+            runner=self.services.docker_runner
+            for entry in entries:                          # 2. the logs are saved first: a container whose logs are unsaved stays
+                if entry['launcher']=='container':
+                    entry['logs_path'],entry['logs_sha256']=container_receipts.save_logs(
+                        host,stage,entry['container_name'],runner,entry['container_id'])
+            for entry in entries:                          # 3. removal
+                if entry['launcher']=='container':
+                    result=runner(['docker','rm',entry['container_id']])
+                    if result.returncode!=0:
+                        raise ValueError('STAGE_CONTAINER_REMOVE_FAILED: '+entry['launch_id'])
+            for entry in entries:                          # 4. nothing of the stage remains, by id and by name
+                if entry['launcher']=='container':
+                    for selector in ('id='+entry['container_id'],'name=^/'+entry['container_name']+'$'):
+                        result=runner(['docker','ps','-a','-q','--no-trunc','--filter',selector])
+                        if result.returncode!=0 or result.stdout.strip():
+                            raise ValueError('STAGE_CONTAINER_STILL_PRESENT: '+entry['launch_id'])
+                    entry.update(removed=True,absent_after_removal=True)
+            record=stage_records.read_record(host,stage)
+            written=container_receipts.write_receipt(host,stage=stage,stage_record_sha256=record['sha256'],containers=entries)
+            return True,f"containers-receipt-{written['seq']:02d}-{stage}.json"
+        except (OSError,ValueError,RuntimeError,KeyError,TypeError) as error:
+            return False,type(error).__name__+': '+str(error)
+
+    def _live_document(self,record):
+        if record['launch'].get('launcher','container')=='native':
+            return record['exit_inspect']
+        return self.services.inspect_container(record['owner']['container_id'])
+
     async def close(self):
         self._closing=True
         self.stop_dispatch('CAMPAIGN_CLOSING')
@@ -715,12 +800,18 @@ class ContainerCampaignOwner:
         processors=await asyncio.gather(*(owner.close() for owner in getattr(self.processing,'owners',())),
                                         return_exceptions=True)
         services=await self.services.close()
-        independently_clear=await asyncio.to_thread(self.registry.all_terminated,self.services.inspect_container)
+        if self._staged_stage() is None:
+            independently_clear=await asyncio.to_thread(self.registry.all_terminated,self.services.inspect_container)
+            receipt=None
+        else:
+            independently_clear,receipt=await asyncio.to_thread(self._prove_stage_containers)
         clear=independently_clear and services['terminated'] is True and all(
             type(value) is dict and value.get('terminated') is True for value in (*shards,*processors))
         result=dict(terminated=clear,services=services,
             shards=[value if type(value) is dict else dict(error_type=type(value).__name__,reason=str(value))
                     for value in shards],stop_reason=self.stop_reason)
+        if receipt is not None:
+            result['container_receipt' if independently_clear else 'container_receipt_error']=receipt
         if processors:
             result['processors']=[value if type(value) is dict else dict(error_type=type(value).__name__,reason=str(value))
                                   for value in processors]

@@ -865,6 +865,12 @@ class UnifiedWorkloadService:
             root = Path(context.evidence_root)
             registry = ContainerLaunchRegistry(root/'host/launches.sqlite3', create=False)
             by_worker = {slot.worker_id:slot for slot in slots}
+            # The processor slots (`pNN`) of an earlier stage were released when that stage settled, but the registry still holds
+            # their launches (a stage receipt covers them). They are checked against the processor slots this campaign was
+            # admitted with, which stay in the table as inactive rows.
+            for released in self.slot_registry.slots(active=False):
+                if released.is_processor and released.campaign_id == context.campaign_id:
+                    by_worker.setdefault(released.worker_id, released)
             for record in registry.records():
                 item = record['launch']
                 if item['role'] in ('head','teacher'):
@@ -884,7 +890,11 @@ class UnifiedWorkloadService:
                         raise ValueError('foreign shard scope')
                 else:
                     raise ValueError('unknown role')
-            if not registry.all_terminated(self.container_inspect, inspect_native=self._observe_native_exit):
+            # A run collected stage by stage proved each finished stage's containers and removed them (a stage receipt);
+            # those launches are checked against the receipt and the registry's settlement, not inspected live.
+            from so101_demo.runtime.container_campaign import container_receipts
+            covered = container_receipts.covered_launches(root/'host', registry.records())
+            if not registry.all_terminated(self.container_inspect, inspect_native=self._observe_native_exit, exclude=covered):
                 raise ValueError('owned launch stop not proven')
         except (OSError, ValueError, TypeError, KeyError, RuntimeError, sqlite3.Error) as error:
             raise ValueError('ACT_CONTAINER_CLEANUP_NOT_CONFIRMED') from error

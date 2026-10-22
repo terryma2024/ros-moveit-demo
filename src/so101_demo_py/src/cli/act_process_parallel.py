@@ -10,6 +10,11 @@ records (the stage before, the logic document, the admitted inputs, the images; 
 (`STAGE_ALREADY_COMPLETE`), `--retry-round` is refused on a qualification run (`STAGE_RETRY_ON_QUALIFICATION_RUN`), after a retry
 round that did not run (`STAGE_RETRY_ROUND_OUT_OF_ORDER`) and beyond `retry_invalid_max_rounds` (`STAGE_RETRY_ROUNDS_EXCEEDED`).
 
+Each completed stage proves its own containers: it inspects them again, removes them, proves none remains and writes a hash-chained
+receipt (`host/containers-receipt-NN-<stage>.json`, see `container_receipts`). A later stage and the finalize verify termination from
+the receipts and never need a live container; a missing, altered or incomplete receipt is refused before admission
+(`STAGE_CONTAINER_RECEIPT_MISSING`, `..._INVALID`, `..._NOT_TERMINATED`, `..._COVERAGE`).
+
 The inputs are the ones phase 1 was given (the same files, checked by hash); the runtime document may differ from stage to stage.
 Exit codes as `act_collect_parallel`: 0 completed and settled; 2 refused before admission; 1 anything after admission.
 """
@@ -27,7 +32,7 @@ from so101_demo.act.parallel_collection_contracts import read_document
 from so101_demo.cli.act_collect_parallel import (
     CollectionEdges, _describe, _inspector, _native_edges, _preflight, _regular, _settle_unbuilt, _sha)
 from so101_demo.runtime import act_fixed_collection_composition as composition
-from so101_demo.runtime.container_campaign import stage_records
+from so101_demo.runtime.container_campaign import container_receipts, stage_records
 from so101_demo.runtime.container_campaign.case_inputs import (
     FROZEN_DIRECTORY, INPUTS_DIRECTORY, MANIFEST_NAME, campaign_binding, read_case_scopes)
 from so101_demo.runtime.container_campaign.paths import existing_campaign_paths, validate_registered_evidence_root
@@ -107,8 +112,9 @@ def main(argv=None, *, edges=None) -> int:
         run = paths['run']
         inputs_manifest = dict(path=str(run / INPUTS_DIRECTORY / FROZEN_DIRECTORY / MANIFEST_NAME),
                                sha256=_sha(run / INPUTS_DIRECTORY / FROZEN_DIRECTORY / MANIFEST_NAME))
-        stage_records.check_before_admission(paths['host'], stage,
+        head = stage_records.check_before_admission(paths['host'], stage,
             logic=dict(path=str(resolved['campaign_config']), sha256=config_sha))
+        container_receipts.verify_for_admission(paths['host'], head)           # STAGE_CONTAINER_RECEIPT_* codes
         case_inputs = read_case_scopes(run, inputs_manifest=inputs_manifest, plane=plane)
         binding = campaign_binding(inputs_manifest, campaign_config=config, plane=plane,
             collection_config_sha256=_sha(resolved['collection_config']), scene_manifest_sha256=scenes_sha)
