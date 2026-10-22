@@ -1133,6 +1133,12 @@ Start the container as `start-container.zsh` did for the formal lists (`so101_mu
 headless:=true sensor_rendering:=true`), and pass `--reach-command` the prefix that runs `task_reachability` in it,
 such as `zsh reach_call.zsh <out> <container>`. The prefix receives the points file, the evidence file and a session id.
 
+`act_scene_sample` can use several stacks at once: `--reach-command "zsh reach_call.zsh $OUT{slot} reach{slot}" --stacks 8` starts the
+planner batches on eight containers side by side (`{slot}` becomes 0..7; the command can also be repeated once per stack). A short batch
+is cut into one share per stack, a long one into calls of at most `--batch-poses` poses (default 80). The scenes do not depend on either
+number. Measured on antzb (mount image, one core and about 1 GB per stack; a call costs about 2 s plus 1 s per pose): 24 + 2 scenes took
+1103 s on one stack and 425 s on eight; a borderline position can still flip between two calls on any stack.
+
 ```sh
 # 1) offline limits per ray (stack running)
 act_boundary_prefilter --reach-command "zsh reach_call.zsh $OUT $CONTAINER" --call-dir $OUT/calls --output $OUT/limits.json
