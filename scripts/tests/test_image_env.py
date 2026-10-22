@@ -105,7 +105,7 @@ def test_dpkg_s_output_maps_files_to_packages_and_reports_the_unowned_ones():
 
 
 def host(**changes):
-    state = {"apt": {"ros-jazzy-rclcpp": "28.1.0-1", "libfoo1": "1.0", "ros-jazzy-rcl": "9.2.0-1", "hostonly": "1", "libc6": "2.39"},
+    state = {"apt": {"ros-jazzy-rclcpp": "28.1.0-1", "libfoo1": "1.0", "ros-jazzy-rcl": "9.2.0-1", "hostonly": "1", "libc6": "2.39", "python3-yaml": "6.0"},
              "os": {"codename": "noble"}, "python3": "3.12.3", "venv_freeze": ["absl-py==2.5.1", "pydantic==2.14.1", "extra==1"]}
     state.update(changes)
     return state
@@ -136,11 +136,16 @@ def test_a_shared_package_at_another_version_is_a_must_failure_whether_or_not_th
     assert ("must", "apt:libfoo1", "older") in keys(rows)
 
 
-def test_a_required_package_the_host_lacks_is_a_must_failure_but_an_unneeded_image_only_package_is_not():
-    apt = dict(host()["apt"])
-    assert not ie.must_failures(ie.compare(image(), host(apt=apt), required={"ros-jazzy-rclcpp"}))     # python3-yaml is image-only
+def test_every_image_package_the_host_lacks_is_a_must_failure_except_the_named_image_tooling():
+    apt = {name: version for name, version in host()["apt"].items() if name != "python3-yaml"}
+    rows = ie.compare(image(), host(apt=apt), required={"ros-jazzy-rclcpp"})
+    assert ("must", "apt:python3-yaml", "missing-on-host") in keys(rows)       # in the image, not needed by the tree, still refused
     rows = ie.compare(image(), host(apt=apt), required={"python3-yaml"})
     assert ("must", "apt:python3-yaml", "missing-on-host") in keys(rows)
+    with_tooling = image(apt={**image()["apt"], "gnupg2": "2.4.4-2", "unminimize": "0.2.1"})
+    rows = ie.compare(with_tooling, host(), required=set())
+    assert ("should", "apt:gnupg2", "image-only (tooling)") in keys(rows) and ("should", "apt:unminimize", "image-only (tooling)") in keys(rows)
+    assert not ie.must_failures(rows)
 
 
 def test_python_minor_codename_and_venv_pins_are_must_matches_and_extra_host_packages_are_not():
@@ -160,7 +165,8 @@ def test_libraries_the_container_cannot_find_are_must_failures():
 
 
 def test_alignment_plan_lists_installs_and_downgrades_and_never_removes():
-    plan = ie.alignment_plan(image(), host(apt={**host()["apt"], "libfoo1": "1.1"}), required={"python3-yaml"})
+    apt = {name: version for name, version in host()["apt"].items() if name != "python3-yaml"}
+    plan = ie.alignment_plan(image(), host(apt={**apt, "libfoo1": "1.1"}), required=set())     # every image package, not only the tree's
     assert plan == {"install": {"python3-yaml": "6.0"}, "change": {"libfoo1": "1.0"}, "downgrades": ["libfoo1"]}
 
 
