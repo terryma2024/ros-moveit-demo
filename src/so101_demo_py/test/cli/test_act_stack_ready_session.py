@@ -17,6 +17,10 @@ import pytest
 
 SESSION = "ready-session"
 DOMAIN = "232"      # none of the gate stages uses it (demo 203, teleop 204, jtc 229, upstream groups 223-226)
+# The gate runs the demo tests on parallel workers, so each graph test (and context) needs a ROS domain of its own: two stand-in stacks and
+# two sessions of the same id on one domain answer each other's questions.
+TEST_DOMAINS = {"test_the_kept_session_and_the_command_line_judge_every_scenario_alike": 227,
+                "test_a_session_that_is_not_ready_recovers_when_the_stack_does": 228}
 TIMEOUT_S = 4.0
 
 
@@ -233,6 +237,8 @@ def graph(request, monkeypatch, tmp_path):
     import rclpy
     from so101_demo.act.rig_profile import DEFAULT_RIG
 
+    global DOMAIN
+    DOMAIN = str(TEST_DOMAINS[request.node.originalname] + (3 if request.param == "instance_context" else 0))    # 227, 228, 230, 231
     monkeypatch.setenv("ROS_DOMAIN_ID", DOMAIN)
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     if request.param == "instance_context":
