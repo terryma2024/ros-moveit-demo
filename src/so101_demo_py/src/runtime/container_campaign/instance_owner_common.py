@@ -33,6 +33,15 @@ def load_instance_spec(path, *, admitted_context, launch, service_token):
                 or spec['deadline_monotonic_s'] != admitted_context.deadline_monotonic_s
                 or spec['wave_id'] != launch.wave_id):
             raise ValueError('SHARD_SPEC_CONTEXT_MISMATCH')
+    if spec['workload_kind'] == 'act_rollout':
+        # A rollout is self-admitted (no unified service): the context's hash fields carry the run's own identity.
+        identity = spec['rollout_identity']
+        if (identity['scenes_sha256'] != admitted_context.manifest_sha256
+                or identity['run_identity_sha256'] != admitted_context.collection_config_sha256
+                or identity['policy_sha256'] != admitted_context.contact_policy_fingerprint
+                or spec['deadline_monotonic_s'] != admitted_context.deadline_monotonic_s
+                or spec['wave_id'] != launch.wave_id):
+            raise ValueError('SHARD_SPEC_CONTEXT_MISMATCH')
     return spec
 
 

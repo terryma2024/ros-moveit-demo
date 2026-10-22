@@ -38,6 +38,10 @@ def shard_builder(spec,*,stack,layout,ready_check=None):
         if not callable(ready_check):raise ValueError('CAMPAIGN_SHARD_READY_CHECK_REQUIRED')
         return functools.partial(build_collection_task,stack=stack,shard_spec=spec,output_root=layout.output_root,
             teacher_socket=layout.teacher_socket,ready_check=ready_check)
+    if spec['workload_kind']=='act_rollout':
+        from so101_demo.runtime.act_rollout.task_builder import build_rollout_task
+        return functools.partial(build_rollout_task,stack=stack,shard_spec=spec,output_root=layout.output_root,
+            policy_socket=layout.policy_socket,install_prefix=layout.install_prefix)
     raise ValueError('CAMPAIGN_SHARD_WORKLOAD_UNKNOWN')
 
 
@@ -69,7 +73,7 @@ async def serve_instance(spec, runtime_config, layout, *, process, stack, ready,
     root = Path(spec["owned_root"])
     if type(layout) is not InstanceLayout or layout.owned_root != root:
         raise ValueError("ACT_INSTANCE_LAYOUT_MISMATCH")
-    output_root = layout.output_root if spec["workload_kind"] == "act_collection" else root / "tmp"
+    output_root = layout.output_root if spec["workload_kind"] in ("act_collection", "act_rollout") else root / "tmp"
     start_aware = StackStartAwareRetirement(retirement)
     # Host status polling bounds owner silence (heartbeat_timeout_s); the frozen worker recovery bound covers
     # helper stop and native retirement.

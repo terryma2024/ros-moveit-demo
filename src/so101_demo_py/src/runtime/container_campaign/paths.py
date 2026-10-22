@@ -18,6 +18,8 @@ TASK_OUTPUT_MOUNT = Path('/act/output')
 CONTAINER_CONTROL_ROOT = Path('/act/control')
 CONTAINER_IPC_ROOT = Path('/act/ipc')
 CONTAINER_TEACHER_SOCKET = CONTAINER_IPC_ROOT/'teacher'/'inference.sock'
+#: the host's ACT policy service, as a rollout shard reaches it; a rollout shard mounts this directory instead of the Teacher's
+CONTAINER_POLICY_SOCKET = CONTAINER_IPC_ROOT/'policy'/'policy.sock'
 CONTAINER_INSTALL_PREFIX = Path('/act/install')
 CONTAINER_ROS2 = CONTAINER_INSTALL_PREFIX/'bin'/'ros2'
 CONTAINER_INTERPRETER = Path('/act/venv/bin/python')
@@ -230,7 +232,10 @@ def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config
                     or source.is_relative_to("/act/source") or source.is_relative_to("/act/install")):
                 raise ValueError("broad, Host-owned, or source override input")
             mounts.append(RoleMount(source, source, True, "input"))
-        for service_role in (() if processor else ("head", "teacher") if role == "shard" else (role,)):
+        # a rollout shard is given the policy service's socket directory and neither the Head's nor the Teacher's: it has no use
+        # for them. It is recognised by the `policy` entry of its socket roots.
+        shard_services = ("policy",) if "policy" in socket_roots else ("head", "teacher")
+        for service_role in (() if processor else shard_services if role == "shard" else (role,)):
             source = _path(socket_roots[service_role], directory=True)
             if source != run / "ipc" / service_role:
                 raise ValueError("service socket owner")

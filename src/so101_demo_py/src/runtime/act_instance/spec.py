@@ -19,6 +19,10 @@ _FIELDS = {"schema_version", "kind", "workload_kind", "campaign_id", "worker_id"
     "execution_generation", "runtime_id", "service_epoch", "service_token", "owned_root",
     "simulation_session_id", "gpu_uuid", "controlled_runtime"}
 _COLLECTION_FIELDS={'business_identity','parallel_runtime','campaign_config','wave_id','deadline_monotonic_s'}
+#: a rollout shard carries no campaign config (it has no Teacher): its frozen inputs travel in each task document and are bound
+#: here by the run identity
+_ROLLOUT_FIELDS={'rollout_identity','rig_profile_sha256','parallel_runtime','wave_id','deadline_monotonic_s'}
+ROLLOUT_IDENTITY_FIELDS={'run_identity_sha256','scenes_sha256','policy_sha256','bundle_sha256'}
 _BUSINESS_FIELDS={'manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint'}
 
 
@@ -27,6 +31,10 @@ def instance_rig(spec):
     config (a readiness shard, a rollout) is the default rig."""
     from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_profile_sha256
 
+    if isinstance(spec, dict) and spec.get("workload_kind") == "act_rollout":
+        # a rollout runs the rig of its bundle: the host names it by profile hash, explicitly, in the spec
+        from so101_demo.act.rig_profile import rig_from_profile_sha256
+        return rig_from_profile_sha256(spec["rig_profile_sha256"])
     reference = spec.get("campaign_config") if isinstance(spec, dict) else None
     if reference is None:
         return DEFAULT_RIG
@@ -47,11 +55,12 @@ def load_spec(path):
             parse_constant=lambda _value: (_ for _ in ()).throw(ValueError("nonfinite")))
         if type(document) is not dict:raise ValueError('shape/kind')
         collection=document.get('workload_kind')=='act_collection'
-        expected=_FIELDS|_COLLECTION_FIELDS if collection else _FIELDS
+        rollout=document.get('workload_kind')=='act_rollout'
+        expected=_FIELDS|_COLLECTION_FIELDS if collection else _FIELDS|_ROLLOUT_FIELDS if rollout else _FIELDS
         if (set(document) != expected
                 or type(document["schema_version"]) is not int or document["schema_version"] != SPEC_SCHEMA_VERSION
                 or document["kind"] != "ACT_CONTAINER_SHARD"
-                or document["workload_kind"] not in ("no_motion_readiness",'act_collection')):
+                or document["workload_kind"] not in ("no_motion_readiness",'act_collection','act_rollout')):
             raise ValueError("shape/kind")
         for name in ("campaign_id", "worker_id", "runtime_id", "service_epoch", "simulation_session_id"):
             if type(document[name]) is not str or re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}", document[name]) is None:
@@ -84,6 +93,19 @@ def load_spec(path):
             if (campaign['controlled_runtime']!=document['controlled_runtime']
                     or campaign['gpu_uuid']!=document['gpu_uuid']):
                 raise ValueError('collection campaign drift')
+            runtime = _load_runtime_config(validate_file_ref(document['parallel_runtime']))
+        elif rollout:
+            identity=document['rollout_identity']
+            if (type(identity) is not dict or set(identity)!=ROLLOUT_IDENTITY_FIELDS
+                    or any(type(value) is not str or re.fullmatch(r'[0-9a-f]{64}',value) is None
+                           for value in (*identity.values(),document['rig_profile_sha256']))
+                    or re.fullmatch(r'wave-[0-9]+',str(document['wave_id'])) is None
+                    or document['wave_id']!=root.parent.parent.name
+                    or type(document['deadline_monotonic_s']) not in (int,float)
+                    or not math.isfinite(document['deadline_monotonic_s'])
+                    or document['deadline_monotonic_s']<=time.monotonic()):
+                raise ValueError('rollout identity')
+            instance_rig(document)           # a profile hash that names no known rig is refused here
             runtime = _load_runtime_config(validate_file_ref(document['parallel_runtime']))
         else:
             runtime = _load_runtime_config(runtime_path)

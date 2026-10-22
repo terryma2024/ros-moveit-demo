@@ -7,6 +7,7 @@ and a native single worker is only these paths, so they are injected here instea
     output_root      where the instance writes `tasks/<task_id>`; `<owned_root>/output` seen through the instance's own paths
     control_root     the directory of the control sockets and the ready record
     teacher_socket   the Teacher inference socket as the instance reaches it
+    policy_socket    the policy service socket as a rollout instance reaches it (None for every other workload)
     install_prefix   the colcon prefix of the code the instance runs
     ros2_executable  the `ros2` command that launches and probes the stack (a container image carries its own copy)
 
@@ -34,9 +35,14 @@ class InstanceLayout:
     teacher_socket: Path
     install_prefix: Path
     ros2_executable: Path
+    #: the policy service socket as the instance reaches it (a rollout instance only; None for every other workload)
+    policy_socket: Path | None = None
 
     def __post_init__(self):
         for name in self.__dataclass_fields__:
-            object.__setattr__(self, name, _absolute(getattr(self, name)))
+            value = getattr(self, name)
+            if name == "policy_socket" and value is None:
+                continue
+            object.__setattr__(self, name, _absolute(value))
         if self.output_root == self.owned_root or self.control_root == self.owned_root:
             raise ValueError("ACT_INSTANCE_LAYOUT_INVALID")

@@ -130,7 +130,7 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
             with _open_regular(entry.spec) as stream:
                 spec = json.load(stream)
             _require(type(spec) is dict)
-            if spec.get('workload_kind') == 'act_collection':
+            if spec.get('workload_kind') in ('act_collection', 'act_rollout'):
                 task_output = owned/'output'
         processor_mounts = dict(phase1_attempts=host_paths["phase1_attempts"], processing_root=host_paths["processing_root"]
                                 ) if role == "processor" else {}

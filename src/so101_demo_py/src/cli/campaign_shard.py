@@ -16,8 +16,8 @@ from so101_demo.runtime.act_instance.program import run_instance
 from so101_demo.runtime.act_instance.spec import load_spec
 from so101_demo.runtime.container_campaign.mount_build import INSTALL_ENV, ROS2_EXECUTABLE
 from so101_demo.runtime.container_campaign.paths import (
-    CONTAINER_CONTROL_ROOT, CONTAINER_INSTALL_PREFIX, CONTAINER_INTERPRETER, CONTAINER_ROS2, CONTAINER_TEACHER_SOCKET,
-    TASK_OUTPUT_MOUNT)
+    CONTAINER_CONTROL_ROOT, CONTAINER_INSTALL_PREFIX, CONTAINER_INTERPRETER, CONTAINER_POLICY_SOCKET, CONTAINER_ROS2,
+    CONTAINER_TEACHER_SOCKET, TASK_OUTPUT_MOUNT)
 
 
 def container_layout(spec):
@@ -28,7 +28,8 @@ def container_layout(spec):
                      else (Path(mounted) / "so101_demo_py", ROS2_EXECUTABLE))
     return InstanceLayout(owned_root=Path(spec["owned_root"]), output_root=TASK_OUTPUT_MOUNT,
         control_root=CONTAINER_CONTROL_ROOT, teacher_socket=CONTAINER_TEACHER_SOCKET,
-        install_prefix=install, ros2_executable=ros2)
+        install_prefix=install, ros2_executable=ros2,
+        policy_socket=CONTAINER_POLICY_SOCKET if spec.get("workload_kind") == "act_rollout" else None)
 
 
 async def run_shard(spec, runtime_config):
