@@ -69,11 +69,43 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3775
-next_experiment: coordinator decision after TRAIN-006 (CP-3774): 0 of 4 points reach 4 of 5 at prefix 5, ensembling or prefix 3 (forward_5cm DONE 4 of 4 with ensembling only). Do not start training without the coordinator.
+latest_checkpoint: CP-3776
+next_experiment: goal met (CP-3776, TRAIN-007A at prefix 50). Next: TRAIN-007B screen (optional comparison), held-out rollout groups, parallel rollout T0a measurement and T4 (design 2026-10-22). Do not start training without the coordinator.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3776 — TRAIN-007A/B (chunk 50, dwell threshold 0.001, lr 1e-4 / 1e-5); TRAIN-007A at `--execution-prefix 50` succeeds on all 4 standard points 5 of 5 (goal met)
+
+- Human decisions (2026-10-22): retrain with "两个变体两台机同时训", meaning chunk 10→50 (`ALLOWED_CHUNK_SIZES = (10, 50)`, 448b71f46) and `idle_threshold_rad` 0.005→0.001, with A lr 1e-4 and B lr 1e-5. Configs are `training-side-wrist-007{a,b}-bf16.yaml`. Reasons: the TRAIN-006 screen (CP-3775, prefix 10 best, reach-depth collapse); the LeRobot official ACT comparison (chunk 100 at 30 Hz is about a 3.3 s horizon, while ours was 1 s; lr 1e-5); and the dwell threshold deleting slow motion (11313 of 28702 removed rows moved more than 2 mrad per step).
+- Source commit `5e287317f` = 448b71f46 + allowlist rows 9e96d3764 + the ready-session test retry 5e287317f. The ai-station gate `5e287317fef7` is green (build 241 s, demo 595 s, colcon 141 s, no known-flake rerun). The three antzb gates on this line were red only on `test_act_stack_ready_session`; antzb root-caused that as shared ROS domain 232 across xdist workers and it is fixed in c0cdec505 (test-only).
+- **TRAIN-007A** ran on ai-station: stamp 20261022T122901Z, rc 0, 14487 s at about 68 samples/s (GPU-bound at 98 %; about 105 samples/s on TRAIN-006).
+  - The train split has 34683 samples after selection.
+  - Final validation L1 is 0.02910. That is not comparable to chunk 10.
+  - Offline-test MAE (EVAL-006 method, same 10 episodes) is 0.00647 rad, against 0.00722 for TRAIN-006.
+  - Bundle `/data/work/so101-policies/train007a-20261022T122901Z/bundle`: `bundle.json` f4056ece…0101f, `policy.safetensors` ea6e0336…f447.
+- **TRAIN-007B** ran on antzb (RTX 5080): stamp 20261022T140441Z, rc 0, 7322 s at about 139 samples/s, final validation L1 0.02619 (best 0.02497 at step 58000).
+  - Bundle copied to ai-station at the same path, `train007b-20261022T140441Z/bundle`. Hashes match: `bundle.json` 333ccb32…7e07, `policy.safetensors` 5c0d8c07…003b.
+  - The dataset reached antzb as one gzip tar: 5.0 GB in 1577 s, sha256 OK. Per-file rsync of the 120k PNGs had been about 0.3 MB/s.
+- **Rollout of TRAIN-007A** (Sonnet subagent; evidence root `act-rollout-train007a-20261023/`, gate install 5e287317fef7, same scenes, receipt and frozen inputs as CP-3774). One screen trial per setting, DONE of 4: p10 2 (task_start, right_5cm), p25 3 (left_5cm missed by 4.8 mm), ensembling 0.01 had no valid trial (task_start INVALID twice), p50 4.
+- **Confirmation at `--execution-prefix 50`, DONE / valid (INVALID attempts):**
+
+  | point | p50, trials t1..t5 |
+  |---|---|
+  | task_start | 5/5 (2) |
+  | forward_5cm | 5/5 (0) |
+  | left_5cm | 5/5 (0) |
+  | right_5cm | 5/5 (1) |
+
+  - Placement: xy error 0.004–0.007 m and z error 0.00015 m in every p50 episode; placed at 33–43 s of sim time.
+  - All 5 INVALID attempts are `CONTROLLER_PAIR_FAILED` (goal response). They were re-run inside the trial and not counted.
+  - The coordinator re-read every p50 `episode.json` verdict independently, and `run.json` shows `execution_prefix: 50`.
+  - **Goal "4固定位点rollout成功" (each point ≥4 of 5 at one setting) is met.** The TRAIN-007B screen was not run, because the stop rule says to stop once one bundle and setting meets the goal.
+- Failed screen episodes:
+  - p10 forward_5cm was lifted, not placed, xy 0.225 m.
+  - p10 left_5cm: the cup was thrown clear (sim blow-up, as in CP-3774 ens-t1).
+  - p25 left_5cm: xy 0.0248 m.
+- Retained: both bundles, the dataset tar and tar.gz, and every evidence json/jsonl. Deletion candidates (none deleted): the raw bags of the p10/p25/ens/p50 trials (most of the 13 GB), `scratch/`, `refused-attempts/`, the gate build/scratch/checkout of 5e287317fef7 (keep while rollouts use that install), `/tmp/so101-debug-train007/`, and antzb's `/home/lenovo/*.tar.gz`.
 
 ## CP-3775 — TRAIN-006 execution-setting screen (bundle default, ensembling m=0 and m=0.1, prefix 10), exact-scene replays, offline chunk-vs-hold check; no setting reaches 3 of 4, no confirmation trials
 
