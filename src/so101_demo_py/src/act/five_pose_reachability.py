@@ -74,8 +74,12 @@ class FivePoseReachability:
     def _ask(self, poses: list[Pose], label: str) -> None:
         todo = [pose for pose in dict.fromkeys(poses) if pose not in self._cache]
         chunks = []
-        for start in range(0, len(todo), self.batch_poses):
-            chunk = todo[start:start + self.batch_poses]
+        size = self.batch_poses
+        if self.pool and len(self.pool) > 1:
+            # a short list is cut into one share per planner: the latency of a round is its longest chunk, not its number of poses
+            size = max(1, min(size, -(-len(todo) // len(self.pool))))
+        for start in range(0, len(todo), size):
+            chunk = todo[start:start + size]
             first = len(self._cache) + start
             ids = {f"p{first + i:05d}": pose for i, pose in enumerate(chunk)}
             document = {

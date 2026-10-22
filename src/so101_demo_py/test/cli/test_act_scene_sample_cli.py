@@ -204,72 +204,20 @@ def test_joint_mode_refuses_bad_lists_and_existing_outputs(tmp_path):
         cli.main(joint_inputs(tmp_path), reach_call=planner())
 
 
-# --- pre-fetch and several planners (item 28): the same scenes, found with fewer sequential steps -------------------------
+# --- several planners (item 28): the same scenes, the batches run side by side ----------------------------------------------
 def corner(x, y):
-    """Rejects a corner of the region, so the first pass of the sampler is wrong about some points and the next ones about more."""
-
     return not (x > 0.04 and y < -0.33)
 
 
-SMALL_LISTS = ["--lists", "formal:24,functional:2"]
-
-
-def recording(log, predicate=corner):
-    inner = planner(predicate)
-
-    def call(document):
-        log.append([tuple(p["cup_position_world_m"][:2]) for p in document["points"]])
-        return inner(document)
-
-    return call
-
-
-def counting_passes(monkeypatch):
-    passes = []
-    original = cli.scene_sampling.sample_joint
-
-    def counted(*args, **keywords):
-        passes.append(1)
-        return original(*args, **keywords)
-
-    monkeypatch.setattr(cli.scene_sampling, "sample_joint", counted)
-    return passes
-
-
-def run_joint(tmp_path, name, **keywords):
-    directory = tmp_path / name
-    directory.mkdir()
-    arguments = joint_inputs(directory)
-    arguments[arguments.index("--lists") + 1] = SMALL_LISTS[1]
-    assert cli.main(arguments + keywords.pop("extra", []), **keywords) == 0
-    return {n: read_scene_rows(directory / "out" / f"{n}.scenes.json") for n in ("formal-24", "functional-2")}, \
-        json.loads((directory / "out-report.json").read_text())
-
-
-def test_prefetch_and_a_pool_find_the_scenes_the_plain_run_finds(tmp_path):
-    plain, plain_report = run_joint(tmp_path, "plain", reach_call=recording([]), extra=["--prefetch-factor", "0"])
-    fast, fast_report = run_joint(tmp_path, "fast", reach_call=recording([]), reach_pool=[recording([]) for _ in range(3)])
-    assert fast == plain and all(len(rows) for rows in plain.values())
-    assert plain_report["positions_rejected_by_reachability"] > 0
-    assert fast_report["reachability_pool_size"] == 3 and plain_report["reachability_pool_size"] == 1
-
-
-def test_prefetch_needs_far_fewer_sampler_passes_than_the_pass_by_pass_run(tmp_path, monkeypatch):
-    passes = counting_passes(monkeypatch)
-    run_joint(tmp_path, "plain", reach_call=recording([]), extra=["--prefetch-factor", "0"])
-    plain_passes, passes[:] = len(passes), []
-    run_joint(tmp_path, "fast", reach_call=recording([]))
-    # each pass of the plain run learns about a few more rejected positions; the cloud answers them in one round
-    assert plain_passes >= 20 and len(passes) <= 4
-
-
-def test_the_single_list_mode_takes_the_pool_and_the_prefetch_too(tmp_path):
-    plain_directory, fast_directory = tmp_path / "plain", tmp_path / "fast"
-    plain_directory.mkdir(), fast_directory.mkdir()
+def test_a_pool_finds_the_scenes_the_single_planner_finds(tmp_path):
+    single, pooled = tmp_path / "single", tmp_path / "pooled"
+    single.mkdir(), pooled.mkdir()
     small = ["--count", "30", "--split-counts", "10", "10", "10"]
-    assert cli.main(inputs(plain_directory) + small + ["--prefetch-factor", "0"], reach_call=planner(corner)) == 0
-    assert cli.main(inputs(fast_directory) + small, reach_call=planner(corner), reach_pool=[planner(corner), planner(corner)]) == 0
-    assert read_scene_rows(plain_directory / "scenes.json") == read_scene_rows(fast_directory / "scenes.json")
+    assert cli.main(inputs(single) + small, reach_call=planner(corner)) == 0
+    assert cli.main(inputs(pooled) + small, reach_call=planner(corner), reach_pool=[planner(corner) for _ in range(3)]) == 0
+    assert read_scene_rows(single / "scenes.json") == read_scene_rows(pooled / "scenes.json")
+    assert json.loads((pooled / "report.json").read_text())["reachability_pool_size"] == 3
+    assert json.loads((single / "report.json").read_text())["reachability_pool_size"] == 1
 
 
 def test_every_reach_command_becomes_one_planner_with_its_own_call_files(tmp_path, monkeypatch):
@@ -285,8 +233,3 @@ def test_every_reach_command_becomes_one_planner_with_its_own_call_files(tmp_pat
     monkeypatch.setattr(cli, "CommandReachabilityCall", Recorder)
     assert cli.main(inputs(tmp_path) + ["--reach-command", "zsh a.zsh out one", "--reach-command", "zsh a.zsh out two"]) == 0
     assert made == [(["zsh", "a.zsh", "out", "one"], "sample"), (["zsh", "a.zsh", "out", "two"], "sample-s1")]
-
-
-def test_a_negative_prefetch_factor_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="SCENE_SAMPLE_PREFETCH_FACTOR_INVALID"):
-        cli.main(inputs(tmp_path) + ["--prefetch-factor", "0.5"], reach_call=planner())

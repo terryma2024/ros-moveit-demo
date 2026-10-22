@@ -208,3 +208,23 @@ def test_evaluate_true_asks_for_true_poses_only_and_never_twice():
         reach.is_reachable(*positions(10)[0])
     reach.evaluate([positions(10)[0]])
     assert reach.is_reachable(*positions(10)[0]) and sum(len(chunk) for chunk in log) == 15
+
+
+def test_a_small_batch_is_split_over_the_pool_instead_of_going_to_one_planner():
+    log = []
+    members = [fake_call(lambda x, y: True, log) for _ in range(4)]
+    reach = fp.FivePoseReachability(members[0], batch_poses=80, pool=members)
+    reach.evaluate(positions(8))
+    sizes = sorted(len(chunk) for chunk in log)
+    assert sizes[:4] == [2, 2, 2, 2] and sum(sizes[:4]) == 8           # the true poses: four planners, two each
+    assert sum(sizes) == 8 + 32 and max(sizes) == 8                    # then 32 offsets in chunks of eight
+    serial = fp.FivePoseReachability(fake_call(lambda x, y: True), batch_poses=80)
+    serial.evaluate(positions(8))
+    assert reach.pose_log == serial.pose_log                            # same ids, same order: the split is invisible
+
+
+def test_a_large_batch_still_uses_the_batch_size_with_a_pool():
+    log = []
+    members = [fake_call(lambda x, y: True, log) for _ in range(2)]
+    fp.FivePoseReachability(members[0], batch_poses=5, pool=members).evaluate_true(positions(30))
+    assert sorted(len(chunk) for chunk in log) == [5] * 6
