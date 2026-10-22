@@ -77,7 +77,8 @@ _FROZEN_KEYS = frozenset({"seed", "preprocessing_sha256"})
 CAMERAS = DEFAULT_RIG.camera_names
 STATE_DIM = DEFAULT_RIG.state_dim
 ACTION_DIM = 6
-_SMOKE_CHUNK_SIZE = 10
+#: The chunk sizes a training config may declare (closed set; human 2026-10-22 added 50 for TRAIN-007). Anything else is a new contract.
+ALLOWED_CHUNK_SIZES = (10, 50)
 _SMOKE_EXECUTION_PREFIX = 1
 
 
@@ -104,8 +105,8 @@ def load_training_config(path) -> dict:
     action = document["action"]
     if not isinstance(action, dict) or set(action) != _ACTION_KEYS:
         raise ValueError("TRAINING_CONFIG_INVALID")
-    if type(action["chunk_size"]) is not int or action["chunk_size"] != _SMOKE_CHUNK_SIZE:
-        # the candidate chunk is frozen: a different value is a new contract, not an edit
+    if type(action["chunk_size"]) is not int or action["chunk_size"] not in ALLOWED_CHUNK_SIZES:
+        # the chunk is one of the allowed sizes: any other value is a new contract, not an edit
         raise ValueError("TRAINING_CHUNK_SIZE_DRIFT")
     if (type(action["execution_prefix"]) is not int
             or action["execution_prefix"] != _SMOKE_EXECUTION_PREFIX):

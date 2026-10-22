@@ -1,0 +1,67 @@
+# TRAIN-007B: TRAIN-005-bf16 with three human-approved changes (2026-10-22, "two variants trained at the same time on two machines"):
+# chunk_size 10 -> 50, idle_threshold_rad 0.005 -> 0.001, learning_rate 1.0e-5 (variant B; the other variant uses 1.0e-4).
+# Why: TRAIN-006 rollouts (ledger CP-3774/CP-3775) did best with execution prefix 10 and showed depth collapse, i.e. a 1 s horizon at
+# 10 Hz is too short. Official LeRobot ACT uses chunk 100 at 30 Hz (about 3.3 s) with lr 1e-5; chunk 50 at 10 Hz gives 5 s. The 0.005 rad
+# dwell threshold deleted slow motion: 11313 of the 28702 removed rows had steps over 2 mrad, so it is lowered to 0.001.
+# keep_tail_rows 20 < chunk 50 is still valid: it only keeps tail rows as start rows; windows running past the episode end are padded
+# with the last action and masked by tail_padding_mask. Everything else is the same as TRAIN-005-bf16, whose header follows.
+schema_version: 2
+kind: act_training
+action:
+  chunk_size: 50
+  execution_prefix: 1
+  temporal_ensembling: false
+  tail_padding_mask: true
+observation:
+  cameras: [side, wrist]
+  state_dim: 6
+  action_dim: 6
+normalization:
+  split: train
+  # floor for the per-dimension std (kept from the head+wrist configuration; the six arm joints all vary)
+  std_floor: 0.01
+# TRAIN-005: TRAIN-004 with the interior idle start-row trim replaced by DWELL COMPRESSION (the start-row trim left the dwell plateaus in
+# the chunk targets, and the policy held at dwell states). TRAIN-004 header follows: training-side-wrist.yaml (TRAIN-003) plus the human decisions of 2026-10-19: drop the interior idle start rows (option 1,
+# keep the last 20 rows of every episode) and the accepted speed-ups (cuDNN autotune, backbone channels_last, torch.compile; the DataLoader
+# prefetch thread is always on). Everything that decides what is learned and how long (steps, batch, rates, seed, workers, preprocessing,
+# backbone) is the same as TRAIN-003.
+training:
+  steps: 60000
+  # TRAIN-002 (plan item O7): the ACT reference rates, learning_rate for the transformer and learning_rate_backbone for the ResNet
+  learning_rate: 1.0e-5
+  learning_rate_backbone: 1.0e-5
+  batch_size: 16
+  # training-view sample selection: compress_dwell removes the dwell rows from the episode timeline itself, as observations AND as action
+  # targets. A row t before the tail is a dwell row when max_j |a[t][j] - s[t][j]| < idle_threshold_rad and max_j |s[t+1][j] - s[t][j]| <
+  # idle_threshold_rad (six arm joints, raw radians, strict). The compressed episode is every non-dwell row plus the last keep_tail_rows
+  # rows (the policy still learns to hold at the end); start rows and the next chunk_size action targets are taken on it, so a chunk is a
+  # continuous motion. Leading idle is a dwell and goes too (hence trim_leading_idle false). Same rule for the validation split.
+  sample_selection:
+    trim_leading_idle: false
+    idle_threshold_rad: 0.001
+    lead_in_rows: 0
+    compress_dwell: true
+    keep_tail_rows: 20
+  # speed-ups (antzb profile 2026-10-19; none changes the data, the maths or the sampling order, but cuDNN/compile are not bit-identical)
+  cudnn_benchmark: true
+  channels_last: true
+  compile: true
+  # TRAIN-005-bf16: autocast bf16 around the training forward and loss only; validation, weights and the bundle stay fp32
+  precision: bf16
+  # progress and validation. None of these changes the training maths, the seed or the sampling order.
+  # one stdout line and one metrics.jsonl record (window means, learning rate, samples/s, ETA, DataLoader wait vs compute) every N steps
+  log_interval_steps: 100
+  # validation loss on a fixed evenly spaced subset of the validation split every M steps (and at the last step)
+  validation_interval_steps: 2000
+  validation_samples: 512
+  # DataLoader worker processes of the training loader (an explicit argument to the trainer wins)
+  num_workers: 16
+  # ImageNet ResNet18 (torchvision ResNet18_Weights.IMAGENET1K_V1, https://download.pytorch.org/models/resnet18-f37072fd.pth); the file
+  # is given to the trainer by path and is hash-verified, never downloaded. null = random initialisation.
+  pretrained_backbone:
+    name: ResNet18_Weights.IMAGENET1K_V1
+    sha256: f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec
+frozen:
+  seed: 20260924
+  # sha256 of adapters/act/lerobot.py preprocessing_for(side-wrist) (the D8 decode table of the rig and the image scaling). Quoted: an all-digit hash is a YAML integer
+  preprocessing_sha256: "699033697cb45db1cbc2f081f8e9d714bab12770e37ec934a6899d60eaaa7c21"
