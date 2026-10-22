@@ -260,3 +260,36 @@ def verify_for_admission(host, last_record):
         return verify_receipts(host, last_record, registry.records())
     finally:
         registry.close()
+
+
+def seal_stage_containers(host, stage, *, records, live_document, prove_terminated, runner, stage_record_sha256):
+    """Receipt the containers of a stage that completed: inspect each independently, save its logs, remove it, prove it absent.
+
+    `records` are the registry records of the launches the stage owns; `live_document(record)` is one fresh reading of a
+    launch (`docker inspect`) and `prove_terminated(launch_id, document)` settles it in the registry. The order is the
+    contract: (1) every container is inspected again and must show `exited`, (2) every container's logs are saved, and a container
+    whose logs are unsaved is left standing, (3) every container is removed, (4) nothing of the stage remains, by id and by name.
+    The receipt is written last, chained to the one before. Raises `STAGE_CONTAINER_*` and writes nothing when any step fails."""
+    entries = []
+    for item in records:                                  # 1. independent inspection of every container of the stage
+        document = live_document(item)
+        prove_terminated(item['launch']['launch_id'], document)
+        entries.append(native_entry(item) if item['launch'].get('launcher', 'container') == 'native'
+                       else container_entry(item, document))
+    for entry in entries:                                 # 2. the logs are saved first
+        if entry['launcher'] == 'container':
+            entry['logs_path'], entry['logs_sha256'] = save_logs(host, stage, entry['container_name'], runner,
+                                                                 entry['container_id'])
+    for entry in entries:                                 # 3. removal
+        if entry['launcher'] == 'container':
+            result = runner(['docker', 'rm', entry['container_id']])
+            if result.returncode != 0:
+                raise ValueError('STAGE_CONTAINER_REMOVE_FAILED: ' + entry['launch_id'])
+    for entry in entries:                                 # 4. nothing of the stage remains, by id and by name
+        if entry['launcher'] == 'container':
+            for selector in ('id=' + entry['container_id'], 'name=^/' + entry['container_name'] + '$'):
+                result = runner(['docker', 'ps', '-a', '-q', '--no-trunc', '--filter', selector])
+                if result.returncode != 0 or result.stdout.strip():
+                    raise ValueError('STAGE_CONTAINER_STILL_PRESENT: ' + entry['launch_id'])
+            entry.update(removed=True, absent_after_removal=True)
+    return write_receipt(host, stage=stage, stage_record_sha256=stage_record_sha256, containers=entries)

@@ -269,9 +269,8 @@ class InstanceDispatch:
                 starting.cancel()
                 await asyncio.gather(starting, return_exceptions=True)
 
-    def prepare_task(self, scene_id):
-        """Write the closed task input document with the durable primitive; return the TaskSpec."""
-        task_id = self.task_id(scene_id)
+    def task_document(self, task_id, scene_id):
+        """The closed task input document of one scene: a collection task (a rollout dispatch writes its own)."""
         refs = self.case_inputs[scene_id]
         document = dict(schema_version=1, kind=TASK_INPUT_KIND, task_id=task_id, worker_id=self.worker_id,
             launch_generation=self.generation, wave_id=self.wave_id, scene_id=scene_id,
@@ -281,15 +280,24 @@ class InstanceDispatch:
             endpoint = self.endpoints[role]
             document[role] = dict(role=role, socket_path=str(self.shard.teacher_socket),
                 service_generation=endpoint.service_generation, max_frame_bytes=endpoint.max_frame_bytes)
+        return document
+
+    def task_budget_s(self):
+        """Seconds from the assignment to the task deadline: the stage bounds of the frozen runtime config."""
         config = self.config
+        return (config.initializing_hard_timeout_s+config.executing_hard_timeout_s
+                +config.finalizing_hard_timeout_s+config.worker_recovery_timeout_s)
+
+    def prepare_task(self, scene_id):
+        """Write the closed task input document with the durable primitive; return the TaskSpec."""
+        task_id = self.task_id(scene_id)
+        document = self.task_document(task_id, scene_id)
         now = self.clock()
         if self.phase1_deadline_s is not None and now >= self.phase1_deadline_s:
             # The phase-1 limit gates claims only. A task already claimed keeps the stage bounds below, capped by the total
             # deadline: cutting a recording short would give phase 2 nothing, and the wave verifier refuses a failed task.
             raise InstanceFault(PHASE1_EXPIRED)
-        deadline = min(now+config.initializing_hard_timeout_s+config.executing_hard_timeout_s
-                       +config.finalizing_hard_timeout_s+config.worker_recovery_timeout_s,
-                       self.context.deadline_monotonic_s)
+        deadline = min(now+self.task_budget_s(), self.context.deadline_monotonic_s)
         if deadline <= now:
             raise InstanceFault('CONTAINER_CAMPAIGN_DEADLINE_EXPIRED')
         path = self.owner_root/'task-inputs'/(task_id+'.json')
@@ -405,10 +413,16 @@ class InstanceDispatch:
 
 
 class ConcurrentCollectionCoordinator:
+    #: what a coordinator of another workload (the rollout's) changes: the admitted context's kind, the file references each
+    #: unit carries, and the per-instance loop
+    WORKLOAD_KIND = 'act_collection_start'
+    CASE_REFS = frozenset({'scope', 'inputs_manifest'})
+    DISPATCH = InstanceDispatch
+
     def __init__(self, *, context, config, case_inputs, scene_manifest, control_factory=None,
                  clock=time.monotonic, sleep=asyncio.sleep, max_recording_shards=None,
                  max_tasks_in_flight=None, min_assignment_gap_s=None, collection_mode='formal'):
-        if (type(context) is not AdmittedCampaignContext or context.workload_kind != 'act_collection_start'
+        if (type(context) is not AdmittedCampaignContext or context.workload_kind != self.WORKLOAD_KIND
                 or type(config) is not ParallelRuntimeConfigLinuxCuda
                 or type(case_inputs) is not dict or not case_inputs or type(scene_manifest) is not dict
                 or not callable(clock) or not callable(sleep)
@@ -423,7 +437,7 @@ class ConcurrentCollectionCoordinator:
                          or min_assignment_gap_s < 0))):
             raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
         for refs in case_inputs.values():
-            if type(refs) is not dict or set(refs) != {'scope', 'inputs_manifest'}:
+            if type(refs) is not dict or set(refs) != self.CASE_REFS:
                 raise ValueError('CONTAINER_COORDINATOR_CONFIG_INVALID')
         self.context, self.config, self.case_inputs = context, config, case_inputs
         self.scene_manifest, self.collection_mode = scene_manifest, collection_mode
@@ -499,7 +513,7 @@ class ConcurrentCollectionCoordinator:
         gap = self.min_assignment_gap_s if self.min_assignment_gap_s else None
         gate = (RecordingGate(cap, in_flight, gap, self.clock)
                 if cap is not None or in_flight is not None or gap is not None else None)
-        dispatches = [InstanceDispatch(control=self.control_factory(shard), shard=shard, assignment=assignment,
+        dispatches = [self.DISPATCH(control=self.control_factory(shard), shard=shard, assignment=assignment,
             journal=journal, endpoints=endpoints, scene_manifest=self.scene_manifest,
             case_inputs=self.case_inputs, config=self.config, context=self.context,
             dispatch_allowed=dispatch_allowed, clock=self.clock, sleep=self.sleep, gate=gate,

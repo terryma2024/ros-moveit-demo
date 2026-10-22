@@ -148,6 +148,7 @@ setup(
             "act_rollout_scenes = so101_demo.cli.act_rollout_scenes:main",
             "act_rollout_native = so101_demo.cli.act_rollout_native:main",
             "act_policy_service = so101_demo.cli.act_policy_service:main",
+            "act_rollout_parallel = so101_demo.cli.act_rollout_parallel:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
             # launches on this platform, because so101_parallel_batch refuses it outright.

@@ -748,33 +748,10 @@ class ContainerCampaignOwner:
                 return all(self.registry.prove_terminated(item['launch']['launch_id'],self._live_document(item)) for item in mine),None
             if not completed:
                 return all(self.registry.prove_terminated(item['launch']['launch_id'],self._live_document(item)) for item in mine),None
-            entries=[]
-            observed=[]
-            for item in mine:                              # 1. independent inspection of every container of the stage
-                document=self._live_document(item)
-                self.registry.prove_terminated(item['launch']['launch_id'],document)
-                observed.append((item,document))
-                entries.append(container_receipts.native_entry(item) if item['launch'].get('launcher','container')=='native'
-                               else container_receipts.container_entry(item,document))
-            runner=self.services.docker_runner
-            for entry in entries:                          # 2. the logs are saved first: a container whose logs are unsaved stays
-                if entry['launcher']=='container':
-                    entry['logs_path'],entry['logs_sha256']=container_receipts.save_logs(
-                        host,stage,entry['container_name'],runner,entry['container_id'])
-            for entry in entries:                          # 3. removal
-                if entry['launcher']=='container':
-                    result=runner(['docker','rm',entry['container_id']])
-                    if result.returncode!=0:
-                        raise ValueError('STAGE_CONTAINER_REMOVE_FAILED: '+entry['launch_id'])
-            for entry in entries:                          # 4. nothing of the stage remains, by id and by name
-                if entry['launcher']=='container':
-                    for selector in ('id='+entry['container_id'],'name=^/'+entry['container_name']+'$'):
-                        result=runner(['docker','ps','-a','-q','--no-trunc','--filter',selector])
-                        if result.returncode!=0 or result.stdout.strip():
-                            raise ValueError('STAGE_CONTAINER_STILL_PRESENT: '+entry['launch_id'])
-                    entry.update(removed=True,absent_after_removal=True)
             record=stage_records.read_record(host,stage)
-            written=container_receipts.write_receipt(host,stage=stage,stage_record_sha256=record['sha256'],containers=entries)
+            written=container_receipts.seal_stage_containers(host,stage,records=mine,live_document=self._live_document,
+                prove_terminated=self.registry.prove_terminated,runner=self.services.docker_runner,
+                stage_record_sha256=record['sha256'])
             return True,f"containers-receipt-{written['seq']:02d}-{stage}.json"
         except (OSError,ValueError,RuntimeError,KeyError,TypeError) as error:
             return False,type(error).__name__+': '+str(error)
