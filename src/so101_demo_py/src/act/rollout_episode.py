@@ -123,6 +123,16 @@ def _step_row(pending, **fields):
     return row
 
 
+def _goal_pair_fields(session):
+    """The optional `goal_pair` diagnostics of the submission just made (T0a); {} when the session records none."""
+
+    try:
+        pair = getattr(session, "goal_pair", lambda: None)()
+    except Exception:       # noqa: BLE001 - diagnostics never change a step
+        return {}
+    return {} if pair is None else {"goal_pair": pair}
+
+
 def _resolve(loop, ports, session, sink, settings):
     """Poll the in-flight request once and act on the answer. Returns after at most one resolution."""
 
@@ -189,13 +199,13 @@ def _resolve(loop, ports, session, sink, settings):
         sink.step(dict(row, held=True, applied=False, reason=_text(error)))
         return
     except RuntimeError as error:
-        sink.step(dict(row, held=True, applied=False, reason=_text(error)))
+        sink.step(dict(row, held=True, applied=False, reason=_text(error), **_goal_pair_fields(session)))
         raise _Abort(f"CONTROLLER_PAIR_FAILED: {_text(error)}") from error
     loop.counts["applied"] += 1
     if loop.execution is not None and loop.execution.open_loop:
         # the prefix runs open-loop: the next inference starts from the first observation at its end
         loop.hold_until = prefix["target_times_s"][-1]
-    sink.step(dict(row, held=False, applied=True, goal_id=goal))
+    sink.step(dict(row, held=False, applied=True, goal_id=goal, **_goal_pair_fields(session)))
 
 
 def _drive(session, ports, settings, sink, loop):
@@ -437,6 +447,12 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
             except Exception as error:
                 retire_errors.append("RECORDER_FAILED: " + _text(error))
         if session is not None:
+            try:
+                summary = getattr(session, "goal_response_summary", None)
+                if summary is not None:
+                    result["goal_response"] = summary()
+            except Exception as error:      # noqa: BLE001 - diagnostics never change the verdict
+                result["goal_response"] = {"error": _text(error)}
             try:
                 session.close()
             except Exception as error:

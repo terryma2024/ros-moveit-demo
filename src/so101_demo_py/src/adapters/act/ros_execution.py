@@ -266,7 +266,8 @@ class RosControllerPort:
         message=FollowJointTrajectory.Goal();message.trajectory=wire
         gid=secrets.token_hex(16)
         record=dict(accepted=None,handle=None,result=None,cancel_requested=False,
-                    cancel_ack=False,error=None,goal=goal)
+                    cancel_ack=False,error=None,goal=goal,
+                    send_wall_s=None,accept_wall_s=None,accept_thread=None)
         with self._lock:
             if self._head_policy_binding_failed:raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
             self._goals[gid]=record
@@ -274,6 +275,7 @@ class RosControllerPort:
             options={}
             if goal_uuid is not None:
                 options['goal_uuid']=goal_uuid
+            record['send_wall_s']=self.monotonic()  # diagnostics only
             response=self.client.send_goal_async(message,**options)
             response.add_done_callback(lambda future:self._accepted(gid,future))
         except Exception as error:
@@ -448,8 +450,10 @@ class RosControllerPort:
                 self._head_dispatch_io(gid,'result',lambda:
                     handle.get_result_async().add_done_callback(lambda f:self._result(gid,f)))
             return
+        callback_wall=self.monotonic();callback_thread=threading.current_thread().name  # diagnostics only
         with self._lock:
             record=self._goals[gid]
+            record['accept_wall_s']=callback_wall;record['accept_thread']=callback_thread
             try:
                 handle=future.result();record['handle']=handle;record['accepted']=bool(handle.accepted)
                 if handle.accepted:
@@ -475,6 +479,13 @@ class RosControllerPort:
 
     def accepted(self,gid):
         with self._lock:return self._goals[gid]['accepted']
+
+    def goal_timing(self,gid):
+        """Diagnostics only: when the goal was handed to the client, when its response callback ran, and on which thread."""
+        with self._lock:
+            record=self._goals[gid]
+            return dict(send_wall_s=record.get('send_wall_s'),accept_wall_s=record.get('accept_wall_s'),
+                        accept_thread=record.get('accept_thread'))
 
     def _cancel_handle(self,gid):
         if self._head_io is not None:

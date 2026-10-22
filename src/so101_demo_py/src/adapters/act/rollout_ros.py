@@ -388,6 +388,16 @@ class RolloutSession:
             raise ValueError("PREFIX_LATE")
         return self.adapter.submit(prefix, self.permit.issue(prefix))
 
+    def goal_pair(self):
+        """Diagnostics only: the `goal_pair` record of the most recent submission (None when it sent nothing)."""
+
+        return getattr(self.adapter, "last_pair", None)
+
+    def goal_response_summary(self):
+        """Diagnostics only: acceptance latency statistics of this attempt's goal pairs."""
+
+        return self.adapter.goal_response_summary()
+
     def drain_goals(self) -> bool:
         """Wait (bounded, wall time) until every goal already sent has its outcome; True when none is left unfinished.
 

@@ -7,6 +7,7 @@ import threading
 import time
 
 from .contracts import finite, identifier, validate_action, validate_action_prefix, vector
+from .goal_pair_telemetry import CONTROLLERS, LoadSampler, late_controllers, summarize_goal_pairs
 from .joints import ARM_JOINTS, joint_limits_for
 
 
@@ -43,7 +44,7 @@ class ActExecutionAdapter:
     def __init__(self, arm, gripper, *, permit_port, sim_clock, monotonic=time.monotonic,
                  progress, submit_lead_s, accept_timeout_s, stop_timeout_s, reference_port,
                  path_port=None, proof_reference_port=None, proof_clock_port=None,
-                 proof_goal_port=None, proof_timing=None):
+                 proof_goal_port=None, proof_timing=None, load_sampler=None):
         self.arm,self.gripper=arm,gripper
         self.permit_port,self.sim_clock=permit_port,sim_clock
         self.monotonic,self.progress=monotonic,progress
@@ -66,6 +67,66 @@ class ActExecutionAdapter:
         self.state='STOPPED'; self.current_goal_ids=(None,None)
         self._all_goals=[]; self._identity=None; self._sequence=-1; self._generation=0
         self.audit=[]; self._submitting=False
+        # Diagnostics only (see goal_pair_telemetry): never read by the control path.
+        self.pair_log=[]; self.last_pair=None; self._load_sampler=load_sampler or LoadSampler()
+
+    def _safely(self,function,*args):
+        try: return function(*args)
+        except Exception: return None
+
+    def _port_timing(self,port,gid):
+        timing=getattr(port,'goal_timing',None)
+        return {} if timing is None else (timing(gid) or {})
+
+    def _in_flight(self,port):
+        count=getattr(port,'unfinished_goals',None)
+        return None if count is None else count()
+
+    def _open_pair(self,sequence,start,send_sim_s):
+        pair=dict(sequence=sequence,target_start_sim_s=start,send_sim_s=send_sim_s,goal_ids=dict.fromkeys(CONTROLLERS),
+            send_wall_s=dict.fromkeys(CONTROLLERS),accept_wall_s=dict.fromkeys(CONTROLLERS),
+            accept_latency_s=dict.fromkeys(CONTROLLERS),accept_thread=dict.fromkeys(CONTROLLERS),
+            in_flight_before_send={name:self._safely(self._in_flight,port)
+                                   for name,port in zip(CONTROLLERS,(self.arm,self.gripper),strict=True)},
+            decision_thread=threading.current_thread().name,load=self._safely(self._load_sampler.sample),
+            outcome=None,late_controller=None,check_wall_s=None,check_sim_s=None,accept_sim_s=None,
+            load_at_check=None,late_arrival_latency_s={})
+        self.pair_log.append(pair); self.last_pair=pair
+        return pair
+
+    def _refresh_pair(self,pair):
+        """Re-read the ports' own send/accept times (the accept callback may run after the decision)."""
+        for name,port in zip(CONTROLLERS,(self.arm,self.gripper),strict=True):
+            gid=pair['goal_ids'].get(name)
+            if gid is None: continue
+            timing=self._safely(self._port_timing,port,gid) or {}
+            sent,accepted=timing.get('send_wall_s'),timing.get('accept_wall_s')
+            pair['send_wall_s'][name]=sent; pair['accept_wall_s'][name]=accepted
+            pair['accept_thread'][name]=timing.get('accept_thread')
+            latency=None if sent is None or accepted is None else accepted-sent
+            pair['accept_latency_s'][name]=latency
+            if pair['outcome']=='timeout' and name in late_controllers(pair) and latency is not None:
+                pair['late_arrival_latency_s'][name]=latency
+
+    def _note_sent(self,pair,sent,sent_done_wall_s):
+        pair['sent_done_wall_s']=sent_done_wall_s
+        pair['goal_ids']=dict(zip(CONTROLLERS,sent,strict=True))
+        self._refresh_pair(pair)
+
+    def _close_pair(self,pair,outcome,responses,check_wall_s,check_sim_s):
+        if pair is None: return
+        pair.update(outcome=outcome,check_wall_s=check_wall_s,check_sim_s=check_sim_s)
+        if outcome=='accepted': pair['accept_sim_s']=check_sim_s
+        else:
+            late=[name for name,result in zip(CONTROLLERS,responses,strict=True) if result is not True]
+            pair['late_controller']=None if not late else ('both' if len(late)==2 else late[0])
+            pair['load_at_check']=self._safely(self._load_sampler.sample)
+        self._refresh_pair(pair)
+
+    def goal_response_summary(self):
+        """Diagnostics only: acceptance latency statistics over the pairs of this attempt (see `summarize_goal_pairs`)."""
+        for pair in self.pair_log: self._safely(self._refresh_pair,pair)
+        return summarize_goal_pairs(self.pair_log,accept_timeout_s=self.accept_timeout_s)
 
     def begin_attempt(self,session_id,attempt_id):
         identity=(identifier(session_id),identifier(attempt_id))
@@ -75,6 +136,7 @@ class ActExecutionAdapter:
             if self._all_goals and not all(port.stopped() for port in (self.arm,self.gripper)):
                 raise RuntimeError('CONTROL_NOT_STOPPED')
             self._identity=identity; self._sequence=-1; self._generation+=1
+            self.pair_log=[]; self.last_pair=None
             self.state='READY'; self.current_goal_ids=(None,None); self._all_goals=[]
 
     def _send(self,port,goal,generation):
@@ -154,7 +216,7 @@ class ActExecutionAdapter:
             generation=self._generation
             previous=self.current_goal_ids
         sent=[]
-        proof=None
+        proof=None; pair=None; send_sim_s=None; self.last_pair=None
         try:
             consumed=self.permit_port.require(permit,checked)
             from .path_proof import PathProof
@@ -163,9 +225,10 @@ class ActExecutionAdapter:
                 if previous!=(None,None):
                     raise PermissionError('PROOF_REPLACEMENT_FORBIDDEN')
                 goals,start,proof_readback=self._prepare_proof_goals(proof,checked)
+                send_sim_s=proof_readback['dual_clock']['sim_s']
             else:
                 now=finite(self.sim_clock(),nonnegative=True)
-                start=now+self.submit_lead_s
+                start=now+self.submit_lead_s; send_sim_s=now
                 if start>=checked['target_times_s'][0]-1e-6:
                     raise ValueError('PREFIX_LATE')
                 held=bounded_positions(self.reference_port(start))
@@ -181,6 +244,7 @@ class ActExecutionAdapter:
             with self._lock:
                 if generation!=self._generation:raise RuntimeError('revoked during preparation')
                 self._sequence=checked['sequence']
+            pair=self._safely(self._open_pair,checked['sequence'],start,send_sim_s)
             # No inference lock, and stop may invalidate this operation at any point.
             for port,old in zip((self.arm,self.gripper),previous,strict=True):
                 if old is not None: port.cancel(old)
@@ -198,7 +262,9 @@ class ActExecutionAdapter:
                         raise PermissionError('PROOF_STOP_UNCONFIRMED')
                     self._proof_time_check(proof,proof_readback,start)
                 sent.append(self._send(port,goal,generation))
-            deadline=self.monotonic()+self.accept_timeout_s
+            wait_start=self.monotonic(); deadline=wait_start+self.accept_timeout_s
+            if pair is not None: self._safely(self._note_sent,pair,tuple(sent),wait_start)
+            sim_now=None
             while True:
                 with self._lock:
                     if generation!=self._generation: raise RuntimeError('revoked before acceptance')
@@ -206,11 +272,17 @@ class ActExecutionAdapter:
                     (self.arm,self.gripper),sent,strict=True))
                 if proof is not None:
                     self._proof_time_check(proof,proof_readback,start)
-                elif self.sim_clock()>=start:
+                elif (sim_now:=self.sim_clock())>=start:
+                    self._safely(self._close_pair,pair,'after_common_start',responses,None,sim_now)
                     raise RuntimeError('acceptance after common start')
-                if any(result is False for result in responses): raise RuntimeError('goal rejected')
+                if any(result is False for result in responses):
+                    self._safely(self._close_pair,pair,'rejected',responses,None,sim_now)
+                    raise RuntimeError('goal rejected')
                 if all(result is True for result in responses): break
-                if self.monotonic()>=deadline: raise RuntimeError('goal response timeout')
+                check_wall=self.monotonic()
+                if check_wall>=deadline:
+                    self._safely(self._close_pair,pair,'timeout',responses,check_wall,sim_now)
+                    raise RuntimeError('goal response timeout')
                 self.progress()
             if proof is not None:
                 self.permit_port.current_proof_state(proof)
@@ -218,10 +290,13 @@ class ActExecutionAdapter:
             with self._lock:
                 if generation!=self._generation: raise RuntimeError('revoked after acceptance')
                 self.current_goal_ids=tuple(sent); self.state='EXECUTING'
-                self.audit.append(dict(prefix_sha256=prefix_sha256(checked),goals=goals,
-                    goal_ids=tuple(sent),accepted_wall_s=self.monotonic(),accepted_sim_s=self.sim_clock()))
+                audit=dict(prefix_sha256=prefix_sha256(checked),goals=goals,
+                    goal_ids=tuple(sent),accepted_wall_s=self.monotonic(),accepted_sim_s=self.sim_clock())
+                self.audit.append(audit)
+                self._safely(self._close_pair,pair,'accepted',responses,audit['accepted_wall_s'],audit['accepted_sim_s'])
             return ':'.join(sent)
         except Exception as error:
+            if pair is not None and pair['outcome'] is None: pair['outcome']='error: '+type(error).__name__
             if sent or self._all_goals or not isinstance(error,(ValueError,PermissionError)):
                 self.stop('CONTROLLER_PAIR_FAILED')
             if not sent and isinstance(error,(ValueError,PermissionError)):raise
