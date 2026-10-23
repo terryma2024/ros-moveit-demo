@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 
 from so101_demo.runtime.act_instance.identity import fastdds_profile_environment, instance_environment
+from so101_demo.runtime.container_campaign.cpuset import valid_cpu_list
 from so101_demo.runtime.container_campaign.mount_build import INTERPRETER, container_environment, container_mounts
 from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX, _path, build_role_mounts
 from so101_demo.runtime.inference.config import _image, _open_regular, calibration_runtime_hash
@@ -101,10 +102,11 @@ SHARD_OOM_SCORE_ADJ = 900
 PROCESSOR_OOM_SCORE_ADJ = SHARD_OOM_SCORE_ADJ
 
 
-def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, uid, gid, mount_build=None):
+def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, uid, gid, mount_build=None, cpuset_cpus=None):
     """The `docker run` argv of one role. With `mount_build` (a `MountBuild`) the image is the dependency-only base: the commit's
     install and source trees are added as read-only bind mounts, the entry script checks their records against the commit, and the
     command runs the image bootstrap through the base's interpreter (the base has no role file and no installed code of its own).
+    `cpuset_cpus` (a `--cpuset-cpus` value, default None = no option) pins the container to those logical CPUs (`container_campaign.cpuset`).
     A processor (phase 2) runs the shard image without a GPU, a Teacher socket or a ROS identity: `gpu_uuid` must be None for it and a UUID for every other role."""
     try:
         _require(role in ("head", "teacher", "shard", "processor"))
@@ -119,6 +121,7 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
                 r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", gpu_uuid) is not None)
         _require(type(container_name) is str and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", container_name) is not None)
         _require(type(uid) is int and uid > 0 and type(gid) is int and gid > 0)
+        _require(cpuset_cpus is None or valid_cpu_list(cpuset_cpus))
         base_keys = {"owned_root", "approved_inputs", "socket_roots", "config_paths", "entry"}
         _require(type(host_paths) is dict and set(host_paths) == (
             base_keys | {"phase1_attempts", "processing_root"} if role == "processor" else base_keys))
@@ -176,6 +179,8 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
             "--network", "none", "--ipc", "private", "--restart", "no"]
         if role != "processor":
             argv.extend(["--gpus", "device="+gpu_uuid])
+        if cpuset_cpus is not None:
+            argv.extend(["--cpuset-cpus", cpuset_cpus])
         for value in environment:
             argv.extend(["--env", value])
         for mount in mounts:

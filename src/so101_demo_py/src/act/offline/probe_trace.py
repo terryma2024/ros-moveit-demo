@@ -1,4 +1,5 @@
-"""Diagnostic-only receipt trace of the raw recorder's probe: when each camera frame and /clock message reached this process.
+"""Diagnostic-only receipt trace of the raw recorder's probe: when each camera frame, /clock message and state message
+(joint_states, controller states, scene state) reached this process.
 
 One JSON line per message, `[topic, receipt CLOCK_REALTIME ns, receipt CLOCK_MONOTONIC ns, header stamp ns]`, after a header line
 that names the fields. The receipt thread only appends a tuple to a bounded buffer; a daemon thread writes it out every
@@ -16,9 +17,16 @@ from collections import deque
 from so101_demo.act.rig_profile import DEFAULT_RIG
 
 
+#: The state topics whose samples the bag has been seen to lose (`topic-loss.json`); every one starts with a Header, so the stamp is read the
+#: same way as for the cameras. With them the trace answers whether a missing sample reached the probe (the recorder lost it) or not.
+STATE_TOPICS = ("/joint_states", "/arm_controller/controller_state", "/gripper_controller/controller_state",
+                "/so101/simulation/scene_state")
+NECK_STATE_TOPIC = "/neck_controller/controller_state"
+
+
 def trace_topics_for(rig) -> tuple:
-    """The simulation clock and, per camera of the rig, its image and camera_info topics."""
-    return ("/clock", *rig.camera_topics)
+    """The simulation clock, per camera of the rig its image and camera_info topics, and the state topics (the neck's only for a rig with a neck)."""
+    return ("/clock", *rig.camera_topics, *STATE_TOPICS, *((NECK_STATE_TOPIC,) if rig.has_neck else ()))
 
 
 TRACE_TOPICS = trace_topics_for(DEFAULT_RIG)

@@ -19,6 +19,7 @@ import time
 from types import SimpleNamespace
 
 from so101_demo.runtime.container_campaign.launch import InferenceLaunchArgs, build_container_argv
+from so101_demo.runtime.container_campaign.cpuset import cpus_for, cpuset_from_config
 from so101_demo.runtime.container_campaign.mount_build import PREFLIGHT_COPY, mount_from_config, read_preflight, verify_images
 from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_inspect
 from so101_demo.runtime.container_campaign.process_identity import ContainerOwnerKey, container_key_from_inspect
@@ -190,7 +191,8 @@ class ContainerServiceOwner:
                     host_paths=dict(owned_root=owned, approved_inputs=(Path(settings['model']['weights']['path']),),
                         socket_roots=self.paths['socket_roots'], config_paths=(config_path, self.head_descriptor)
                             if role == 'head' else (config_path,), entry=entry),
-                    container_name='so101-'+generation, uid=os.getuid(), gid=os.getgid(), mount_build=mount_build)
+                    container_name='so101-'+generation, uid=os.getuid(), gid=os.getgid(), mount_build=mount_build,
+                    cpuset_cpus=cpus_for(cpuset_from_config(self.config), role, worker_count=self.context.worker_count))
                 prepared.append((role, generation, argv))
             for role, generation, argv in prepared:
                 if self._closing or self.clock() >= deadline:

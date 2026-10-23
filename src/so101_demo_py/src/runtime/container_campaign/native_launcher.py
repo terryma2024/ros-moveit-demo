@@ -67,7 +67,7 @@ class NativeInstanceLauncher(ContainerShardLauncher):
             worker_id=slot.worker_id, wave_id=wave_id, launch_generation=generation, container_name=None,
             image_digest=None, owned_root=str(root), session_id=session, launcher='native')
 
-    def _owner(self, *, launch, entry, spec_path, token, images, endpoints):
+    def _owner(self, *, launch, entry, spec_path, token, images, endpoints, cpuset_cpus=None):  # a native owner has no container to pin; the option is ignored
         owner_environment = None
 
         def graph_probe():
