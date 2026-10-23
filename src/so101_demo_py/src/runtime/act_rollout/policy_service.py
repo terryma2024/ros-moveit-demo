@@ -18,7 +18,7 @@ import subprocess
 import threading
 import time
 
-from so101_demo.runtime.act_policy.service import process_record, write_json
+from so101_demo.runtime.act_policy.service import ProcessGone, process_record, write_json
 
 #: the only variables the service inherits; ROS and gate environments must not reach the training interpreter
 INHERITED_ENVIRONMENT = ("PATH", "HOME", "LANG", "LC_ALL", "USER", "LOGNAME")
@@ -141,7 +141,10 @@ class PolicyServiceOwner:
 
     def _check_started(self):
         record, ready, expected = self.record, self.ready, self.expected
-        live = self.identity_of(record["pid"])
+        try:
+            live = self.identity_of(record["pid"])
+        except ProcessGone as error:
+            raise PolicyServiceError(f"POLICY_SERVICE_IDENTITY_MISMATCH: the recorded pid is gone ({error})"[:300]) from error
         if (record["pid"] != self.process.pid or record["kind"] != "ACT_POLICY_SERVICE_PROCESS"
                 or any(record[name] != live[name] for name in ("pgid", "start_ticks", "argv_sha256"))
                 or record["generation"] != self.generation):
@@ -177,6 +180,8 @@ class PolicyServiceOwner:
                 return None
             answer = self.health_probe()
             return None if answer is True else (answer if isinstance(answer, str) and answer else "HEALTH_PROBE_FALSE")
+        except ProcessGone as error:
+            return f"PROCESS_GONE: {error}"[:200]
         except (OSError, ValueError, KeyError) as error:
             return f"HEALTH_CHECK_ERROR: {type(error).__name__}: {error}"[:200]
 
@@ -211,8 +216,19 @@ class PolicyServiceOwner:
             return self.stop_result
         try:
             if process.poll() is None:
-                live = self.identity_of(process.pid) if self.record is not None else None
-                if live is not None and any(self.record[name] != live[name] for name in ("pgid", "start_ticks", "argv_sha256")):
+                try:
+                    live = self.identity_of(process.pid) if self.record is not None else None
+                except ProcessGone:
+                    # the started child (the proven pid) exited between the poll and the identity read: nothing to signal;
+                    # reap it and judge it by its exit code and its stop proof like any other exit
+                    live = None
+                    try:
+                        process.wait(timeout=self.stop_timeout_s)
+                    except subprocess.TimeoutExpired:
+                        pass                    # still running with an unreadable /proc entry: it is signalled below
+                if process.poll() is not None:
+                    pass
+                elif live is not None and any(self.record[name] != live[name] for name in ("pgid", "start_ticks", "argv_sha256")):
                     errors.append("POLICY_SERVICE_IDENTITY_CHANGED_BEFORE_STOP")
                 else:
                     self.signal_process(process.pid, signal.SIGTERM)

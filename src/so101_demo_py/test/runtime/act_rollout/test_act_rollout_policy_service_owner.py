@@ -31,7 +31,9 @@ FAKE_SERVICE = textwrap.dedent('''
     record_dir.mkdir(mode=0o700)
     record = process_record()
     if args.mode == "bad_pid":
-        record["pid"] = record["pid"] + 1
+        record["pid"] = 1                                  # a live process that is not this one
+    if args.mode == "gone_pid":
+        record["pid"] = 2 ** 31 - 1                        # no such process: /proc/<pid> does not exist
     (record_dir / "process-record.json").write_text(json.dumps({"kind": "ACT_POLICY_SERVICE_PROCESS", **record,
         "generation": args.generation}))
     stop = {"flag": False}
@@ -118,6 +120,68 @@ def test_a_process_record_that_is_not_the_started_process_is_refused_and_killed(
     with pytest.raises(PolicyServiceError, match="POLICY_SERVICE_IDENTITY_MISMATCH"):
         served.start()
     assert served.process.poll() is not None
+
+
+def test_a_process_record_whose_pid_does_not_exist_is_an_identity_mismatch_not_a_raw_oserror(tmp_path):
+    served = owner(tmp_path, mode="gone_pid")
+    with pytest.raises(PolicyServiceError, match="POLICY_SERVICE_IDENTITY_MISMATCH"):
+        served.start()
+    assert served.process.poll() is not None
+
+
+def test_process_record_of_a_pid_that_does_not_exist_is_process_gone():
+    from so101_demo.runtime.act_policy.service import ProcessGone, process_record
+    with pytest.raises(ProcessGone):
+        process_record(2 ** 31 - 1)
+
+
+def test_a_process_that_vanishes_between_the_two_reads_is_process_gone(tmp_path, monkeypatch):
+    from so101_demo.runtime.act_policy import service
+    real = service.Path
+
+    class Vanishing(type(real("/"))):
+        def read_bytes(self):
+            raise FileNotFoundError(str(self))
+    monkeypatch.setattr(service, "Path", lambda *a: Vanishing(*a) if str(a[0]).endswith("cmdline") else real(*a))
+    with pytest.raises(service.ProcessGone):
+        service.process_record()
+
+
+def test_the_health_check_names_a_vanished_process(tmp_path):
+    from so101_demo.runtime.act_policy.service import ProcessGone
+    served = owner(tmp_path)
+    served.start()
+
+    def gone(pid):
+        raise ProcessGone(pid)
+    served.identity_of = gone
+    try:
+        assert served.healthy() is False and served.unhealthy_reason.startswith("PROCESS_GONE")
+    finally:
+        served.identity_of = process_record_of_real()
+        served.stop()
+
+
+def process_record_of_real():
+    from so101_demo.runtime.act_policy.service import process_record
+    return process_record
+
+
+def test_a_service_that_vanishes_before_the_stop_signal_is_stopped_not_an_error(tmp_path):
+    from so101_demo.runtime.act_policy.service import ProcessGone
+    served = owner(tmp_path)
+    served.start()
+    real = served.identity_of
+
+    def gone_after_poll(pid):
+        served.process.terminate()                   # the proven child exits between the poll and the identity read
+        served.process.wait(timeout=10)
+        raise ProcessGone(pid)
+    served.identity_of = gone_after_poll
+    result = served.stop()
+    served.identity_of = real
+    assert not any("ProcessGone" in e or "FileNotFound" in e for e in result["errors"])
+    assert result["exit_code"] is not None and result["pid"] == served.process.pid
 
 
 def test_a_service_that_ignores_sigterm_is_killed_and_the_stop_is_not_confirmed(tmp_path):

@@ -426,16 +426,26 @@ class PolicyUnixServer:
                 and all(not thread.is_alive() for thread in handlers)}
 
 
+class ProcessGone(OSError):
+    """The process has no readable `/proc/<pid>` entry: it exited (or never existed), or exited between two reads."""
+
+
 def process_record(pid=None):
-    """Who this process is, from /proc alone (the train venv has no `so101_teleop`): pid, process group, start ticks, argv hash."""
+    """Who this process is, from /proc alone (the train venv has no `so101_teleop`): pid, process group, start ticks, argv hash.
+
+    A process that is gone, vanishes between the two reads or whose entry cannot be read raises `ProcessGone` (never a raw
+    `FileNotFoundError`), so callers can tell "no such process" from a mismatch."""
     import hashlib
 
     pid = os.getpid() if pid is None else pid
-    stat = Path(f"/proc/{pid}/stat").read_text()
-    fields = stat[stat.rindex(")") + 2:].split()
-    cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
-    return {"pid": pid, "pgid": int(fields[2]), "start_ticks": int(fields[19]),
-            "argv_sha256": hashlib.sha256(cmdline).hexdigest()}
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        fields = stat[stat.rindex(")") + 2:].split()
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+        return {"pid": pid, "pgid": int(fields[2]), "start_ticks": int(fields[19]),
+                "argv_sha256": hashlib.sha256(cmdline).hexdigest()}
+    except (OSError, ValueError, IndexError) as error:
+        raise ProcessGone(f"pid {pid}: /proc entry unreadable: {type(error).__name__}: {error}") from error
 
 
 def write_json_atomic(path, document):
