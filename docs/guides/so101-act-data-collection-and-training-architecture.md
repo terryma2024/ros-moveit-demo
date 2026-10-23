@@ -1133,6 +1133,23 @@ Start the container as `start-container.zsh` did for the formal lists (`so101_mu
 headless:=true sensor_rendering:=true`), and pass `--reach-command` the prefix that runs `task_reachability` in it,
 such as `zsh reach_call.zsh <out> <container>`. The prefix receives the points file, the evidence file and a session id.
 
+`act_scene_sample` can use several stacks at once: `--reach-command "zsh reach_call.zsh $OUT{slot} reach{slot}" --stacks 8` starts the
+planner batches on eight containers side by side (`{slot}` becomes 0..7; the command can also be repeated once per stack). A short batch
+is cut into one share per stack, a long one into calls of at most `--batch-poses` poses (default 80). The scenes do not depend on either
+number. Measured on antzb (mount image, one core and about 1 GB per stack; a call costs about 2 s plus 1 s per pose): 24 + 2 scenes took
+1103 s on one stack and 425 s on eight; a borderline position can still flip between two calls on any stack.
+
+**Light stacks (`scripts/reach/`).** The five-pose filter needs `/move_group`, the robot description, the planning scene and a clock and
+joint state, not physics or a GPU. `scripts/reach/light_stacks.zsh start N` starts N containers of the mount image (default use 16; same
+restrictions as `start_mounted.zsh`: read-only root, no network, `--cap-drop ALL`, trees mounted read-only, no GPU) that run
+`light_stack.launch.py`: `robot_state_publisher` and `graceful_shutdown_move_group` with the parameters of the execution stack, `scene_setup`,
+and `fake_sim.py` publishing `/clock` and a fixed rest `/joint_states`. `reach_call.zsh` is the matching `--reach-command` prefix and
+`sample_scenes.zsh --stacks 16 -- ARGS` runs start, `act_scene_sample` and stop in one go. A light stack costs about a third of a full stack's
+CPU, so 16 of them fit the host where 8 full ones did. `compare_verdicts.py --full F... --light L...` states whether the two kinds answer alike: a
+point is *borderline* when its verdict (status, first failure code) differs between repeats of one stack kind, and a difference between the
+kinds is accepted only there; on any other point it is a hard mismatch and the exit code is 1. A single borderline position (1 of 734 in the first
+measurement) is therefore expected to flip on either kind, never a stable one.
+
 ```sh
 # 1) offline limits per ray (stack running)
 act_boundary_prefilter --reach-command "zsh reach_call.zsh $OUT $CONTAINER" --call-dir $OUT/calls --output $OUT/limits.json

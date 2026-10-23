@@ -8,7 +8,7 @@
 #            local SO-101 test test_state_queue_publication runs; the upstream suites (test_trajectory_controller, ~690
 #            tests, test_trajectory, test_tolerances, test_trajectory_actions, test_load_joint_trajectory_controller) are
 #            skipped. Otherwise the whole package runs.
-#   teleop : so101_teleop only. SERIAL_TELEOP_TESTS first with -j1, then everything else with -j $TELEOP_JOBS.
+#   teleop : so101_teleop only. SERIAL_TELEOP_TESTS first with -j1, then everything else with -j $TELEOP_JOBS (TELEOP_XDIST=1: as one pytest -n $TELEOP_JOBS run).
 #   up-<group> : (UPSTREAM_PARALLEL=1, started by upstream_stage.zsh on its own CPUs) the entries of one group of upstream-groups.txt, one after the
 #            other, each a ctest -j1 of one package with -R/-E from $UPSTREAM_SPEC, in the ROS domain $UPSTREAM_GROUP_DOMAIN. With UPSTREAM_PARALLEL=1 the
 #            main part leaves out controller_manager and hardware_interface_testing, and the jtc part its upstream suites: the groups run them.
@@ -24,6 +24,7 @@ FZ=$DEPS_FREEZE
 TESTVENV=$TEST_VENV
 run=${1:?run dir}; part=${2:?part}
 TELEOP_JOBS=${TELEOP_JOBS:-6}
+TELEOP_XDIST=${TELEOP_XDIST:-0}
 # Tests that spawn and scan real process groups, or that proved timing-sensitive; they run alone (-j1) before the parallel rest.
 # Names are ctest names (first argument of so101_add_pytest_test). Empty the list to run everything in parallel.
 # test_expert_validation_e2e_installed_port: its test_fixed_helper_full_protocol runs fixed_helper.py with plain
@@ -98,6 +99,9 @@ colcon_test() {
     --build-base $GB/build --install-base $GB/install --event-handlers console_direct+ \
     --ctest-args $ca > $d/colcon-test-$tag.log 2>&1
   local crc=$?
+  # several ctest phases of one package may start in the same minute and share Testing/<TAG>: keep each phase's Test.xml (result_sets.py preserve)
+  # (only the teleop part: its phases run one after the other; upstream groups share a package's Testing/ dir concurrently and are read per group)
+  if [[ $part == teleop ]]; then python3 -I $FG/result_sets.py preserve --build-base $GB/build --package $pkg --tag $tag > $d/preserve-$tag.log 2>&1 || crc=$(( crc ? crc : 99 )); fi
   print -r -- $crc > $d/colcon-test-$tag.rc; print -r -- $(( SECONDS - t0 )) > $d/colcon-test-$tag.elapsed
   return $crc
 }
@@ -149,7 +153,22 @@ elif [[ $part == teleop ]]; then
   for n in $SERIAL_TELEOP_TESTS; do
     grep -q -- "so101_add_pytest_test($n " $WT/src/so101_teleop/CMakeLists.txt || { print "SERIAL_TELEOP_TESTS names an unregistered test: $n"; exit 98; }
   done
-  if (( TELEOP_JOBS <= 1 )); then
+  if (( TELEOP_XDIST && TELEOP_JOBS > 1 )); then
+    # The registered modules but the serial ones as ONE pytest process with TELEOP_JOBS xdist workers (the serial ones stay separate ctest runs: see
+    # the list above). Same interpreter, flags and results directory as ament_add_pytest_test; one xunit file instead of one per module.
+    paths=($(python3 -I $FG/teleop_pytest.py paths --cmake $WT/src/so101_teleop/CMakeLists.txt --root $WT/src/so101_teleop --exclude ${(j:,:)SERIAL_TELEOP_TESTS})) || { print "teleop_pytest.py paths failed"; exit 98; }
+    rc_a=0
+    if (( ${#SERIAL_TELEOP_TESTS} )); then colcon_test serial so101_teleop -- -j1 -R $serial_rx --no-tests=error; rc_a=$?; fi
+    results=$GB/build/so101_teleop/test_results/so101_teleop
+    mkdir -p $results $GB/build/so101_teleop/ament_cmake_pytest/xdist || exit 96
+    t0=$SECONDS
+    (cd $GB/build/so101_teleop && /usr/bin/setsid -w /usr/bin/timeout 1800 /usr/bin/python3 -u -m pytest $paths -n $TELEOP_JOBS \
+      -o cache_dir=$GB/build/so101_teleop/ament_cmake_pytest/xdist/.cache --junit-xml=$results/so101_teleop_xdist.xunit.xml \
+      --junit-prefix=so101_teleop > $d/colcon-test-xdist.log 2>&1)
+    rc_b=$?
+    print -r -- $rc_b > $d/colcon-test-xdist.rc; print -r -- $(( SECONDS - t0 )) > $d/colcon-test-xdist.elapsed
+    rc=$(( rc_a || rc_b ))
+  elif (( TELEOP_JOBS <= 1 )); then
     colcon_test all so101_teleop -- -j1; rc=$?
   elif (( ${#SERIAL_TELEOP_TESTS} == 0 )); then
     colcon_test parallel so101_teleop -- -j$TELEOP_JOBS; rc=$?
@@ -160,7 +179,7 @@ elif [[ $part == teleop ]]; then
   fi
   # one combined log, phases in order
   : > $d/colcon-test.log
-  for f in $d/colcon-test-serial.log $d/colcon-test-parallel.log $d/colcon-test-all.log; do
+  for f in $d/colcon-test-serial.log $d/colcon-test-parallel.log $d/colcon-test-xdist.log $d/colcon-test-all.log; do
     test -f $f && cat -- $f >> $d/colcon-test.log
   done
   print -r -- $rc > $d/colcon-test-teleop.rc; print -r -- $(( SECONDS - start )) > $d/colcon-test-teleop.elapsed

@@ -33,6 +33,7 @@ from collections import deque
 from pathlib import Path
 
 from ...act.collection_reference import build_collection_reference
+from ...act.joints import act_joints_for
 from ...act.nonfinite import json_safe
 from ...act.recorder_scene import (
     AssociationJob,
@@ -42,6 +43,7 @@ from ...act.recorder_scene import (
     build_association,
     select_source,
 )
+from ...act.scene_association import association_anchor
 from ...act.scene_operation import SceneOperationError
 from ...act.synchronizer import source_age_ok_ns
 from ...ros.recorder_data_side import RecorderDataSide
@@ -70,6 +72,22 @@ def controller_state_qos():
     return QoSProfile(history=QoSHistoryPolicy.KEEP_LAST, depth=STATE_QOS_DEPTH,
                       reliability=QoSReliabilityPolicy.RELIABLE)
 
+
+
+_ROS_NAMES: dict = {}
+
+
+def _ros(module, name):
+    """`from <module> import <name>`, looked up once: these ROS modules are not imported when this module is (it loads without ROS)."""
+    key = (module, name)
+    found = _ROS_NAMES.get(key)
+    if found is None:
+        found = _ROS_NAMES[key] = getattr(__import__(module, fromlist=[name]), name)
+    return found
+
+
+def _planning_scene_components():
+    return _ros("moveit_msgs.msg", "PlanningSceneComponents")
 
 class ControllerReferencePort:
     """Read-only controller reference at an instant, from the controller state topics (no lease, no RPC).
@@ -261,21 +279,17 @@ class OfflineRosSources:
         """Count the message and keep the original measured state the rows join (same record the Teacher child kept)."""
         self._counts["joint_states"] += 1
         try:
-            from ...act.joints import act_joints_for
-
             if len(message.name) != len(message.position):
                 return
             positions = {name: float(value) for name, value in zip(message.name, message.position, strict=True)}
             stamp = getattr(getattr(message, "header", None), "stamp", None)
             if not all(name in positions for name in act_joints_for(self.rig)) or stamp is None:
                 return
-            from rosidl_runtime_py.convert import message_to_ordereddict
-
             record = {
                 "source_stamp_ns": int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec),
                 "positions": copy.deepcopy(positions), "received_monotonic_s": time.monotonic(),
                 # NaN/inf (the broadcaster's missing effort interface) are tagged, not dropped: canonical JSON is strict
-                "original_message": json_safe(message_to_ordereddict(message))}
+                "original_message": json_safe(_ros("rosidl_runtime_py.convert", "message_to_ordereddict")(message))}
             with self._controller_lock:
                 self._joint_generation += 1
                 record["generation"] = self._joint_generation
@@ -412,12 +426,9 @@ class OfflineRosSources:
     def _planning_reads(self, at_s, bound):
         """The full reads usable after the governing association: {"fresh": newest at or before the instant within 100 ms,
         "before": newest at or before the instant, "after": first after the instant}."""
-        from moveit_msgs.msg import PlanningSceneComponents
-
-        from ...act.scene_association import association_anchor
-
-        required = (PlanningSceneComponents.WORLD_OBJECT_NAMES | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
-                    | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS | PlanningSceneComponents.OBJECT_COLORS)
+        components = _planning_scene_components()
+        required = (components.WORLD_OBJECT_NAMES | components.WORLD_OBJECT_GEOMETRY
+                    | components.ROBOT_STATE_ATTACHED_OBJECTS | components.OBJECT_COLORS)
         anchor = association_anchor(bound["association"])
         at_ns = round(at_s * 1e9)
         with self._planning_lock:

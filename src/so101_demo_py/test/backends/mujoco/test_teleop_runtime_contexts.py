@@ -9,13 +9,12 @@ import pytest
 
 
 @pytest.fixture
-def container_environment(monkeypatch, tmp_path):
+def container_environment(monkeypatch, tmp_path, isolated_ros_domain):
     """The instance marker alone: no ROS namespace, the fixed identity's root namespace."""
     import rclpy
 
     monkeypatch.delenv("ROS_NAMESPACE", raising=False)
     monkeypatch.setenv("SO101_ACT_INSTANCE_ROOT", str(tmp_path))
-    monkeypatch.setenv("ROS_DOMAIN_ID", "231")
     rclpy.try_shutdown()
     yield
     rclpy.try_shutdown()
@@ -94,13 +93,12 @@ def test_the_instance_scope_uses_a_private_context_and_no_namespace_arguments(co
         scope.close()
 
 
-def test_without_the_instance_marker_the_default_context_is_still_used(monkeypatch):
+def test_without_the_instance_marker_the_default_context_is_still_used(monkeypatch, isolated_ros_domain):
     """Host and macOS callers are unchanged: they initialise and shut down the default context themselves."""
     import rclpy
     from so101_demo.backends.mujoco import teleop_runtime
 
     monkeypatch.delenv("SO101_ACT_INSTANCE_ROOT", raising=False)
-    monkeypatch.setenv("ROS_DOMAIN_ID", "231")
     rclpy.try_shutdown()
     seen = []
     original_create_node = rclpy.create_node

@@ -19,8 +19,9 @@ for line in log.read_text(errors="replace").splitlines():
 extra = [0, 0, 0, 0]
 for tag in sorted(build.glob("*/Testing/TAG")):
     latest = tag.read_text().splitlines()[0]
+    newest = (tag.parent / latest / "Test.xml").read_bytes() if (tag.parent / latest / "Test.xml").is_file() else None
     for xml in sorted(tag.parent.glob("*/Test.xml")):
-        if xml.parent.name == latest:
+        if xml.parent.name == latest or xml.read_bytes() == newest:   # the newest phase, or its preserved copy (result_sets.py preserve)
             continue
         root = parse(str(xml)).getroot()
         counts = [0, 0, 0, 0]

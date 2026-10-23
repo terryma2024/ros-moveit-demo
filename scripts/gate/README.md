@@ -17,6 +17,7 @@ result is valid only if `scripts/gate` was clean at the commit that was tested.
 | --- | --- |
 | `--host H` | Use `hosts/H.env`. Without it, the host whose `HOST_NAMES` contains `hostname` is used. An unknown host is refused (exit 2). |
 | `--full` | Run the `controller_manager` and `hardware_interface_testing` tests even when the skip rule allows skipping them. |
+| `--results-reference FILE` | Compare `result-sets.json` (all packages, test ids and outcomes) with that of a serial gate; a difference fails the gate. |
 | `--serial` | Demo pytest, then colcon test; the colcon parts one after the other; `so101_teleop` with `ctest -j1`. The skip rule still applies; add `--full` for full coverage. |
 | `--teleop-jobs N` | `ctest -j` for the parallel part of `so101_teleop` (default 6). |
 | `--gate-suffix S` | Gate directory `gates/<commit12>.S` instead of `gates/<commit12>`. |
@@ -107,10 +108,29 @@ kept to the remaining CPUs (`taskset -c`; the user systemd manager here does not
   spawner tests; see the times in `upstream-groups.txt`) each have a group of their own. `upstream_groups.py timing` lists them for a build.
 - Domains: group *i* uses `UPSTREAM_DOMAIN_BASE` (223) + *i*. `joint_trajectory_controller` stays loopback only, `controller_manager` does not.
 - A package split over several groups is several ctest runs in one build directory. A ctest tag has minute resolution and colcon reads only the
-  newest, so `upstream_slot.zsh` keeps the starts of one package at least 75 s apart; `ctest_extra_phases.py` adds the older phases.
+  newest, so `upstream_slot.zsh` starts two ctest runs of one package in different tag minutes (a start waits for the first minute boundary
+  after the previous start plus 15 s; at most 75 s, about 37 s on average); `ctest_extra_phases.py` adds the older phases. A group lists the
+  packages that no other group is starting first, then the package every group needs (`other`: hardware_interface_testing, joint_trajectory_controller,
+  controller_manager), so the waits are off its critical path.
+- `result_sets.py collect` writes `result-sets.json` for every gate (every package: ctest names and statuses, every test case of every xunit/gtest
+  file with its outcome, no times). `--results-reference FILE` compares it with the file of a serial gate and fails the gate on any difference.
 - `upstream_groups.py sets` writes the executed tests of the upstream packages (ctest name and status, gtest cases per file) to
   `upstream-sets.json`; `--upstream-sets-reference FILE` compares them with those of a serial gate and fails the gate on any difference.
 - The known-flake rerun is one serial colcon stage; the groups do not take part in it.
+
+## so101_teleop as one xdist run
+
+Off by default (`GATE_TELEOP_XDIST=0` in the host config; `--teleop-xdist` / `--no-teleop-xdist` per run). The ordinary gate runs one ctest process (one pytest
+process) per `so101_add_pytest_test` registration of `src/so101_teleop/CMakeLists.txt`, `-j $TELEOP_JOBS` at a time, after the serial tests. With the switch on, the
+serial tests (`SERIAL_TELEOP_TESTS` in `colcon_part.zsh`) still run first as ctest runs with `-j1`, and every other registered module runs as ONE
+`python3 -u -m pytest <files> -n $TELEOP_JOBS` in the build directory, with the flags `ament_add_pytest_test` uses (`--junit-xml`, `--junit-prefix=so101_teleop`, a cache
+directory of its own) and one xunit file `so101_teleop_xdist.xunit.xml` in the same results directory, so `colcon test-result` counts it as before.
+
+- `teleop_pytest.py paths` gives the files from the registrations (refusing an excluded name that is not registered, a missing file, a duplicate name or path), so one
+  pytest run collects exactly what the separate runs collect. The serial tests stay separate because one of them kills the process group of a sibling pytest.
+- `teleop_pytest.py sets` writes the executed tests of the package (`classname::name` -> pass|fail|error|skipped) to `teleop-sets.json` in the gate directory in every gate;
+  `--teleop-sets-reference FILE` compares them with another gate's and fails the gate on any difference (ids or results).
+- The whole run is bounded by `timeout 1800`; there is no per-module ctest timeout in this mode.
 
 ## Skip rules
 
@@ -183,3 +203,10 @@ A red result on a listed test is not evidence of a regression until it fails aga
 Deleting a gate: after the results are read back, the build root and the scratch directory are deletion candidates; the evidence gate
 directory stays. Do not delete the build root of a gate that an image was built from until the template runs for that commit are
 finished.
+
+## Front end tests (manual, not in the gate)
+
+`scripts/gate/run_web_tests.zsh [--e2e] [--install] [--dry-run]` runs the `so101_teleop` web tests through bun: `bun run test`
+(vitest, about 5 s) and, with `--e2e`, `bun run test:e2e` (Playwright; the browsers must be installed on the host). `--install`
+runs `bun install --frozen-lockfile` first; without it a missing `node_modules` is an error. bun is `$BUN_BIN`, else the host env
+file's `BUN_BIN`, else `bun` on `PATH`. The gate does not call it.

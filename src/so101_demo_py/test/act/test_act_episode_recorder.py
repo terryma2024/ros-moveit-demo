@@ -268,7 +268,7 @@ def make_episode(root):
         physical_audit=recorder_physical_audit, monotonic=time.monotonic)
 
 
-def build(tmp_path, *, script=None, skip=(), raise_at=None, policy=None, clock=None, working=None, **sources_kwargs):
+def build(tmp_path, *, script=None, skip=(), raise_at=None, policy=None, clock=None, working=None, engine_kwargs=None, **sources_kwargs):
     working = working or tmp_path / "working"
     working.mkdir(parents=True, exist_ok=True)
     box = {}
@@ -278,7 +278,7 @@ def build(tmp_path, *, script=None, skip=(), raise_at=None, policy=None, clock=N
     policy = dict(load_recorder_policy(POLICY_FILE), poll_s=0.0, **(policy or {}))
     engine = OfflineEngine(episode=make_episode(working), sources=sources, policy=policy, identity=STREAM_IDENTITY,
                            result_file=result, clock=time.monotonic if clock is None else clock,
-                           sleep=lambda seconds: None)
+                           sleep=lambda seconds: None, **(engine_kwargs or {}))
     box["engine"] = engine
     return engine, sources, working
 
@@ -397,6 +397,26 @@ def test_a_normal_run_over_the_synthetic_stream_seals_valid_rc0_and_passes_the_r
     assert result["event_stream"]["deferred_replayed"] == 0 and result["event_stream"]["deferred_first"] is None
     assert sources.events_seen[0] == "reset_complete" and sources.events_seen[-1] == "terminal"
     assert list(working.glob("episode/**/*.tmp")) == []
+
+
+def test_the_engine_reads_the_sealed_files_back_unless_the_caller_leaves_that_to_the_independent_qc(tmp_path, monkeypatch):
+    """Option 9 (2e): the processor's own readback after the seal is the second verification of the same files; the QC child repeats it. The
+    engine keeps it by default; the processor turns it off. Nothing else changes: the verdict and the files are the same either way (byte identity is shown by the differential on a real episode)."""
+
+    calls = []
+    original = OfflineEngine._readback
+    monkeypatch.setattr(OfflineEngine, "_readback", lambda self: (calls.append(1), original(self))[1])
+    default, _sources, with_readback = build(tmp_path / "a")
+    assert default.process(NOT_EXHAUSTED) == RC_VALID and calls == [1]
+    skipping, _sources, without_readback = build(tmp_path / "b", engine_kwargs=dict(readback_after_seal=False))
+    assert skipping.process(NOT_EXHAUSTED) == RC_VALID and calls == [1]
+    # the association ids are random per run, so seal and record bytes differ between any two runs; what must not differ is the verdict and the files
+    for key in ("status", "rc", "reasons"):
+        assert result_of(with_readback)[key] == result_of(without_readback)[key], key
+    files = lambda root: sorted(path.relative_to(root).as_posix() for path in (root / "episode").rglob("*") if path.is_file())
+    assert files(with_readback) == files(without_readback)
+    seal, manifest, references = readback(without_readback)         # a fresh reader (the QC) still verifies what was left unread
+    assert seal["status"] == "PASSED" and references["status"] == "PASS"
 
 
 def test_the_result_names_the_recording_start(tmp_path):

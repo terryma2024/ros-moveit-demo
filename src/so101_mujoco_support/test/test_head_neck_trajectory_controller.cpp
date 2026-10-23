@@ -36,6 +36,19 @@ namespace
 {
 using namespace std::chrono_literals;
 using Action = control_msgs::action::FollowJointTrajectory;
+
+// The endpoints of the previous test's nodes are retracted by the middleware asynchronously, and later under load. A real
+// subscription of the controller stays, so wait for the count to reach zero and assert what it settled at.
+template<typename Count>
+std::size_t settled_count(Count count)
+{
+  std::size_t value = count();
+  for (int i = 0; i < 300 && value != 0; ++i) {
+    std::this_thread::sleep_for(10ms);
+    value = count();
+  }
+  return value;
+}
 using so101_mujoco_support::HeadNeckTrajectoryController;
 
 std::string continuous_neck_urdf()
@@ -304,7 +317,8 @@ TEST(HeadNeckTrajectoryController, ConfigureLeavesNoTopicCommandSubscription)
   Rig rig;
   ASSERT_TRUE(rig.configure());
   EXPECT_FALSE(rig.controller.topic_subscriber_exists());
-  EXPECT_EQ(rig.controller.get_node()->count_subscribers("/neck_controller/joint_trajectory"), 0U);
+  EXPECT_EQ(
+    settled_count([&] {return rig.controller.get_node()->count_subscribers("/neck_controller/joint_trajectory");}), 0U);
   EXPECT_TRUE(rig.controller.get_node()->get_subscriptions_info_by_topic(
       "/neck_controller/joint_trajectory").empty());
   EXPECT_TRUE(rig.controller.action_server_exists());
@@ -328,7 +342,7 @@ TEST(HeadNeckTrajectoryController, ConfigureLeavesNoSpeedScalingSubscriptionAndN
   executor.add_node(node->get_node_base_interface());
   executor.add_node(probe);
   for (int i = 0; i < 20; ++i) {executor.spin_some(); std::this_thread::sleep_for(5ms);}
-  EXPECT_EQ(publisher->get_subscription_count(), 0U);
+  EXPECT_EQ(settled_count([&] {return publisher->get_subscription_count();}), 0U);
   EXPECT_TRUE(node->get_subscriptions_info_by_topic("/neck_controller/speed_scaling_input").empty());
 }
 
@@ -341,7 +355,8 @@ TEST(HeadNeckTrajectoryController, AngleWraparoundIsOffAfterEveryConfigureOfACon
     lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
   ASSERT_TRUE(rig.configure());
   EXPECT_FALSE(rig.controller.wraps());
-  EXPECT_EQ(rig.controller.get_node()->count_subscribers("/neck_controller/joint_trajectory"), 0U);
+  EXPECT_EQ(
+    settled_count([&] {return rig.controller.get_node()->count_subscribers("/neck_controller/joint_trajectory");}), 0U);
 }
 
 TEST(HeadNeckTrajectoryController, TheImmutableConfigurationIsCheckedAtConfigure)

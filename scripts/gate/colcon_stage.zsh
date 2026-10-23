@@ -14,7 +14,7 @@ test -x /usr/bin/colcon && test -r $GB/install/setup.zsh && test "$(cat $G/build
 zmodload zsh/zselect
 # GATE_TEST_RUN: the run dir made by run_host_gate.zsh when the upstream groups write into it too (UPSTREAM_PARALLEL=1).
 if [[ -n ${GATE_TEST_RUN:-} ]]; then run=$GATE_TEST_RUN; test -d $run || exit 93; else run=$(mktemp -d $GB/test-run.XXXXXXXX) || exit 93; fi
-print -r -- "UPSTREAM_PARALLEL=${UPSTREAM_PARALLEL:-0} FAST_SKIP_ROS2_CONTROL=${FAST_SKIP_ROS2_CONTROL:-0} FAST_SKIP_JTC_UPSTREAM=${FAST_SKIP_JTC_UPSTREAM:-0} TELEOP_JOBS=${TELEOP_JOBS:-6} PARTS_SEQUENTIAL=${PARTS_SEQUENTIAL:-0}" > $run/stage-config.txt
+print -r -- "UPSTREAM_PARALLEL=${UPSTREAM_PARALLEL:-0} FAST_SKIP_ROS2_CONTROL=${FAST_SKIP_ROS2_CONTROL:-0} FAST_SKIP_JTC_UPSTREAM=${FAST_SKIP_JTC_UPSTREAM:-0} TELEOP_JOBS=${TELEOP_JOBS:-6} TELEOP_XDIST=${TELEOP_XDIST:-0} PARTS_SEQUENTIAL=${PARTS_SEQUENTIAL:-0}" > $run/stage-config.txt
 start=$SECONDS
 if [[ ${PARTS_SEQUENTIAL:-0} == 1 ]]; then
   zsh $FG/colcon_part.zsh $run main > $run/part-main.console 2>&1; rc_main=$?

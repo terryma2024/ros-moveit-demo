@@ -127,3 +127,104 @@ def test_the_exit_code_file_of_the_prefix_wins_over_the_process_code(tmp_path):
     call = fp.CommandReachabilityCall(["x"], tmp_path / "calls", run=run)
     with pytest.raises(fp.ReachabilityUnknownError):
         call({"schema_version": 1, "points": [{"id": "p00000", "label": "l", "cup_position_world_m": [0.1, -0.3, 0.165]}]})
+
+
+# --- a pool of planners: chunks run at the same time, the verdicts and their order do not change --------------------------
+
+def pool_calls(count, predicate, concurrency, wait=None):
+    """``count`` fake planners that record which thread ran them and how many chunks they held at once."""
+
+    import threading
+
+    live = {"now": 0, "peak": 0}
+    lock = threading.Lock()
+    held = [0] * count
+    overlap = [0] * count
+
+    def member(index):
+        base = fake_call(predicate)
+
+        def call(document):
+            with lock:
+                live["now"] += 1
+                live["peak"] = max(live["peak"], live["now"])
+                held[index] += 1
+                overlap[index] = max(overlap[index], held[index])
+            try:
+                if wait is not None:
+                    wait()
+                return base(document)
+            finally:
+                with lock:
+                    live["now"] -= 1
+                    held[index] -= 1
+
+        return call
+
+    return [member(i) for i in range(count)], live, overlap
+
+
+def positions(count):
+    return [(round(-0.1 + 0.001 * i, 6), -0.3) for i in range(count)]
+
+
+def test_a_pool_gives_the_same_verdicts_ids_and_order_as_one_planner():
+    import time
+
+    serial = fp.FivePoseReachability(fake_call(lambda x, y: x < -0.05), batch_poses=7)
+    serial.evaluate(positions(60))
+    calls, live, overlap = pool_calls(3, lambda x, y: x < -0.05, 3, wait=lambda: time.sleep(0.05))
+    pooled = fp.FivePoseReachability(calls[0], batch_poses=7, pool=calls)
+    pooled.evaluate(positions(60))
+    assert pooled.pose_log == serial.pose_log
+    assert pooled._cache == serial._cache
+    assert pooled.calls == serial.calls
+    assert live["peak"] >= 2                      # chunks really ran together
+    assert max(overlap) == 1                      # and no planner was handed two chunks at once
+
+
+def test_a_pool_member_that_cannot_answer_aborts_the_evaluation():
+    good = fake_call(lambda x, y: True)
+    bad = fake_call(lambda x, y: True, unknown_first=False)
+
+    def unknown(document):
+        return {p["id"]: ("UNKNOWN", "PLANNER_UNAVAILABLE") for p in document["points"]}
+
+    reach = fp.FivePoseReachability(good, batch_poses=5, pool=[good, unknown])
+    with pytest.raises(fp.ReachabilityUnknownError):
+        reach.evaluate(positions(30))
+    assert bad is not None
+
+
+def test_evaluate_true_asks_for_true_poses_only_and_never_twice():
+    log = []
+    reach = fp.FivePoseReachability(fake_call(lambda x, y: True, log), batch_poses=4)
+    reach.evaluate_true(positions(10))
+    assert sum(len(chunk) for chunk in log) == 10 and reach.calls == 3
+    reach.evaluate_true(positions(10) + [(0.2, -0.3)])
+    assert sum(len(chunk) for chunk in log) == 11
+    # the offsets of a surviving position are still missing, so it is not reachable yet; evaluate then adds exactly four poses
+    with pytest.raises(fp.PoseNotEvaluatedError):
+        reach.is_reachable(*positions(10)[0])
+    reach.evaluate([positions(10)[0]])
+    assert reach.is_reachable(*positions(10)[0]) and sum(len(chunk) for chunk in log) == 15
+
+
+def test_a_small_batch_is_split_over_the_pool_instead_of_going_to_one_planner():
+    log = []
+    members = [fake_call(lambda x, y: True, log) for _ in range(4)]
+    reach = fp.FivePoseReachability(members[0], batch_poses=80, pool=members)
+    reach.evaluate(positions(8))
+    sizes = sorted(len(chunk) for chunk in log)
+    assert sizes[:4] == [2, 2, 2, 2] and sum(sizes[:4]) == 8           # the true poses: four planners, two each
+    assert sum(sizes) == 8 + 32 and max(sizes) == 8                    # then 32 offsets in chunks of eight
+    serial = fp.FivePoseReachability(fake_call(lambda x, y: True), batch_poses=80)
+    serial.evaluate(positions(8))
+    assert reach.pose_log == serial.pose_log                            # same ids, same order: the split is invisible
+
+
+def test_a_large_batch_still_uses_the_batch_size_with_a_pool():
+    log = []
+    members = [fake_call(lambda x, y: True, log) for _ in range(2)]
+    fp.FivePoseReachability(members[0], batch_poses=5, pool=members).evaluate_true(positions(30))
+    assert sorted(len(chunk) for chunk in log) == [5] * 6

@@ -92,8 +92,11 @@ def _publish_json(path: Path, document: dict, *, replace: bool = False) -> None:
 
 class OfflineEngine:
     def __init__(self, *, episode, sources, policy, identity: StreamIdentity, result_file, clock, sleep,
-                 rig=DEFAULT_RIG) -> None:
+                 rig=DEFAULT_RIG, readback_after_seal: bool = True) -> None:
         self.episode, self.sources, self.policy, self.identity = episode, sources, dict(policy), identity
+        #: The sealed files are read back once more after the seal, in this process. The offline processor turns it off: the independent QC child
+        #: verifies the same seal, audit manifest and Teacher references from the files (2e option 9, approved by the human on 2026-10-20).
+        self.readback_after_seal = readback_after_seal
         self.rig = rig
         self.required_sources = required_sources_for(rig)
         self.result_file = Path(result_file)
@@ -464,7 +467,8 @@ class OfflineEngine:
             return
         self.sealed = True
         self._seal_path = Path(episode.capture.recorder.root) / "seal.json"
-        self._readback()
+        if self.readback_after_seal:
+            self._readback()
 
     def _pre_seal_reference_check(self) -> None:
         """The Teacher-reference check over the recording as it stands, before the seal.

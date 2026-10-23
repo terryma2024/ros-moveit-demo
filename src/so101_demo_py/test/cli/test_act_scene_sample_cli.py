@@ -202,3 +202,80 @@ def test_joint_mode_refuses_bad_lists_and_existing_outputs(tmp_path):
     cli.main(joint_inputs(tmp_path), reach_call=planner())
     with pytest.raises(ValueError, match="OUTPUT_EXISTS"):
         cli.main(joint_inputs(tmp_path), reach_call=planner())
+
+
+# --- several planners (item 28): the same scenes, the batches run side by side ----------------------------------------------
+def corner(x, y):
+    return not (x > 0.04 and y < -0.33)
+
+
+def test_a_pool_finds_the_scenes_the_single_planner_finds(tmp_path):
+    single, pooled = tmp_path / "single", tmp_path / "pooled"
+    single.mkdir(), pooled.mkdir()
+    small = ["--count", "30", "--split-counts", "10", "10", "10"]
+    assert cli.main(inputs(single) + small, reach_call=planner(corner)) == 0
+    assert cli.main(inputs(pooled) + small, reach_call=planner(corner), reach_pool=[planner(corner) for _ in range(3)]) == 0
+    assert read_scene_rows(single / "scenes.json") == read_scene_rows(pooled / "scenes.json")
+    assert json.loads((pooled / "report.json").read_text())["reachability_pool_size"] == 3
+    assert json.loads((single / "report.json").read_text())["reachability_pool_size"] == 1
+
+
+def test_every_reach_command_becomes_one_planner_with_its_own_call_files(tmp_path, monkeypatch):
+    made = []
+
+    class Recorder:
+        def __init__(self, command, directory, session_prefix="boundary"):
+            made.append((command, session_prefix))
+
+        def __call__(self, document):
+            return planner(corner)(document)
+
+    monkeypatch.setattr(cli, "CommandReachabilityCall", Recorder)
+    assert cli.main(inputs(tmp_path) + ["--reach-command", "zsh a.zsh out one", "--reach-command", "zsh a.zsh out two"]) == 0
+    assert made == [(["zsh", "a.zsh", "out", "one"], "sample"), (["zsh", "a.zsh", "out", "two"], "sample-s1")]
+
+
+# --- the stack count and the batch size are parameters ----------------------------------------------------------------------
+def recorded_commands(monkeypatch):
+    made, sizes = [], []
+
+    class Recorder:
+        def __init__(self, command, directory, session_prefix="boundary"):
+            made.append((command, session_prefix))
+
+        def __call__(self, document):
+            sizes.append(len(document["points"]))
+            return planner(corner)(document)
+
+    monkeypatch.setattr(cli, "CommandReachabilityCall", Recorder)
+    return made, sizes
+
+
+def test_stacks_repeats_one_command_template_with_the_slot_filled_in(tmp_path, monkeypatch):
+    made, _ = recorded_commands(monkeypatch)
+    arguments = inputs(tmp_path) + ["--count", "30", "--split-counts", "10", "10", "10",
+                                    "--reach-command", "zsh a.zsh out{slot} reach{slot}", "--stacks", "3"]
+    assert cli.main(arguments) == 0
+    assert made == [(["zsh", "a.zsh", "out0", "reach0"], "sample"), (["zsh", "a.zsh", "out1", "reach1"], "sample-s1"),
+                    (["zsh", "a.zsh", "out2", "reach2"], "sample-s2")]
+    assert json.loads((tmp_path / "report.json").read_text())["reachability_pool_size"] == 3
+
+
+def test_stacks_needs_a_slot_placeholder_unless_there_is_one_stack(tmp_path, monkeypatch):
+    recorded_commands(monkeypatch)
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_STACKS_NEED_SLOT"):
+        cli.main(inputs(tmp_path) + ["--reach-command", "zsh a.zsh out", "--stacks", "2"])
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_STACKS_INVALID"):
+        cli.main(inputs(tmp_path) + ["--reach-command", "zsh a.zsh out{slot}", "--stacks", "0"])
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_STACKS_WITH_REPEATED_COMMANDS"):
+        cli.main(inputs(tmp_path) + ["--reach-command", "a{slot}", "--reach-command", "b{slot}", "--stacks", "2"])
+
+
+def test_batch_poses_caps_the_size_of_a_planner_call(tmp_path, monkeypatch):
+    _, sizes = recorded_commands(monkeypatch)
+    assert cli.main(inputs(tmp_path) + ["--count", "30", "--split-counts", "10", "10", "10",
+                                        "--reach-command", "zsh a.zsh out", "--batch-poses", "7"]) == 0
+    assert max(sizes) == 7 and min(sizes) >= 1
+    assert json.loads((tmp_path / "report.json").read_text())["batch_poses"] == 7
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_BATCH_POSES_INVALID"):
+        cli.main(inputs(tmp_path) + ["--reach-command", "zsh a.zsh out", "--batch-poses", "0"])

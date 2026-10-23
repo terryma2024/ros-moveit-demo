@@ -17,7 +17,7 @@ import shlex
 from pathlib import Path
 
 from so101_demo.act import rollout_scenes, scene_sampling
-from so101_demo.act.five_pose_reachability import CommandReachabilityCall, FivePoseReachability
+from so101_demo.act.five_pose_reachability import DEFAULT_BATCH_POSES, CommandReachabilityCall, FivePoseReachability
 from so101_demo.act.scene_list_format import CUP_Z_M, scene_document, scene_row, write_new_json
 
 SEED_BASE = 200
@@ -84,7 +84,7 @@ def build_joint_rows(sample: scene_sampling.JointSceneSample, name: str) -> list
     return [scene_row(f"{prefix}-{i:0{width}d}", seed_base + i, split, p) for i, (split, p) in enumerate(ordered)]
 
 
-def main_joint(args, reach_call) -> int:
+def main_joint(args, reach_calls) -> int:
     counts = parse_lists(args.lists)
     if args.scenes_output_dir is None:
         raise ValueError("SCENE_SAMPLE_OUTPUT_DIR_REQUIRED")
@@ -101,7 +101,7 @@ def main_joint(args, reach_call) -> int:
     split_counts = dict(zip(SPLIT_ORDER, args.split_counts))
     if sum(split_counts.values()) != counts[JOINT_SPLIT_LIST]:
         split_counts = {"train": counts[JOINT_SPLIT_LIST] - 20, "validation": 10, "offline_test": 10}
-    reach = FivePoseReachability(reach_call)
+    reach = FivePoseReachability(reach_calls[0], batch_poses=args.batch_poses, pool=reach_calls if len(reach_calls) > 1 else None)
     sample = sample_joint_with_reachability(
         {name: tuple(p) for name, p in boundary_points.items()}, rollout, reach,
         list_counts=counts, split_list=JOINT_SPLIT_LIST, split_counts=split_counts, seed=args.seed,
@@ -158,13 +158,14 @@ def main_joint(args, reach_call) -> int:
             for name, p in rollout.items()
         },
         "positions_rejected_by_reachability": rejected, "reachability_calls": reach.calls, "seed": args.seed,
+        "reachability_pool_size": len(reach_calls), "batch_poses": args.batch_poses,
     }
     write_new_json(args.report_output, report)
     print(json.dumps({"lists": sha256, "report": str(args.report_output), "min_spacing_m": sample.spacing_m}, sort_keys=True))
     return 0
 
 
-def main(argv: list[str] | None = None, *, reach_call=None) -> int:
+def main(argv: list[str] | None = None, *, reach_call=None, reach_pool=None) -> int:
     parser = argparse.ArgumentParser(prog="act_scene_sample", description=__doc__)
     parser.add_argument("--state", type=Path, required=True, help="finished boundary state with boundary_points")
     parser.add_argument("--rollout-points", type=Path, required=True, help="config/mujoco/rgbd_task_points.yaml")
@@ -173,7 +174,13 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     parser.add_argument("--scenes-output-dir", type=Path, help="joint mode: where <name>-<count>.scenes.json are written")
     parser.add_argument("--report-output", type=Path, required=True)
     parser.add_argument("--call-dir", type=Path, required=True, help="per-call points and evidence files (kept)")
-    parser.add_argument("--reach-command", help="command prefix that runs task_reachability; points, evidence, session appended")
+    parser.add_argument("--stacks", type=int, help="run the --reach-command template on this many execution stacks; the text {slot} in the command "
+                        "is replaced by 0, 1, ... so each stack gets its own container and call directory")
+    parser.add_argument("--batch-poses", type=int, default=DEFAULT_BATCH_POSES,
+                        help="most poses in one planner call (a short batch is cut into one share per stack first)")
+    parser.add_argument("--reach-command", action="append",
+                        help="command prefix that runs task_reachability; points, evidence, session appended. Repeat it for several "
+                             "execution stacks: the planner batches then run at the same time, one per stack")
     parser.add_argument("--count", type=int, default=scene_sampling.DEFAULT_COUNT)
     parser.add_argument("--split-counts", type=int, nargs=3, metavar=("TRAIN", "VALIDATION", "OFFLINE_TEST"), default=(83, 10, 10))
     parser.add_argument("--seed", type=int, default=scene_sampling.DEFAULT_SEED)
@@ -181,12 +188,26 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     parser.add_argument("--scene-prefix", default="frm")
     args = parser.parse_args(argv)
 
+    if args.batch_poses < 1:
+        raise ValueError("SCENE_SAMPLE_BATCH_POSES_INVALID")
+    if args.stacks is not None:
+        if args.stacks < 1:
+            raise ValueError("SCENE_SAMPLE_STACKS_INVALID")
+        if args.reach_command and len(args.reach_command) > 1:
+            raise ValueError("SCENE_SAMPLE_STACKS_WITH_REPEATED_COMMANDS")
+        if args.reach_command and args.stacks > 1 and "{slot}" not in args.reach_command[0]:
+            raise ValueError("SCENE_SAMPLE_STACKS_NEED_SLOT")
+        if args.reach_command:
+            args.reach_command = [args.reach_command[0].replace("{slot}", str(i)) for i in range(args.stacks)]
     if reach_call is None:
         if not args.reach_command:
             raise ValueError("SCENE_SAMPLE_REACHABILITY_PROBE_NOT_AVAILABLE")
-        reach_call = CommandReachabilityCall(shlex.split(args.reach_command), args.call_dir, session_prefix="sample")
+        reach_pool = [CommandReachabilityCall(shlex.split(command), args.call_dir, session_prefix="sample" if i == 0 else f"sample-s{i}")
+                      for i, command in enumerate(args.reach_command)]
+        reach_call = reach_pool[0]
+    reach_calls = list(reach_pool) if reach_pool else [reach_call]
     if args.lists is not None:
-        return main_joint(args, reach_call)
+        return main_joint(args, reach_calls)
     if args.scenes_output is None:
         raise ValueError("SCENE_SAMPLE_OUTPUT_REQUIRED")
     for target in (args.scenes_output, args.report_output):
@@ -199,7 +220,7 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
     boundary_kinds = state.get("boundary_kinds")  # absent in states of the 1 cm search: every point is then reach-limited
     rollout = {s["point_id"]: tuple(s["xy"]) for s in rollout_scenes.load_standard_points(args.rollout_points)}
     counts = dict(zip(SPLIT_ORDER, args.split_counts))
-    reach = FivePoseReachability(reach_call)
+    reach = FivePoseReachability(reach_calls[0], batch_poses=args.batch_poses, pool=reach_calls if len(reach_calls) > 1 else None)
     sample = sample_with_reachability(
         {name: tuple(p) for name, p in boundary_points.items()}, rollout, reach,
         count=args.count, split_counts=counts, seed=args.seed, margin_m=args.inward_margin_m,
@@ -234,6 +255,7 @@ def main(argv: list[str] | None = None, *, reach_call=None) -> int:
         "rollout_nearest_scene_m": sample.rollout_nearest_scene_m,
         "rollout_nearest_training_m": sample.rollout_nearest_training_m,
         "positions_rejected_by_reachability": rejected, "reachability_calls": reach.calls, "seed": args.seed,
+        "reachability_pool_size": len(reach_calls), "batch_poses": args.batch_poses,
     }
     write_new_json(args.scenes_output, document)
     write_new_json(args.report_output, report)

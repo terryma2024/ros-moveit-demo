@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -11,6 +12,7 @@ from PIL import Image
 
 from so101_demo.act.expert import MoveItExpertActionTap, CausalEpisodeCapture
 from audited_episode import audit_of, seal_audited
+from so101_demo.act.rig_profile import DEFAULT_RIG
 from so101_demo.act.recorder import EpisodeRecorder, RecorderInfraError, require_grid, verify_episode_seal
 
 
@@ -498,6 +500,52 @@ def test_an_acquisition_that_does_not_identify_the_stored_frame_is_refused(tmp_p
     with pytest.raises(Exception, match="RECORDER_SEAL_FAILED") as caught:
         recorder.finish(outcome(), audit_manifest=manifest, scope=scope)
     assert "EPISODE_SEAL_PIXELS_MISMATCH" in str(caught.value.__cause__)
+
+
+def _count_pixel_hashes(monkeypatch, fail_on=None, wrong_on=None):
+    """Every call of the frame decoder, in the order the calls start; `fail_on` (a file name) makes that frame undecodable and
+    `wrong_on` gives it a hash that is not its acquisition's."""
+    from so101_demo.act import recorder as recorder_module
+
+    seen, direct = [], recorder_module._decoded_pixel_sha256
+
+    def counted(path):
+        seen.append(Path(path).name)
+        if fail_on is not None and Path(path).name == fail_on:
+            raise ValueError("EPISODE_FRAME_INVALID")
+        if wrong_on is not None and Path(path).name == wrong_on:
+            return "0" * 64
+        return direct(path)
+    monkeypatch.setattr(recorder_module, "_decoded_pixel_sha256", counted)
+    return seen
+
+
+def test_the_seal_decodes_each_stored_frame_once_and_threads_do_not_change_the_verdict(tmp_path, monkeypatch):
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    path = _three_row_recorder(tmp_path).finish(outcome(), audit_manifest=manifest, scope=scope)
+    seen = _count_pixel_hashes(monkeypatch)
+    seal = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
+    assert seal["record_count"] == 3 and len(seen) == len(set(seen)) == 3 * len(DEFAULT_RIG.camera_names)
+    assert sorted(seen) == sorted(f"{index:06d}-{camera}.png" for index in range(3) for camera in DEFAULT_RIG.camera_names)
+
+
+def test_an_undecodable_frame_raises_its_own_error_from_the_seal_check(tmp_path, monkeypatch):
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    path = _three_row_recorder(tmp_path).finish(outcome(), audit_manifest=manifest, scope=scope)
+    _count_pixel_hashes(monkeypatch, fail_on=f"000001-{DEFAULT_RIG.camera_names[0]}.png")
+    with pytest.raises(ValueError, match="EPISODE_FRAME_INVALID"):
+        verify_episode_seal(path, audit_manifest=manifest, scope=scope)
+
+
+def test_the_first_frame_that_fails_decides_even_when_a_later_one_fails_differently(tmp_path, monkeypatch):
+    """Row 0 does not match its acquisition and row 2 cannot be decoded: the check meets row 0 first, as it always did."""
+
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    path = _three_row_recorder(tmp_path).finish(outcome(), audit_manifest=manifest, scope=scope)
+    camera = DEFAULT_RIG.camera_names[0]
+    _count_pixel_hashes(monkeypatch, wrong_on=f"000000-{camera}.png", fail_on=f"000002-{camera}.png")
+    with pytest.raises(ValueError, match="EPISODE_SEAL_PIXELS_MISMATCH"):
+        verify_episode_seal(path, audit_manifest=manifest, scope=scope)
 
 
 def test_a_zero_row_seal_may_not_name_a_labelled_binding(tmp_path):

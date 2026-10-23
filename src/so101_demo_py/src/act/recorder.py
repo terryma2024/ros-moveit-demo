@@ -11,6 +11,7 @@ import stat
 import struct
 import tempfile
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 
 from .contracts import finite, identifier, integer, sha256, validate_action, validate_observation, vector
 from .rig_profile import DEFAULT_RIG
@@ -105,6 +106,16 @@ def _decoded_pixel_sha256(path: Path) -> str:
     if scanlines[:, 0].any():
         raise ValueError("EPISODE_FRAME_INVALID")
     return hashlib.sha256(np.ascontiguousarray(scanlines[:, 1:])).hexdigest()
+
+
+#: threads that decode and hash the frames of a seal while it is verified; zlib, hashlib and numpy release the GIL for the large calls
+PIXEL_HASH_THREADS = 4
+
+
+def _pixel_hashes_ahead(pool, paths):
+    """One future per path (None where there is no path), started in order: `result()` is what `_decoded_pixel_sha256(path)` returns or
+    raises. The caller reads them in the order it always checked the frames in, so the first failure is the same one."""
+    return [None if path is None else pool.submit(_decoded_pixel_sha256, path) for path in paths]
 
 
 def _regular_hash(path: Path) -> tuple[str, int]:
@@ -469,18 +480,35 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
         # and to the reference its action actually claims
         if len(bindings) != document["record_count"]:
             raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-        for row, binding in zip(recorded, bindings, strict=True):
-            if binding["sim_time_s"] != row["observation"]["sim_time_s"]:
-                raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-            named = references.get(binding["reference_sequence"])
-            if named is None or list(row["action"]) != list(named["positions"]):
-                raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-            for slot, png_key in ((f"{camera}_acquisition_id", rig.frame_key(camera)) for camera in rig.camera_names):
-                acquisition = acquisitions.get(binding[slot])
-                if acquisition is None or _decoded_pixel_sha256(
-                        root / row["observation"][png_key]) != acquisition["pixel_sha256"]:
-                    # the stored lossless frame must be the frame that acquisition identified
-                    raise ValueError("EPISODE_SEAL_PIXELS_MISMATCH")
+        cameras = [(f"{camera}_acquisition_id", rig.frame_key(camera)) for camera in rig.camera_names]
+        frame_paths = []
+        for row in recorded:
+            for _slot, png_key in cameras:
+                try:
+                    frame_paths.append(root / row["observation"][png_key])
+                except (KeyError, TypeError):
+                    frame_paths.append(None)        # the loop below meets the same row first and raises what it always raised
+        with ThreadPoolExecutor(max_workers=PIXEL_HASH_THREADS) as pool:
+            ahead = _pixel_hashes_ahead(pool, frame_paths)
+            try:
+                for index, (row, binding) in enumerate(zip(recorded, bindings, strict=True)):
+                    if binding["sim_time_s"] != row["observation"]["sim_time_s"]:
+                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                    named = references.get(binding["reference_sequence"])
+                    if named is None or list(row["action"]) != list(named["positions"]):
+                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                    for offset, (slot, png_key) in enumerate(cameras):
+                        acquisition = acquisitions.get(binding[slot])
+                        future = ahead[index * len(cameras) + offset]
+                        if acquisition is None or (
+                                _decoded_pixel_sha256(root / row["observation"][png_key]) if future is None else future.result()
+                        ) != acquisition["pixel_sha256"]:
+                            # the stored lossless frame must be the frame that acquisition identified
+                            raise ValueError("EPISODE_SEAL_PIXELS_MISMATCH")
+            finally:
+                for future in ahead:
+                    if future is not None:
+                        future.cancel()
     rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
     if len(rows) != document["record_count"]:
         raise ValueError("EPISODE_RECORD_COUNT_MISMATCH")

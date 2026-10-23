@@ -11,17 +11,16 @@ import pytest
 from so101_demo.act.teacher_event_stream import (EVENT_TYPES, STREAM_TOPIC, EventStreamMonitor, StreamIdentity,
                                                  TeacherEventStream, decode_event)
 
-DOMAIN_ID = 231
 IDENTITY = StreamIdentity("session-ros", 4, "attempt-ros")
 
 
 @pytest.fixture
-def ros_context():
+def ros_context(isolated_ros_domain):
     import rclpy
     from rclpy.context import Context
 
     context = Context()
-    rclpy.init(context=context, domain_id=DOMAIN_ID)
+    rclpy.init(context=context, domain_id=isolated_ros_domain)
     try:
         yield context
     finally:

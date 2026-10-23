@@ -9,7 +9,8 @@ check-image    Compares this host with that manifest for one install tree. Exit 
                --plan also writes what `so101_env apply` would have to change on the host (installs and downgrades; no removals).
 
 The must-match set (docs/superpowers/specs/2026-10-21-so101-mount-build-images-design.md, section b):
-  1. every apt package installed on both sides is at the same version;
+  1. every apt package installed on both sides is at the same version, and every apt package of the image is installed on the host
+     (compared by package name; image tooling such as gnupg2 is only reported);
   2. every package in the image that the install tree needs is installed on the host: the dependency closure of the packages named by
      the tree's package.xml files, and the owner of every library `ldd` resolves for an ELF file of the tree inside the image;
   3. the python minor version, the Ubuntu codename and the pip pins of the image's /act/venv (present at the same version on the host venv).
@@ -195,6 +196,8 @@ def required_packages(manifest: dict, tree: Path, docker=run_docker) -> dict:
 # --------------------------------------------------------------------------
 
 HOST_SPECIFIC_PACKAGES = frozenset({"libxnvctrl0"})     # NVIDIA driver userland: the version follows the host's driver
+# Installed in the base image for building and maintaining the image itself; no mounted code loads them.
+IMAGE_TOOLING_PACKAGES = frozenset({"gnupg2", "ros2-apt-source", "unminimize"})
 _ESM_SUFFIX = re.compile(r"[+~]esm\d+")
 
 
@@ -220,7 +223,9 @@ def compare(image: dict, host: dict, required: set[str], missing_libraries=froze
     for name, version in image["apt"].items():
         have = host["apt"].get(name)
         if have is None:
-            if name in required:
+            if name in IMAGE_TOOLING_PACKAGES and name not in required:
+                rows.append(row(SHOULD, f"apt:{name}", version, None, "image-only (tooling)"))
+            else:
                 rows.append(row(MUST, f"apt:{name}", version, None, "missing-on-host"))
         elif have != version:
             relation = "newer" if base.compare_versions(have, version) > 0 else "older"
@@ -250,7 +255,8 @@ must_failures = base.must_failures
 
 def alignment_plan(image: dict, host: dict, required: set[str]) -> dict:
     """What bringing the host to the image would take. Installs and version changes only; nothing is removed."""
-    install = {name: image["apt"][name] for name in sorted(required) if name in image["apt"] and name not in host["apt"]}
+    wanted = {name for name in image["apt"] if name in required or name not in IMAGE_TOOLING_PACKAGES}
+    install = {name: image["apt"][name] for name in sorted(wanted) if name not in host["apt"]}
     change, downgrades = {}, []
     for name, version in image["apt"].items():
         have = host["apt"].get(name)
