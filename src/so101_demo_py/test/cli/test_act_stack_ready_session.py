@@ -237,4 +237,3 @@ def test_a_session_that_is_not_ready_recovers_when_the_stack_does(graph):
         assert kept(session)[0] is True
     finally:
         session.close()
-
