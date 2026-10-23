@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 import sys
 
+import pytest
+
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from so101_demo.runtime import launch_composition
@@ -12,6 +14,16 @@ from so101_demo.runtime.launch_composition import perception as launch_compositi
 from so101_demo.runtime.launch_composition import supervisor as launch_composition_supervisor
 
 from launch import LaunchDescription
+
+
+@pytest.fixture(autouse=True)
+def _fresh_launch_logging():
+    """These tests start real launch services; a log handler another test on this worker left on a deleted tmp_path must not be reused."""
+    import launch.logging
+
+    launch.logging.reset()
+    yield
+    launch.logging.reset()
 
 
 def _runner_module():

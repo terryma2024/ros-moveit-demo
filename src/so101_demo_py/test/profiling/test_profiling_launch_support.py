@@ -11,6 +11,18 @@ from so101_demo.profiling.launch_support import resolve_launch_profiling
 from so101_demo.profiling.system_trace import SystemTraceResult, build_system_trace
 
 
+@pytest.fixture(autouse=True)
+def _fresh_launch_logging():
+    """launch keeps process-global log handlers on the ROS_LOG_DIR of the first launch in the process. pytest removes the tmp_path of a
+    passed test (tmp_path_retention_policy = failed), so a handler left by this module would make a later launch test on the same
+    worker reopen a deleted directory (found by the gate: test_perception_launch_runner after test_execute_time_trace_failure...)."""
+    import launch.logging
+
+    launch.logging.reset()
+    yield
+    launch.logging.reset()
+
+
 class _ExecuteFailingTrace(Action):
     trace_directory = None
 
