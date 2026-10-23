@@ -133,7 +133,7 @@ def test_real_writer_capacity_fault_latches_truth_incomplete(tmp_path):
     assert not (tmp_path/'run/seal.json').exists()
 
 
-def test_owned_ros_subscriptions_receive_real_native_topic_types_and_retire(tmp_path):
+def test_owned_ros_subscriptions_receive_real_native_topic_types_and_retire(tmp_path, isolated_ros_domain):
     module = _module()
     import os
     import time
@@ -147,9 +147,7 @@ def test_owned_ros_subscriptions_receive_real_native_topic_types_and_retire(tmp_
     from sensor_msgs.msg import Image, CameraInfo
     from so101_mujoco_support.msg import PhysicsStepEvidenceChunk
     context = Context()
-    worker = os.environ.get('PYTEST_XDIST_WORKER','gw0')
-    domain = 212 + (int(worker[2:]) if worker.startswith('gw') else 0)
-    rclpy.init(context=context,domain_id=domain)
+    rclpy.init(context=context,domain_id=isolated_ros_domain)
     token='truth_'+uuid.uuid4().hex
     node=Node(token,context=context)
     executor=SingleThreadedExecutor(context=context)

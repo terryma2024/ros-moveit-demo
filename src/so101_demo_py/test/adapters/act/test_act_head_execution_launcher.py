@@ -8,6 +8,8 @@ import pytest
 
 from test_act_head_execution_composition import build_inputs, module
 
+pytestmark = pytest.mark.usefixtures("isolated_ros_domain")      # real nodes: a ROS domain of this test's own (not the gate's 203)
+
 
 @pytest.mark.parametrize('fail_start', [False, True])
 @pytest.mark.parametrize('legacy_binding', [False, True])

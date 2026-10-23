@@ -14,6 +14,8 @@ import pytest
 from test_act_head_execution_composition import build_inputs as composition_inputs
 from test_act_head_execution_composition import local_stack
 
+pytestmark = pytest.mark.usefixtures("isolated_ros_domain")      # real nodes: a ROS domain of this test's own (not the gate's 203)
+
 
 def build_inputs(tmp_path, **kwargs):
     inputs, policy = composition_inputs(tmp_path, **kwargs)

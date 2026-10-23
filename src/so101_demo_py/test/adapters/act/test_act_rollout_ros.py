@@ -18,6 +18,8 @@ from so101_demo.adapters.act import rollout_ros as rr
 from so101_demo.adapters.act.inference_process import ActInferenceProcess
 from paths import PACKAGE_ROOT
 
+pytestmark = pytest.mark.usefixtures("isolated_ros_domain")      # real nodes: a ROS domain of this test's own (not the gate's 203)
+
 SHAPE = (4, 6, 3)
 ARM = {name: 0.1 * index for index, name in enumerate(ARM_JOINTS)}
 CONFIG = load_rollout_config(PACKAGE_ROOT / "config/act/rollout.yaml")

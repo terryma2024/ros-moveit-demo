@@ -17,8 +17,8 @@ except ModuleNotFoundError:
 
 
 @pytest.fixture
-def node():
-    ctx=Context();rclpy.init(context=ctx)
+def node(isolated_ros_domain):
+    ctx=Context();rclpy.init(context=ctx,domain_id=isolated_ros_domain)
     value=Node('controlled_head_clock',context=ctx,parameter_overrides=[Parameter('use_sim_time',value=True)])
     try:yield value
     finally:value.destroy_node();ctx.shutdown()

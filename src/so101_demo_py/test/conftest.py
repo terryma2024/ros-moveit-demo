@@ -60,6 +60,17 @@ def _current_event_loop():
     yield
 
 
+#: The domains a graph test may take: 10..215 without the ones the gate and the live runs own (181: the live launch plan, 203/204: the demo and
+#: teleop stages of the gate). 216..229 are the live runs, the upstream groups and the JTC stage; 230..232 are not handed out.
+RESERVED_ROS_DOMAINS = frozenset({181, 203, 204})
+TEST_ROS_DOMAINS = tuple(domain for domain in range(10, 216) if domain not in RESERVED_ROS_DOMAINS)
+
+
+def ros_domain_slot(worker_index, counter):
+    """The ROS domain of the `counter`-th graph test of worker `worker_index`: distinct for every (worker < 25, counter % 8) pair."""
+    return TEST_ROS_DOMAINS[(worker_index * 8 + counter % 8) % len(TEST_ROS_DOMAINS)]
+
+
 @pytest.fixture
 def isolated_ros_domain(monkeypatch):
     """A ROS domain of this test's own.
@@ -67,7 +78,9 @@ def isolated_ros_domain(monkeypatch):
     Tests that publish to fixed topic names (`/arm_controller/controller_state`, ...) and start a spooler process must not share a
     domain with the same test on another xdist worker, or with the live runs (domains 181 and 216-222): the frames of one worker
     arrived in another worker's spooler and produced ORDER_INVALID hazards, gaps that were never seen and shifted sequences.
-    Domain 100 + 8 per worker + a per-worker counter keeps parallel workers apart; the child processes inherit it.
+    Eight domains per worker and a per-worker counter keep parallel workers apart; the child processes inherit it. The slots are laid
+    over `TEST_ROS_DOMAINS` (10..215 without the reserved 181, 203 and 204), so up to 25 workers get distinct domains (the old
+    `100 + n % 100` gave workers 0 and 13..15 of a 16-worker run the same domains). `ros_domain_slot` is the pure part.
     """
     import os
 
@@ -75,7 +88,7 @@ def isolated_ros_domain(monkeypatch):
     index = int(worker[2:]) if worker.startswith("gw") and worker[2:].isdigit() else 0
     counter = getattr(isolated_ros_domain, "_count", 0) + 1
     isolated_ros_domain._count = counter
-    domain = 100 + (index * 8 + counter % 8) % 100
+    domain = ros_domain_slot(index, counter)
     monkeypatch.setenv("ROS_DOMAIN_ID", str(domain))
     return domain
 

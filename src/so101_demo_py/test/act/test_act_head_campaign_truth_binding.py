@@ -10,6 +10,8 @@ import pytest
 from test_act_head_campaign_fixture_reset import _prepared
 from test_act_head_campaign_truth_collector import _writer
 
+pytestmark = pytest.mark.usefixtures("isolated_ros_domain")      # real nodes: a ROS domain of this test's own (not the gate's 203)
+
 
 class Node:
     def __init__(self):self.subscriptions=[]
