@@ -141,7 +141,8 @@ def _composition_stub(tmp_path, rig_profile):
     return SimpleNamespace(environment={"ROS_DOMAIN_ID": "181"}, inputs=SimpleNamespace(
         recorder_policy={"ready_timeout_s": 30.0}, settings=SimpleNamespace(execution_deadline_s=180.0)),
         launch=SimpleNamespace(rig_profile=rig_profile), layout=SimpleNamespace(output_root=tmp_path / "output"), options=SimpleNamespace(run_id="run-1"), attempts=0,
-        runtime=object(), binding=None, runner=None, inference=None, transport=None)
+        runtime=object(), binding=None, runner=None, inference=None, transport=None,
+        stall_monitor=SimpleNamespace(stop=lambda: None))
 
 
 def test_the_recorder_records_the_rig_the_stack_composes_not_the_default_rig(tmp_path):
@@ -271,7 +272,7 @@ def test_the_composition_releases_its_own_ros_participants_before_the_stack_grap
         inference=SimpleNamespace(close=lambda: order.append("inference.close")),
         runtime=SimpleNamespace(close_runtime=lambda: order.append("runtime.close"),
                                 resume_physics=lambda lease, receipt: order.append("physics.resume") or True),
-        binding=SimpleNamespace(shutdown=lambda: order.append("binding.shutdown")),
+        binding=SimpleNamespace(shutdown=lambda: order.append("binding.shutdown")), stall_monitor=SimpleNamespace(stop=lambda: None),
         graph_probe=lambda: order.append("graph_probe") or True)
     stub.close = lambda: native.NativeComposition.close(stub)
     monkeypatch.setattr("so101_demo.runtime.container_campaign.native_stop.marker_survivors", lambda *a, **k: [])
