@@ -1,12 +1,16 @@
 # SO-101 ACT 首条非 Head Search 闭环 Implementation Plan
 
 > **2026-10-05 修订（优先）**：本计划中 Teacher/Recorder/QC 耦合、过程质量成功判定与数据故障停 Teacher 的步骤已被 [`2026-10-05-so101-teacher-act-decoupling-implementation.md`](2026-10-05-so101-teacher-act-decoupling-implementation.md)（设计 [`../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md`](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)）替代；执行者不得继续按旧条款实现。
+>
+> 用户已授权现有 ai-station Claude 更新实施步骤、清理被替代的代码/测试并执行；保留 Teacher 执行保护、严格数据 QC、历史证据和用途隔离。
+
+> **2026-10-01 验收修订：** [共用端点 Pose 设计](../specs/2026-10-01-so101-act-endpoint-pose-acceptance-design.md) 及[实施修订](2026-10-01-so101-act-endpoint-pose-acceptance-implementation.md) 替代本计划的过程质量前置/成功条件，且也适用于正式采集、资格和 rollout。下文 Tasks 1/3/4/6/7 按该修订执行；安全、连续采样、实际提交与诊断不训练保持不变。原版已进入 dst 执行，本次修订未下发。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 项目规定覆盖一般 subagent 建议：实现由 ai-station 的同一 tmux `dst` 执行，串行写入同一 worktree/branch，不创建第二实现执行器。
 
-**Goal:** 完成一条真实 MuJoCo 桌面抓放 episode，经正式 Recorder 无损保存、独立回读 QC PASS，并取得真实 Coordinator 提交。
+**Goal:** 执行一条真实 MuJoCo 桌面抓放流程，按共用起点/终点 Pose 判断物体结果，经正式 Recorder 无损保存、独立回读 QC PASS，并取得真实 Coordinator 提交。
 
-**Architecture:** 在共同采集链增加显式 `preselected_target_diagnostic` 模式，只替换目标选择和 Head prerequisite。复用正式动作 broker、Worker、Recorder、ResultStore、Coordinator 和训练导出验证边界；诊断数据不进入训练。新增程序负责冻结输入、运行、独立 QC 和提交回读，不用临时 agent 脚本。
+**Architecture:** 在共同采集链增加显式 `preselected_target_diagnostic` 模式，替换目标选择和 Head prerequisite；所有模式采用共用端点 Pose 规则。复用正式动作 broker、Worker、Recorder、ResultStore、Coordinator 和训练导出验证边界；诊断数据不进入训练。新增程序负责冻结输入、运行、独立 QC 和提交回读，不用临时 agent 脚本。
 
 **Tech Stack:** ROS 2 Jazzy、MoveIt 2、ros2_control、Linux MuJoCo `3.12.0`、Python、NumPy、PNG/JSONL、现有 journal/lease、pytest-xdist。
 
@@ -138,7 +142,7 @@ def require_scope(mode: str, *, head_ready: bool, nonhead_ready: bool,
 
 ```
 
-`inspect_inputs(source_root:Path,ledger:Path)->dict` 返回只读 candidate registry：记录被账本引用的实际 scene/model、运动配置、PathProof、contact proposal/activation、reset recipe、reference interpolation、placement/retreat QC 与资源阈值来源。`freeze_inputs(candidates_path:Path,output:Path)->Path` 将唯一、匹配当前身份且已获批准的候选复制成不可变 inputs，逐文件 hash，返回新建的 `inputs-manifest.json` 路径；候选缺失/多义/未批准返回具体 blocker，不自动选最新文件或重新发 activation。
+`inspect_inputs(source_root:Path,ledger:Path)->dict` 返回只读 candidate registry：记录实际 scene/model、运动配置、PathProof、contact proposal/activation、reset/放置 recipe、reference interpolation、共用端点策略和资源阈值来源。`freeze_inputs(candidates_path:Path,output:Path,*,mode:str,endpoint_policy:Path)->Path` 按实施修订 E1 验证安全和用途输入，将共用策略/目标复制成不可变 inputs，逐文件 hash，返回新建的 `inputs-manifest.json`。缺必要安全批准、身份错误或配置多义返回具体 blocker；不要求本次运行后才能产生的旧过程质量报告，不自动写 activation。
 
 - [ ] 写并运行以下 RED，不以 import failure 算 RED：
 
@@ -168,7 +172,8 @@ def test_formal_still_requires_head_qualification():
 | heartbeat interval/timeout=`1/5s`，lease=`300s`，finalizing=`120s`，batch=`5400s` | `config/mujoco/parallel_batch_v3.yaml` | 动作仍最多120s；续 lease 不延长 phase/batch hard bound |
 | `cpu_busy_warn_fraction=.90`，RAM min=`1073741824` bytes 且 fraction=`.05`，GPU min=`1073741824` bytes | 同一 runtime 的 start_guard | 复用当前 guard；warning 不擅自变成物理判定，hard refusal 照实际 guard |
 | contact minimum force=`0.10080889546060459N`，max compression=`9.827758117465844e-05m`，max safe force=`3.2101397343864315N`，hold speed=`0.0037844871361341977m/s`，stable hold=`0.010999999999998789s`，age=`.1s`、consecutive=`5` | EXP-213 `proposal-pass2.json.payload`，fingerprint=`0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11`，独立 activation receipt | 这是已读历史候选，不是本次有效批准。核对 compiled model/scene/motion/source/config 的全部绑定；任一漂移即拒绝，不照抄数值建立新批准 |
-| PathProof `path_step_s`、clearance、六维 velocity/acceleration；RGB `max_skew_s`；支撑、放置 pose/速度、稳定窗口、retreat；RTF/disk/队列 hard-stop | 当前注册的批准配置和对应证据 | inspect 输出 exact key/value/path/hash/approval。若缺少其中任一必要数值，输出 `NONHEAD_INPUT_BINDING_REQUIRED` 并阻止 live，不以 candidate 或测得结果代替批准 |
+| PathProof `path_step_s`、clearance、六维 velocity/acceleration；RGB `max_skew_s`；开爪前支撑安全策略；RTF/disk/队列 hard-stop | 当前注册的批准安全/运行配置和对应证据 | inspect 输出 exact key/value/path/hash/approval。必要安全数值缺失仍阻止 live，不把端点策略当作安全批准 |
+| 两端杯子目标 Pose 与五个端点经验阈值 | 共用 `endpoint_pose_acceptance_v1.yaml`、当前 reset/放置 recipe | 用户授权的经验默认值运行前冻结并参与hash；不要求旧五项过程质量测量。正式路径也采用同一规则 |
 
 已有 `visible_approach_candidate_v1.json` 声明 `eligible_for_collection:false`，不可因含数值就直接授权。缺少有效非 Head 输入不会阻止编写和定向测试，但 Task 6 的 freeze/live gate 必须等待合法输入或用户最小决策；不扩展本计划去做新的物理校准。
 
@@ -228,7 +233,7 @@ def test_sealed_audit_is_not_overwritten(tmp_path):
 fixture 在本 task 实现，明确建立真实文件/hash，不替代 Task 7 的 live evidence。定向命令 `"$TEST_PYTHON" -m pytest src/so101_demo_py/test/test_act_episode_audit.py src/so101_demo_py/test/test_act_controller_reference.py src/so101_demo_py/test/test_act_physics.py -q --junitxml="$TEST_RUN/junit.xml"`。
 
 - [ ] broker 实际 claim/dispatch/accept/revoke/stop 事件与 controller observer 原始 history 连入 audit；phase名由真实runner事件产生，不能事后从预设phase列表填 success。
-- [ ] 保存桌面初态、双侧实际接触、micro-lift高度与off-table、全程持物/碰撞、放置支撑、detach/open顺序、当前release epoch的无指尖接触、最终pose/速度稳定窗口和retreat原始观测。离线能够按同一阈值重算，不仅消费阶段布尔值。
+- [ ] 原始 physics/contact/Planning Scene/动作证据继续保存用于审计和安全，不以抓稳/抬升/释放后接触/速度/稳定窗口/撤离距离作为物体成功条件。按实施修订E2记录确定性的起点和终点source Pose/sequence/身份，离线重算五个误差，不消费阶段布尔值。
 - [ ] 验证当前 `PickPlaceRunner`/实际 port 的释放顺序；不足时只修相应根因，补 detach失败零open、无支撑stop/hold、release epoch变化与旧观测拒绝的RED/GREEN。始终不物理attach/teleport。
 - [ ] Recorder seal v2 引用 audit/scope digest，保存前fsync所有文件与父目录。旧schema兼容仅供读取审计，新闭环必须v2。审查并提交共同审计边界。
 
@@ -240,7 +245,7 @@ Interfaces：`verify_episode_qc(episode_seal:Path,inputs:Path,expected_identity:
 
 - [ ] 编写并跑定向RED/GREEN：`"$TEST_PYTHON" -m pytest src/so101_demo_py/test/test_act_episode_qc.py src/so101_demo_py/test/test_act_first_episode_commit.py src/so101_demo_py/test/test_act_first_episode_export.py -q --junitxml="$TEST_RUN/junit.xml"`。
 - [ ] 离线逐个完整解码PNG，对比生产pixel digest；核对每行绑定、acquisition序号/cadence/完整窗口，允许同像素新acquisition，拒绝复用旧ID或源序列洞。核对state/action单位与source age/skew；从原始history回算`t+.1`reference及撤销有效区间。
-- [ ] 从原始physics/contact/Planning Scene与事件计算全部物理判据；配置来自hash绑定inputs。缺少原始量、阶段、窗口或required policy即FAIL。报告不相信seal的qc布尔值。
+- [ ] 从原始physics与边界事件计算共用端点判据；安全、因果数据和身份验证独立保留。配置来自hash绑定inputs；缺端点/必要原始记录/required安全policy即FAIL，但旧质量测量或稳定窗口缺失不阻断端点规则。报告不相信seal的qc布尔值。
 - [ ] 在新OS进程运行QC，禁用网络/live topic，输入只读、报告写到新路径。Coordinator verifier从registered result目录核对同样内容与完整有效lease，再调用实际 `commit_result(lease,sealed_location,request_key=f"{lease.batch_id}/result/{lease.attempt_id}")`；journal fsync/ack 后建立index receipt。
 - [ ] 更新 `collect_authorized_scenario()`：Worker return只报告采集与sealed location，`coordinator_committed`若为兼容字段必须由receipt回读派生，不能硬编码True。
 - [ ] exporter `resolve_committed_episodes()` 和 `export_dataset()` 均追溯scope/QC/result/journal；diagnostic、未知mode、missing mode、只seal未commit、conflicting receipt拒绝，返回稳定错误 `DIAGNOSTIC_EPISODE_NOT_TRAINABLE` 或对应identity错误。直接调用export不能绕过resolver。测试文件内建立versioned完整receipt fixture，证明零dataset产物。
@@ -308,6 +313,7 @@ test -x "$ACT_FIRST_EPISODE" || exit 1
 inspect_rc=$?
 test "$inspect_rc" -eq 0 || exit "$inspect_rc"
 "$ACT_FIRST_EPISODE" prepare --candidates "$PLAN_ROOT/input-candidates.json" \
+  --mode preselected_target_diagnostic --endpoint-policy "$ENDPOINT_POLICY" \
   --output "$PLAN_ROOT/inputs"
 prepare_rc=$?
 test "$prepare_rc" -eq 0 || exit "$prepare_rc"
@@ -317,7 +323,7 @@ preflight_rc=$?
 test "$preflight_rc" -eq 0 || exit "$preflight_rc"
 ```
 
-任何必要placement/skew/path/resource字段或activation无法证明，则prepare/preflight rc2，不补默认值。保存该JSON blocker与exact来源，交最小用户决策；本计划不授权自动激活新policy。
+`ENDPOINT_POLICY` 按实施修订E3从新overlay的share解析。经验端点默认值可用，但必要安全开爪/skew/path/resource字段或activation无法证明仍prepare/preflight rc2。保存具体blocker；不要求旧过程质量报告，不授权自动激活新安全policy。
 
 - [ ] 代码冻结后跑一次完整普通门：每个受影响Python包分别 `-n min(8,logicalCPU)`，不混重名包、不跑benchmark。`so101_demo_py` 使用 `"$TEST_PYTHON" -m pytest src/so101_demo_py/test -n "$workers" --junitxml="$TEST_RUN/demo-junit.xml"`；`so101_teleop`使用其package已声明的完整普通test范围及对应pytest配置。scratch先重新验证，记录CPU/worker/RAM、实际node IDs和skip；资源不足不降worker。
 - [ ] ai-station还需实际colcon/CTest登记gate：分别核对package驱动的argv。ament_python可用 `colcon --log-base "$PLAN_ROOT/colcon-test-log" test --build-base "$PLAN_ROOT/build" --install-base "$PLAN_ROOT/install" --packages-select so101_demo_py --return-code-on-test-failure --pytest-args test -n "$workers"`，验证子进程解释器/worker实际继承NVMe scratch。Teleop是`ament_cmake`包，`CMakeLists.txt`逐项登记`ament_add_pytest_test`，不能把`--pytest-args`当作其CTest控制入口。若修改Teleop，则在另一全新scratch中执行 `colcon --log-base "$PLAN_ROOT/teleop-test-log" test --build-base "$PLAN_ROOT/build" --install-base "$PLAN_ROOT/install" --packages-select so101_teleop --return-code-on-test-failure --ctest-args -j1 --output-on-failure`，核对生成的CTest/Python argv及实际解释器，不向每个CTest case再注入8worker。其他受影响CMake包同样用serial CTest；完整普通Python xdist gate按上一项另外执行。保留 `colcon test-result --test-result-base "$PLAN_ROOT/build" --verbose`。实际测试命令和test-result均须rc=0、JUnit无fail/error，不能只凭colcon启动成功。仅测试确实被修改的其他包，记录范围；不把demo普通gate充当全仓gate。
@@ -359,7 +365,7 @@ export_rc=$?
 test "$export_rc" -eq 0 || exit "$export_rc"
 ```
 
-- [ ] 人工审阅报告对应真实桌面初态、抓稳/抬升、持物搬运、supported release、detach-before-open、当前release epoch稳定放置、retreat、安全终态；同时核对全部acquisition窗口、0丢帧、PNG pixel digest、future reference与journal/result/QC/hash身份。head能否看到杯子不参与本次成功判定。
+- [ ] 审阅两端杯子actual/target Pose、五个误差/阈值、固定sample边界、策略hash与正常安全终态；核对全部acquisition窗口、0丢帧、PNG pixel digest、future reference与journal/result/QC/hash身份。过程质量不再是额外PASS条件；head能否看到杯子不参与本诊断物体结果。
 - [ ] 纯headless不要求桌面GUI，说明visual N/A；从本次retained RGB查看首帧/抬升/释放/末帧，作为辅助，不代替独立物理QC。若使用GUI则先读gui-capture并保存fresh截图，不扩大为UI改造。
 
 ## Task 8：负向副本与阶段性交付
@@ -376,7 +382,7 @@ test "$export_rc" -eq 0 || exit "$export_rc"
 | Spec要求 | 实施边界 | 必须保留的真实证据 |
 | --- | --- | --- |
 | Head隔离、非Head安全与训练身份 | Tasks1、4、5 | admission/scope、export拒绝、有效activation绑定 |
-| 真正桌面抓放及安全停止 | Tasks3、5、7 | live broker/controller/physics/Planning Scene与release事件 |
+| 真实执行、共用端点Pose和独立安全停止 | Tasks3、5、7及修订E1–E3 | 两端source Pose/目标/策略、live broker/controller/physics/Planning Scene与release事件；不宣称抓放过程质量合格 |
 | 执行期10Hz、acquisition唯一性、因果action | Tasks2、3、7、8 | 原始source schedule/reference与旧帧复用拒绝 |
 | 无损与新进程QC | Tasks3、4、7 | acquisition pixel digest、完整PNG decode、独立QC |
 | 实际Coordinator提交 | Tasks4、5、7、8 | journal回放、result/index/receipt hash链、无commit拒绝 |

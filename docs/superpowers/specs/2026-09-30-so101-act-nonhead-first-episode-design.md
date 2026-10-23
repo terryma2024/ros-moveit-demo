@@ -1,15 +1,19 @@
 # SO-101 ACT 首条非 Head Search 采集闭环设计
 
 > **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+>
+> Teacher 按起终点杯子 Pose 和最终直立结果判定任务；过程质量项以审计为主，保留真正的执行保护。ACT 采集/QC 故障不得阻断或撤销 Teacher 运动，数据标准和用途隔离不放宽。用户已授权现有 ai-station Claude 更新计划、清理旧逻辑/测试并执行，尚未形成新运行验收。
 
 日期：2026-09-30
-状态：讨论边界已获用户确认，独立 Astra/High 复审通过，等待用户审阅本文。本文不授权实现或启动采集。
+状态：原版已获批准并进入执行。2026-10-01 按用户要求改为完整方案共用的端点 Pose 验收；本次修订独立 Astra/High 静态复审通过，等待用户审阅，不表示已下发 dst 或已通过运行验收。
+
+共用验收修订：[端点 Pose 验收设计](2026-10-01-so101-act-endpoint-pose-acceptance-design.md)。该规则也用于完整正式方案，不是非 Head 专用的宽松 QC；相关冲突以共用修订为准。
 
 ## 1. 目标
 
 在 ai-station 上完成一次真实 MuJoCo 抓放，将执行期间的数据交给正式 Recorder 无损落盘，再由独立进程回读、计算 QC，并取得实际 Coordinator 提交记录。
 
-这次只回答一个问题：隔离 Head Search 后，正式 ACT 数据采集的首条闭环能否跑通。完成条件是一条从桌面杯子开始、完整抓放并提交的 episode，不要求多场景、多个 anchor 或连续五次成功。这个单次里程碑是用户指定的范围，不改变正式采集与稳定性资格的验收次数。
+这次只回答一个问题：隔离 Head Search 后，正式 ACT 数据采集的首条闭环能否跑通。执行器仍运行桌面抓放流程，但本次只通过杯子的起点和终点 Pose 判断物体任务结果，再验证采集、回读和提交。不要求多场景、多个 anchor 或连续五次成功。端点通过不证明抓取方式、全程持物、释放质量或长期稳定性；正式采集与稳定性资格的标准不变。
 
 复用正式 Worker 的采集合同。固定目标输入是隔离点，其余动作授权、物理监督、同步、Recorder、seal、结果验证与提交走共同路径。诊断数据可以获得真实提交，但不能进入正式训练集或计入资格数量。
 
@@ -38,7 +42,7 @@
 
 正式模式继续要求合法 Head Search 校准和 qualification。诊断模式不扫描、不居中、不运行 head YOLO，也不生成 `TARGET_LOCKED`、Head `QUALIFIED` 或 `TASK8_READY` 假证书。neck 保持冻结的初始角，使用实际关节反馈确认静止。
 
-拆分启动 prerequisite 的适用范围：仅 Head Search、Head 视野效果及其校准配对不适用于本诊断。机器人、接触、控制器、reset、碰撞、持物、释放、采样与身份门禁仍适用。包含 `CALIBRATION_REQUIRED` 的非 Head 安全策略不能被诊断模式清除；缺少必要的非 Head 参数或批准证据时停在具体 blocker。
+拆分启动 prerequisite 的适用范围：Head Search、Head 视野效果及其校准配对不适用于本诊断；2026-10-01 起，正式抓放质量校准也不再是本诊断的输入前置条件。机器人动作授权、接触力限制、控制器、reset、碰撞、采样与身份门禁仍适用。输入检查须区分执行安全策略与事后质量验收，不能要求先取得本次运行结束后才产生的释放/撤离测量报告。安全策略中的 `CALIBRATION_REQUIRED` 不得清除；缺少实际必需的安全批准证据仍停在具体 blocker。
 
 启动时创建不可变的模式/场景记录，并绑定到该 batch、lease、episode seal 和 QC 报告的 hash 链。诊断身份必须保留到 Coordinator index 与训练导出边界；不能只放在不参与验证的 README 或命令行日志里。导出器仅接收明确的正式身份，未知模式、缺少模式证据、诊断模式均拒绝。不能通过复制目录或改一个布尔值把诊断结果改为正式数据。
 
@@ -68,13 +72,37 @@ campaign 资源绑定只在统一启动入口发生。内部组件验证当前 l
 
 ### 4.1 物理动作
 
-杯子从桌面开始。必须经历接近、闭合夹爪、抓稳验证、抬升、搬运、到达有支撑的放置位置、释放、稳定放置、撤离和最终检查。不能以已经持杯的轨迹、瞬移杯子或人为 physics attachment 替代抓取过程。
+杯子从桌面开始，执行器仍发起现有接近、闭合、抬升、搬运、放置、释放和撤离流程。该执行器已有的安全 interlock 保留，但独立 QC 不再要求抓稳、抬升高度、全程持物、释放接触、放置稳定窗口或撤离距离达到正式质量指标。不能以已经持杯的初始化、瞬移杯子或人为 physics attachment 替代执行。禁用这些手段是执行范围和证据真实性约束，不另加一套过程质量评分。
 
 完整机器人碰撞检查和 controller admission 保持生效。MoveIt attachment 仅是规划 shadow；MuJoCo pose/contact 是独立物理事实源。释放顺序必须满足现有安全契约，包括开夹爪前的必要 shadow detach；不能从成功 action 返回值推定该顺序已经实现。该顺序若需要修复，保存真实前后证据并单独测试。
 
-持有无支撑杯子时出现错误，只允许 stop/hold 和保存证据，不自动开夹爪或 reset。放置验收须使用当前 release epoch 的 pose、support contact、gripper/controller 和 Planning Scene 证据，不能复用释放前样本。
+持有无支撑杯子时出现错误，只允许 stop/hold 和保存证据，不自动开夹爪或 reset。运行安全证据继续保留；本次物体任务结果只按第 4.2 节的两个 Pose 计算，不用 contact、速度、阶段名称或稳定时长增加成功条件。
 
-数值阈值、采样新鲜度、碰撞接触白名单和稳定窗口来自冻结的共同策略。实现计划必须列出实际配置键、数值、来源文件与 hash，并给出可执行的逐项断言；缺失项是启动失败，不能为首条成功临时选取宽松数值。
+执行安全、采样新鲜度和碰撞白名单仍来自冻结的共同策略。端点经验阈值是用户本次授权的诊断验收配置，按第 4.2 节在运行前冻结。不能观察结果后修改配置、重算同一条运行并把 FAIL 改为 PASS。
+
+### 4.2 端点 Pose 验收（2026-10-01 修订）
+
+共用配置文件为 `src/so101_demo_py/config/act/endpoint_pose_acceptance_v1.yaml`，这是待实现的持久配置，不是临时脚本。`kind=ACT_ENDPOINT_POSE_POLICY`、`schema_version=1`、`rule_version=endpoint_pose_v1`；适用于正式、诊断、资格和 rollout。完整 closed schema、边界和报告以共用修订为准。默认值如下，均为经验值，未宣称校准通过：
+
+| 配置键 | 默认值 | 判定 |
+| --- | --- | --- |
+| `initial_position_tolerance_m` | `0.010` | 初始杯子 body 原点的三维欧氏误差 ≤10 mm |
+| `initial_axis_tolerance_rad` | `0.15` | 初始杯子轴与冻结初始目标轴夹角 ≤0.15 rad |
+| `final_xy_tolerance_m` | `0.020` | 最终杯子 body 原点的 XY 欧氏误差 ≤20 mm |
+| `final_z_tolerance_m` | `0.010` | 最终杯子 body 原点的 Z 绝对误差 ≤10 mm |
+| `final_axis_tolerance_rad` | `0.15` | 最终杯子轴与冻结放置目标轴夹角 ≤0.15 rad |
+
+位置和四元数都使用同一个 MuJoCo `world` frame、同一个杯子 body 的 Pose。目标 Pose 在运行前从场景 reset recipe 和放置目标 recipe 取得并冻结；TCP/grasp Pose 必须先经已绑定的杯子到 TCP 变换换算为杯子 body Pose。不得混用杯底高度、TCP 高度或事后实际终点作为目标。
+
+杯子轴定义为 body 局部 `+Z` 经四元数旋转后的单位向量。夹角用 `acos(clamp(dot(actual_axis,target_axis),-1,1))`；忽略绕杯子自身轴的 yaw。两端目标四元数必须有效，不能因忽略 yaw 而忽略倾倒。配置为 closed schema，所有阈值须为有限的正数，角度还须 ≤π；拒绝布尔值和未知字段。正式模式也使用本策略，但仍须满足正式 Head、用途与数据资格条件。
+
+初始样本确定为本次 reset 已确认后、采集窗口内第一条有效杯子 Pose，必须早于本次抓放的首条 arm/gripper dispatch，不包含先前的 neck 搜索动作。终止样本确定为专家获准命令序列结束且controller停止确认后取得的第一条新physics Pose；timeout、abort 或故障安全stop不构成正常终态。source/capture/boundary的sim-time不等式和等stamp时的sequence要求按共用修订第4节执行，拒绝停止前缓存，不增加稳定等待或contact/速度条件。
+
+独立 QC 从封印的原始 physics history 和边界事件确定这两个样本，复算全部五项误差。起点和终点分别符合配置才是 `endpoint_pose` PASS；不要求额外最小位移或过程轨迹。起点预先就在目标位置也不能因此宣称抓取成功，本规则只给出端点结果。
+
+配置内容与目标 Pose 进入 inputs hash 链；QC `rule_version` 和 `checks` 记录 `endpoint_pose_v1`、配置 hash、两端样本序号、实际/目标 Pose、误差和逐项结果。正式模式和本诊断共享端点计算器及数据验证器；用途身份仍不同。缺失策略/规则标识不默认回退。旧报告和旧成功证据保留原结论，不能升级为本修订的 PASS。
+
+原来的七项中，`grasp_occlusion_window_s`、`support_distance_m`、`release_stable_s`、`retreat_distance_m`、`placement_stable_s` 不再是任何采集模式的质量 prerequisite 或 QC 通过条件；`path_step_s`、`path_clearance_m` 若用于真实规划/碰撞安全，则仍按执行策略验证。安全开爪策略若使用支撑距离/窗口，保留其批准配置，但不要求正式质量测量报告。RGB age/skew、资源 hard-stop、接触策略有效 activation 属于另外的运行门禁，不能用端点策略代替。
 
 ## 5. Observation、action 与时序
 
@@ -88,7 +116,7 @@ campaign 资源绑定只在统一启动入口发生。内部组件验证当前 l
 
 `task_camera`、mask、目标坐标、Depth、truth、contact、phase 和教师内部状态均不进入 ACT observation。教师可以使用诊断目标几何；其来源只留在 audit 和运行溯源。
 
-采集从 reset 已确认、目标已指定且输入稳定的初始状态开始，早于第一条抓取命令；覆盖整个执行及撤离、最终放置稳定检查。不能只在每个 phase 返回后记录一行或补造中间帧。
+采集从 reset 已确认、目标已指定且输入稳定的初始状态开始，早于第一条抓取命令；覆盖整个执行及撤离，直到正常终态的终点 Pose 已采样。不能只在每个 phase 返回后记录一行或补造中间帧。
 
 每个 observation 只使用 `stamp <= t` 且满足共同 age/skew 约束的输入。已有 Recorder 的 `dt_s=0.1`、`max_source_age_s=0.1` 约束保持不变，跨流 skew 使用冻结配置。head 即使没看到杯子，仍要有新鲜、连续、身份正确的 RGB；本次不评价它的检测或搜索效果。
 
@@ -96,7 +124,7 @@ campaign 资源绑定只在统一启动入口发生。内部组件验证当前 l
 
 `t+0.1s` reference 是实际 controller 接受的轨迹在该时刻的参考位置。采集器用有界缓冲等待相应 reference 的可验证证据，再封存 observation/action pair。停止或撤销后的未生效轨迹不提供标签；不能改用下一帧实测关节、未执行的规划结果或固定 action。
 
-命令 dispatch、接触变化、release 和最终检查在实际发生边界记录源时间、序号及关联身份，保留足以回算标签的 controller reference 历史。结束时没有合法未来 reference 的尾帧仅留在审计数据，不伪造训练 action；释放和最终稳定性证据仍须完整保留。队列溢出、缺帧、过期或跨 epoch 数据使运行失败，不丢帧后继续报 PASS。
+命令 dispatch、接触变化、release 和最终检查在实际发生边界记录源时间、序号及关联身份，保留足以回算标签的 controller reference 历史。结束时没有合法未来 reference 的尾帧仅留在审计数据，不伪造训练 action；两个端点和执行安全证据仍须完整保留。队列溢出、缺帧、过期或跨 epoch 数据使运行失败，不丢帧后继续报 PASS。
 
 单次 attempt 保留共同的 120 s 单调墙钟上限。在第一条执行命令前开始计时，包含等待、完整抓放、撤离和最终检查；若有更早的实际推理则从其开始计时。进入 finalizing 后不再发新物理动作。Recorder/QC/提交另受现有 finalization、lease 和 batch deadline 约束，不能反向延长运动期限。
 
@@ -117,15 +145,15 @@ campaign 资源绑定只在统一启动入口发生。内部组件验证当前 l
 1. 文件集合、数量、大小、SHA256、每个 PNG 的完整解码及 RGB shape/dtype；解码像素与 acquisition digest 一致。
 2. rows 与双帧的一一对应、完整 10 Hz 网格、每路 acquisition ID 的唯一性、源序号/stamp 严格递增、源帧 schedule 的连续覆盖、源 age/skew、关节顺序、有限值及 session/attempt/reset/release 身份。
 3. 每个 action 与实际 controller reference 在 `t+0.1s` 的匹配、命令接受/撤销时序，拒绝未来反馈和未生效参考。
-4. 桌面初态、抓稳和实际抬升、持物搬运、当前 release epoch 的释放及支撑、稳定最终 pose、撤离和安全终态；阈值用绑定的共同策略。
+4. 正式与诊断模式都按共用修订复算起点和终点 Pose。运行安全停止、授权和正常终态是独立条件，端点匹配不能使安全失败或 abort 变为成功。
 
-seal 中的 `status` 或 `qc_passed` 只是一项待核对声明，不能代替计算。QC 报告保存规则版本、配置 hash、episode/audit hash、完整身份、计数、逐项结果和失败原因，并由结果验证器核对。正式与诊断共享这套 QC，不增加一套降低阈值的“测试 QC”。
+seal 中的 `status` 或 `qc_passed` 只是一项待核对声明，不能代替计算。QC 报告保存规则版本、配置 hash、episode/audit hash、完整身份、计数、逐项结果和失败原因，并由结果验证器核对。正式与诊断共享数据完整性验证器；物体任务结果依据已验证 scope 选择规则，不另建一套 Recorder 或提交链。旧过程质量字段不参与诊断 PASS，也不能被写成虚假的校准 PASS。
 
 ### 6.3 真正提交
 
 episode seal 保持不可变，`committed:false` 不改写。Coordinator 经结果 verifier 确认 sealed result、QC 和当前有效 lease 后，持久写入 `RESULT_COMMITTED` 并生成 index/receipt。完成报告须回放这个 journal 事件，核对 episode、result、QC、模式及 identity hash 一致。
 
-因此有三种不同状态：只有文件；已有合法 seal/QC；已由 Coordinator 提交。只有第三种同时具备真实物理成功及独立 QC PASS 才满足本任务。诊断提交仍禁止进入正式训练 manifest、资格计数和正式成功率分母。
+因此有三种不同状态：只有文件；已有合法 seal/QC；已由 Coordinator 提交。只有第三种同时具备本次端点 Pose 通过、独立数据 QC PASS 和安全运行结束才满足本任务。诊断提交仍禁止进入正式训练 manifest、资格计数和正式成功率分母。
 
 ## 7. 失败处理与安全停点
 
@@ -149,7 +177,7 @@ CPU/GPU/RAM、磁盘、MuJoCo RTF、Recorder 队列或 10 Hz 连续性达到共�
 
 完整普通 Python gate 使用 `pytest-xdist`，worker 数为 `min(8, 逻辑 CPU 数)`；记录实际收集范围、JUnit、跳过数、耗时及退出码。`so101_demo_py` 普通范围仅为 `test/`，本任务不运行 `benchmark_test/`。ai-station 的 fsync-heavy pytest/colcon 使用登记 evidence root 下全新 NVMe scratch，验证 `TMPDIR`、`TMP`、`TEMP` 和每个实际测试 Python 的 `tempfile.gettempdir()`；不满足则不启动。
 
-只有以下结果齐全才报告首条闭环通过：真实完整抓放证据、持续采样及无损 readback、独立 QC PASS、当前身份的持久提交、诊断导出拒绝、相关回归和集成 gate。报告明确“非 Head Search 诊断闭环”，不宣称 Head 校准完成、正式训练数据已合格或并行采集已通过。
+只有以下结果齐全才报告首条闭环通过：正常结束的真实执行、起点/终点 Pose 通过、持续采样及无损 readback、独立 QC PASS、当前身份的持久提交、诊断导出拒绝、相关回归和集成 gate。报告明确“非 Head Search 端点 Pose 诊断采集闭环”，不宣称过程质量已验证、Head 校准完成、正式训练数据已合格或并行采集已通过。
 
 ## 9. 证据与后续合并
 
@@ -169,4 +197,4 @@ CPU/GPU/RAM、磁盘、MuJoCo RTF、Recorder 队列或 10 Hz 连续性达到共�
 - ai-station 上的批准设计 `docs/superpowers/specs/2026-09-28-so101-act-task8-artifact-preparation-design.md` 与已审计划 `docs/superpowers/plans/2026-09-11-so101-act-head-wrist-rgb-implementation.md`。
 - ai-station 上的 `act/contracts.py`、`act/joints.py`、`act/synchronizer.py`、`act/expert.py`、`act/recorder.py`、`act/result_store.py`、`act/collection.py`、`adapters/act/parallel_collection_runtime.py` 与 `parallel_batch/coordinator.py`，路径均相对 `src/so101_demo_py/src/`。
 
-本文仅针对预选目标的单 episode 诊断，明确替代“必须先完成 Head qualification 才能做这项诊断”以及一般五次稳定性验收对本里程碑的要求。正式模式、非 Head 安全门、正式数据资格和并行计划不因此放宽。
+本文的单 episode/预选目标范围不变，仍不要求先完成 Head qualification 或一般五次稳定性验收。2026-10-01 的端点 Pose 规则来自完整方案的共用修订；非 Head 安全门、正式用途资格和并行执行顺序不因此放宽。

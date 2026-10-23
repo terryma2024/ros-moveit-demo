@@ -1,6 +1,10 @@
 # SO-101 Head/Wrist RGB ACT Implementation Plan
 
 > **2026-10-05 修订（优先）**：本计划中 Teacher/Recorder/QC 耦合、过程质量成功判定与数据故障停 Teacher 的步骤已被 [`2026-10-05-so101-teacher-act-decoupling-implementation.md`](2026-10-05-so101-teacher-act-decoupling-implementation.md)（设计 [`../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md`](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)）替代；执行者不得继续按旧条款实现。
+>
+> 用户已授权现有 ai-station Claude 更新实施步骤、清理被替代的代码/测试并执行；保留 Teacher 执行保护、严格数据 QC、历史证据和用途隔离。
+
+> **2026-10-01 acceptance amendment:** [Shared endpoint-Pose design](../specs/2026-10-01-so101-act-endpoint-pose-acceptance-design.md) and its [implementation amendment](2026-10-01-so101-act-endpoint-pose-acceptance-implementation.md) replace the object-quality success conditions in Tasks 6/8/9/11/11A/16. This applies to formal collection, qualification and rollout, not only the non-head diagnostic. Safety, Head, data integrity and eligibility gates remain independent. Existing runtime evidence does not qualify the changed contract.
 
 > **2026-09-24 refresh:** [Task 8 live and formal collection design](../specs/2026-09-24-so101-act-task8-live-formal-collection-design.md) is approved and incorporated below. MuJoCo is the only simulator; campaign resource binding is checked once at admission; W2 proceeds directly to one independent 40-scene exact-W8 qualification, without W4/W6. This plan supersedes the earlier Task 7A–11A wording.
 

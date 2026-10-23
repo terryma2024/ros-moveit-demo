@@ -1,8 +1,12 @@
 # SO-101 ACT Task 8 live 与正式采集设计
 
 > **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+>
+> Teacher 按起终点杯子 Pose 和最终直立结果判定任务；过程质量项以审计为主，保留真正的执行保护。ACT 采集/QC 故障不得阻断或撤销 Teacher 运动，数据标准和用途隔离不放宽。用户已授权现有 ai-station Claude 更新计划、清理旧逻辑/测试并执行，尚未形成新运行验收。
 
 日期：2026-09-24
+
+2026-10-01 验收修订：[共用端点 Pose 验收](2026-10-01-so101-act-endpoint-pose-acceptance-design.md) 优先于本文的物体过程质量条件。正式采集、资格和 rollout 均使用同一端点规则；安全监督、Head、数据完整性、配额和并发资格顺序不变。本次修订尚未形成新的 live/QUALIFIED 证据。
 
 状态：方案已在对话中确认，并通过独立 GPT-6 Astra / High 文档审查；等待用户书面审阅。本文只定义实现与验收合同，不表示接触校准、Task 8 live、W8 资格或正式数据已经完成。
 
@@ -194,16 +198,16 @@ holding 为 unknown、接触流过期、控制器状态不明或 release 前失�
 
 phase-prefix 全部通过后，在冻结的 default、left、forward anchor scene 上做完整自主运行。五次运行使用预先冻结、覆盖三个 anchor 的顺序；接受门是同一 commit、配置、policy 和 `FULL_RESTART` 生命周期下至少连续 5 次有效成功。
 
-每次运行必须证明：
+每次运行按 2026-10-01 共用修订证明：
 
 1. 搜索完成，head/wrist RGB 新鲜且身份正确。
 2. 接近路径安全，控制器实际执行 reference 与 permit 一致。
-3. 双侧接触、微抬升、离台和稳定持物证据成立。
-4. 搬运与对齐期间没有非法机器人接触或持物丢失。
+3. 杯子起点 Pose 与冻结 reset 目标符合共用阈值。
+4. 运行未发生非法接触或安全故障；过程原始记录保留，不另评抓稳/抬升/全程持物质量。
 5. 开夹爪前完成 `DETACH_MOVEIT`。
-6. 新 release epoch 证明桌面支撑成立，且没有持续指尖接触。
-7. 径向撤离 10 mm，再垂直撤离 60 mm。
-8. 杯子最终位于目标区，保持稳定且姿态合格。
+6. release epoch 和实际动作事件身份正确；开爪前安全支撑门保持有效，不追加释放后的 contact 质量评分。
+7. 执行器正常结束并确认 controller 停止；实际撤离距离和稳定时长不作质量通过条件。
+8. 正常终态后的第一条新鲜杯子终点 Pose 符合冻结放置目标与共用阈值，不要求持续稳定窗口。
 9. MuJoCo、Planning Scene、controller、contact stream 和双 RGB 时间线一致。
 10. 全程无人工介入、无 MoveIt recovery、无证据丢失。
 
