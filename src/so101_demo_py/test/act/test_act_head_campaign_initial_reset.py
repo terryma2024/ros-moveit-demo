@@ -139,7 +139,9 @@ def test_verified_reset_hook_runs_before_resume_and_preserves_the_existing_deadl
         calls.append((frame,deadline))
         assert frame['paused'] is True and frame['simulation_step']==0
         assert frame['reset_epoch']==3
-        assert started<deadline<=started+.101
+        # reset() takes its deadline when it starts, however late the scheduler lets that happen after `started`: never shorter than
+        # the timeout counted from `started`, never longer than the timeout counted from this call
+        assert started+.1<=deadline<=time.monotonic()+.1
         assert not any(row[0]=='switch' and row[1] for row in events)
         return {'ready':not refuse}
     scene.on_verified_reset=ready
