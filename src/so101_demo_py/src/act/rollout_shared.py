@@ -341,13 +341,17 @@ class NativeEpisodePorts:
 
         def world_observer(node, session_id):
             from so101_demo.backends.mujoco.observer import MujocoWorldObserver
-            return MujocoWorldObserver(node, session_id, max_age_s=config["world_max_age_s"], accept_truncated=True)
+            # The observer is created after the reset: it can first hold the replay of the previous epoch, and its live samples of the
+            # new epoch (step > 0) would be rejected for ever (to-do 35, END_OBSERVATION_UNAVAILABLE). A one-shot observer rebaselines.
+            return MujocoWorldObserver(node, session_id, max_age_s=config["world_max_age_s"], accept_truncated=True,
+                                       rebaseline_stale_join=True)
 
         return build_ros_session(
             binding=self.binding, config=config, cameras=observation["cameras"], state_dim=observation["state_dim"],
             image_shape=tuple(observation["image_shape"]), session_id=receipt["simulation_session_id"],
             source_floor_s=receipt["simulation_time_s"], timing=self.inputs.timing,
-            rgb_sync=frozen["runtime_policy"]["rgb_sync"], world_observer_factory=world_observer)
+            rgb_sync=frozen["runtime_policy"]["rgb_sync"], world_observer_factory=world_observer,
+            reset_epoch=receipt.get("reset_epoch"))
 
     def cancel_motion(self):
         return self.runtime.cancel_motion(self.lease)

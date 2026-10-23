@@ -258,6 +258,34 @@ def test_the_world_observer_gives_the_teachers_observation_document_or_none():
         rr.WorldCupObserver(object())
 
 
+def test_a_pose_of_another_reset_epoch_than_the_episodes_is_no_pose():
+    """To-do 35: a one-shot observer first holds the transient-local replay of the PREVIOUS epoch; that pose is not this episode's."""
+    epoch = {"value": 1}
+
+    class Observer:
+        def snapshot_with_receipt(self):
+            item = _evidence()
+            item.reset_epoch = epoch["value"]
+            return SimpleNamespace(evidence=item, received_monotonic_s=1.0)
+
+    world = rr.WorldCupObserver(Observer(), reset_epoch=2)
+    assert world.cup_pose() is None and "WORLD_EPOCH_MISMATCH" in world.last_error and "1" in world.last_error
+    epoch["value"] = 2
+    assert world.cup_pose()["reset_epoch"] == 2
+    unbound = rr.WorldCupObserver(Observer())
+    epoch["value"] = 1
+    assert unbound.cup_pose()["reset_epoch"] == 1       # without an expected epoch the observer behaves as before
+
+
+def test_the_session_hands_the_episodes_epoch_to_the_world_observer():
+    binding = FakeBinding()
+    session = rr.build_ros_session(
+        binding=binding, config=CONFIG, cameras=("side", "wrist"), state_dim=6, image_shape=SHAPE, session_id="sim-1",
+        source_floor_s=0.0, timing=TIMING, rgb_sync={"max_age_s": 0.1, "max_skew_s": 0.1}, reset_epoch=2,
+        world_observer_factory=lambda node, session_id: SimpleNamespace(snapshot_with_receipt=lambda: None))
+    assert session.world.reset_epoch == 2
+
+
 class FakeAdapter:
     def __init__(self):
         self.calls, self.audit, self.state = [], [], "READY"

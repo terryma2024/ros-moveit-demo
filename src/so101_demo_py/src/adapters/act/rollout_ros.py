@@ -352,10 +352,11 @@ class ThreadInferenceTransport:
 class WorldCupObserver:
     """The cup pose of the world evidence stream, as the Teacher's observation document (None when none is fresh)."""
 
-    def __init__(self, observer) -> None:
+    def __init__(self, observer, reset_epoch=None) -> None:
         if not callable(getattr(observer, "snapshot_with_receipt", None)):
             raise ValueError("ROLLOUT_WORLD_OBSERVER_INVALID")
         self.observer = observer
+        self.reset_epoch = reset_epoch      # the episode's reset epoch: a pose of any other epoch is no pose (to-do 35)
         self.last_error = None
 
     def cup_pose(self):
@@ -363,6 +364,10 @@ class WorldCupObserver:
             evidence = self.observer.snapshot_with_receipt().evidence
         except Exception as error:      # noqa: BLE001 - a stale or missing sample is "no pose", the machine decides what that means
             self.last_error = (str(error) or type(error).__name__)[:200]
+            return None
+        if self.reset_epoch is not None and evidence.reset_epoch != self.reset_epoch:
+            # A one-shot observer is first handed the transient-local replay of the PREVIOUS epoch: that pose is not this episode's.
+            self.last_error = f"WORLD_EPOCH_MISMATCH: pose of epoch {evidence.reset_epoch}, episode epoch {self.reset_epoch}"
             return None
         state = evidence.object_state
         x, y, z, w = state.orientation_xyzw
@@ -550,8 +555,10 @@ def _last_goals(adapter):
 
 
 def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_shape, session_id: str, source_floor_s: float,
-                      timing: dict, rgb_sync: dict, world_observer_factory):
+                      timing: dict, rgb_sync: dict, world_observer_factory, reset_epoch=None):
     """Create the executor's nodes (AFTER the initial gate) and return the `RolloutSession`.
+
+    `reset_epoch` is the reset epoch of the episode (the reset receipt's): the world pose of any other epoch is refused.
 
     `binding` is the ROS seam: `create_node(name)`, `message_types` (`Image`, `JointState`, `FollowJointTrajectory`), the QoS
     profiles, `action_client(node, type, name)`, `start_spinning(node)` (a background executor; returns a stop callable) and
@@ -618,7 +625,7 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
             accept_timeout_s=timing["accept_timeout_s"], stop_timeout_s=timing["stop_timeout_s"],
             reference_port=ControllerReference(measured=assembler.latest_arm,
                                                last_goals=lambda: _last_goals(adapter)))
-        world = WorldCupObserver(world_observer_factory(node, session_id))
+        world = WorldCupObserver(world_observer_factory(node, session_id), reset_epoch=reset_epoch)
         stop_spinning = binding.start_spinning(node)
         readiness = await_controllers_ready(binding, {"arm": arm_client, "gripper": gripper_client},
                                             timeout_s=timing.get("controller_ready_timeout_s", CONTROLLER_READY_TIMEOUT_S))

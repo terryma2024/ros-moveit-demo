@@ -137,6 +137,27 @@ def test_a_model_call_still_running_blocks_the_next_session(tmp_path):
         ports.open_session({"scene_id": "s"}, {"simulation_session_id": "sim-1", "simulation_time_s": 0.5}, "a1")
 
 
+def test_the_rollout_world_observer_rebaselines_a_stale_join_and_the_session_gets_the_receipt_epoch(tmp_path, monkeypatch):
+    """To-do 35: the observer is created after the reset, so it may first see the replay of the previous epoch."""
+    from so101_demo.adapters.act import rollout_ros
+    from so101_demo.backends.mujoco import observer as world_module
+
+    seen, built = {}, {}
+    monkeypatch.setattr(rollout_ros, "build_ros_session", lambda **kwargs: seen.update(kwargs) or "session")
+    monkeypatch.setattr(world_module, "MujocoWorldObserver", lambda *args, **kwargs: built.update(args=args, kwargs=kwargs))
+    inputs = SimpleNamespace(
+        rollout_config={"world_max_age_s": 1.0}, observation={"cameras": ["side", "wrist"], "state_dim": 6, "image_shape": [4, 6, 3]},
+        timing={}, frozen={"runtime_policy": {"rgb_sync": {}}})
+    ports = native.NativeEpisodePorts(
+        runtime=FakeRuntime(), lease=object(), scene={}, directory=tmp_path, inputs=inputs, environment={}, binding=None,
+        runner=None, inference=None, transport=SimpleNamespace(quiesce=lambda timeout: True), pilot_factory=None)
+    receipt = {"simulation_session_id": "sim-1", "simulation_time_s": 0.5, "reset_epoch": 3}
+    assert ports.open_session({"scene_id": "s"}, receipt, "a1") == "session"
+    assert seen["reset_epoch"] == 3
+    seen["world_observer_factory"]("node", "sim-1")
+    assert built["kwargs"]["rebaseline_stale_join"] is True and built["kwargs"]["accept_truncated"] is True
+
+
 def _composition_stub(tmp_path, rig_profile):
     return SimpleNamespace(environment={"ROS_DOMAIN_ID": "181"}, inputs=SimpleNamespace(
         recorder_policy={"ready_timeout_s": 30.0}, settings=SimpleNamespace(execution_deadline_s=180.0)),

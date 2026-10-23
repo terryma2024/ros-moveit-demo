@@ -231,6 +231,27 @@ def test_a_one_shot_observer_that_joined_on_a_replayed_previous_epoch_takes_the_
         world.accept(replace(live, publisher_sequence=14181, reset_epoch=3, simulation_step=7), received_at_s=10.)
 
 
+def test_the_rollout_cup_pose_waits_for_the_epoch_of_the_episode_after_a_stale_join(monkeypatch):
+    """To-do 35 (END_OBSERVATION_UNAVAILABLE): the rollout observer joins after the reset, holds the replayed previous-epoch
+    sample, and every live sample of the new epoch (step > 0) was rejected, so the end pose never arrived."""
+    from so101_demo.adapters.act.rollout_ros import WorldCupObserver
+    from so101_demo.backends.mujoco import observer as world_module
+    world, replayed, live = _joining_pair(world_module, monkeypatch, rebaseline_stale_join=True)
+    cup = WorldCupObserver(world, reset_epoch=2)
+    world.accept(replayed, received_at_s=10.)
+    assert cup.cup_pose() is None                                   # the stale epoch is not this episode's pose
+    world.accept(live, received_at_s=10.)
+    world.accept(replace(live, publisher_sequence=14181, simulation_step=43, paused=False, simulation_time_s=0.2),
+                 received_at_s=10.)
+    pose = cup.cup_pose()
+    assert pose["reset_epoch"] == 2 and pose["simulation_time_s"] == pytest.approx(0.2)
+    assert world.diagnostics()["rejections"] == []
+    strict, strict_replayed, strict_live = _joining_pair(world_module, monkeypatch)
+    strict.accept(strict_replayed, received_at_s=10.)
+    with pytest.raises(world_module.EvidenceRejected):              # what the rollout observer did before: stuck on the old epoch
+        strict.accept(strict_live, received_at_s=10.)
+
+
 def test_a_continuous_observer_still_rejects_a_new_epoch_that_does_not_begin_at_step_zero(monkeypatch):
     from so101_demo.backends.mujoco import observer as world_module
     world, replayed, live = _joining_pair(world_module, monkeypatch)
