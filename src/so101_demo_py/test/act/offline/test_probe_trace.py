@@ -64,6 +64,27 @@ def test_the_buffer_is_bounded(tmp_path):
     assert len(read(tmp_path/'trace.jsonl')[1]) == 5
 
 
-def test_traced_topics_are_cameras_and_clock():
+def test_traced_topics_are_cameras_clock_and_the_state_topics_whose_samples_the_bag_can_lose():
+    states = {'/joint_states', '/arm_controller/controller_state', '/gripper_controller/controller_state',
+              '/so101/simulation/scene_state'}
     assert set(TRACE_TOPICS) == {'/clock', '/head_camera/color', '/head_camera/camera_info',
-                                 '/wrist_camera/color', '/wrist_camera/camera_info'}
+                                 '/wrist_camera/color', '/wrist_camera/camera_info', '/neck_controller/controller_state'} | states
+
+
+def test_a_rig_without_a_neck_traces_no_neck_state():
+    from so101_demo.act.rig_profile import DEFAULT_RIG
+    from dataclasses import replace
+    from so101_demo.act.offline.probe_trace import trace_topics_for
+
+    assert '/neck_controller/controller_state' in trace_topics_for(DEFAULT_RIG)
+    assert '/neck_controller/controller_state' not in trace_topics_for(replace(DEFAULT_RIG, has_neck=False))
+
+
+def test_state_messages_are_traced_with_their_header_stamp(tmp_path):
+    trace = ProbeTrace(tmp_path/'trace.jsonl', flush_every_s=3600)
+    for topic in ('/joint_states', '/arm_controller/controller_state', '/gripper_controller/controller_state', '/so101/simulation/scene_state'):
+        trace.on_message(topic, cdr(3, 4))
+    trace.close()
+    _header, rows = read(tmp_path/'trace.jsonl')
+    assert [(row[0], row[3]) for row in rows] == [(topic, 3*10**9+4) for topic in (
+        '/joint_states', '/arm_controller/controller_state', '/gripper_controller/controller_state', '/so101/simulation/scene_state')]

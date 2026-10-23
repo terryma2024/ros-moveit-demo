@@ -240,7 +240,7 @@ def test_the_head_wrist_topic_lists_are_the_literals_they_replaced():
     from so101_demo.act.offline import delivery_diag, probe_trace, raw_recorder, replay, scan
     head_wrist = ("/head_camera/color", "/head_camera/camera_info", "/wrist_camera/color", "/wrist_camera/camera_info")
     assert raw_recorder.CAMERA_TOPICS == head_wrist and delivery_diag.STALL_TOPICS == head_wrist
-    assert probe_trace.TRACE_TOPICS == ("/clock", *head_wrist)
+    assert probe_trace.TRACE_TOPICS == ("/clock", *head_wrist, *probe_trace.STATE_TOPICS, probe_trace.NECK_STATE_TOPIC)
     assert replay.CAMERA_TOPICS == ("/head_camera/color", "/wrist_camera/color")
     assert scan.CAMERA_INFO_TOPICS == ("/head_camera/camera_info", "/wrist_camera/camera_info")
     assert scan.COLOR_TOPICS == {"/head_camera/color": "/head_camera/camera_info", "/wrist_camera/color": "/wrist_camera/camera_info"}
@@ -285,8 +285,9 @@ def test_the_raw_recorder_takes_the_rig_for_its_topics_its_probe_and_its_stall_r
     recorder = raw_recorder.RawRecorder("/tmp/never-started", rig=SIDE_WRIST_RIG)
     assert recorder.topics == raw_recorder.topics_for(SIDE_WRIST_RIG) and recorder.core_topics == raw_recorder.core_topics_for(SIDE_WRIST_RIG)
     assert raw_recorder.RawRecorder("/tmp/never-started").topics == raw_recorder.TOPICS
+    neck = (probe_trace.NECK_STATE_TOPIC,) if SIDE_WRIST_RIG.has_neck else ()
     assert probe_trace.trace_topics_for(SIDE_WRIST_RIG) == ("/clock", "/side_camera/color", "/side_camera/camera_info",
-                                                    "/wrist_camera/color", "/wrist_camera/camera_info")
+                                                    "/wrist_camera/color", "/wrist_camera/camera_info", *probe_trace.STATE_TOPICS, *neck)
 
 
 def test_the_replay_camera_repair_touches_only_the_rigs_image_topics():
