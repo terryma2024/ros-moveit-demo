@@ -21,7 +21,6 @@ from .gpu_workload import ActGpuWorkloadArbiter
 from .instances import InstanceRegistry
 from .intent_store import IntentStore
 from .ports import UnknownBudgetSource, UnifiedServices
-from .worker_slots import default_batch_domain_claim_probe
 from .safety import SafetyLane, SafetyLimits
 from .teleop_service import BackendView, ProductionTeleopService
 
@@ -117,7 +116,6 @@ def compose_domain_services(
     act_owner_identity=None,
     act_container_inspect=None,
     act_calibration_identity=None,
-    act_batch_domain_claim_probe=None,
 ) -> UnifiedServices:
     """Build the domain services on top of an already-owned child and store.
 
@@ -210,7 +208,6 @@ def compose_domain_services(
                 owner_pid=owner_pid, owner_started_ticks=owner_started_ticks,
                 clock_ns=clock, gpu_inventory_probe=inventory_probe,
                 calibration_identity_probe=act_calibration_identity, container_inspect=act_container_inspect,
-                batch_domain_claim_probe=act_batch_domain_claim_probe or default_batch_domain_claim_probe,
                 root_registration=dict(path=str(evidence_root.resolve(strict=True)),
                                        uid=evidence_root.stat().st_uid, gid=evidence_root.stat().st_gid),
             )
@@ -262,7 +259,6 @@ def compose_services(
     act_owner_identity=None,
     act_container_inspect=None,
     act_calibration_identity=None,
-    act_batch_domain_claim_probe=None,
 ) -> UnifiedServices:
     """The production entry point: own the child first, then compose the domains.
 
@@ -299,7 +295,6 @@ def compose_services(
         act_owner_identity=act_owner_identity,
         act_container_inspect=act_container_inspect,
         act_calibration_identity=act_calibration_identity,
-        act_batch_domain_claim_probe=act_batch_domain_claim_probe,
     )
     if bridge_owner is not None:
         bridge_owner.bind(services.arbiter, services.safety)

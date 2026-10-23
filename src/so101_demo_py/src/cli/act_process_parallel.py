@@ -30,7 +30,7 @@ from types import SimpleNamespace
 
 from so101_demo.act.parallel_collection_contracts import read_document
 from so101_demo.cli.act_collect_parallel import (
-    CollectionEdges, _describe, _inspector, _native_edges, _preflight, _regular, _settle_unbuilt, _sha)
+    CollectionEdges, _describe, _inspector, _preflight, _regular, _settle_unbuilt, _sha)
 from so101_demo.runtime import act_fixed_collection_composition as composition
 from so101_demo.runtime.container_campaign import container_receipts, stage_records
 from so101_demo.runtime.container_campaign.case_inputs import (
@@ -56,7 +56,6 @@ def _parser():
     parser.add_argument('--worker-count', type=int, required=True)
     parser.add_argument('--qualification', action='store_true')
     parser.add_argument('--spot-check', action='store_true')
-    parser.add_argument('--instance-launcher', choices=('container', 'native'), default='container')
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--qualification-report', type=Path)
     parser.add_argument('--source', type=Path, required=True)
@@ -124,7 +123,7 @@ def main(argv=None, *, edges=None) -> int:
             runtime_config=resolved['runtime_config'], collection_config=resolved['collection_config'],
             campaign_config=resolved['campaign_config'], root=run, qualification=bool(args.qualification or spot_check),
             spot_check=spot_check, qualification_report=report, worker_count=args.worker_count,
-            instance_launcher=args.instance_launcher, runtime_document=runtime_document, stage=stage)
+            instance_launcher='container', runtime_document=runtime_document, stage=stage)
         spec = composition.prepare_collection_operation(arguments, services=services,
                                                         contact_policy_fingerprint=binding['contact_policy_fingerprint'])
         parallel_runtime = composition.collection_parallel_runtime(resolved['collection_config'])
@@ -145,8 +144,7 @@ def main(argv=None, *, edges=None) -> int:
             collection_mode='preselected_target_diagnostic' if spot_check else 'formal',
             approved_disk_floor_bytes=binding['disk_floor_bytes'], docker_runner=edges.docker_runner,
             service_query=edges.service_query, namespace_reader=edges.namespace_reader,
-            control_factory=edges.control_factory, instance_launcher=args.instance_launcher,
-            native=_native_edges(edges, args), admit_processor_slots=workload.admit_processor_slots,
+            control_factory=edges.control_factory, admit_processor_slots=workload.admit_processor_slots,
             runtime_document=runtime_document, stage=stage)
     except Exception as error:  # noqa: BLE001 - admitted but not built: nothing was launched, so ask admission to settle
         return _settle_unbuilt(workload, context, run, error)

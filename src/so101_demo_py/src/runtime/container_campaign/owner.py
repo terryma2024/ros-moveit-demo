@@ -31,7 +31,6 @@ from so101_demo.runtime.container_campaign.resource_log import (
 from so101_demo.runtime.container_campaign.processing_verifier import build_campaign_result,read_journal,retry_candidate
 from so101_demo.runtime.container_campaign.result_verifier import build_frozen_index
 from so101_demo.runtime.container_campaign.service_owner import ContainerServiceOwner,_write
-from so101_demo.runtime.container_campaign.native_owner import NativeInstanceOwner
 from so101_demo.runtime.container_campaign.shard_owner import ContainerShardOwner
 from so101_demo.runtime.inference.config import load_campaign_config
 from so101_teleop.unified.contracts import AdmittedCampaignContext
@@ -300,7 +299,7 @@ class ContainerCampaignOwner:
                 prepared=self.launcher(plan=plan,endpoints=endpoints,slots=self.slots)
                 self._next_wave_index=getattr(self.launcher,'_next_wave',plan['wave_index']+1)
                 if (type(prepared) is not tuple or len(prepared)!=len(self.slots)
-                        or any(type(shard) not in (ContainerShardOwner,NativeInstanceOwner) for shard in prepared)):
+                        or any(type(shard) is not ContainerShardOwner for shard in prepared)):
                     raise ValueError('CAMPAIGN_SHARD_PREPARATION_INVALID')
                 for shard,slot in zip(prepared,self.slots,strict=True):
                     if (shard.context!=self.context or shard.registry is not self.registry
@@ -757,8 +756,6 @@ class ContainerCampaignOwner:
             return False,type(error).__name__+': '+str(error)
 
     def _live_document(self,record):
-        if record['launch'].get('launcher','container')=='native':
-            return record['exit_inspect']
         return self.services.inspect_container(record['owner']['container_id'])
 
     async def close(self):

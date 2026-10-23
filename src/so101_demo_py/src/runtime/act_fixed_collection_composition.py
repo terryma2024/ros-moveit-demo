@@ -10,7 +10,6 @@ from so101_demo.runtime.container_campaign.owner import ContainerCampaignOwner
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.result_verifier import ContainerWaveResultVerifier
 from so101_demo.runtime.container_campaign.service_owner import ContainerServiceOwner
-from so101_demo.runtime.container_campaign.native_launcher import NativeInstanceLauncher
 from so101_demo.runtime.container_campaign.shard_launcher import ContainerShardLauncher
 from so101_demo.runtime.inference.config import validate_file_ref
 
@@ -99,11 +98,8 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     check_phase_limits(limits,total_s)
     if arguments.qualification and limits.get('retry_invalid_max_rounds',0):
         raise ValueError('COLLECTION_RETRY_QUALIFICATION_FORBIDDEN')
-    launcher = getattr(arguments, 'instance_launcher', 'container')
-    if launcher not in ('container', 'native'):
-        raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
-    if launcher == 'native' and arguments.worker_count != 1:
-        raise ValueError('COLLECTION_NATIVE_SINGLE_WORKER_ONLY')
+    if getattr(arguments, 'instance_launcher', 'container') != 'container':
+        raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')     # native collection is retired
     if arguments.worker_count > runtime.max_worker_count:
         raise ValueError('COLLECTION_RUNTIME_WORKER_COUNT_INVALID')
     fingerprint = contact_policy_fingerprint
@@ -125,7 +121,7 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     payload = dict(campaign_id=campaign_id,backend='mujoco',worker_count=arguments.worker_count,
         contact_policy_fingerprint=fingerprint,evidence_root=str(root),
         service_epoch=workload.service_epoch,resource_binding_id=workload.resource_binding_id,
-        qualification_mode=arguments.qualification,instance_launcher=launcher,
+        qualification_mode=arguments.qualification,instance_launcher='container',
         qualification_receipt_path=str(arguments.qualification_report) if arguments.qualification_report is not None else None,
         qualification_receipt_sha256=_digest(arguments.qualification_report)
             if arguments.qualification_report is not None else None,
@@ -153,7 +149,7 @@ def _digest(path) -> str:
 def build_container_campaign_owner(context, *, config, paths, slots, manifest_path, scene_manifest, case_inputs,
                                    parallel_runtime, approved_inputs, qualification, approved_disk_floor_bytes,
                                    docker_runner=None, service_query=None, namespace_reader=None, control_factory=None,
-                                   instance_launcher='container', native=None, admit_processor_slots=None,
+                                   admit_processor_slots=None,
                                    collection_mode='formal', runtime_document=None, stop_after_phase1=False,
                                    stage=None):
     """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
@@ -170,18 +166,13 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
     `namespace_reader` and `control_factory` are the external edges (Docker, the Teacher socket, `/proc`, the container's control
     channel); `None` keeps each owner's production default.
 
-    `instance_launcher` is `container` (one Docker container per slot) or `native` (one Host process group, one worker);
-    admission has already refused `native` for anything else. Both run the same instance program, and the Teacher service
-    is a container either way.
+    Every instance, processor and the Teacher service is a Docker container started from the base image with the mounted trees.
 
     `collection_mode` is the plane's collection mode, written into every task document as a cross-check: `formal`, or
     `preselected_target_diagnostic` for a contact-policy spot check.
 
     Phase 2 (processing): with an `admit_processor_slots(context, slots)` (the unified service's), the owner gets a `ProcessingScheduler`
-    over `ContainerProcessorLauncher` (container launcher) or `NativeProcessorLauncher` (native launcher: one Host-process processor,
-    the same `campaign_processor` program). Without `admit_processor_slots` the campaign ends after phase 1. `native` is a mapping of
-    the native launcher's edges (`install_prefix` is required; `command`, `base_environment`, `popen` and `graph_probe_factory` default
-    to production; `processor_command` is the native processor's own command, default its module).
+    over `ContainerProcessorLauncher`. Without `admit_processor_slots` the campaign ends after phase 1.
     """
     from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 
@@ -205,17 +196,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
             parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
             config_paths=(Path(context.campaign_config_path),),
             **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
-        if instance_launcher == 'native':
-            if 'mount_build' in config:
-                # mount mode mounts the build into containers; a native instance runs the Host's own install
-                raise ValueError('COLLECTION_MOUNT_BUILD_NEEDS_CONTAINER_LAUNCHER')
-            if 'shard_cpuset' in config:
-                raise ValueError('COLLECTION_CPUSET_NEEDS_CONTAINER_LAUNCHER')    # the plan is a docker option
-            launcher = NativeInstanceLauncher(**(native or {}), **shard_arguments)
-        elif instance_launcher == 'container':
-            launcher = ContainerShardLauncher(**shard_arguments)
-        else:
-            raise ValueError('COLLECTION_INSTANCE_LAUNCHER_INVALID')
+        launcher = ContainerShardLauncher(**shard_arguments)
         coordinator = ConcurrentCollectionCoordinator(context=context, config=runtime, case_inputs=case_inputs,
             scene_manifest=scene_manifest, max_recording_shards=config.get('max_concurrent_recordings'),
             max_tasks_in_flight=config.get('max_tasks_in_flight'), min_assignment_gap_s=config.get('min_assignment_gap_s'),
@@ -223,33 +204,21 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
         verifier = ContainerWaveResultVerifier(root=paths['run'], registry=registry, case_inputs=case_inputs,
             qualification=qualification)
         processing = None
-        if admit_processor_slots is not None and instance_launcher in ('container', 'native'):
+        if admit_processor_slots is not None:
             from so101_demo.runtime.container_campaign.processing_scheduler import ProcessingScheduler
-            if instance_launcher == 'native':
-                # the same scheduler and the same processor program, as one Host process (a native single worker has one processor)
-                from so101_demo.runtime.container_campaign.native_launcher import NativeProcessorLauncher
-                edges = native or {}
-                processors = NativeProcessorLauncher(context=context, paths=paths, registry=registry,
-                    parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
-                    config_paths=(Path(context.campaign_config_path),), install_prefix=edges['install_prefix'],
-                    **given(command=edges.get('processor_command'), base_environment=edges.get('base_environment'),
-                            popen=edges.get('popen')))
-                limit = 1
-            else:
-                from so101_demo.runtime.container_campaign.cpuset import cpus_for, cpuset_from_config
-                from so101_demo.runtime.container_campaign.mount_build import mount_from_config
-                from so101_demo.runtime.container_campaign.processor_launcher import ContainerProcessorLauncher
-                processors = ContainerProcessorLauncher(context=context, paths=paths, registry=registry,
-                    images=dict(head=config['head_service']['image'], teacher=config['teacher_service']['image'],
-                                shard=config['shard_image']),
-                    parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
-                    config_paths=(Path(context.campaign_config_path),), mount_build=mount_from_config(config),
-                    cpuset_cpus=cpus_for(cpuset_from_config(config), 'processor', worker_count=context.worker_count),
-                    **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
-                limit = None
+            from so101_demo.runtime.container_campaign.cpuset import cpus_for, cpuset_from_config
+            from so101_demo.runtime.container_campaign.mount_build import mount_from_config
+            from so101_demo.runtime.container_campaign.processor_launcher import ContainerProcessorLauncher
+            processors = ContainerProcessorLauncher(context=context, paths=paths, registry=registry,
+                images=dict(head=config['head_service']['image'], teacher=config['teacher_service']['image'],
+                            shard=config['shard_image']),
+                parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
+                config_paths=(Path(context.campaign_config_path),), mount_build=mount_from_config(config),
+                cpuset_cpus=cpus_for(cpuset_from_config(config), 'processor', worker_count=context.worker_count),
+                **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
             processing = ProcessingScheduler(context=context, runtime=runtime, config=limits, root=paths['run'],
                 launcher=processors, admit_slots=lambda slots: admit_processor_slots(context, slots),
-                case_inputs=case_inputs, max_processors=limit, **given(control_factory=control_factory))
+                case_inputs=case_inputs, max_processors=None, **given(control_factory=control_factory))
         return ContainerCampaignOwner(admitted_context=context, config=config, root=paths['run'], service_owner=services,
             slots=slots, manifest_path=manifest_path, qualification=qualification, launcher=launcher,
             coordinator=coordinator, verifier=verifier, approved_disk_floor_bytes=approved_disk_floor_bytes,

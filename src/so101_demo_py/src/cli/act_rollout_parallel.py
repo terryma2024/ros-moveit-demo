@@ -258,7 +258,7 @@ def approved_inputs(args, config, mount, parallel_runtime_path):
             wanted.append(Path(getattr(args, name)))
     kept = []
     for path in dict.fromkeys(item.resolve(strict=True) for item in wanted):
-        if mount is not None and (path.is_relative_to(mount.root) or mount.root.is_relative_to(path)):
+        if path.is_relative_to(mount.root) or mount.root.is_relative_to(path):
             continue
         kept.append(path)
     return tuple(path for path in kept if not any(other != path and path.is_relative_to(other) and other.is_dir() for other in kept))
@@ -399,7 +399,7 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
     header = {"identity": dict(inputs.identity), "runtime_settings": runtime_settings, "run_identity_sha256": description["run_identity_sha256"],
               "execution": inputs.execution.document() if inputs.execution is not None else None,
               "runtime": runtime_values, "preconditions": preconditions, "install_prefix": str(install_prefix),
-              "mount_build": None if mount is None else mount.document(), "rig_profile_sha256": rig.profile_sha256,
+              "mount_build": mount.document(), "rig_profile_sha256": rig.profile_sha256,
               "gpu_uuid": config["gpu_uuid"], "campaign_config_sha256": config_sha}
     if inputs.scene_variant is not None:       # only a variant run has the key: a nominal run.json is unchanged
         header["scene_variant"] = dict(inputs.scene_variant)
