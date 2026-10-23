@@ -393,6 +393,10 @@ class FakeRuntime:
     def close_runtime(self):
         pass
 
+    def resume_physics(self, lease, receipt):
+        self.resumed = True
+        return True
+
 
 def listing(root):
     return sorted(str(path.relative_to(root)) for path in Path(root).rglob("*") if path.is_file())
@@ -450,6 +454,38 @@ def test_the_real_ports_are_built_over_the_shard_runtime_the_socket_transport_an
         assert ports.runner.policy.__class__.__name__ == "RemotePolicy"
     finally:
         parts.transport.close()
+
+
+@pytest.fixture
+def shard_runtime_reset():
+    task_builder.stop_shard_runtime()
+    yield
+    task_builder.stop_shard_runtime()
+
+
+def test_the_shard_applies_the_native_runtime_memory_setting_and_runs_the_stall_monitor(world, fake_ros, monkeypatch, shard_runtime_reset):
+    """Parity with native (T0b): gc.freeze() once at the shard's first task, gc.collect()+gc.freeze() at each episode reset before the
+    physics resume, recorded as runtime_memory; and the stall monitor of the process, which the episode summarises."""
+    from so101_demo.act.stall_diagnostics import StallMonitor
+
+    freezes = []
+    monkeypatch.setattr("so101_demo.act.runtime_memory.freeze_heap", lambda: freezes.append("freeze") or {"frozen_after": len(freezes)})
+    parts, *_ = real_parts(world, fake_ros, monkeypatch)
+    parts.transport.close()
+    assert freezes == ["freeze"]
+    ports = parts.ports
+    assert isinstance(ports.stall_monitor, StallMonitor) and ports.stall_monitor._thread.is_alive()
+    assert ports.resume_physics(None) is True
+    assert freezes == ["freeze", "freeze"] and ports.memory_record == [{"frozen_after": 2}]
+    # the next task of the same shard process shares the monitor and does not repeat the first freeze
+    assert task_builder.shard_runtime()["stall_monitor"] is ports.stall_monitor and freezes == ["freeze", "freeze"]
+
+
+def test_stopping_the_shard_runtime_stops_the_monitor_and_is_idempotent(shard_runtime_reset):
+    monitor = task_builder.shard_runtime()["stall_monitor"]
+    task_builder.stop_shard_runtime()
+    task_builder.stop_shard_runtime()
+    assert monitor._thread is not None and not monitor._thread.is_alive()
 
 
 def test_a_borrowed_stack_of_another_rig_than_the_bundles_is_refused(world, fake_ros, monkeypatch):

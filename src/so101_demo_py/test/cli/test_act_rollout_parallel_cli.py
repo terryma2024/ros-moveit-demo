@@ -136,6 +136,8 @@ def test_a_run_makes_the_files_and_the_exit_code_of_a_clean_parallel_rollout(set
     assert document["units"] == ["task_start-t1-a1", "forward_5cm-t1-a1", "task_start-t2-a1", "forward_5cm-t2-a1"]
     assert document["preconditions"] == {name: {"ok": True, "detail": []} for name in cli.PRECONDITIONS}
     assert document["rig_profile_sha256"] and len(document["run_identity_sha256"]) == 64
+    assert document["runtime_settings"]["gc_freeze"] is True and document["runtime_settings"]["stall_monitor"] is True
+    assert document["runtime_settings"]["gc_freeze_points"] == ["the shard's first task", "each episode reset, before the physics resume"]
     assert read(setup, "services/policy/host-stop.json")["confirmed"] is True
     assert read(setup, "services/policy/host-start.json")["ready"]["bundle_sha256"] == BUNDLE
     checks = read(setup, "host/gpu-checks.json")

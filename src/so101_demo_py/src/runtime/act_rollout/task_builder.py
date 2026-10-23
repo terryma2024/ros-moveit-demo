@@ -315,6 +315,38 @@ def task_result(document, result, names, *, wall_s):
     return summary
 
 
+_SHARD_RUNTIME = {}
+_SHARD_RUNTIME_LOCK = threading.Lock()
+
+
+def shard_runtime():
+    """The runtime settings every shard process shares with the native command (T0b): once per process, `gc.collect()` + `gc.freeze()`
+    (the shard's warm-up: the libraries are loaded and the first task is about to start) and the stall monitor (GC callbacks, a 1 ms
+    heartbeat, CPU accounting), which each episode summarises into `stall_attribution`. The per-episode freeze is done by the ports at the
+    reset, before the physics resume (`NativeEpisodePorts.resume_physics`)."""
+
+    from so101_demo.act import runtime_memory
+    from so101_demo.act.stall_diagnostics import StallMonitor
+
+    with _SHARD_RUNTIME_LOCK:
+        if not _SHARD_RUNTIME:
+            warm_up = runtime_memory.freeze_heap()
+            monitor = StallMonitor()
+            monitor.start()
+            _SHARD_RUNTIME.update(freeze_heap=runtime_memory.freeze_heap, stall_monitor=monitor, warm_up_heap=warm_up)
+        return dict(_SHARD_RUNTIME)
+
+
+def stop_shard_runtime():
+    """Stop the monitor of this process (tests; a shard just exits). Idempotent."""
+
+    with _SHARD_RUNTIME_LOCK:
+        monitor = _SHARD_RUNTIME.pop("stall_monitor", None)
+        _SHARD_RUNTIME.clear()
+    if monitor is not None:
+        monitor.stop()
+
+
 def real_ports(*, shard_spec, document, inputs, scene, stack, task_dir, files, policy_client, clock):
     """The production ports of one episode: the shard runtime, the ROS binding and the recorder; mirrors `NativeComposition`."""
     from so101_demo.act.rig_profile import rig_from_observation
@@ -328,6 +360,7 @@ def real_ports(*, shard_spec, document, inputs, scene, stack, task_dir, files, p
     rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
     if getattr(stack.launch, "rig", rig.rig) != rig.rig:
         raise ValueError("ROLLOUT_BORROWED_STACK_RIG_MISMATCH")
+    extras = shard_runtime()
     resources = rollout_resources(shard_spec, task_root=task_dir)
     inference_config = inputs.runtime_config["inference"]
     # the client stops waiting for a reply when the boundary would refuse it as too old (and never after the request timeout)
@@ -352,7 +385,8 @@ def real_ports(*, shard_spec, document, inputs, scene, stack, task_dir, files, p
                                transport=transport, pilot_factory=pilot,
                                # as natively: the recorder works beside the episode (its process manifest stays there) and its raw
                                # directory is moved into the episode directory when the recorder has closed the bag
-                               recording_dir=Path(task_dir) / "recordings" / document["attempt_id"])
+                               recording_dir=Path(task_dir) / "recordings" / document["attempt_id"],
+                               stall_monitor=extras["stall_monitor"], freeze_heap=extras["freeze_heap"])
     return SimpleNamespace(ports=ports, inference=inference, transport=transport, runtime=runtime, binding=binding, lease=lease)
 
 

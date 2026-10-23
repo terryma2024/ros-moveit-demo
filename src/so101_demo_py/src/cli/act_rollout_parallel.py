@@ -389,7 +389,9 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
                       "max_tasks_in_flight": args.max_tasks_in_flight, "min_assignment_gap_s": args.min_assignment_gap_s,
                       "task_timeout_s": args.task_timeout_s, "campaign_timeout_s": args.campaign_timeout_s,
                       "max_invalid_retries": args.max_invalid_retries}
-    header = {"identity": dict(inputs.identity), "run_identity_sha256": description["run_identity_sha256"],
+    runtime_settings = {"gc_freeze": True, "stall_monitor": True,
+                        "gc_freeze_points": ["the shard's first task", "each episode reset, before the physics resume"]}
+    header = {"identity": dict(inputs.identity), "runtime_settings": runtime_settings, "run_identity_sha256": description["run_identity_sha256"],
               "execution": inputs.execution.document() if inputs.execution is not None else None,
               "runtime": runtime_values, "preconditions": preconditions, "install_prefix": str(install_prefix),
               "mount_build": None if mount is None else mount.document(), "rig_profile_sha256": rig.profile_sha256,
