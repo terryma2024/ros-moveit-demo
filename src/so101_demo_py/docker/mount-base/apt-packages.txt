@@ -1,6 +1,6 @@
 # Packages the shard needs beyond the yolo11n base, as the ai-station shard image carries them (453 names). Installed at the versions the
 # mirrors hold at build time in one apt-get call with --no-install-recommends; the installed versions are recorded in
-# scripts/images/shard-deps-apt-installed.tsv.
+# scripts/images/shard-deps-apt-installed.tsv (removed with the shard-deps image; see scripts/images/README.md).
 autoconf
 automake
 autotools-dev

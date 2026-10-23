@@ -1,13 +1,11 @@
-"""Image-byte freeze and installed-runtime readback for both campaign images."""
+"""Installed-runtime readback of a mount-mode container: the records of the mounted trees and what the interpreter imports."""
 
-import hashlib
 import importlib
 import importlib.metadata
 import json
 import os
 from pathlib import Path
 import re
-import stat
 import sys
 import time
 
@@ -15,14 +13,13 @@ from so101_demo.runtime.container_campaign.docker_inspect import bounded_docker_
 from so101_demo.runtime.container_campaign.mount_build import (
     COMMIT_ENV, ENTRY_SCRIPT, INSTALL_ENV, INTERPRETER, SOURCE_ENV, read_record, record_sha256)
 from so101_demo.runtime.container_campaign.process_identity import container_key_from_inspect
-from so101_demo.runtime.inference.config import _open_regular
 from so101_demo.runtime.parallel_ipc.frames import _pairs, canonical_json
 
 
 INFERENCE_PACKAGES = ("so101_demo_py",)
 #: the shard's ament packages whose resolved prefix is read back; the lossless queued-state overlay
 #: (joint_trajectory_controller, joint_state_broadcaster, so101_queued_state_publisher) must resolve inside
-#: /act/install, so an apt fallback to /opt/ros/jazzy is refused
+#: the mounted install, so an apt fallback to /opt/ros/jazzy is refused
 SHARD_PACKAGES = INFERENCE_PACKAGES + ("so101_teleop", "so101_quik", "so101_mujoco_support",
     "controller_manager", "joint_trajectory_controller", "joint_state_broadcaster",
     "so101_queued_state_publisher", "mujoco_ros2_control", "mujoco_ros2_control_msgs",
@@ -46,30 +43,6 @@ def _json(payload):
         parse_constant=lambda _value: (_ for _ in ()).throw(ValueError("nonfinite")))
 
 
-def _tree(root):
-    root = Path(root)
-    _require(root.is_absolute() and root.resolve(strict=True) == root and root.is_dir())
-    files = {}
-    for path in sorted(root.rglob("*")):
-        metadata = path.lstat()
-        relative = path.relative_to(root).as_posix()
-        if stat.S_ISLNK(metadata.st_mode):
-            target = path.readlink()
-            _require(not target.is_absolute() and path.resolve(strict=True).is_relative_to(root))
-            files[relative] = dict(kind="symlink", target=str(target))
-        elif stat.S_ISREG(metadata.st_mode):
-            digest = hashlib.sha256()
-            with _open_regular(path) as stream:
-                while chunk := stream.read(1024*1024):
-                    digest.update(chunk)
-            files[relative] = dict(kind="file", sha256=digest.hexdigest(), size=metadata.st_size,
-                                   mode=stat.S_IMODE(metadata.st_mode))
-        else:
-            _require(stat.S_ISDIR(metadata.st_mode))
-    _require(bool(files))
-    return dict(files=files, sha256=hashlib.sha256(canonical_json(files)).hexdigest())
-
-
 def _git(commit, submodules):
     _require(_sha(commit, 40) and type(submodules) is dict)
     for path, value in submodules.items():
@@ -77,13 +50,7 @@ def _git(commit, submodules):
                  and ".." not in Path(path).parts and str(Path(path)) == path and _sha(value, 40))
 
 
-def _git_readback(source_root, commit, submodules):
-    with _open_regular(Path(source_root) / ".image-git.json") as stream:
-        metadata = _json(stream.read())
-    _require(metadata == dict(git_commit=commit, submodules=submodules))
-
-
-def _runtime_contract(runtime, install_root="/act/install"):
+def _runtime_contract(runtime, install_root):
     _require(type(runtime) is dict and set(runtime) == {
         "interpreter", "dependencies", "module_origins", "package_prefixes"})
     _require(runtime["interpreter"] == "/act/venv/bin/python")
@@ -97,43 +64,7 @@ def _runtime_contract(runtime, install_root="/act/install"):
                          and path.is_relative_to(install_root) and str(path) == value)
 
 
-def freeze_image(*, source_root, install_root, git_commit, submodules, runtime):
-    try:
-        _git(git_commit, submodules)
-        _git_readback(source_root, git_commit, submodules)
-        _runtime_contract(runtime)
-        return dict(schema_version=1, kind="ACT_CONTAINER_IMAGE_FREEZE",
-            source=_tree(source_root) | dict(git_commit=git_commit, submodules=submodules.copy()),
-            install=_tree(install_root), runtime=json.loads(canonical_json(runtime)))
-    except (OSError, ValueError, TypeError, KeyError, RuntimeError) as error:
-        raise ValueError("IMAGE_PROVENANCE_INVALID") from error
-
-
-def verify_image_freeze(manifest, *, source_root, install_root, runtime):
-    try:
-        _require(type(manifest) is dict and set(manifest) == {"schema_version", "kind", "source", "install", "runtime"})
-        _require(type(manifest["schema_version"]) is int and manifest["schema_version"] == 1
-                 and manifest["kind"] == "ACT_CONTAINER_IMAGE_FREEZE")
-        _require(type(manifest["source"]) is dict and set(manifest["source"]) == {
-            "git_commit", "submodules", "files", "sha256"})
-        _require(type(manifest["install"]) is dict and set(manifest["install"]) == {"files", "sha256"})
-        source = manifest["source"]
-        _git(source["git_commit"], source["submodules"])
-        _git_readback(source_root, source["git_commit"], source["submodules"])
-        _runtime_contract(manifest["runtime"])
-        _runtime_contract(runtime)
-        _require(manifest["runtime"] == runtime)
-        _require({name: source[name] for name in ("files", "sha256")} == _tree(source_root))
-        _require(manifest["install"] == _tree(install_root))
-        return dict(schema_version=1, kind="ACT_CONTAINER_IMAGE_READBACK",
-            package_source_sha256=source["sha256"], install_sha256=manifest["install"]["sha256"],
-            git_commit=source["git_commit"], submodules=source["submodules"].copy(),
-            runtime=json.loads(canonical_json(runtime)))
-    except (OSError, ValueError, TypeError, KeyError, RuntimeError) as error:
-        raise ValueError("IMAGE_PROVENANCE_INVALID") from error
-
-
-def runtime_readback(contract, install_root="/act/install"):
+def runtime_readback(contract, install_root):
     """Import the requested installed modules and query actual dependency metadata."""
     from ament_index_python.packages import get_package_prefix
 
@@ -149,7 +80,7 @@ def runtime_readback(contract, install_root="/act/install"):
     return runtime
 
 
-def _report(report, install_root="/act/install"):
+def _report(report, install_root):
     _require(type(report) is dict and set(report) == {"schema_version", "kind",
         "package_source_sha256", "install_sha256", "git_commit", "submodules", "runtime"})
     _require(type(report["schema_version"]) is int and report["schema_version"] == 1
@@ -172,9 +103,9 @@ class _NotReadYet(ValueError):
     pass
 
 
-def read_container_provenance(container_id, *, docker_runner, mount_role=None, install_root="/act/install"):
-    """`mount_role` ('inference' or 'shard') reads a mount-mode container: the entry script first (it checks the trees' records and
-    sets the environment), and the role says which modules the readback imports."""
+def read_container_provenance(container_id, *, docker_runner, mount_role, install_root):
+    """Reads a mount-mode container: the entry script first (it checks the trees' records and sets the environment), and `mount_role`
+    ('inference' or 'shard') says which modules the readback imports."""
     try:
         _require(_sha(container_id))
         def inspect(retryable=True):
@@ -192,8 +123,7 @@ def read_container_provenance(container_id, *, docker_runner, mount_role=None, i
             refuse(state["Running"] is True and state["Restarting"] is False and type(state["Pid"]) is int and state["Pid"] > 0)
             return key
         module = "so101_demo.runtime.container_campaign.provenance"
-        command = (["/act/venv/bin/python", "-I", "-m", module] if mount_role is None
-                   else [ENTRY_SCRIPT, INTERPRETER, "-I", "-B", "-m", module, mount_role])
+        command = [ENTRY_SCRIPT, INTERPRETER, "-I", "-B", "-m", module, mount_role]
         def read():
             before = inspect()
             result = docker_runner(["docker", "exec", container_id, *command])
@@ -237,47 +167,10 @@ def read_mounted_image(role):
                 install_sha256=record_sha256(install), git_commit=commit, submodules={}, runtime=runtime)
 
 
-def read_installed_image():
-    with _open_regular("/act/provenance.json") as stream:
-        manifest = _json(stream.read())
-    runtime = runtime_readback(manifest["runtime"])
-    return verify_image_freeze(manifest, source_root="/act/source", install_root="/act/install", runtime=runtime)
-
-
-def write_build_freeze(role):
-    """Build-only producer; bootstrap never calls it or repairs a frozen image."""
-    import subprocess
-
-    _require(role in ("inference", "shard"))
-    modules = ["so101_demo"] + (["so101_teleop", "so101_quik"] if role == "shard" else [])
-    packages = list(SHARD_PACKAGES if role == "shard" else INFERENCE_PACKAGES)
-    versions = {distribution.metadata["Name"]: importlib.metadata.version(distribution.metadata["Name"])
-                for distribution in importlib.metadata.distributions() if distribution.metadata.get("Name")}
-    runtime = runtime_readback(dict(interpreter="/act/venv/bin/python", dependencies=versions,
-        module_origins={name: "/act/install" for name in modules},
-        package_prefixes={name: "/act/install" for name in packages}))
-    if role == "inference":
-        pins = {"torch": "2.13.0+cu130", "torchvision": "0.28.0+cu130", "ultralytics": "8.4.115",
-                "numpy": "1.26.4", "PyYAML": "6.0.2", "Pillow": "12.3.0"}
-        _require(all(importlib.metadata.version(name) == value for name, value in pins.items()))
-    dependencies = Path("/act/install/share/act-image-dependencies.json")
-    with dependencies.open("xb") as stream:
-        stream.write(canonical_json(dict(python=versions, apt=subprocess.check_output(
-            ["dpkg-query", "-W", "-f=${Package}=${Version}\\n"], text=True).splitlines())))
-    os.chmod(dependencies, 0o444)
-    with _open_regular("/act/source/.image-git.json") as stream:
-        metadata = _json(stream.read())
-    manifest = freeze_image(source_root="/act/source", install_root="/act/install", runtime=runtime, **metadata)
-    with Path("/act/provenance.json").open("xb") as stream:
-        stream.write(canonical_json(manifest)+b"\n")
-    print(canonical_json(verify_image_freeze(manifest, source_root="/act/source",
-        install_root="/act/install", runtime=runtime)).decode())
-
-
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
-        report = read_mounted_image(argv[0]) if os.environ.get(INSTALL_ENV) else read_installed_image()
+        report = read_mounted_image(argv[0])
         print(canonical_json(report).decode())
         return 0
     except (OSError, ValueError, TypeError, KeyError, RuntimeError, ImportError) as error:

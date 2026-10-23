@@ -5,6 +5,10 @@ from pathlib import Path
 
 import pytest
 
+import tempfile
+
+from mount_trees import make_mount_trees
+
 from so101_demo.runtime.container_campaign import launch as launch_module
 from so101_demo.runtime.container_campaign.launch import ProcessorLaunchArgs, build_container_argv
 from so101_demo.runtime.container_campaign.paths import build_role_mounts, make_campaign_paths
@@ -33,7 +37,8 @@ def fixture(tmp_path):
 
 
 def build(images, host_paths, **changes):
-    kwargs = dict(role="processor", image=images, gpu_uuid=None, host_paths=host_paths,
+    mount = changes.pop("mount_build", None) or make_mount_trees(Path(tempfile.mkdtemp()))
+    kwargs = dict(role="processor", mount_build=mount, image=images, gpu_uuid=None, host_paths=host_paths,
                   container_name="so101-act-p00-g1", uid=os.getuid(), gid=os.getgid())
     kwargs.update(changes)
     return build_container_argv(**kwargs)
@@ -56,7 +61,9 @@ def test_processor_argv_has_no_gpu_teacher_socket_or_ros_identity(tmp_path):
     assert argv[argv.index("--oom-score-adj")] != argv[-1]
     digest = images["shard"]["digest"]
     assert argv[-3:] == ["campaign_processor", "--spec", str(host_paths["entry"].spec)]
-    assert argv[-4] == digest and digest != images["teacher"]["digest"], "the processor runs the shard image"
+    # the processor runs the shard image through the mount-mode bootstrap
+    assert argv[-9] == digest and digest != images["teacher"]["digest"], "the processor runs the shard image"
+    assert argv[-8:-3] == ["/act/venv/bin/python", "-I", "-B", "-m", "so101_demo.runtime.container_campaign.image_bootstrap"]
     environment = [argv[i + 1] for i, value in enumerate(argv) if value == "--env"]
     assert not [item for item in environment if item.startswith(("ROS_DOMAIN_ID", "ROS_NAMESPACE", "ROS_LOCALHOST", "ROS_AUTOMATIC", "SO101_MUJOCO", "NVIDIA", "MUJOCO_GL"))]
     assert "TMPDIR=" + str(host_paths["owned_root"] / "tmp") in environment

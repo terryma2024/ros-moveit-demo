@@ -48,7 +48,6 @@ from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.runtime import act_fixed_collection_composition as composition
 from so101_demo.runtime.container_campaign import result_verifier
 from so101_demo.runtime.container_campaign.process_identity import pid_namespace_inode, read_process_owner
-from so101_demo.runtime.container_campaign.provenance import freeze_image, verify_image_freeze
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.task_contracts import InstanceStatus, TaskSpec, TaskStatus
 from so101_demo.runtime.container_campaign.task_control import ContainerTaskControl
@@ -137,16 +136,10 @@ def shared(tmp_path_factory):
         runtime_bytes, collection_bytes, development_runtime=development)
     candidates = _write_registry(base, registry)
     proposal = json.loads(Path(registry['roles']['contact_proposal']['selected']['path']).read_bytes())
-    source, install = base / 'image-source', base / 'image-install'
-    source.mkdir()
-    install.mkdir()
-    (source / '.image-git.json').write_text(json.dumps(dict(git_commit='1' * 40, submodules={})))
-    (install / 'installed.py').write_text('installed')
-    runtime = dict(interpreter='/act/venv/bin/python', dependencies={'numpy': '1.26.4'},
-        module_origins={'so101_demo': '/act/install/lib/so101_demo/__init__.py'},
-        package_prefixes={'so101_demo_py': '/act/install'})
-    manifest = freeze_image(source_root=source, install_root=install, git_commit='1' * 40, submodules={}, runtime=runtime)
-    report = verify_image_freeze(manifest, source_root=source, install_root=install, runtime=runtime)
+    # the readback an image reports (the hashes stand for the trees' records; every launch in this world is mounted)
+    report = dict(schema_version=1, kind='ACT_CONTAINER_IMAGE_READBACK', package_source_sha256='1' * 64, install_sha256='2' * 64,
+        git_commit='1' * 40, submodules={}, runtime=dict(interpreter='/act/venv/bin/python', dependencies={'numpy': '1.26.4'},
+            module_origins={'so101_demo': '/act/install/lib/so101_demo/__init__.py'}, package_prefixes={'so101_demo_py': '/act/install'}))
     teacher_image = dict(digest='sha256:' + 'b' * 64, package_source_sha256=report['package_source_sha256'],
                          install_sha256=report['install_sha256'])
     return SimpleNamespace(base=base, candidates=candidates, fingerprint=proposal['policy_fingerprint'],
@@ -354,7 +347,7 @@ class World:
     pass
 
 
-def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, qualified=False, mount=False):
+def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, qualified=False, mount=True):
     """A synthetic campaign for `plane` in ('W1', 'W8', 'FORMAL', 'SPOT'); returns everything the CLI is given and the doubles.
 
     `qualified` (FORMAL only) replaces the synthetic report file by a real report of a qualification run built under the same
@@ -443,7 +436,7 @@ def make_world(tmp_path, shared, monkeypatch, *, plane, polls_to_finish=1, quali
         (root / 'qualification').mkdir()
         qualification = build_world(root / 'qualification', evidence_root=evidence, images=(teacher_image, shard_image),
             source_bytes=world.source.read_bytes(), runtime_bytes=shared.runtime_bytes, collection_bytes=shared.collection_bytes,
-            fingerprint=shared.fingerprint, formal_scenes=world.scenes)
+            fingerprint=shared.fingerprint, formal_scenes=world.scenes, mount_build=world.mount_build)
         world.report = build_collection_qualification_report(qualification.run, contract=qualification.contract_path)
         world.qualification_world = qualification
     world.campaign = dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN', evidence_root=str(evidence),

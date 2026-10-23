@@ -51,7 +51,7 @@ Every host-specific value is a `KEY=VALUE` line in `hosts/<host>.env`. No script
 | `DEMO_DIST` | xdist `--dist` mode of the demo stage; empty keeps the xdist default. |
 | `DEMO_MALLOC_ARENA_MAX`, `DEMO_MALLOC_TRIM_THRESHOLD`, `DEMO_MALLOC_MMAP_THRESHOLD` | glibc malloc settings of the demo stage only; empty means not set. |
 | `GATE_EXTRA_PYTHONPATH` | Extra `PYTHONPATH` entries for the demo stage. |
-| `NATIVE_BUILD_DEPS`, `BUN_BIN`, `BUN_CACHE` | Inputs of the image build (`scripts/images`). |
+| `BUN_BIN` | The bun of `run_web_tests.zsh`. |
 
 `MUJOCO_GL=egl` is exported by the build, demo and colcon stages on every host.
 

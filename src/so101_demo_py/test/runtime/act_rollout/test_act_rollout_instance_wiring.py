@@ -1,5 +1,8 @@
 """The `act_rollout` workload kind in the instance machinery: spec, layout, mounts, container argv and the shard builder."""
 
+import tempfile
+
+from mount_trees import make_mount_trees
 import functools
 import hashlib
 import json
@@ -165,7 +168,7 @@ def test_the_layout_carries_an_optional_policy_socket_and_refuses_a_relative_one
 def test_the_container_layout_names_the_policy_socket_for_a_rollout_only(tmp_path, monkeypatch):
     from so101_demo.cli import campaign_shard
 
-    monkeypatch.delenv("SO101_MOUNT_INSTALL", raising=False)
+    monkeypatch.setenv("SO101_MOUNT_INSTALL", str(tmp_path / "mounted-install"))
     spec, _path, _owned, _run = rollout_spec(tmp_path)
     assert campaign_shard.container_layout(spec).policy_socket == paths.CONTAINER_POLICY_SOCKET
     assert campaign_shard.container_layout(dict(spec, workload_kind="act_collection")).policy_socket is None
@@ -219,6 +222,7 @@ def test_the_container_argv_of_a_rollout_shard_has_the_task_output_and_the_polic
               for name, digest in (("head", "a"), ("teacher", "a"), ("shard", "b"))}
     argv = launch.build_container_argv(
         role="shard", image=images, gpu_uuid=GPU, container_name="so101-rollout-w00-g1", uid=os.getuid(), gid=os.getgid(),
+        mount_build=make_mount_trees(Path(tempfile.mkdtemp())),
         host_paths=dict(owned_root=owned, approved_inputs=(), socket_roots=roots, config_paths=(path,),
                         entry=launch.ShardLaunchArgs(spec=path, mujoco_session_id="act-session-w00-g1")))
     mounts = [argv[index + 1] for index, value in enumerate(argv) if value == "--mount"]
@@ -226,7 +230,7 @@ def test_the_container_argv_of_a_rollout_shard_has_the_task_output_and_the_polic
     assert f"type=bind,src={owned / 'output'},dst=/act/output" in mounts
     assert not any("/act/ipc/teacher" in mount or "/act/ipc/head" in mount for mount in mounts)
     assert argv[argv.index("--network") + 1] == "none" and argv[argv.index("--ipc") + 1] == "private"
-    assert argv[argv.index(images["shard"]["digest"]) + 1] == "campaign_shard"
+    assert argv[argv.index(images["shard"]["digest"]) + 6] == "campaign_shard"      # after the mount-mode bootstrap
 
 
 def test_the_shard_builder_gives_a_rollout_its_stack_output_socket_and_install(tmp_path):

@@ -252,7 +252,8 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
         identity['rig_profile_sha256'] = campaign_config['rig_profile_sha256']
     if 'mount_build' in campaign_config:
         # mount mode: the commit and the root of the mounted build are part of what two hosts must agree on (the images then name the
-        # base image and the trees' record hashes); an image-mode config has no such key and its identity is unchanged
+        # base image and the trees' record hashes); the identity of a sealed image-mode config (read by the verifiers) has no such key.
+        # A start refuses such a config before it gets here (MOUNT_BUILD_REQUIRED).
         identity['mount_build'] = dict(campaign_config['mount_build'])
     return identity
 
@@ -443,6 +444,8 @@ class UnifiedWorkloadService:
             self._verify_artifact(payload['campaign_config_path'], payload['campaign_config_sha256'])
             campaign_config = load_campaign_config(payload['campaign_config_path'], roles=('teacher',),
                                                   expected_sha256=payload['campaign_config_sha256'])
+            if 'mount_build' not in campaign_config:
+                raise ValueError('MOUNT_BUILD_REQUIRED')       # a collection starts from a mount tree (image mode is retired)
             registered = validate_registered_evidence_root(campaign_config['evidence_root'],
                 payload['registered_evidence_root'], registration=self.root_registration)
             if (root.resolve(strict=True) != root or root == registered or not root.is_relative_to(registered)

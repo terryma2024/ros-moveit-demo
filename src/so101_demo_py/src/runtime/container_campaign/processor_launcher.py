@@ -39,7 +39,7 @@ def all_phase1_attempts(run):
 
 class ContainerProcessorLauncher:
     def __init__(self, *, context, images, paths, registry, parallel_runtime, approved_inputs, config_paths,
-                 docker_runner=_docker, namespace_reader=read_container_namespace, mount_build=None, cpuset_cpus=None):
+                 docker_runner=_docker, namespace_reader=read_container_namespace, mount_build, cpuset_cpus=None):
         if type(images) is not dict or set(images) != {"head", "teacher", "shard"}:
             raise ValueError("PROCESSOR_LAUNCHER_INVALID")
         self._common(context=context, paths=paths, registry=registry, parallel_runtime=parallel_runtime,

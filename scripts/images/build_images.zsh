@@ -1,20 +1,16 @@
 #!/usr/bin/env zsh
-# Build the inference and shard campaign images from the worktree this script lives in.
-# usage: build_images.zsh [--host H] [--roles 'inference shard'] [--pin-shard-deps ID] [--no-cache]
-#   Host values (evidence root, build dependencies) come from scripts/gate/hosts/<host>.env. Roles: inference, shard-deps, shard, mount-base.
-#   The default builds inference and shard. shard-deps (the networked apt and pip base) is built on its own; the shard build starts
-#   from the image that scripts/images/base-image-ids.json pins (--pin-shard-deps supplies the ID while that file has none).
+# Build the so101-mount-base image (dependencies only; the project code is mounted at run time) from the worktree this script lives in.
+# usage: build_images.zsh [--host H] [--no-cache]
+#   Host values (evidence root, proxy) come from scripts/gate/hosts/<host>.env. The only role is mount-base.
 set -o pipefail
 FG=${0:A:h}
 HOST_ARG=
-ROLES=(inference shard)
+ROLES=(mount-base)
 PIN=()
 while (( $# )); do
   case $1 in
     --host) HOST_ARG=${2:?--host needs a name}; shift 2;;
-    --roles) ROLES=(${=2:?--roles needs a list}); shift 2;;
     --no-cache) PIN+=(--no-cache); shift;;
-    --pin-shard-deps) PIN+=(--pin-shard-deps ${2:?--pin-shard-deps needs an image ID}); shift 2;;
     *) print "unknown argument $1"; exit 2;;
   esac
 done

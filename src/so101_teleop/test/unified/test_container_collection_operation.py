@@ -367,7 +367,9 @@ def test_the_controlled_identity_ignores_the_campaign_config_total(tmp_path,monk
         store,workload,spec,args = _prepared_with_total(tmp_path/name,monkeypatch,total)
         try:
             payload = prepare(module,args,workload,spec).payload
-            identities.append(_collection_identity(payload,load_campaign_config(args.campaign_config,roles=('teacher',))))
+            identity = _collection_identity(payload,load_campaign_config(args.campaign_config,roles=('teacher',)))
+            identity.pop('mount_build')                   # each fixture mounts its own tmp tree; the total is what is compared
+            identities.append(identity)
             hashes.append(payload['campaign_config_sha256'])
         finally:
             store.close()
@@ -379,7 +381,8 @@ def test_the_controlled_identity_carries_the_rig_only_when_the_campaign_config_n
     payload = {name: str(index) * 64 for index, name in enumerate(
         ('source_sha256', 'runtime_config_sha256', 'collection_config_sha256', 'contact_policy_fingerprint'))}
     image = {'digest': 'sha256:' + 'a' * 64, 'package_source_sha256': 'b' * 64, 'install_sha256': 'c' * 64}
-    config = {'gpu_uuid': 'GPU-28221cec-9d21-7753-fd5a-da645740df19', 'teacher_service': {'image': image}, 'shard_image': image}
+    config = {'gpu_uuid': 'GPU-28221cec-9d21-7753-fd5a-da645740df19', 'teacher_service': {'image': image}, 'shard_image': image,
+              'mount_build': {'commit': 'a' * 40, 'root': '/mount/' + 'a' * 12}}
     assert 'rig_profile_sha256' not in _collection_identity(payload, config)
     named = _collection_identity(payload, dict(config, rig_profile_sha256='9' * 64))
     assert named['rig_profile_sha256'] == '9' * 64

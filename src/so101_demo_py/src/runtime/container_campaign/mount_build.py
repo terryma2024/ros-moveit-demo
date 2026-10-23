@@ -46,10 +46,11 @@ class MountBuild:
 
 
 def mount_from_config(config):
-    """The `MountBuild` a campaign config names, or None when the key is absent (the image path)."""
+    """The `MountBuild` a campaign config names. Every run starts from a mount tree: a config without the key is refused
+    (image mode is retired; the sealed image-mode records are read by `legacy_image_records`, never launched)."""
     document = config.get("mount_build")
     if document is None:
-        return None
+        raise ValueError("MOUNT_BUILD_REQUIRED")
     validate_mount_build(document)
     return MountBuild(commit=document["commit"], root=Path(document["root"]))
 

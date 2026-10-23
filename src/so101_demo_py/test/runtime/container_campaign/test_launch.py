@@ -6,6 +6,10 @@ from pathlib import Path
 
 import pytest
 
+import tempfile
+
+from mount_trees import make_mount_trees
+
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths
 
 #: The retired per-worker field; built from fragments so the source-tree absence test keeps matching nothing.
@@ -50,7 +54,8 @@ def fixture(tmp_path, role):
 
 
 def build(module, images, paths, role="shard", **changes):
-    kwargs = dict(role=role, image=images, gpu_uuid=GPU, host_paths=paths,
+    mount = changes.pop("mount_build", None) or make_mount_trees(Path(tempfile.mkdtemp()))
+    kwargs = dict(role=role, mount_build=mount, image=images, gpu_uuid=GPU, host_paths=paths,
                   container_name="so101-campaign-w00-g1", uid=os.getuid(), gid=os.getgid())
     kwargs.update(changes)
     return module.build_container_argv(**kwargs)
@@ -74,7 +79,8 @@ def test_only_shards_are_raised_in_the_kernel_oom_order(tmp_path, role):
 @pytest.mark.parametrize("role", ["head", "teacher", "shard"])
 def test_fixed_image_private_namespaces_and_mounts(tmp_path, role):
     module, images, paths = fixture(tmp_path, role)
-    argv = build(module, images, paths, role)
+    mount = make_mount_trees(Path(tempfile.mkdtemp()))
+    argv = build(module, images, paths, role, mount_build=mount)
     assert argv[:3] == ["docker", "run", "--detach"]
     assert argv[argv.index("--gpus")+1] == "device="+GPU
     assert argv[argv.index("--user")+1] == f"{os.getuid()}:{os.getgid()}"
@@ -84,7 +90,9 @@ def test_fixed_image_private_namespaces_and_mounts(tmp_path, role):
     assert "--read-only" in argv
     assert not {"--privileged", "--pid", "--rm", "--entrypoint", "--volume"}.intersection(argv)
     digest_index = argv.index(images[role]["digest"])
-    assert argv[digest_index+1] == "campaign_shard" if role == "shard" else argv[digest_index+1] == "campaign_inference"
+    # the dependency-only base has no role file: the bootstrap runs through its interpreter and then the role program
+    assert argv[digest_index+1:digest_index+6] == ["/act/venv/bin/python", "-I", "-B", "-m", "so101_demo.runtime.container_campaign.image_bootstrap"]
+    assert argv[digest_index+6] == ("campaign_shard" if role == "shard" else "campaign_inference")
     mounts = [argv[i+1] for i, value in enumerate(argv) if value == "--mount"]
     owned = str(paths["owned_root"])
     assert f"type=bind,src={owned},dst={owned}" in mounts
@@ -102,8 +110,8 @@ def test_fixed_image_private_namespaces_and_mounts(tmp_path, role):
         assert env.count("ROS_DOMAIN_ID=181") == 1 and not [item for item in env if item.startswith("ROS_NAMESPACE")]
         assert "SO101_MUJOCO_SESSION_ID=campaign-wave00-w00-g1" in env
         assert "ROS_LOCALHOST_ONLY=1" in env and "ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST" in env and "MUJOCO_GL=egl" in env
-        # the Fast DDS collection profile at its in-image install path; QoS-from-XML is never switched on
-        assert env.count("FASTRTPS_DEFAULT_PROFILES_FILE=/act/install/share/so101_demo_py/config/dds/fastdds-collection.xml") == 1
+        # the Fast DDS collection profile in the mounted install; QoS-from-XML is never switched on
+        assert env.count(f"FASTRTPS_DEFAULT_PROFILES_FILE={mount.install}/so101_demo_py/share/so101_demo_py/config/dds/fastdds-collection.xml") == 1
         assert not [item for item in env if item.startswith("RMW_FASTRTPS_USE_QOS_FROM_XML")]
     else:
         # the Teacher (head) and the processor join no ROS graph and get no DDS profile

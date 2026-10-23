@@ -7,6 +7,9 @@ loaders under that view. The eight-worker qualification campaign failed at once 
 ref and was not mounted (`CAMPAIGN_SHARD_SPEC_INVALID`); worker counts 1 and 2 carry `null` there and never showed it.
 """
 
+import tempfile
+
+from mount_trees import make_mount_trees
 import hashlib
 import json
 import os
@@ -158,7 +161,7 @@ def test_null_contract_adds_no_mount_and_loads_in_the_container_view(tmp_path, c
         # Exactly the owned root, its output, the approved inputs, the one config, the spec and the three sockets.
         assert sources == {Path(owner.launch.owned_root), Path(owner.launch.owned_root)/'output', *approved,
             campaign_path, owner.entry.spec, paths['socket_roots']['head'], paths['socket_roots']['teacher'],
-            Path(owner.launch.owned_root)/'control'}
+            Path(owner.launch.owned_root)/'control', owner.mount_build.install, owner.mount_build.source}   # the two read-only mounted trees
         container_view(owner.argv)
         assert load_spec(owner.entry.spec)[0] == owner.spec
     finally:
@@ -195,7 +198,7 @@ def test_teacher_container_needs_no_campaign_config_or_contract(tmp_path, contai
         startup_deadline_monotonic_ns=time.monotonic_ns()+10**11, receive_budget_s=1.0)
     images = {name: dict(digest='sha256:'+digest*64, package_source_sha256='c'*64, install_sha256='d'*64)
               for name, digest in (('head', 'a'), ('teacher', 'a'), ('shard', 'b'))}
-    argv = build_container_argv(role='teacher', image=images, gpu_uuid=GPU, container_name='so101-campaign-teacher-g1',
+    argv = build_container_argv(role='teacher', image=images, gpu_uuid=GPU, mount_build=make_mount_trees(Path(tempfile.mkdtemp())), container_name='so101-campaign-teacher-g1',
         uid=os.getuid(), gid=os.getgid(),
         host_paths=dict(owned_root=owned, approved_inputs=(Path(settings['model']['weights']['path']),),
             socket_roots=paths['socket_roots'], config_paths=(config_path,), entry=entry))

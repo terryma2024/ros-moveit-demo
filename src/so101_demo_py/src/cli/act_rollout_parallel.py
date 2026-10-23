@@ -56,7 +56,7 @@ from so101_demo.runtime.act_rollout.policy_service import PolicyServiceOwner
 from so101_demo.runtime.act_rollout.shard_launcher import WORKLOAD_KIND, RolloutShardLauncher
 from so101_demo.runtime.act_rollout.task_builder import identity_sha256
 from so101_demo.runtime.container_campaign.mount_build import mount_from_config
-from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX, CONTAINER_POLICY_SOCKET, make_campaign_paths
+from so101_demo.runtime.container_campaign.paths import CONTAINER_POLICY_SOCKET, make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.task_control import ContainerTaskControl
 from so101_demo.runtime.container_campaign.service_owner import _docker
@@ -288,7 +288,7 @@ def prepare(args, edges):
     check_arguments(args)
     config = load_campaign_config(args.campaign_config, roles=("teacher",), expected_sha256=_sha256(args.campaign_config))
     mount = mount_from_config(config)
-    install_prefix = mount.package_prefix if mount is not None else CONTAINER_INSTALL_PREFIX
+    install_prefix = mount.package_prefix
     if not _GPU.fullmatch(config["gpu_uuid"]):
         raise Refused("ROLLOUT_GPU_UUID_INVALID")
     arguments = SimpleNamespace(**{name: getattr(args, name) for name in (
@@ -303,9 +303,7 @@ def prepare(args, edges):
     if calibration_runtime_hash(config["controlled_runtime"]["path"]) != config["controlled_runtime"]["sha256"]:
         raise Refused("ROLLOUT_CONTROLLED_RUNTIME_DRIFT")
     rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
-    pythonpath = args.policy_pythonpath or (None if mount is None else mount.package_prefix / "lib/python3.12/site-packages")
-    if pythonpath is None:
-        raise Refused("ROLLOUT_POLICY_PYTHONPATH_REQUIRED")
+    pythonpath = args.policy_pythonpath or mount.package_prefix / "lib/python3.12/site-packages"
     if not Path(args.policy_python).is_file():
         raise Refused("ROLLOUT_POLICY_PYTHON_MISSING")
     return config, mount, install_prefix, inputs, units, rig, pythonpath

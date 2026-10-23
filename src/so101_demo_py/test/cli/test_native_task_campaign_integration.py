@@ -45,52 +45,6 @@ def native_world(tmp_path, shared, monkeypatch, *, plane='W1', **options):
     return world
 
 
-def test_the_native_single_worker_runs_the_whole_campaign_chain_and_settles(tmp_path, shared, monkeypatch, capsys):
-    world = native_world(tmp_path, shared, monkeypatch, polls_to_finish=2)
-    spies = Spies(monkeypatch)
-    verified = controlled_verifier(monkeypatch)
-    code, out, err = run(world, capsys, instance_launcher='native')
-    assert code == 0, err
-    summary = json.loads(out.strip().splitlines()[-1])
-    assert summary['plane'] == 'qualification' and summary['scene_count'] == 8 and summary['waves'] == 1
-    run_root = world.evidence/'run-one'
-    (owner,) = spies.owners
-    (shard,) = owner.shards
-    assert type(shard) is NativeInstanceOwner and shard.launch.launcher == 'native'
-    # phase 2 of a native single worker: the same scheduler over the native processor launcher, one processor at most
-    assert owner.processing is not None and type(owner.processing.launcher) is NativeProcessorLauncher
-    assert owner.processing.max_processors == 1
-    # admission recorded the launcher; the Teacher is still a container, the instance is not
-    payload = json.loads(spies.workload.arbiter.store._query_one('SELECT payload_json FROM parents')['payload_json'])
-    assert payload['instance_launcher'] == 'native' and payload['worker_count'] == 1
-    assert len(world.docker.runs(shard=False)) == 1 and world.docker.runs(shard=True) == []
-    # the layout seen from the Host is the container's: control, output/tasks/<task_id>, stack, retirement
-    root = run_root/'wave-0/w00/g1'
-    for name in ('control', 'output', 'stack', 'retirement', 'task-inputs', 'tmp'):
-        assert (root/name).is_dir(), name
-    documents = [entry[2] for entry in world.log if entry[1] == 'task_document']
-    assert len(documents) == 8
-    for document in documents:
-        assert document['teacher']['socket_path'] == str(run_root/'ipc/teacher/inference.sock')      # the Host path
-        assert (root/'output/tasks'/document['task_id']/'task-result.json').is_file()
-        assert (run_root/'host/wave-0/task-journal'/document['task_id']/'collected.json').is_file()
-    operations = [entry[1] for entry in world.log if entry[1] != 'task_document']
-    assert operations.count('assign_task') == 8 and operations.count('terminate') == 1
-    # the same wave verification: the unchanged class, built once, over the registry record of the native instance
-    assert len(verified) == 1 and verified[0]['qualification'] is True
-    # the stop was proven from the instance's own receipt and the Host observation, then settled
-    cleanup = json.loads((run_root/'host/campaign-cleanup.json').read_bytes())
-    assert cleanup['terminated'] is True and cleanup['shards'][0]['terminated'] is True
-    observed = json.loads((root/'final-exit.json').read_bytes())
-    assert observed['kind'] == 'native_instance_exit' and observed['leader_state'] in ('absent', 'zombie')
-    assert observed['group_members'] == [] and observed['marker_survivors'] == [] and observed['graph_clear'] is True
-    stop = json.loads((root/'shard-stop.json').read_bytes())
-    assert [stop[name] for name in ('goals_stopped', 'controllers_stopped', 'ros_children_exited', 'ros_graph_empty',
-                                    'forced')] == [True, True, True, True, False]
-    assert len(spies.finishes) == 1 and spies.finishes[0][1] is True
-    assert spies.lease() is None and spies.active_slots() == ()
-
-
 def test_the_default_launcher_is_the_container_and_records_it(tmp_path, shared, monkeypatch, capsys):
     world = native_world(tmp_path, shared, monkeypatch)
     spies = Spies(monkeypatch)

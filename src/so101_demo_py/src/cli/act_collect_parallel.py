@@ -51,6 +51,7 @@ from so101_demo.runtime.container_campaign.case_inputs import (
 )
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths, validate_registered_evidence_root
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
+from so101_demo.runtime.container_campaign.mount_build import mount_from_config
 from so101_demo.runtime.inference.config import load_campaign_config, load_runtime_document, validate_file_ref
 from so101_teleop.unified.compose import compose_services
 from so101_teleop.unified.worker_slots import ActWorkerSlot
@@ -231,6 +232,7 @@ def main(argv=None, *, edges=None) -> int:
             raise ValueError(f'ACT_COLLECTION_UNIFIED_SERVICE_UNAVAILABLE: {services.act_error}')
         config_sha = _sha(resolved['campaign_config'])
         config = load_campaign_config(resolved['campaign_config'], roles=('teacher',), expected_sha256=config_sha)
+        mount_from_config(config)                   # MOUNT_BUILD_REQUIRED before the run id is used or anything is frozen
         runtime_document = (None if args.runtime_document is None
                             else load_runtime_document(_regular(args.runtime_document)))
         registered = validate_registered_evidence_root(config['evidence_root'], config['evidence_root'],
