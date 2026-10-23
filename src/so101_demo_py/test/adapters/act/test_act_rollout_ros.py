@@ -95,6 +95,10 @@ def test_the_assembler_counts_the_sets_it_does_not_emit_by_reason_and_the_inputs
     skewed.push_image("head", 1.0, _frame(1))
     skewed.push_image("wrist", 1.3, _frame(2))
     assert skewed.poll() is None and skewed.poll_skips == {"rgb_skew": 1}
+    assert skewed.poll() is None and skewed.poll() is None and skewed.poll_skips == {"rgb_skew": 1}    # one set, polled again: still one
+    skewed.push_image("head", 1.4, _frame(3))
+    skewed.push_image("wrist", 1.9, _frame(4))
+    assert skewed.poll() is None and skewed.poll_skips == {"rgb_skew": 2}                                 # another set: counted
     stale = _assembler()
     stale.push_joints(1.0, _joints())
     stale.push_image("head", 0.8, _frame(1))
