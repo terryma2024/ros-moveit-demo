@@ -1,6 +1,15 @@
 # SO-101: migrate every image-baked flow to the mount-tree model — design
 
-Status: draft for human confirmation (2026-10-23). Nothing is implemented. Human request: "现在 mount tree 的方案已经通了。原始所有将 source build 进 image 的方案都改向这个方案。做一个迁移设计，清理相关历史代码。"
+Status: decisions confirmed by the human (2026-10-23). Nothing is implemented yet.
+
+Human decisions (2026-10-23), all on the recommended option:
+- **M1:** mount only.
+- **M2:** keep a read-only legacy image-record verifier.
+- **M3:** delete most old images. `docker save` three of them: the TRAIN-003..005 source shard and inference images, plus the old mount base `19a57e70`.
+- **M4:** retire native collection.
+- **M5:** in phase 2, run the broker in mount-base. If its users are no longer used, delete it instead. Phase 3 must check that usage first.
+- **M6:** in phase 3, make the mounted-source `docker_dev` pattern the standard.
+- **M7:** out of scope; note it in the guide only. Human request: "现在 mount tree 的方案已经通了。原始所有将 source build 进 image 的方案都改向这个方案。做一个迁移设计，清理相关历史代码。"
 
 ## Why
 
