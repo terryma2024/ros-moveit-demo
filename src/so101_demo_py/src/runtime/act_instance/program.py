@@ -169,11 +169,12 @@ def compose_stack(launch, observer):
     return ready,ready_check,stack
 
 
-def instance_stack_launch(spec, *, ros2, stack_root, environment, rig=None, share=None):
+def instance_stack_launch(spec, *, ros2, stack_root, environment, rig=None, share=None, mujoco_scene=None):
     """The instance's stack: the plain ACT execution stack at the fixed instance identity, no namespace wrapper.
 
     `rig` (default: the rig the spec's campaign config names) is the camera rig the stack composes; a rig other than the default is
-    launched with `rig:=<name>` and its profile file under `share` (default: the installed share) is what readiness observes."""
+    launched with `rig:=<name>` and its profile file under `share` (default: the installed share) is what readiness observes.
+    `mujoco_scene` (default: the rig's own scene) is the evaluation-only scene variant file of a rollout shard."""
     from so101_demo.act.rig_files import rig_model_files
     from so101_demo.act.rig_profile import DEFAULT_RIG
     from so101_demo.runtime.act_instance.spec import instance_rig
@@ -188,7 +189,7 @@ def instance_stack_launch(spec, *, ros2, stack_root, environment, rig=None, shar
         rig_arguments = dict(rig=rig.rig, rig_profile=Path(share) / rig_model_files(rig).profile)
     return ActStackLaunch(ros2_executable=ros2,session_id=spec["simulation_session_id"],evidence_root=stack_root,
         ros_domain_id=ACT_INSTANCE_ROS_DOMAIN_ID,
-        environment=dict(environment) | {"GZ_PARTITION":spec["simulation_session_id"]},**rig_arguments)
+        environment=dict(environment) | {"GZ_PARTITION":spec["simulation_session_id"]},mujoco_scene=mujoco_scene,**rig_arguments)
 
 
 async def run_instance(spec, runtime_config, layout):
@@ -221,7 +222,10 @@ async def run_instance(spec, runtime_config, layout):
     _write(root,"gpu-driver.json",canonical_json(gpu))
     from so101_demo.runtime.act_instance.spec import instance_rig
     rig = instance_rig(spec)
-    launch = instance_stack_launch(spec,ros2=ros2,stack_root=stack_root,environment=os.environ,rig=rig)
+    from so101_demo.act import scene_variant_run
+    # an evaluation-only scene variant (rollout spec only): realized and proven physics-equal into the owned root before the stack starts
+    scene,_variant = scene_variant_run.prepare_shard_scene(spec,prefix/"share"/"so101_demo_py")
+    launch = instance_stack_launch(spec,ros2=ros2,stack_root=stack_root,environment=os.environ,rig=rig,mujoco_scene=scene)
     ready,ready_check,stack = compose_stack(launch,observer)
     process = read_process_owner(os.getpid())
     # a rig without a neck has no neck action lane to cancel and observe

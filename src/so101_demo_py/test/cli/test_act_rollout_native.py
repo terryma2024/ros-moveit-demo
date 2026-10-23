@@ -307,6 +307,46 @@ def test_the_effective_execution_mode_is_passed_to_every_episode_and_recorded_in
     assert episode["execution"] == mode.document() and episode["execution"]["execution_prefix"] == 5
 
 
+def test_a_scene_variant_is_recorded_in_run_and_episode_json_and_a_nominal_run_has_no_such_key(tmp_path):
+    record = {"name": "dark", "variant": {"name": "dark", "set": {}}, "variant_sha256": "1" * 64, "applied": {},
+              "realized_sha256": "2" * 64, "physics_fingerprint": "3" * 64, "nominal_physics_fingerprint": "3" * 64,
+              "file": {"path": "/v.json", "sha256": "4" * 64}}
+    identity = dict(_inputs().identity, scene_variant={key: record[key] for key in ("name", "variant_sha256", "realized_sha256",
+                                                                                    "physics_fingerprint")})
+    varied = dataclasses.replace(_inputs(), scene_variant=record, identity=identity)
+    options = _options(tmp_path)
+    native.run_rollout(options=options, inputs=varied, probes=_passing_probes(),
+                       composition_factory=lambda **kwargs: FakeComposition(tmp_path), episode_runner=_runner({}, []), environ={})
+    group_root = options.evidence_root / "rollout_validation"
+    assert json.loads((group_root / "run.json").read_text())["scene_variant"] == record
+    episode = json.loads(next((group_root / "episodes").iterdir()).joinpath("episode.json").read_text())
+    assert episode["scene_variant"] == record and episode["identity"]["scene_variant"]["realized_sha256"] == "2" * 64
+    (tmp_path / "plain").mkdir()
+    _summary, _composition, _runs, plain_options = _run(tmp_path / "plain")
+    run = json.loads((plain_options.evidence_root / "rollout_validation" / "run.json").read_text())
+    assert "scene_variant" not in run
+
+
+def test_the_native_parser_takes_a_scene_variant_and_the_native_scene_is_realized_into_the_owned_root(tmp_path):
+    from paths import PACKAGE_ROOT
+    assert native.build_parser().get_default("scene_variant") is None
+    variant = tmp_path / "variant.json"
+    variant.write_text(json.dumps({"schema_version": 1, "kind": "ACT_SCENE_VARIANT", "name": "dark",
+                                   "set": {"key_light.diffuse": [0.35, 0.35, 0.35]}}))
+    owned = tmp_path / "owned"
+    owned.mkdir()
+    layout = SimpleNamespace(owned_root=owned)
+    from so101_demo.act import scene_variant_run
+    record = scene_variant_run.host_record(variant, PACKAGE_ROOT)
+    options = SimpleNamespace(scene_variant=variant, install_prefix=tmp_path / "unused")
+    scene = native.native_scene_variant(options, SimpleNamespace(scene_variant=record), layout, share=PACKAGE_ROOT)
+    assert scene == owned / "scene-variant" / "scene_variant.xml" and scene.is_file()
+    drifted = SimpleNamespace(scene_variant=dict(record, realized_sha256="0" * 64))
+    with pytest.raises(ValueError, match="SCENE_VARIANT_REALIZED_MISMATCH"):
+        native.native_scene_variant(options, drifted, SimpleNamespace(owned_root=tmp_path / "owned2"), share=PACKAGE_ROOT)
+    assert native.native_scene_variant(SimpleNamespace(scene_variant=None), SimpleNamespace(scene_variant=None), layout) is None
+
+
 def test_the_clamp_tolerance_is_recorded_in_run_and_episode_json_and_clamped_steps_are_summed(tmp_path):
     settings = dataclasses.replace(SETTINGS, joint_limit_clamp_tolerance_rad=0.01)
     inputs = dataclasses.replace(_inputs(), settings=settings)

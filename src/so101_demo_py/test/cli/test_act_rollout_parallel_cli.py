@@ -33,6 +33,11 @@ SCENES = {"groups": {"rollout_standard": [{"scene_id": "task_start"}, {"scene_id
                      "rollout_test": [{"scene_id": "held_out"}]}, "manifest_sha256": "2" * 64}
 
 
+VARIANT_RECORD = {"name": "dark", "variant": {"name": "dark", "set": {"key_light.diffuse": [0.35, 0.35, 0.35]}},
+                  "variant_sha256": "1" * 64, "applied": {"key_light.diffuse": {"nominal": [0.7] * 3, "value": [0.35] * 3}},
+                  "realized_sha256": "2" * 64, "physics_fingerprint": "3" * 64, "nominal_physics_fingerprint": "3" * 64}
+
+
 class CliWorld(World):
     """The owner test's doubles without its run directory (the command makes its own)."""
 
@@ -93,12 +98,17 @@ class Setup:
 
     def inputs(self, arguments):
         self.loaded_with = arguments
-        return RolloutInputs(
+        identity = {"bundle_sha256": BUNDLE, "policy_sha256": POLICY, "scenes_sha256": "2" * 64,
+                    "inputs_manifest_sha256": "3" * 64, "gate_install": str(arguments.install_prefix)}
+        variant = None
+        if getattr(arguments, "scene_variant", None) is not None:
+            variant = dict(VARIANT_RECORD, file={"path": str(arguments.scene_variant), "sha256": "5" * 64})
+            identity["scene_variant"] = {key: variant[key] for key in ("name", "variant_sha256", "realized_sha256", "physics_fingerprint")}
+        return RolloutInputs(scene_variant=variant, identity=identity,
             settings=SETTINGS, snapshot_targets=SNAPSHOT_TARGETS, endpoint_policy=_endpoint_policy(), timing={}, rollout_config={},
             observation={"cameras": ("head", "wrist"), "state_dim": 8, "image_shape": [4, 6, 3], "source": "bundle"},
             substitution={}, scenes=SCENES, runtime_config={"inference": {"request_timeout_s": 0.5}},
-            identity={"bundle_sha256": BUNDLE, "policy_sha256": POLICY, "scenes_sha256": "2" * 64,
-                      "inputs_manifest_sha256": "3" * 64, "gate_install": str(arguments.install_prefix)})
+            )
 
     def argv(self, *extra, run_id="run-1", group="rollout_standard"):
         return ["--evidence-root", str(self.evidence), "--run-id", run_id, "--campaign-config", str(self.campaign),
@@ -171,6 +181,38 @@ def test_the_task_documents_carry_the_runtime_values_and_the_shared_run_identity
     assert document["inputs"]["install_prefix"] == str(cli.CONTAINER_INSTALL_PREFIX)
     assert document["inputs"]["scenes"]["sha256"] and document["inputs"]["bundle_dir"] == str(setup.bundle)
     assert len({item["run_identity_sha256"] for item in setup.world.documents.values()}) == 1
+
+
+def test_a_scene_variant_is_bound_into_the_run_the_tasks_the_launcher_and_the_mounts(setup):
+    variant = setup.files / "variant.json"
+    variant.write_text("{}")
+    assert setup.run("--scene-variant", str(variant)) == EXIT_OK
+    assert str(setup.loaded_with.scene_variant) == str(variant)
+    document = read(setup, "run.json")
+    assert document["scene_variant"]["name"] == "dark" and document["scene_variant"]["realized_sha256"] == "2" * 64
+    assert document["identity"]["scene_variant"]["physics_fingerprint"] == "3" * 64
+    task = next(iter(setup.world.documents.values()))
+    assert task["inputs"]["scene_variant"]["path"] == str(variant) and len(task["inputs"]["scene_variant"]["sha256"]) == 64
+    entry = setup.world.launcher_arguments["scene_variant"]
+    assert entry["file"]["path"] == str(variant) and entry["realized_sha256"] == "2" * 64 and entry["physics_fingerprint"] == "3" * 64
+    assert str(variant) in {str(path) for path in setup.world.launcher_arguments["approved_inputs"]} or \
+        str(setup.files) in {str(path) for path in setup.world.launcher_arguments["approved_inputs"]}
+    assert len({item["run_identity_sha256"] for item in setup.world.documents.values()}) == 1
+
+
+def test_a_scene_variant_that_is_not_an_absolute_regular_file_refuses_before_anything_exists(setup, capsys):
+    for path in ("variant.json", str(setup.files / "missing.json"), str(setup.files)):
+        assert setup.run("--scene-variant", path) == 2
+        assert "ROLLOUT_SCENE_VARIANT_INVALID" in capsys.readouterr().err
+        assert not (setup.evidence / "run-1").exists()
+
+
+def test_a_run_without_a_scene_variant_has_none_of_it_anywhere(setup):
+    assert setup.run() == EXIT_OK
+    assert setup.loaded_with.scene_variant is None
+    assert "scene_variant" not in read(setup, "run.json") or read(setup, "run.json")["scene_variant"] is None
+    assert "scene_variant" not in next(iter(setup.world.documents.values()))["inputs"]
+    assert setup.world.launcher_arguments.get("scene_variant") is None
 
 
 def test_an_invalid_attempt_is_run_again(setup):

@@ -250,7 +250,8 @@ def run_rollout(*, options, inputs, probes, composition_factory, episode_runner=
         "max_invalid_retries": options.max_invalid_retries,
         "runtime_settings": {"gc_freeze": bool(getattr(options, "gc_freeze", True)),
                              "gc_freeze_points": ["after policy warm-up", "each episode reset, before the physics resume"]
-                             if getattr(options, "gc_freeze", True) else []}})
+                             if getattr(options, "gc_freeze", True) else []},
+        **({} if inputs.scene_variant is None else {"scene_variant": dict(inputs.scene_variant)})})
     composition = composition_factory(layout=layout, environment=environment, inputs=inputs, options=options)
     summary = {"inference_warm_up_s": getattr(composition, "warm_up_s", None), "exit_code": EXIT_OK, "done": 0,
                "verdicts": {}, "invalid_attempts": 0, "invalid_exhausted": [], "clamped_steps": 0,
@@ -318,6 +319,25 @@ def _run_scenes(options, inputs, scenes, composition, group_root, preconditions,
 # ---- real inputs and composition -----------------------------------------------------------------------------------------
 
 
+def native_scene_variant(options, inputs, layout, *, share=None):
+    """The scene file of an evaluation-only variant, realized into the run's owned root and proven physics-equal; None without one.
+
+    The realized hash must be the one the inputs recorded (the Host's record of the same file over the same install)."""
+    if getattr(options, "scene_variant", None) is None:
+        return None
+    from so101_demo.act import scene_variant_run
+
+    share = Path(options.install_prefix) / "share" / "so101_demo_py" if share is None else Path(share)
+    record = scene_variant_run.realize_into(Path(layout.owned_root) / scene_variant_run.SCENE_DIRECTORY, share,
+                                            scene_variant_run.read_variant_file(options.scene_variant))
+    expected = inputs.scene_variant
+    if (expected is None or record["realized_sha256"] != expected["realized_sha256"]
+            or record["physics_fingerprint"] != expected["physics_fingerprint"]):
+        Path(record["scene_path"]).unlink(missing_ok=True)
+        raise ValueError("SCENE_VARIANT_REALIZED_MISMATCH: the native stack would load another scene than the inputs name")
+    return Path(record["scene_path"])
+
+
 class NativeComposition:
     """The real stack, runtime ports, policy and recorder of one run. Built after the environment is applied."""
 
@@ -351,8 +371,9 @@ class NativeComposition:
         self.runner = make_policy_runner(inputs, policy)
         # the rig the policy was trained on (its bundle's observation declaration) is the rig of the stack that runs it
         self.rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
+        scene = native_scene_variant(options, inputs, layout)
         self.launch = instance_stack_launch({"simulation_session_id": self.session_id}, ros2=Path(options.ros2),
-                                            stack_root=layout.stack_root, environment=environment, rig=self.rig)
+                                            stack_root=layout.stack_root, environment=environment, rig=self.rig, mujoco_scene=scene)
         observer = Path(options.install_prefix) / "lib/so101_demo_py/act_stack_ready"
         _ready, _ready_check, self.stack = compose_stack(self.launch, observer)
         self.graph_probe = RosGraphClearProbe(self.launch, spin_time_s=3.0)
@@ -485,6 +506,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rollout-config", type=Path, required=True, help="config/act/rollout.yaml")
     parser.add_argument("--contact-activation-receipt", type=Path, help="default: the frozen inputs' activation receipt")
     parser.add_argument("--contact-proposal", type=Path, help="default: the frozen inputs' contact proposal")
+    parser.add_argument("--scene-variant", type=Path, default=None,
+                        help="an evaluation-only scene variant (`act/scene_variant.py`); bound into the identity, run.json and "
+                             "every episode.json")
     parser.add_argument("--install-prefix", type=Path, required=True, help="the gate install the stack is launched from")
     parser.add_argument("--ros2", type=Path, required=True)
     parser.add_argument("--gpu-uuid", required=True)

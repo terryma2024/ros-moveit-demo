@@ -60,6 +60,9 @@ class RolloutInputs:
     execution: object | None = None
     #: file hashes and the outcome-risk / runtime-only values the run used (recorded in run.json, never compared)
     runtime_used: dict | None = None
+    #: the evaluation-only scene variant of the run (`scene_variant_run.host_record`), None for a nominal run; its identity entry is
+    #: in `identity`, so runs of different variants can never be mixed and a nominal run's identity is unchanged
+    scene_variant: dict | None = None
 
 
 def _plain(value):
@@ -147,12 +150,15 @@ def make_policy_runner(inputs, policy):
 def episode_document(*, inputs, options, scene, attempt_id, result, preconditions) -> dict:
     observation = dict(inputs.observation)
     observation["cameras"] = list(observation["cameras"])
-    return {"schema_version": 1, "kind": "ACT_ROLLOUT_EPISODE", "run_id": options.run_id, "attempt_id": attempt_id,
-            "group": scene["group"], "scene": scene, "identity": dict(inputs.identity), "observation": observation,
-            "execution": _execution_document(inputs, result),
-            "joint_limit_clamp_tolerance_rad": inputs.settings.joint_limit_clamp_tolerance_rad,
-            "calibration": inputs.substitution, "preconditions": preconditions, "verdict": result["verdict"],
-            "reason": result["reason"], "done": result["done"], "status": result["status"], "result": result}
+    document = {"schema_version": 1, "kind": "ACT_ROLLOUT_EPISODE", "run_id": options.run_id, "attempt_id": attempt_id,
+                "group": scene["group"], "scene": scene, "identity": dict(inputs.identity), "observation": observation,
+                "execution": _execution_document(inputs, result),
+                "joint_limit_clamp_tolerance_rad": inputs.settings.joint_limit_clamp_tolerance_rad,
+                "calibration": inputs.substitution, "preconditions": preconditions, "verdict": result["verdict"],
+                "reason": result["reason"], "done": result["done"], "status": result["status"], "result": result}
+    if inputs.scene_variant is not None:       # an evaluation-only scene variant: only such an episode has the key
+        document["scene_variant"] = dict(inputs.scene_variant)
+    return document
 
 
 def select_scenes(document: dict, group: str, scene_ids=None, limit=None) -> list:
@@ -239,6 +245,9 @@ def load_inputs(args) -> RolloutInputs:
                                   ensembling=getattr(args, "temporal_ensembling", None))
     if execution.source != "bundle":
         identity["execution_mode"] = execution.document()
+    from so101_demo.act import scene_variant_run
+    scene_variant = scene_variant_run.bind_variant(getattr(args, "scene_variant", None),
+                                                   Path(args.install_prefix) / "share" / "so101_demo_py", identity)
     settings = rollout_settings(frozen, config)
     # the clamp tolerance is a LOGIC setting too (it changes what reaches the controller): bound into the identity when set, so a
     # run with it can never be mixed with one without; absent keeps the identity of every earlier run unchanged
@@ -252,7 +261,7 @@ def load_inputs(args) -> RolloutInputs:
         timing=controller_timing(frozen, config), rollout_config=config, observation=observation, scenes=scenes,
         substitution=contact_activation_substitution(receipt, proposal), identity=identity, bundle=bundle,
         bundle_dir=bundle_dir, runtime_config=runtime, frozen=frozen, manifest_path=manifest_path,
-        recorder_policy=load_recorder_frozen_policy(manifest_path), execution=execution)
+        recorder_policy=load_recorder_frozen_policy(manifest_path), execution=execution, scene_variant=scene_variant)
 
 
 class RelocatedRecording:

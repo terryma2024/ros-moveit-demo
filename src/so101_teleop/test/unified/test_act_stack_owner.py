@@ -265,6 +265,22 @@ def test_pre_setsid_identity_cannot_capture_the_parent_process_group(monkeypatch
         identity_for(pid, argv, {})
 
 
+def test_a_stack_with_a_scene_variant_is_launched_with_that_scene_and_none_other_is(tmp_path):
+    profile = tmp_path / "rig-side.yaml"
+    profile.write_text("rig: side-wrist\n")
+    scene = tmp_path / "scene_variant.xml"
+    scene.write_text("<mujoco/>")
+    common = dict(ros2_executable=Path(sys.executable), session_id="act-case-1", evidence_root=tmp_path, ros_domain_id=179,
+                  environment={}, rig="side-wrist", rig_profile=profile)
+    plain = ActStackLaunch(**common)
+    assert plain.mujoco_scene is None and not any(item.startswith("mujoco_scene:=") for item in plain.argv())
+    varied = ActStackLaunch(**common, mujoco_scene=scene)
+    assert varied.argv() == [*plain.argv(), f"mujoco_scene:={scene}"]
+    for broken in (Path("scene.xml"), tmp_path / "missing.xml", tmp_path / ".." / "scene_variant.xml", tmp_path):
+        with pytest.raises(ValueError, match="ACT_STACK_SCENE_INVALID"):
+            ActStackLaunch(**common, mujoco_scene=broken)
+
+
 def test_a_stack_of_another_rig_is_launched_with_the_rig_and_observed_with_its_profile(tmp_path):
     profile = tmp_path / "rig-side.yaml"
     profile.write_text("rig: side-wrist\n")

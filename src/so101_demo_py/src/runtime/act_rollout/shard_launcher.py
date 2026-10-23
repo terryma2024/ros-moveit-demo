@@ -28,7 +28,8 @@ WORKLOAD_KIND = "act_rollout_start"
 
 class RolloutShardLauncher:
     def __init__(self, *, context, config, run, registry, parallel_runtime, rollout_identity, rig_profile_sha256,
-                 approved_inputs, config_paths, docker_runner=_docker, namespace_reader=read_container_namespace):
+                 approved_inputs, config_paths, docker_runner=_docker, namespace_reader=read_container_namespace,
+                 scene_variant=None):
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != WORKLOAD_KIND
                 or type(registry) is not ContainerLaunchRegistry or str(run) != context.evidence_root
                 or type(approved_inputs) is not tuple or type(config_paths) is not tuple):
@@ -40,6 +41,8 @@ class RolloutShardLauncher:
         self.approved_inputs, self.config_paths = approved_inputs, config_paths
         self.docker_runner, self.namespace_reader = docker_runner, namespace_reader
         self.mount_build = mount_from_config(config)
+        # the evaluation-only scene variant entry (`scene_variant_run.spec_entry`), written into every spec; None is a nominal run
+        self.scene_variant = None if scene_variant is None else dict(scene_variant)
         self.socket_roots = {"policy": self.run / "ipc" / "policy"}
         self._next_wave = 0
 
@@ -79,6 +82,8 @@ class RolloutShardLauncher:
                         controlled_runtime=self.config["controlled_runtime"], rollout_identity=dict(self.rollout_identity),
                         rig_profile_sha256=self.rig_profile_sha256, parallel_runtime=dict(self.parallel_runtime),
                         wave_id=wave_id, deadline_monotonic_s=context.deadline_monotonic_s)
+            if self.scene_variant is not None:
+                spec["scene_variant"] = dict(self.scene_variant)
             spec_path = self.run / ("shard-" + wave_id + "-" + worker_id + "-g" + str(generation) + ".json")
             _write(spec_path, spec)
             if load_spec(spec_path)[0] != spec:

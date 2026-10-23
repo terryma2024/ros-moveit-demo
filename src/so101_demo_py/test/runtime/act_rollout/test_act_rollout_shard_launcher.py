@@ -26,7 +26,7 @@ GPU = "GPU-28221cec-9d21-7753-fd5a-da645740df19"
 IDENTITY = {"run_identity_sha256": "1" * 64, "scenes_sha256": "2" * 64, "policy_sha256": "3" * 64, "bundle_sha256": "4" * 64}
 
 
-def prepared(tmp_path, *, workers=1, mount=None, kind=WORKLOAD_KIND):
+def prepared(tmp_path, *, workers=1, mount=None, kind=WORKLOAD_KIND, **launcher_extra):
     paths = make_campaign_paths(tmp_path, "run-1")
     (paths["run"] / "ipc" / "policy").mkdir(mode=0o700)
     campaign = campaign_fixture(tmp_path)
@@ -50,7 +50,8 @@ def prepared(tmp_path, *, workers=1, mount=None, kind=WORKLOAD_KIND):
     launcher = RolloutShardLauncher(
         context=context, config=load_campaign_config(campaign_path, expected_sha256=campaign_sha), run=paths["run"],
         registry=registry, parallel_runtime=dict(path=str(runtime), sha256=hashlib.sha256(runtime.read_bytes()).hexdigest()),
-        rollout_identity=IDENTITY, rig_profile_sha256=DEFAULT_RIG.profile_sha256, approved_inputs=(), config_paths=())
+        rollout_identity=IDENTITY, rig_profile_sha256=DEFAULT_RIG.profile_sha256, approved_inputs=(), config_paths=(),
+        **launcher_extra)
     return launcher, registry, context, paths
 
 
@@ -137,5 +138,27 @@ def test_in_mount_mode_the_shard_gets_the_build_environment_and_read_only_trees(
         assert f"type=bind,src={mount.source},dst={mount.source},readonly" in mounts
         assert f"SO101_MOUNT_INSTALL={mount.install}" in owner.argv and f"SO101_EXPECTED_COMMIT={commit}" in owner.argv
         assert owner.argv[owner.argv.index("campaign_shard") - 1].endswith("image_bootstrap")
+    finally:
+        registry.close()
+
+
+def test_a_scene_variant_entry_goes_into_every_spec_the_loader_accepts_and_only_then(tmp_path):
+    from so101_demo.act import scene_variant_run as variant_run
+    path = tmp_path / "variant.json"
+    path.write_text(json.dumps({"schema_version": 1, "kind": "ACT_SCENE_VARIANT", "name": "dark",
+                                "set": {"key_light.diffuse": [0.35, 0.35, 0.35]}}))
+    entry = variant_run.spec_entry(variant_run.host_record(path, PACKAGE_ROOT))
+    launcher, registry, context, paths = prepared(tmp_path, workers=2, scene_variant=entry)
+    try:
+        for owner in launcher(plan={"wave_index": 0}, worker_ids=workers(2), context=context):
+            written = json.loads(owner.entry.spec.read_text())
+            assert written["scene_variant"] == entry and load_spec(owner.entry.spec)[0] == written
+    finally:
+        registry.close()
+    (tmp_path / "plain").mkdir()
+    plain, registry, context, _paths = prepared(tmp_path / "plain", workers=1)
+    try:
+        for owner in plain(plan={"wave_index": 0}, worker_ids=workers(1), context=context):
+            assert "scene_variant" not in json.loads(owner.entry.spec.read_text())
     finally:
         registry.close()

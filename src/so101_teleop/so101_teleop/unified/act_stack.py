@@ -40,6 +40,9 @@ class ActStackLaunch:
     #: launch command and readiness command stay exactly what they were before rigs existed.
     rig: str = DEFAULT_RIG
     rig_profile: Path | None = None
+    #: an evaluation-only scene variant (goal 35-R0): the MJCF the simulator loads instead of the rig's scene, an absolute file the
+    #: shard wrote into its own owned root. None (every collection and every nominal rollout) adds nothing to the launch command.
+    mujoco_scene: Path | None = None
 
     def __post_init__(self) -> None:
         binary, root = Path(self.ros2_executable), Path(self.evidence_root)
@@ -53,6 +56,10 @@ class ActStackLaunch:
                 or any(not isinstance(key, str) or not isinstance(value, str)
                        for key, value in self.environment.items())):
             raise ValueError("ACT_STACK_LAUNCH_INVALID")
+        if self.mujoco_scene is not None:
+            scene = Path(self.mujoco_scene)
+            if (not scene.is_absolute() or ".." in scene.parts or scene.is_symlink() or not scene.is_file()):
+                raise ValueError("ACT_STACK_SCENE_INVALID")
         if self.rig == DEFAULT_RIG:
             if self.rig_profile is not None:
                 raise ValueError("ACT_STACK_RIG_INVALID")
@@ -70,6 +77,7 @@ class ActStackLaunch:
             "headless:=true", "sensor_rendering:=true", "act_profile:=true",
             f"session_id:={self.session_id}", f"task_evidence_root:={self.evidence_root}",
             *(() if self.rig == DEFAULT_RIG else (f"rig:={self.rig}",)),
+            *(() if self.mujoco_scene is None else (f"mujoco_scene:={self.mujoco_scene}",)),
         ]
 
     def readiness_arguments(self) -> list[str]:
