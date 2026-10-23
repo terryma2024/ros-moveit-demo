@@ -267,3 +267,26 @@ def test_the_old_nine_phase_coverage_is_gone():
     from so101_demo.act.episode_audit import checks
 
     assert not hasattr(checks, "FORMAL_PHASES") and not hasattr(checks, "_formal_coverage_ok")
+
+
+def test_a_stalled_host_does_not_move_the_stamps_of_a_written_episode(tmp_path, frozen_scene, monkeypatch):
+    """The 100 ms bound between a source receipt and its request is the verifier's, not the host's: a stall of the writing
+    process (a GC pause, load) between two readings of the episode's clock must not change what the episode proves."""
+
+    import time
+    import teacher_formal_audit
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
+
+    reading = teacher_formal_audit._TickClock.monotonic_ns
+    readings = []
+
+    def stalled(self):
+        readings.append(1)
+        if len(readings) % 5 == 0:
+            time.sleep(0.12)
+        return reading(self)
+
+    monkeypatch.setattr(teacher_formal_audit._TickClock, "monotonic_ns", stalled)
+    path = seal(tmp_path / "stalled", frozen_scene)
+    assert len(readings) > 50
+    assert verify_audit_manifest(path)["identity"]["mode"] == "formal"
