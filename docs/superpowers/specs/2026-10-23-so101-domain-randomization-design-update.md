@@ -17,6 +17,29 @@
 - **D2**：选 a，随机化 episode 中 Teacher 用特权真值杯位（`teacher_source: privileged_pose`）。**另加一项**：YOLO（Teacher 的 `task_camera` 感知）也要做微调，以适应随机化后的场景外观。微调数据来自随机化场景的渲染，标注用仿真真值；资格评估按随机化分桶报告。
 - **D3**：首版只做 R0。拿到 R0 数据后，再定 R2、R3 的具体参数和预算。
 
+## R0 实施方案（2026-10-23，人工设定目标“完成35-R0”）
+
+- **评估用场景变体**：新增一个纯函数模块。输入是 nominal 的 `scene_side_wrist.xml` 和一个变体描述（JSON），输出三样东西：变体 MJCF、实际生效值清单、realized 哈希。只允许白名单内的视觉字段：
+  - `key_light` 的 diffuse 和方向；
+  - headlight 的 ambient、diffuse；
+  - 杯子材质的 rgba；
+  - 桌面材质的 rgba，或 builtin 纹理；
+  - `side_camera` 的 pos、quat 增量，以及 fovy。
+
+  wrist 相机定义在机器人 MJCF 里，首版不改。其他字段一律拒绝。
+- **物理子树指纹（D1 的落地）**：去掉渲染字段后，对物理相关部分做规范化哈希。白名单里的视觉编辑必须让该指纹保持不变，任一物理字段的修改必须让它改变；这两点都要有测试证明。rollout 仍然按现在的方式，用 nominal 安装文件校验接触激活回执，再额外核对“变体的物理指纹 == nominal 的物理指纹”，不相等就拒绝。现有回执的键不变。
+- **rollout 接入**：`act_rollout_parallel` 和 `act_rollout_native` 增加 `--scene-variant <json>` 参数。变体 MJCF 写到运行自己的 owned 目录，栈启动时从这里加载。变体是逻辑参数，所以变体描述和 realized 哈希都写进 `run.json` 和每个 `episode.json`，并进入运行身份。
+- **分桶**（TRAIN-007A，prefix 50，N=8，rollout_validation 28 个点 × 1 次）：
+  - nominal 复测 1 桶；
+  - 光照：强度 0.5×、0.75×、1.25×、1.5×，方向 ±20°，关闭 headlight，共 7 桶；
+  - side 相机：平移 ±5 mm（x、y、z 各一桶）、旋转 ±1°（两桶）、fovy ±3%（两桶），共 7 桶；
+  - 杯色：3 档；
+  - 桌面：2 档。
+
+  每桶报告成功率和 Wilson 95% 区间，并与 nominal 的 27/28 对比。
+- **杯–桌摩擦桶暂缓**：按 D1，动力学变化需要重新校准接触策略，R0 首版只做视觉。这一项记入待办。
+- **磁盘**：每桶的 bag 在提取完指标后删除（已预授权，并记日志），只保留 json 和 jsonl。
+
 ## 1. 自原草案以来改变的事实
 
 | 变化 | 依据 | 对随机化设计的影响 |
