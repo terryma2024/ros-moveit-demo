@@ -1,5 +1,7 @@
 # SO-101 感知镜像构建与导读运行排障记录
 
+> 2026-10-23 注：ACT 采集/回放已全部改为 `so101-mount-base` + 主机构建的只读挂载树（见 `scripts/images/README.md`）。本文所述的感知镜像（`yolo11n-seg-inference`、`parallel-perception`）不属于该迁移的 ACT 部分，仍按本文构建；它们是否迁移待迁移设计（`docs/superpowers/specs/2026-10-23-so101-mount-tree-migration-design.md`）的 M5/M6 决定。
+
 **范围：** 在 ai-station 上按 [`so101-yolo-seg-rgbd-perception-pick-place-source-guide.md`](so101-yolo-seg-rgbd-perception-pick-place-source-guide.md) 和 [`so101-grounded-sam-rgbd-perception-pick-place-source-guide.md`](so101-grounded-sam-rgbd-perception-pick-place-source-guide.md) 各跑通一次完整抓放时踩到的坑
 
 **对象：** 已经读过那两篇导读，准备在 Linux CUDA 机器上照着跑一遍的开发者

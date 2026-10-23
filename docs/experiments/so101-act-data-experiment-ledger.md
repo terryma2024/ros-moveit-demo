@@ -69,7 +69,7 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3780
+latest_checkpoint: CP-3781
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: R2/R3 plan from the R0 report (CP-3780), the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator.
 ---
 
@@ -91,6 +91,16 @@ next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout poli
 - **Disk.** Bags deleted after each bucket's metrics (pre-authorised): `R/act-rollout-r0-20261023/deletions-*-mcap.log`; evidence filesystem 189 GB free before the buckets, 174 GB after; never below 30 GiB.
 - **Retained / archived / deletion candidates.** Retained: all json, jsonl, reports and scripts under `R/act-rollout-r0-20261023`. Archived: none. Deletion candidates (not deleted): `R/act-rollout-r0-20261023/*/{wave-*,ipc,live,measurement,host}` raw run trees after readback, `r0-cup_blue.failed-stop-unconfirmed`, gate worktrees `/data/work/so101-build/gate-wt-634b6c2a5231` and `gate-wt-8bfe6901489a`, gate trees and mount tree `634b6c2a5231`, test scratch directories `r35*`, `sv*` under the gate scratch, `/data/work/so101-tools/gate-env-import-{634b6c2a5231,8bfe6901489a}`.
 - Next: the friction bucket (cup-table friction 0.8x/1.2x) is deferred (D1: a dynamics change needs the contact policy recalibrated; to-do 39). R2/R3 parameters and budget are the coordinator's decision from `report.md` (D3).
+
+## CP-3781 — Mount-tree migration P1, P2, P3 (native collection) and P5 docs on antzb (to-do 34)
+
+- Branch `antzb/mount-migration` on antzb (local, not pushed), merge-base `origin/codex/so101-act-data-0917a` `8bfe69014` (rebased onto `4bbfcf970`). Design: `docs/superpowers/specs/2026-10-23-so101-mount-tree-migration-design.md` (M1–M7 on the recommended options).
+- **Templates.** The coordinator moved the 21 image-mode campaign templates to `act-templates/archived/` on ai-station (map: `act-templates/ARCHIVED-20261023.md`); this branch does not touch ai-station templates.
+- **P1 (M1, M2).** A campaign starts from a mount tree only: `mount_from_config` refuses a config without `mount_build` (`MOUNT_BUILD_REQUIRED`); the image branches of `launch.py`, `image_bootstrap`, `provenance`, the shard, processor and service owners and `campaign_shard` are gone. The image-mode readback checks that the verifiers still need for the sealed image-mode configs (about 96) live in `so101_demo.act.legacy_image_records`, used by `collection_qualification_recompute`. `scripts/migration/recompute_before_after.py` (fixture-tested, 7 tests) recomputes one sealed image-mode root and one sealed mount root in a checkout before and after the change and byte-compares the verdicts; it exits 0 only when every root is usable and identical. It runs on ai-station, where those roots are; it was not run on antzb.
+- **P2.** `2219211c7` cherry-picked onto P1: the campaign-inference, campaign-shard and campaign-shard-deps build chain, `record_deps_installed` and its deps records, `image_content_manifest.py`, and the image-only host keys `NATIVE_BUILD_DEPS` and `BUN_CACHE` are removed; `build_images.zsh` builds only `so101-mount-base`.
+- **P3 (M4).** Native collection retired: the native instance and processor launchers, `act_instance_native`, the `--instance-launcher` option, the native-instance exclusivity of the worker slot registry. Admission refuses any launcher but `container`. Kept: `NativeInstanceOwner`, `native_stop`, the registry's native records and the read-side proofs of `finish` (used by `act_rollout_native`).
+- **Gates on antzb (all `final_rc=0`, no known flake needed):** P1 `b34fccc3c1d5.p1c` (two earlier attempts failed on tests the local harness had hidden: integration worlds not mounted, shard layout tests, host-path literals, the teleop identity test), P2 `0a47d68ef00d.p2`, P3 `fc2661f86816.p3b`. Evidence under `R/gates/antzb/gates/`.
+- **Open.** P3 broker (M5): the evidence on the users of `so101-parallel-perception` is in `progress-item34.md`; no recent use is visible from antzb, so the ruling is the coordinator's. M6 follows that ruling. P4: antzb has no dispatch image left (listing in `goal10/p4-antzb-images-20261023.txt`); nothing was deleted. M3 note: the old mount base `19a57e70` no longer exists on either host.
 
 ## CP-3779 — To-do 35 `END_OBSERVATION_UNAVAILABLE`: root cause found (stale-epoch join of the rollout world observer), fixed, 0 of 31 attempts in the N=8 check (goal 35-R0, Part A)
 

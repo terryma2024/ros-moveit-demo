@@ -1,62 +1,42 @@
-# Image content manifest
+# Images and mount trees
 
-`image_content_manifest.py` computes what an image contains, so two images built on different hosts can be compared by content
-instead of by image ID. It reads a `docker save` tar (a file, or `-` for stdin), merges the layers and hashes the result. It does
-not start the image and does not run code from it. It uses only the Python standard library.
+Every ACT campaign role (the Teacher service, collection shards, phase-2 processors, `act_rollout` shards) runs in one image,
+`so101-mount-base`. The image holds the dependencies only (apt packages, the Python lock, ROS Jazzy). The project code is built
+on the host and bind-mounted read-only, so a new commit needs a tree build of about 5 minutes and no image build.
+Design: `docs/superpowers/specs/2026-10-21-so101-mount-build-images-design.md`; the migration that removed the image-baked
+campaign images: `docs/superpowers/specs/2026-10-23-so101-mount-tree-migration-design.md`.
 
-```
-python3 -I scripts/images/image_content_manifest.py manifest <tar|-> --exclusions scripts/images/image-content-exclusions.txt --output M.json
-python3 -I scripts/images/image_content_manifest.py diff A.json B.json
-python3 -I scripts/images/image_content_manifest.py check-no-pyc M.json [--base BASE.json]
-```
+| File | What it does |
+| --- | --- |
+| `build_images.zsh [--host H] [--no-cache]` | Builds `so101-mount-base` (the only role) from `docker/mount-base/` through `prepare-image-build.py`. Host values (evidence root, `BUILD_PROXY`) come from `scripts/gate/hosts/<host>.env`. |
+| `prepare-image-build.py` | Prepares the build context and the pinned inputs of the role, and records the build under `<evidence root>/image-build-<stamp>`. |
+| `base-image-ids.json` | The pinned base image id of `so101-mount-base`. |
+| `build_mount_tree.zsh --commit HEX [--host H \| --build-root DIR]` | From a clean worktree at HEX, builds `<build root>/mount/<commit12>/{install,source}`, writes `BUILD-COMMIT` last, then makes both trees read-only. |
+| `start_mounted.zsh` | Starts one headless stack in the base image with the two trees mounted read-only; the entry script refuses a tree whose `BUILD-COMMIT` is not the given commit. |
 
-`manifest` prints `content_sha256` on stdout. The entry count and the excluded counts go to stderr. Every refusal prints
-`error: <ErrorName>: <cause>` and exits 2.
+`docker/mount-base/apt-packages.txt` was first taken from the installed set of the shard-deps image (`shard-deps-apt-installed.tsv`,
+453 names). That image, the tsv and `image_content_manifest.py` are gone; the list now stands on its own and `apt-pins.txt` holds the versions.
 
-## What is hashed
+## Workflow for a run
 
-- **Layers.** Plain and gzip layers, in the docker-archive layout (`manifest.json`) and the OCI layout (`index.json` and
-  `blobs/`). The tar is read once, so the order of the members does not matter. An archive with more than one image is refused;
-  attestation manifests in an OCI index are skipped.
-- **Merge.** Layers apply in order. A whiteout `.wh.<name>` removes the path and its subtree. `.wh..wh..opq` clears the lower
-  content of its directory and keeps the entries the same layer adds. A later entry replaces an earlier one; replacing a
-  directory with a non-directory drops the old children. A hard link takes its target's content, mode, owner and group at the
-  time the layer is applied, and keeps its `target`. Other `.wh..wh.*` names are ignored.
-- **One entry per path.** `type` (`file`, `dir`, `symlink`, `hardlink`, `char`, `block`, `fifo`), `mode` as an octal string,
-  `uid`, `gid`; for a file `size` and `sha256`; for a symlink `link`; for a device `major` and `minor`; `xattrs` (value hashes)
-  when present. There are no mtimes, atimes or ctimes.
-- **Image config.** `Entrypoint`, `Cmd`, `Env`, `WorkingDir`, `User`, `ExposedPorts`, `Volumes`, `Labels` and `Shell`.
-- **Canonical JSON.** Sorted keys, no whitespace, ASCII-escaped (valid UTF-8), integers and strings only.
+1. The gate is green at commit C (`scripts/gate/run_host_gate.zsh`).
+2. `build_mount_tree.zsh --commit C --host H` (the submodule `third_party/mujoco_ros2_control` must be initialised).
+3. `python3 scripts/env/image_env.py capture-image --image <base image id> --output M.json` records what the base contains once per base;
+   `python3 scripts/env/image_env.py check-image --manifest M.json --tree <install tree> --preflight <file>` compares the host with it and
+   writes the record a campaign start requires (`mount-preflight-<commit12>.json` in the evidence root); exit 0 means no must-match difference.
+4. The campaign config names `mount_build` (`{commit, root}`); `mount_from_config` is the only launch path. A config without it is refused
+   (`MOUNT_BUILD_REQUIRED`).
 
-The output file has four parts: `content` (schema, config, entries and the list of exclusion globs), `content_sha256` (the
-sha256 of the canonical bytes of `content`), `excluded` and `attribution`. Only `content` is hashed. `diff` and `check-no-pyc`
-recompute the hash and refuse a manifest that does not match it.
+The base is rebuilt only when the host pins move (`check-image --preflight` reports the difference as a must-match failure).
 
-## Exclusions
+## Sealed image-mode records
 
-`image-content-exclusions.txt` has one rule per line: `<glob> | <reason> | <date added>`. `**` matches across `/`, `*` and `?`
-do not. A path matched by a rule leaves `content.entries` and appears in `excluded.entries` with the rule and the sha256 of its
-own entry, so an exclusion stays visible. The list of globs is part of `content`, so two manifests are comparable only when
-they used the same rules.
+About 96 sealed campaign configs predate the mount trees and name self-contained images. They are read, never launched:
+`so101_demo.act.legacy_image_records` compares the recorded digests, the recorded readback and the identity, and
+`scripts/migration/recompute_before_after.py` checks that a recompute of a sealed root gives the same verdict before and after the
+migration. No image is needed to re-verify a sealed root.
 
-The loader refuses any rule that could match at or inside `/act`, `/opt/ros`, `/usr/lib`, `/usr/bin` or `/act/venv` (for
-example `/**`, `/usr/*` or `/**/site-packages/**`). Add a rule only after a determinism test shows the path varies between
-builds of the same commit, and record the reason.
+## Other images
 
-## diff
-
-Lists every differing path with both sides (`A:` and `B:`), grouped by top-level directory, and a count per package. A path is
-attributed to a dpkg package from `/var/lib/dpkg/info/*.list` and to a pip distribution from `*.dist-info/RECORD`. The path
-lists of those files are stored in `attribution`, because the entries only hold their hashes. Exit status is 1 when anything
-differs, 0 when nothing does.
-
-## check-no-pyc
-
-Fails (exit 1) when a `*.pyc` file exists anywhere under `/act` (this includes `/act/venv`), or in a `site-packages` directory
-outside `/act` that the build added. With `--base BASE.json` (the base image's manifest) only `.pyc` files missing from the base
-count. Without it, every `.pyc` in a `site-packages` directory counts. The first line of output gives the counts under `/act`,
-under `/act/venv`, and added in `site-packages`.
-
-## Tests
-
-`scripts/tests/test_image_content_manifest.py` builds synthetic layer tars in the test and reads no host path.
+`so101-parallel-perception` (the perception broker of the mujoco parallel batch and of the Expert Validation production service) and
+the offline training images (`yolo11n-seg-*`, `grounding-dino-tiny-train`) are separate tool chains; they are not built here.
