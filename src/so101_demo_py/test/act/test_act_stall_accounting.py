@@ -102,6 +102,23 @@ def test_the_summary_counts_the_classifications_and_a_failed_pair_carries_the_ac
     assert summary["pairs"][0]["heartbeat_stalls"][0]["account"]["classification"] == "gil_holder"
 
 
+def test_the_time_the_monitor_spends_accounting_is_not_a_stall_of_the_process():
+    clock = FakeClock()
+
+    class Slow(FakeSampler):
+        def cpu(self):
+            clock.now += 0.009                                       # reading /proc takes 9 ms of the heartbeat thread
+            return super().cpu()
+
+    delays = [0.001, 0.001, 0.001]
+    monitor = _monitor_with(Slow(), clock, delays)
+    now = clock.now
+    for _ in range(3):
+        now = monitor.beat(now)
+    assert not monitor.stalls and monitor.account_s == pytest.approx(0.027)
+    assert monitor.summary(since_s=0.0, until_s=now + 1)["heartbeat"]["accounting_s_total"] == pytest.approx(0.027)
+
+
 def test_a_failing_sampler_never_stops_the_heartbeat():
     class Broken(FakeSampler):
         def cpu(self):

@@ -138,6 +138,7 @@ class StallMonitor:
         self.stalls = collections.deque(maxlen=capacity)             # (start, end)
         self.wakeups = 0
         self.max_gap_s = 0.0
+        self.account_s = 0.0                                          # time the heartbeat thread spent in its own accounting
         self.sampler = sampler if sampler is not None else ThreadSampler()
         self.cpu_stall_s, self.sample_period_s, self.stack_period_s = cpu_stall_s, sample_period_s, stack_period_s
         self.details = {}                                            # stall start -> account of a stall over cpu_stall_s
@@ -171,11 +172,15 @@ class StallMonitor:
             self.max_gap_s = gap
         if gap > self.stall_s:
             self.stalls.append((previous, now))
+        accounting_started = self.monotonic()
         try:
             self._account(previous, now, gap)
         except Exception:               # noqa: BLE001 - diagnostics never stop the heartbeat
             pass
-        return now
+        after = self.monotonic()
+        self.account_s += after - accounting_started
+        # the time spent accounting is the monitor's own and must not show up as a stall of the process in the next gap
+        return after
 
     def _account(self, previous, now, gap):
         """Keep a CPU baseline fresh every `sample_period_s`; on a stall over `cpu_stall_s` say who ran and who was waiting."""
@@ -256,7 +261,7 @@ class StallMonitor:
         window = max(until_s - since_s, 1e-9)
         calls = by_kind["call"]
         heartbeat = {"stall_threshold_s": self.stall_s, "sleep_s": self.heartbeat_sleep_s, "wakeups_total": self.wakeups,
-                     "max_gap_s_total": self.max_gap_s, "stalls": len(stalls_in),
+                     "max_gap_s_total": self.max_gap_s, "accounting_s_total": self.account_s, "stalls": len(stalls_in),
                      "stall_duration_s": _stats([row[1] - row[0] for row in stalls_in]),
                      "listed": [{"start": row[0], "end": row[1], "duration_s": row[1] - row[0]} for row in stalls_in][:_MAX_LISTED]}
         detailed = [self.details[row[0]] for row in stalls_in if row[0] in self.details]
