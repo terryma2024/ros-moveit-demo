@@ -45,7 +45,7 @@ class ContainerProcessorOwner(ContainerShardOwner):
     def __init__(self, *, admitted_context, launch, entry, images, paths, registry, approved_inputs, config_paths,
                  phase1_attempts, service_token, startup_timeout_s, status_timeout_s, max_frame_bytes, stop_timeout_s,
                  docker_runner=_docker, namespace_reader=read_container_namespace, monotonic_ns=time.monotonic_ns,
-                 mount_build=None):
+                 mount_build=None, cpuset_cpus=None):
         run = Path(paths['run'])
         if (type(admitted_context) is not AdmittedCampaignContext
                 or type(launch) is not ContainerLaunch or launch.role != 'processor'
@@ -73,7 +73,8 @@ class ContainerProcessorOwner(ContainerShardOwner):
             host_paths=dict(owned_root=self.root, approved_inputs=approved_inputs, config_paths=config_paths,
                 socket_roots={'control': self.root / 'control'}, entry=entry, phase1_attempts=phase1_attempts,
                 processing_root=run / 'processing'),
-            container_name=launch.container_name, uid=os.getuid(), gid=os.getgid(), mount_build=mount_build)
+            container_name=launch.container_name, uid=os.getuid(), gid=os.getgid(), mount_build=mount_build,
+            cpuset_cpus=cpuset_cpus)
         self.mount_build = mount_build
         if images['shard']['digest'] != launch.image_digest:
             raise ValueError('PROCESSOR_OWNER_CONFIG_INVALID')

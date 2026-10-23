@@ -7,6 +7,7 @@ import secrets
 from so101_demo.runtime.act_instance.program import instance_id_for
 from so101_demo.runtime.act_instance.spec import SPEC_SCHEMA_VERSION,load_spec
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.runtime.container_campaign.cpuset import cpus_for,cpuset_from_config
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs
 from so101_demo.runtime.container_campaign.mount_build import mount_from_config
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch,ContainerLaunchRegistry
@@ -33,6 +34,7 @@ class ContainerShardLauncher:
         self.approved_inputs,self.config_paths=approved_inputs,config_paths
         self.docker_runner,self.namespace_reader=docker_runner,namespace_reader
         self.mount_build=mount_from_config(config)
+        self.cpuset=cpuset_from_config(config)    # None = off; the plan is checked against the host when a wave is prepared
         self._next_wave=0
         self._prepared={}
 
@@ -51,14 +53,15 @@ class ContainerShardLauncher:
         contract=self.config['qualification_contract']
         return () if contract is None else (Path(contract['path']),)
 
-    def _owner(self,*,launch,entry,spec_path,token,images,endpoints):
+    def _owner(self,*,launch,entry,spec_path,token,images,endpoints,cpuset_cpus=None):
         return ContainerShardOwner(admitted_context=self.context,launch=launch,entry=entry,
             images=images,paths=self.paths,registry=self.registry,approved_inputs=self.approved_inputs,
             config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path,*self._contract_paths()))),service_token=token,
             startup_timeout_s=self.runtime.initializing_hard_timeout_s,
             status_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
             stop_timeout_s=self.runtime.worker_recovery_timeout_s,
-            docker_runner=self.docker_runner,namespace_reader=self.namespace_reader,mount_build=self.mount_build)
+            docker_runner=self.docker_runner,namespace_reader=self.namespace_reader,mount_build=self.mount_build,
+            cpuset_cpus=cpuset_cpus)
 
     def __call__(self,*,plan,endpoints,slots):
         wave=plan['wave_index']
@@ -79,6 +82,9 @@ class ContainerShardLauncher:
         generation=wave+1
         images=dict(head=config['head_service']['image'],teacher=config['teacher_service']['image'],
                     shard=config['shard_image'])
+        # every slot's CPUs first: a plan that does not fit the host stops the wave before any directory exists
+        cpus={slot.worker_id:cpus_for(self.cpuset,'shard',worker_id=slot.worker_id,worker_count=self.context.worker_count)
+              for slot in slots}
         owners=[]
         for slot in slots:
             root=self.paths['run']/wave_id/slot.worker_id/('g'+str(generation))
@@ -106,7 +112,7 @@ class ContainerShardLauncher:
             if launch.launch_id!=instance_id_for(spec):raise ValueError('COLLECTION_SHARD_INSTANCE_ID_DRIFT')
             entry=ShardLaunchArgs(spec=spec_path,mujoco_session_id=session)
             owners.append(self._owner(launch=launch,entry=entry,spec_path=spec_path,token=token,images=images,
-                endpoints=endpoints))
+                endpoints=endpoints,cpuset_cpus=cpus[slot.worker_id]))
         self._prepared[wave]=tuple(owners)
         self._next_wave+=1
         return tuple(owners)

@@ -29,13 +29,15 @@ NS_FIELD = "ros" + "_namespace"
 GPU = 'GPU-28221cec-9d21-7753-fd5a-da645740df19'
 
 
-def prepared(tmp_path, mount=None):
+def prepared(tmp_path, mount=None, cpuset=None):
     paths = make_campaign_paths(tmp_path, 'campaign')
     campaign = campaign_fixture(tmp_path)
     campaign['gpu_uuid'] = GPU
     if mount is not None:
         campaign['shard_image'] = dict(campaign['teacher_service']['image'])
         campaign['mount_build'] = mount.document()
+    if cpuset is not None:
+        campaign['shard_cpuset'] = cpuset
     campaign_path = write_config(tmp_path, campaign)
     campaign_sha = hashlib.sha256(campaign_path.read_bytes()).hexdigest()
     runtime = tmp_path/'parallel.yaml'
@@ -133,5 +135,35 @@ def test_an_image_mode_config_leaves_the_shard_owner_unmounted(tmp_path):
     try:
         (owner,) = launcher(plan={'wave_index': 0}, endpoints={}, slots=(slot,))
         assert owner.mount_build is None and not [value for value in owner.argv if 'SO101_MOUNT' in value]
+    finally:
+        registry.close()
+
+
+def test_a_launcher_without_the_cpuset_key_adds_no_cpu_option(tmp_path):
+    launcher, registry, slot, _paths = prepared(tmp_path)
+    try:
+        (owner,) = launcher(plan={'wave_index': 0}, endpoints={}, slots=(slot,))
+        assert '--cpuset-cpus' not in owner.argv
+    finally:
+        registry.close()
+
+
+def test_the_cpuset_key_gives_the_shard_of_a_worker_its_own_range(tmp_path, monkeypatch):
+    monkeypatch.setattr('os.cpu_count', lambda: 24)
+    launcher, registry, slot, _paths = prepared(tmp_path, cpuset={'shard_cpus': 3, 'first_shard_cpu': 6})
+    try:
+        (owner,) = launcher(plan={'wave_index': 0}, endpoints={}, slots=(slot,))
+        assert owner.argv[owner.argv.index('--cpuset-cpus')+1] == '6-8'
+    finally:
+        registry.close()
+
+
+def test_a_cpuset_that_does_not_fit_the_host_stops_the_wave_before_anything_is_prepared(tmp_path, monkeypatch):
+    monkeypatch.setattr('os.cpu_count', lambda: 8)
+    launcher, registry, slot, paths = prepared(tmp_path, cpuset={'shard_cpus': 3, 'first_shard_cpu': 6})
+    try:
+        with pytest.raises(ValueError, match='CPUSET_PLAN_EXCEEDS_HOST'):
+            launcher(plan={'wave_index': 0}, endpoints={}, slots=(slot,))
+        assert not (paths['run']/'wave-0').exists()
     finally:
         registry.close()

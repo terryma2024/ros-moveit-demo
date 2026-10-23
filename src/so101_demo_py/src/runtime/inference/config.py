@@ -145,7 +145,9 @@ _GPU_MODEL = "gpu_model"
 # class L: it is part of the controlled identity (`unified.admission._collection_identity`) beside the images, whose `digest` is then the
 # base image and whose two hashes are the sha256 of the trees' BUILD-COMMIT records (`container_campaign.mount_build`).
 _MOUNT_BUILD = "mount_build"
-_OPTIONAL_LIMITS = (_GPU_MODEL, _MOUNT_BUILD, _RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
+# CPU partition mode (default off = absent): `container_campaign.cpuset`.
+_SHARD_CPUSET = "shard_cpuset"
+_OPTIONAL_LIMITS = (_GPU_MODEL, _MOUNT_BUILD, _SHARD_CPUSET, _RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
                     _RIG_PROFILE_SHA256, *_INT_LIMITS)
 
 
@@ -236,6 +238,9 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
             validate_mount_build(document[_MOUNT_BUILD])
             # one base image runs every role
             _require(document["shard_image"]["digest"] == document["head_service"]["image"]["digest"])
+        if _SHARD_CPUSET in document:
+            from so101_demo.runtime.container_campaign.cpuset import validate_cpuset
+            validate_cpuset(document[_SHARD_CPUSET])
         _text(document["gpu_uuid"])
         _require(document["gpu_uuid"].startswith("GPU-"))
         if "gpu_model" in document:
