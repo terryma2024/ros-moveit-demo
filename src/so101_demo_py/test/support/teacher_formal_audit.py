@@ -56,8 +56,31 @@ STOP_STEP = 109
 END_STEP = 120
 
 
+class _TickClock:
+    """The monotonic time of one written episode: the real time at its start, then one microsecond per reading.
+
+    Every stamp of the episode (the test's own and the scene service records the production code takes) comes from this one
+    source, so the verifier's 100 ms bound between a source receipt and its request never measures the speed of the host
+    (a GC pause or load in a test worker used to exceed it)."""
+
+    TICK_NS = 1000
+
+    def __init__(self):
+        self.start, self.readings = time.monotonic_ns(), 0
+
+    def monotonic_ns(self) -> int:
+        self.readings += 1
+        return self.start + self.readings * self.TICK_NS
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+_clock = _TickClock()
+
+
 def _ns() -> int:
-    return time.monotonic_ns()
+    return _clock.monotonic_ns()
 
 
 def phase_bounds(index: int) -> tuple[int, int]:
@@ -320,6 +343,17 @@ class TeacherEpisode:
     # -- the writer ------------------------------------------------------------------------------------------------
 
     def write(self, root: Path):
+        global _clock
+        from so101_demo.control.planning_scene import task_scene
+
+        _clock, real_time = _TickClock(), task_scene.time
+        task_scene.time = _clock
+        try:
+            return self._write(root)
+        finally:
+            task_scene.time = real_time
+
+    def _write(self, root: Path):
         from so101_demo.act.lossless_recorder import LosslessRecorderQueue
         from so101_demo.act.native_endpoints import world_source_record
         from so101_demo.act.teacher_collection import normal_stop_boundary_from_event
