@@ -1,6 +1,6 @@
 dataset_contract: so101-nonpenetrating-test-v1
 schema_version: 2
-mjcf_path: ../../assets/mujoco/v5_multi_object_scene.xml
+mjcf_path: ../../assets/mujoco/multi_object_scene.xml
 camera_name: task_camera
 image_width: 640
 image_height: 480

@@ -1,0 +1,478 @@
+from __future__ import annotations
+
+import builtins
+from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
+import sys
+from types import ModuleType
+
+import pytest
+
+from so101_demo.adapters.pick_place_executor import (
+    DynamicCupPickPlaceExecutor,
+    DynamicRuntimeContext,
+)
+from so101_demo.ports.pick_place_executor import (
+    DynamicCupPickPlaceRequest,
+    ExecutionProvenance,
+    ExecutorDispatchError,
+)
+from so101_demo.runtime.workflow_events import EventDecoder, EventEmitter
+
+
+SOURCE_COMMIT = "e58eee1a2ad94c859a6784bb968ca9702ec4031a"
+INSTALLED_PREFIX = "/data/work/ws_moveit/install/so101_demo_py"
+
+
+def _provenance(tmp_path: Path) -> ExecutionProvenance:
+    return ExecutionProvenance(
+        source_commit=SOURCE_COMMIT,
+        installed_prefix=INSTALLED_PREFIX,
+        entrypoint=None,
+        module=None,
+        executable=None,
+        session_id="text-agent-session",
+        expected_reset_epoch=3,
+        evidence_root=str(tmp_path),
+    )
+
+
+def _context(tmp_path: Path) -> DynamicRuntimeContext:
+    return DynamicRuntimeContext(
+        session_id="text-agent-session",
+        expected_reset_epoch=3,
+        evidence_root=tmp_path,
+        source_commit=SOURCE_COMMIT,
+        installed_prefix=INSTALLED_PREFIX,
+        execution_provenance=_provenance(tmp_path),
+    )
+
+
+def _request(**changes: object) -> DynamicCupPickPlaceRequest:
+    values: dict[str, object] = {
+        "request_id": "req-001",
+        "capability": "dynamic_cup_pick_place",
+        "backend": "mujoco",
+        "scene_source": "observe_only",
+        "target_object": "plastic_cup",
+        "action": "pick",
+    }
+    values.update(changes)
+    return DynamicCupPickPlaceRequest(**values)  # type: ignore[arg-type]
+
+
+def test_context_is_frozen_and_adapter_calls_runner_once_with_only_whitelisted_options(
+    tmp_path: Path,
+) -> None:
+    calls: list[object] = []
+    context = _context(tmp_path)
+    executor = DynamicCupPickPlaceExecutor(
+        context,
+        runner=lambda options, **kwargs: calls.append(options) or 0,
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        context.session_id = "replacement"  # type: ignore[misc]
+
+    result = executor.dispatch(_request())
+
+    assert result.exit_code == 0
+    assert result.runtime_session_id == "text-agent-session"
+    assert len(calls) == 1
+    options = calls[0]
+    assert vars(options) == {
+        "backend": "mujoco",
+        "mode": "execute",
+        "execute": True,
+        "scene_source": "observe_only",
+        "dynamic_policy": None,
+        "cup_pose_timeout_s": 30.0,
+        "source_commit": SOURCE_COMMIT,
+        "installed_prefix": INSTALLED_PREFIX,
+        "session_id": "text-agent-session",
+        "expected_reset_epoch": 3,
+        "evidence_root": tmp_path,
+    }
+
+
+def test_executor_emits_runtime_started_before_the_real_runtime_boundary(
+    tmp_path: Path,
+) -> None:
+    order: list[tuple[str, object]] = []
+    lines: list[str] = []
+
+    def write(line: str) -> None:
+        lines.append(line)
+        order.append(("event", line))
+
+    emitter = EventEmitter("w1", "dynamic_runtime", write, lambda: 100)
+    context = replace(
+        _context(tmp_path), workflow_id="w1", event_emitter=emitter
+    )
+    executor = DynamicCupPickPlaceExecutor(
+        context,
+        runner=lambda options, **kwargs: order.append(("runtime", options)) or 0,
+    )
+
+    result = executor.dispatch(_request())
+
+    assert result.exit_code == 0
+    assert [kind for kind, _value in order] == ["event", "runtime", "event"]
+    events = EventDecoder("w1", frozenset({"dynamic_runtime"})).feed(
+        "".join(lines).encode(), now_ns=100
+    )
+    assert [event.event for event in events] == [
+        "RUNTIME_STARTED",
+        "RUNTIME_COMPLETED",
+    ]
+    assert events[0].payload == {
+        "request_id": "req-001",
+        "session_id": "text-agent-session",
+        "reset_epoch": 3,
+    }
+    options = order[1][1]
+    assert options.workflow_id == "w1"
+    assert options.request_id == "req-001"
+
+
+@pytest.mark.parametrize(
+    ("workflow_id", "emitter_workflow_id", "component"),
+    [
+        ("w1", None, None),
+        (None, "w1", "dynamic_runtime"),
+        ("w1", "w2", "dynamic_runtime"),
+        ("w1", "w1", "text_agent"),
+    ],
+)
+def test_executor_rejects_unpaired_or_cross_bound_workflow_emitter(
+    tmp_path: Path,
+    workflow_id: str | None,
+    emitter_workflow_id: str | None,
+    component: str | None,
+) -> None:
+    emitter = (
+        None
+        if emitter_workflow_id is None or component is None
+        else EventEmitter(emitter_workflow_id, component, lambda _line, **kwargs: None, lambda: 100)
+    )
+    calls: list[object] = []
+    context = replace(
+        _context(tmp_path), workflow_id=workflow_id, event_emitter=emitter
+    )
+    executor = DynamicCupPickPlaceExecutor(
+        context, runner=lambda options, **kwargs: calls.append(options) or 0
+    )
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        executor.dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_CONTEXT_INVALID"
+    assert calls == []
+
+
+def test_adapter_forwards_explicit_cup_pose_timeout(tmp_path: Path) -> None:
+    calls: list[object] = []
+    executor = DynamicCupPickPlaceExecutor(
+        _context(tmp_path),
+        cup_pose_timeout_s=42.5,
+        runner=lambda options, **kwargs: calls.append(options) or 0,
+    )
+
+    result = executor.dispatch(_request())
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0].cup_pose_timeout_s == 42.5
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"capability": "arbitrary_provider_capability"},
+        {"backend": "gazebo"},
+        {"scene_source": "provider_scene"},
+        {"target_object": "metal_cup"},
+        {"action": "place"},
+    ],
+)
+def test_invalid_typed_request_is_rejected_without_runner_or_ros_import(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    changes: dict[str, str],
+) -> None:
+    calls: list[object] = []
+    real_import = builtins.__import__
+
+    def reject_rclpy(name: str, *args: object, **kwargs: object):
+        if name == "rclpy" or name.startswith("rclpy."):
+            raise AssertionError("rclpy must not be imported for rejected dispatch")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_rclpy)
+    executor = DynamicCupPickPlaceExecutor(
+        _context(tmp_path),
+        runner=lambda options, **kwargs: calls.append(options) or 0,
+    )
+
+    result = executor.dispatch(_request(**changes))
+
+    assert result.exit_code == 1
+    assert result.runtime_session_id == "text-agent-session"
+    assert calls == []
+
+
+def test_invalid_typed_request_precedes_context_validation_and_default_import(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = DynamicRuntimeContext(
+        session_id=" ",
+        expected_reset_epoch=3,
+        evidence_root=tmp_path,
+        source_commit=SOURCE_COMMIT,
+        installed_prefix=INSTALLED_PREFIX,
+        execution_provenance=ExecutionProvenance(
+            source_commit=SOURCE_COMMIT,
+            installed_prefix=INSTALLED_PREFIX,
+            entrypoint=None,
+            module=None,
+            executable=None,
+            session_id=" ",
+            expected_reset_epoch=3,
+            evidence_root=str(tmp_path),
+        ),
+    )
+    real_import = builtins.__import__
+
+    def reject_runtime_import(name: str, *args: object, **kwargs: object):
+        if name == "so101_demo.ros.dynamic_runtime":
+            raise AssertionError("default runtime import must not run")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_runtime_import)
+    monkeypatch.delitem(sys.modules, "so101_demo.ros.dynamic_runtime", raising=False)
+
+    result = DynamicCupPickPlaceExecutor(context).dispatch(_request(action="place"))
+
+    assert result.exit_code == 1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"session_id": ""},
+        {"session_id": "   "},
+        {"session_id": 1},
+        {"expected_reset_epoch": True},
+        {"expected_reset_epoch": -1},
+        {"expected_reset_epoch": "3"},
+        {"evidence_root": "relative-evidence"},
+        {"evidence_root": Path("relative-evidence")},
+        # A source commit is optional debug metadata: an empty or non-string value is
+        # redacted only because the dataclass itself rejects a non-string type.
+        {"source_commit": 1},
+        # Prefix metadata is optional debug data; only a non-string type is redacted.
+        {"installed_prefix": 1},
+    ],
+)
+def test_invalid_context_is_redacted_before_runner_or_default_runtime_import(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    changes: dict[str, object],
+) -> None:
+    values = {
+        "session_id": "text-agent-session",
+        "expected_reset_epoch": 3,
+        "evidence_root": tmp_path,
+        "source_commit": SOURCE_COMMIT,
+        "installed_prefix": INSTALLED_PREFIX,
+        "execution_provenance": _provenance(tmp_path),
+    }
+    values.update(changes)
+    calls: list[object] = []
+    real_import = builtins.__import__
+
+    def reject_runtime_import(name: str, *args: object, **kwargs: object):
+        if name == "so101_demo.ros.dynamic_runtime":
+            raise AssertionError("default runtime import must not run")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_runtime_import)
+    monkeypatch.delitem(sys.modules, "so101_demo.ros.dynamic_runtime", raising=False)
+    executor = DynamicCupPickPlaceExecutor(
+        DynamicRuntimeContext(**values),  # type: ignore[arg-type]
+        runner=lambda options, **kwargs: calls.append(options) or 0,
+    )
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        executor.dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_CONTEXT_INVALID"
+    assert str(captured.value) == "DYNAMIC_RUNTIME_CONTEXT_INVALID"
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+    assert calls == []
+
+
+def test_default_runtime_import_exception_is_redacted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real_import = builtins.__import__
+
+    def fail_dynamic_runtime_import(name: str, *args: object, **kwargs: object):
+        if name.endswith("dynamic_runtime"):
+            raise ModuleNotFoundError("private runtime path /secret/dynamic_runtime.py")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, "so101_demo.ros.dynamic_runtime", raising=False)
+    monkeypatch.setattr(builtins, "__import__", fail_dynamic_runtime_import)
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        DynamicCupPickPlaceExecutor(_context(tmp_path)).dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_EXCEPTION"
+    assert str(captured.value) == "DYNAMIC_RUNTIME_EXCEPTION"
+    assert "secret" not in str(captured.value)
+    assert captured.value.__cause__ is None
+    assert captured.value.__suppress_context__ is True
+
+
+def test_preview_path_never_imports_ros_or_dispatches(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from so101_demo.application.text_agent import AgentRequest, TextAgent
+    from so101_demo.ports.task_planner import PlannerCandidate, PlannerMetadata
+
+    real_import = builtins.__import__
+
+    def reject_rclpy(name: str, *args: object, **kwargs: object):
+        if name == "rclpy" or name.startswith("rclpy."):
+            raise AssertionError("rclpy must not be imported for preview")
+        return real_import(name, *args, **kwargs)
+
+    class Planner:
+        def plan(self, instruction: str) -> PlannerCandidate:
+            return PlannerCandidate(
+                {
+                    "outcome": "supported",
+                    "command": {
+                        "target_object": "plastic_cup",
+                        "action": "pick",
+                        "constraints": {},
+                    },
+                },
+                PlannerMetadata("test", "test", 0, None, None, None, False),
+            )
+
+    monkeypatch.setattr(builtins, "__import__", reject_rclpy)
+    agent = TextAgent(Planner(), DynamicCupPickPlaceExecutor(_context(tmp_path)))
+
+    result = agent.handle(
+        AgentRequest("req-preview", "帮我拿杯子", "preview", False, "mujoco")
+    )
+
+    assert result.dispatch is False
+    assert result.runtime_session_id is None
+
+
+def test_runner_exception_becomes_stable_redacted_executor_error(tmp_path: Path) -> None:
+    def runner(_options: object) -> int:
+        raise RuntimeError("secret endpoint https://token.example/internal")
+
+    executor = DynamicCupPickPlaceExecutor(_context(tmp_path), runner=runner)
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        executor.dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_EXCEPTION"
+    assert str(captured.value) == "DYNAMIC_RUNTIME_EXCEPTION"
+    assert "secret" not in str(captured.value)
+    assert "token.example" not in str(captured.value)
+    assert captured.value.__cause__ is None
+    assert captured.value.__suppress_context__ is True
+
+
+@pytest.mark.parametrize("runner_result", [True, False, "0", 0.0, None])
+def test_runner_result_must_be_an_exact_integer(
+    tmp_path: Path,
+    runner_result: object,
+) -> None:
+    executor = DynamicCupPickPlaceExecutor(
+        _context(tmp_path),
+        runner=lambda _options, **kwargs: runner_result,
+    )
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        executor.dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_RESULT_INVALID"
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_default_runtime_receives_context_profiler(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[object, object]] = []
+    profiler = object()
+    runtime_module = ModuleType("so101_demo.ros.dynamic_runtime")
+
+    def run_dynamic_execute(options: object, *, profiler: object) -> int:
+        calls.append((options, profiler))
+        return 0
+
+    runtime_module.run_dynamic_execute = run_dynamic_execute  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "so101_demo.ros.dynamic_runtime", runtime_module)
+    context = replace(_context(tmp_path), profiler=profiler)
+
+    result = DynamicCupPickPlaceExecutor(context).dispatch(_request())
+
+    assert result.exit_code == 0
+    assert calls[0][1] is profiler
+    assert calls[0][0].session_id == "text-agent-session"
+
+
+def test_default_runtime_owns_terminal_event_without_outer_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lines: list[str] = []
+    emitter = EventEmitter("w1", "dynamic_runtime", lines.append, lambda: 100)
+    runtime_module = ModuleType("so101_demo.ros.dynamic_runtime")
+
+    def run_dynamic_execute(options, *, profiler, event_emitter) -> int:
+        assert profiler is None
+        event_emitter.emit(
+            "RUNTIME_READY",
+            payload={
+                "request_id": options.request_id,
+                "session_id": options.session_id,
+                "reset_epoch": options.expected_reset_epoch,
+            },
+        )
+        event_emitter.emit(
+            "RUNTIME_COMPLETED",
+            payload={
+                "manifest_path": str(options.evidence_root / "dynamic-execute-manifest.json"),
+                "runtime_exit_code": 0,
+            },
+        )
+        return 0
+
+    runtime_module.run_dynamic_execute = run_dynamic_execute  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "so101_demo.ros.dynamic_runtime", runtime_module)
+    context = replace(
+        _context(tmp_path), workflow_id="w1", event_emitter=emitter
+    )
+
+    result = DynamicCupPickPlaceExecutor(context).dispatch(_request())
+
+    assert result.exit_code == 0
+    decoded = EventDecoder("w1", frozenset({"dynamic_runtime"})).feed(
+        "".join(lines).encode(), now_ns=100
+    )
+    assert [event.event for event in decoded] == [
+        "RUNTIME_STARTED",
+        "RUNTIME_READY",
+        "RUNTIME_COMPLETED",
+    ]

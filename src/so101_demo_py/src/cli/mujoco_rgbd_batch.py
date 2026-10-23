@@ -157,7 +157,7 @@ def main(arguments: list[str] | None = None) -> int:
 
     share = Path(get_package_share_directory("so101_demo_py"))
     policy = options.dynamic_policy or (
-        share / "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+        share / "config/policies/dynamic_cup_pick/mujoco.yaml"
     )
     owned_stack = None
     result = None

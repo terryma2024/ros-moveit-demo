@@ -244,8 +244,8 @@ function scenario(options: ScenarioOptions): Scenario {
     expectation: {
       batchKind: options.batchKind,
       executionProfile: options.batchKind === "FULL_RESTART_RETRY"
-        ? "MPS_W1_FULL_RESTART_RETRY"
-        : options.workerCount === 2 ? "MPS_W2_FIRST_PASS" : "MPS_W1_FIRST_PASS",
+        ? "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
+        : options.workerCount === 2 ? "MPS_TWO_WORKER_FIRST_PASS" : "MPS_SINGLE_WORKER_FIRST_PASS",
       schemaVersion: options.batchKind === "FULL_RESTART_RETRY"
         ? 5
         : options.workerCount === 2 ? 4 : 6,
@@ -392,7 +392,7 @@ describe("assertCampaignBatchEvidence", () => {
 // no cleanup document, so the verifier has to pick the branch from the batch's own bytes.
 // ---------------------------------------------------------------------------------------------
 
-const MACOS_DYNAMIC_SCHEMA = "so101-dynamic-mujoco-execute-v1";
+const MACOS_DYNAMIC_SCHEMA = "so101-dynamic-execute";
 
 type MacosOptions = {
   batchId: string;
@@ -857,14 +857,14 @@ function macosScenario(options: MacosOptions): MacosScenario {
 
   const committedIds = [...commitOrder].sort();
   const campaignResult = {
-    status: options.workerCount === 2 ? "W2_CAMPAIGN_PASS" : "N1_CAMPAIGN_PASS",
+    status: options.workerCount === 2 ? "TWO_WORKER_CAMPAIGN_PASS" : "SINGLE_WORKER_CAMPAIGN_PASS",
     execution_profile: options.executionProfile,
     route: {
       schema_version: options.schemaVersion,
       execution_profile: options.executionProfile,
       batch_kind: options.batchKind,
       worker_count: options.workerCount,
-      module: "so101_demo.cli.macos_w2_campaign",
+      module: "so101_demo.cli.macos_two_worker_campaign",
       config_path: join(root, "route.yaml"),
       config_sha256: sha256("config"),
     },
@@ -978,7 +978,7 @@ function reRootDocuments(root: string, alias: string): void {
 const W2_MACOS: Omit<MacosOptions, "batchId" | "points"> = {
   batchKind: "FIRST_PASS",
   workerCount: 2,
-  executionProfile: "MPS_W2_FIRST_PASS",
+  executionProfile: "MPS_TWO_WORKER_FIRST_PASS",
   schemaVersion: 4,
 };
 
@@ -986,7 +986,7 @@ const W2_MACOS: Omit<MacosOptions, "batchId" | "points"> = {
 const RETRY_MACOS: Omit<MacosOptions, "batchId" | "points"> = {
   batchKind: "FULL_RESTART_RETRY",
   workerCount: 1,
-  executionProfile: "MPS_W1_FULL_RESTART_RETRY",
+  executionProfile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
   schemaVersion: 5,
   retryBinding: true,
 };
@@ -1013,7 +1013,7 @@ describe("the macOS composed campaign layout", () => {
   test("accepts the W1 route: one worker runs the whole selection sequentially", () => {
     const batch = macosScenario({
       batchId: "w1-b001", points: ["p1", "p2", "p3", "p4"], batchKind: "FIRST_PASS",
-      workerCount: 1, executionProfile: "MPS_W1_FIRST_PASS", schemaVersion: 6,
+      workerCount: 1, executionProfile: "MPS_SINGLE_WORKER_FIRST_PASS", schemaVersion: 6,
     });
     expect(() => assertCampaignBatchEvidence(
       readCampaignBatchEvidence(batch.root), batch.expectation)).not.toThrow();
@@ -1151,7 +1151,7 @@ describe("the macOS composed campaign layout", () => {
       ...batch.expectation, workerCount: 1,
     })).toThrow(/SELECTED_ONLY_EVIDENCE_INVALID/);
     expect(() => assertCampaignBatchEvidence(readCampaignBatchEvidence(batch.root), {
-      ...batch.expectation, executionProfile: "MPS_W1_FIRST_PASS",
+      ...batch.expectation, executionProfile: "MPS_SINGLE_WORKER_FIRST_PASS",
     })).toThrow(/SELECTED_ONLY_EVIDENCE_INVALID/);
     expect(() => assertCampaignBatchEvidence(readCampaignBatchEvidence(batch.root), {
       ...batch.expectation, selectedPointIds: ["p1"],
@@ -1302,7 +1302,7 @@ describe("the macOS composed campaign layout", () => {
 describe("assertRoutingClaim", () => {
   const expectation: CampaignBatchExpectation = {
     batchKind: "FIRST_PASS",
-    executionProfile: "MPS_W1_FIRST_PASS",
+    executionProfile: "MPS_SINGLE_WORKER_FIRST_PASS",
     schemaVersion: 6,
     workerCount: 1,
     selectedPointIds: ["p1", "p2", "p3", "p4"],
@@ -1310,7 +1310,7 @@ describe("assertRoutingClaim", () => {
 
   test("accepts the receipt that resolved the claimed profile from real bytes", () => {
     expect(() => assertRoutingClaim({
-      execution_profile: "MPS_W1_FIRST_PASS",
+      execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS",
       execution_schema_version: 6,
       execution_batch_kind: "FIRST_PASS",
       admitted: true,
@@ -1319,15 +1319,15 @@ describe("assertRoutingClaim", () => {
 
   test("rejects a receipt for a different profile, schema or batch kind", () => {
     expect(() => assertRoutingClaim({
-      execution_profile: "MPS_W2_FIRST_PASS", execution_schema_version: 4,
+      execution_profile: "MPS_TWO_WORKER_FIRST_PASS", execution_schema_version: 4,
       execution_batch_kind: "FIRST_PASS", admitted: true,
     }, expectation)).toThrow(/ROUTING_CLAIM_INVALID/);
     expect(() => assertRoutingClaim({
-      execution_profile: "MPS_W1_FIRST_PASS", execution_schema_version: 5,
+      execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS", execution_schema_version: 5,
       execution_batch_kind: "FIRST_PASS", admitted: true,
     }, expectation)).toThrow(/ROUTING_CLAIM_INVALID/);
     expect(() => assertRoutingClaim({
-      execution_profile: "MPS_W1_FIRST_PASS", execution_schema_version: 6,
+      execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS", execution_schema_version: 6,
       execution_batch_kind: "FULL_RESTART_RETRY", admitted: true,
     }, expectation)).toThrow(/ROUTING_CLAIM_INVALID/);
   });

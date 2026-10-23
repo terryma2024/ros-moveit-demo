@@ -9,7 +9,8 @@ from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchSummary,
     BatchTerminalStatus,
 )
-from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus
+from so101_demo.parallel_batch.contracts.common import PointStatus
+from so101_demo.parallel_batch.contracts.identity import BatchSummary
 
 
 class StatisticsProjectionError(ValueError):

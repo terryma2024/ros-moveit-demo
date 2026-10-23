@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import fixture from "@/fixtures/top_view_projection_v1.json";
+import fixture from "@/fixtures/top_view_projection.json";
 import { projectBounds, projectXY } from "./projection";
 
 describe("expert validation projection", () => {

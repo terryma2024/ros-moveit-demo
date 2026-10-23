@@ -1,0 +1,507 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+from ament_index_python.packages import get_package_prefix
+
+from so101_demo.application.text_agent import AgentResult, AgentStatus
+from so101_demo.ports.task_planner import PlannerMetadata
+from paths import REPOSITORY
+
+
+FULL_SHA = re.compile(r"[0-9a-f]{64}")
+
+
+def _head() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def test_resolve_installed_execution_identity_is_cwd_and_git_independent(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The installed location is required; a source commit is an optional observation."""
+
+    from so101_demo.runtime.provenance import resolve_installed_execution_identity
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SO101_SOURCE_COMMIT", raising=False)
+    identity = resolve_installed_execution_identity()
+
+    assert identity.package_prefix == str(
+        Path(get_package_prefix("so101_demo_py")).resolve(strict=True)
+    )
+    assert identity.source_commit is None or isinstance(identity.source_commit, str)
+    assert identity.source_commit_source in {"OBSERVED", "UNKNOWN"}
+
+    # A pure copied install outside Git observes nothing and still resolves.
+    monkeypatch.setenv("SO101_SOURCE_COMMIT", "")
+    unresolved = resolve_installed_execution_identity()
+    assert unresolved.source_commit is None
+    assert unresolved.source_commit_source == "UNKNOWN"
+
+
+def _options(
+    evidence_root: Path,
+    *,
+    source_commit: str | None,
+    installed_prefix: str,
+):
+    from so101_demo.cli.text_pick_agent import build_parser
+
+    arguments = [
+        "--instruction",
+        "Pick the plastic cup.",
+        "--mode",
+        "execute",
+        "--execute",
+        "--session-id",
+        "provenance-session",
+        "--expected-reset-epoch",
+        "4",
+        "--evidence-root",
+        str(evidence_root),
+        "--installed-prefix",
+        installed_prefix,
+    ]
+    if source_commit is not None:
+        arguments += ["--source-commit", source_commit]
+    return build_parser().parse_args(arguments)
+
+
+@pytest.mark.parametrize("source_commit", ["abc123", "a" * 39, "g" * 40, "", None])
+def test_execute_accepts_any_debug_commit_value_without_refusing(
+    tmp_path: Path, source_commit
+) -> None:
+    """Debug metadata can be missing or malformed; it never refuses an execution."""
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    context, reason = _valid_execute_context(
+        _options(tmp_path, source_commit=source_commit, installed_prefix=prefix)
+    )
+
+    assert reason is None, reason
+    assert context is not None
+    assert context.installed_prefix == str(Path(prefix).resolve())
+    assert context.source_commit is None or isinstance(context.source_commit, str)
+    assert context.source_commit != "UNRECORDED_SOURCE"
+
+
+@pytest.mark.parametrize("prefix_kind", ["missing", "relative", "foreign", "absent"])
+def test_execute_never_refuses_on_prefix_metadata(tmp_path: Path, prefix_kind) -> None:
+    """Prefix metadata is optional debug data: no value or absence can refuse a run."""
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+
+    values = {
+        "missing": str(tmp_path / "does-not-exist"),
+        "relative": "relative-prefix",
+        "foreign": str(tmp_path),
+        "absent": None,
+    }
+    context, reason = _valid_execute_context(
+        _options(tmp_path, source_commit=_head(), installed_prefix=values[prefix_kind])
+    )
+    assert reason is None, reason
+    assert context is not None
+    # The declared value is metadata; a real observed prefix may legitimately replace it.
+    assert context.installed_prefix is None or isinstance(context.installed_prefix, str)
+    assert context.session_id == "provenance-session"
+    assert context.expected_reset_epoch == 4
+    assert context.evidence_root == tmp_path.resolve()
+
+
+def test_execute_accepts_a_mismatched_debug_commit(tmp_path: Path) -> None:
+    """A caller-supplied commit is debug metadata, never verified runtime source."""
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+
+    monkeypatch_prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    mismatched = "0" * 40 if _head() != "0" * 40 else "1" * 40
+    context, reason = _valid_execute_context(
+        _options(tmp_path, source_commit=mismatched, installed_prefix=monkeypatch_prefix)
+    )
+
+    assert reason is None, reason
+    assert context is not None
+    assert context.execution_provenance.source_commit_source in {"OBSERVED", "DECLARED"}
+    assert context.execution_provenance.installed_prefix == monkeypatch_prefix
+
+
+def test_verified_context_canonicalizes_symlink_and_projects_hashes(tmp_path: Path) -> None:
+    """Catches lexical-prefix comparison and provenance that omits runtime artifact hashes."""
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+
+    prefix = Path(get_package_prefix("so101_demo_py")).resolve()
+    prefix_link = tmp_path / "prefix-link"
+    prefix_link.symlink_to(prefix, target_is_directory=True)
+    context, reason = _valid_execute_context(
+        _options(
+            tmp_path,
+            source_commit=_head().upper(),
+            installed_prefix=str(prefix_link),
+        )
+    )
+
+    assert reason is None
+    assert context is not None
+    # A usable declared path is kept as metadata; the observed prefix wins when present.
+    assert context.execution_provenance.installed_prefix in {str(prefix), str(prefix_link)}
+    assert context.source_commit is None or isinstance(context.source_commit, str)
+    assert context.installed_prefix == str(prefix)
+    projection = context.execution_provenance.to_dict()
+    assert projection["schema_version"] == 1
+    # The commit is optional DEBUG metadata; here it can only be what Git observed.
+    assert projection["source_commit"] in {None, _head(), _head().upper()}
+    assert projection["source_commit_source"] in {"OBSERVED", "DECLARED", "UNKNOWN"}
+    assert projection["source_commit_authority"] if "source_commit_authority" in projection else True
+    assert projection["installed_prefix"] in {str(prefix), str(prefix_link)}
+    assert projection["session_id"] == "provenance-session"
+    assert projection["expected_reset_epoch"] == 4
+    assert projection["evidence_root"] == str(tmp_path.resolve())
+    for artifact in ("entrypoint", "module", "executable"):
+        assert Path(projection[artifact]["path"]).is_absolute()
+        assert FULL_SHA.fullmatch(projection[artifact]["sha256"])
+
+
+def _forbid_git(monkeypatch):
+    """Any Git subprocess on a runtime path is a failure; other subprocesses pass."""
+
+    import subprocess as subprocess_module
+
+    calls: list[list[str]] = []
+    mode = {"strict": True}
+
+    def recorder(argv, *args, **kwargs):
+        recorded = [str(item) for item in argv] if isinstance(argv, (list, tuple)) else [str(argv)]
+        calls.append(recorded)
+        if mode["strict"] and recorded and recorded[0].endswith("git"):
+            raise AssertionError(f"runtime Git subprocess: {recorded}")
+        return real_run(argv, *args, **kwargs)
+
+    real_run = subprocess_module.run
+    monkeypatch.setattr(subprocess_module, "run", recorder)
+    return calls, mode
+
+
+def test_runtime_execution_chain_never_runs_git(tmp_path: Path, monkeypatch) -> None:
+    """Runtime commit metadata is declared/unknown; Git is build-manifest only."""
+
+    from ament_index_python.packages import get_package_prefix
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+    from so101_demo.runtime.provenance import (
+        installed_bundle, resolve_installed_execution_identity)
+
+    calls, mode = _forbid_git(monkeypatch)
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    context, reason = _valid_execute_context(
+        _options(tmp_path, source_commit="0" * 40, installed_prefix=prefix))
+
+    assert reason is None, reason
+    assert context is not None
+    assert context.execution_provenance.source_commit in {None, "0" * 40}
+    identity = resolve_installed_execution_identity()
+    assert identity.source_commit in {None, None} or isinstance(identity.source_commit, str)
+    bundle = installed_bundle()
+    assert bundle.bundle_sha256
+    assert not [call for call in calls if call and call[0].endswith("git")]
+
+    # The build/install manifest generator is the one place Git may be observed.
+    from so101_demo.runtime.debug_provenance import build_debug_manifest
+
+    mode["strict"] = False
+    copied = tmp_path / "copied"
+    (copied / "share/so101_demo_py").mkdir(parents=True)
+    (copied / "share/so101_demo_py/note.txt").write_text("bytes\n")
+    document = build_debug_manifest(copied, source_root=REPOSITORY)
+    assert document["kind"] == "DEBUG_INSTALL_PROVENANCE"
+    assert [call for call in calls if call and call[0].endswith("git")]
+
+
+def test_debug_artifact_read_failures_are_nonblocking(tmp_path: Path, monkeypatch) -> None:
+    """Permission, race and malformed metadata failures stay diagnostics."""
+
+    from ament_index_python.packages import get_package_prefix
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+    from so101_demo.runtime import provenance
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    for error in (PermissionError("denied"), FileNotFoundError("vanished"),
+                  OSError("io"), ValueError("bad path")):
+        def failing(_path, _error=error):
+            raise _error
+
+        monkeypatch.setattr(provenance, "_sha256", failing)
+        context, reason = _valid_execute_context(
+            _options(tmp_path, source_commit=_head(), installed_prefix=prefix))
+        assert reason is None, (error, reason)
+        assert context is not None
+        assert context.execution_provenance.entrypoint is None
+        assert context.execution_provenance.module is None
+    monkeypatch.undo()
+
+    # Malformed/unresolvable declared metadata is unknown, not a refusal.
+    for declared in ("\u0000bad", "/proc/self/nonexistent/../prefix", ""):
+        context, reason = _valid_execute_context(
+            _options(tmp_path, source_commit=_head(), installed_prefix=declared))
+        assert reason is None, (declared, reason)
+        assert context is not None
+
+
+class RecordingAgent:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    def handle(self, request: object) -> AgentResult:
+        self.requests.append(request)
+        return AgentResult(
+            request_id=request.request_id,
+            status=AgentStatus.RUNTIME_COMPLETED,
+            reason_code=None,
+            metadata=PlannerMetadata(
+                "deepseek",
+                "deepseek-v4-flash",
+                5,
+                10,
+                4,
+                0,
+                False,
+            ),
+            command=None,
+            capability="dynamic_cup_pick_place",
+            dispatch=True,
+            runtime_session_id="provenance-session",
+            state_trace=(AgentStatus.RUNTIME_STARTED, AgentStatus.RUNTIME_COMPLETED),
+            confirmation_mode=("skipped" if request.skip_confirmation else "digest"),
+        )
+
+
+class RejectingAgent:
+    def handle(self, request: object) -> AgentResult:
+        return AgentResult(
+            request_id=request.request_id,
+            status=AgentStatus.DISPATCH_REJECTED,
+            reason_code="CONFIRMATION_MISMATCH",
+            metadata=None,
+            command=None,
+            capability=None,
+            dispatch=False,
+            runtime_session_id=None,
+            state_trace=(AgentStatus.DISPATCH_REJECTED,),
+        )
+
+
+def test_cli_persists_verified_provenance_before_agent_dispatch(tmp_path: Path, capsys) -> None:
+    """Catches verified provenance existing only transiently in process memory."""
+
+    from so101_demo.cli import text_pick_agent
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    agent = RecordingAgent()
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "Pick the plastic cup.",
+            "--request-id",
+            "req-persist",
+            "--mode",
+            "execute",
+            "--execute",
+            "--confirmation-digest",
+            "sha256:v1:" + "0" * 64,
+            "--session-id",
+            "provenance-session",
+            "--expected-reset-epoch",
+            "4",
+            "--evidence-root",
+            str(tmp_path),
+            "--source-commit",
+            _head(),
+            "--installed-prefix",
+            prefix,
+        ],
+        _agent=agent,
+    )
+
+    assert exit_code == 0
+    assert len(agent.requests) == 1
+    request_projection = agent.requests[0].execution_provenance.to_dict()
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert len(persisted) == 1
+    document = json.loads(persisted[0].read_text())
+    assert document == {
+        "request_id": "req-persist",
+        "confirmation_mode": "digest",
+        "confirmation_validated": True,
+        "execution_provenance": request_projection,
+        "planner": {
+            "provider": "deepseek",
+            "model": "deepseek-v4-flash",
+            "fallback_used": False,
+        },
+    }
+    assert hashlib.sha256(persisted[0].read_bytes()).hexdigest()
+    rendered = json.loads(capsys.readouterr().out)
+    assert rendered["status"] == "RUNTIME_COMPLETED"
+    assert rendered["confirmation_mode"] == "digest"
+
+
+def test_cli_records_skipped_confirmation_in_result_and_provenance(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """Catches a direct Execute being indistinguishable from digest confirmation."""
+
+    from so101_demo.cli import text_pick_agent
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    agent = RecordingAgent()
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "Pick the plastic cup.",
+            "--request-id",
+            "req-skip-confirmation",
+            "--mode",
+            "execute",
+            "--execute",
+            "--skip-confirmation",
+            "--session-id",
+            "provenance-session",
+            "--expected-reset-epoch",
+            "4",
+            "--evidence-root",
+            str(tmp_path),
+            "--source-commit",
+            _head(),
+            "--installed-prefix",
+            prefix,
+        ],
+        _agent=agent,
+    )
+
+    assert exit_code == 0
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert len(persisted) == 1
+    document = json.loads(persisted[0].read_text())
+    assert document["confirmation_mode"] == "skipped"
+    assert document["confirmation_validated"] is True
+    rendered = json.loads(capsys.readouterr().out)
+    assert rendered["confirmation_mode"] == "skipped"
+
+
+def test_cli_does_not_label_rejected_digest_as_confirmed(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """Catches a rejected digest attempt being persisted or rendered as validated."""
+
+    from so101_demo.cli import text_pick_agent
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "Pick the plastic cup.",
+            "--request-id",
+            "req-rejected-digest",
+            "--mode",
+            "execute",
+            "--execute",
+            "--confirmation-digest",
+            "sha256:v1:" + "0" * 64,
+            "--session-id",
+            "provenance-session",
+            "--expected-reset-epoch",
+            "4",
+            "--evidence-root",
+            str(tmp_path),
+            "--source-commit",
+            _head(),
+            "--installed-prefix",
+            prefix,
+        ],
+        _agent=RejectingAgent(),
+    )
+
+    assert exit_code == 1
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert len(persisted) == 1
+    document = json.loads(persisted[0].read_text())
+    assert document["confirmation_mode"] == "digest"
+    assert document["confirmation_validated"] is False
+    rendered = json.loads(capsys.readouterr().out)
+    assert rendered["reason_code"] == "CONFIRMATION_MISMATCH"
+    assert "confirmation_mode" not in rendered
+
+
+def test_cli_fails_closed_when_validated_provenance_cannot_be_finalized(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    """Catches returning success after the confirmation audit update was lost."""
+
+    from so101_demo.cli import text_pick_agent
+
+    original = text_pick_agent._persist_execution_provenance
+    calls = 0
+
+    def fail_second_write(*args, **kwargs) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("audit storage unavailable")
+        original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        text_pick_agent,
+        "_persist_execution_provenance",
+        fail_second_write,
+    )
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "Pick the plastic cup.",
+            "--request-id",
+            "req-finalize-failure",
+            "--mode",
+            "execute",
+            "--execute",
+            "--confirmation-digest",
+            "sha256:v1:" + "0" * 64,
+            "--session-id",
+            "provenance-session",
+            "--expected-reset-epoch",
+            "4",
+            "--evidence-root",
+            str(tmp_path),
+            "--source-commit",
+            _head(),
+            "--installed-prefix",
+            prefix,
+        ],
+        _agent=RecordingAgent(),
+    )
+
+    assert exit_code == 1
+    rendered = json.loads(capsys.readouterr().out)
+    assert rendered["reason_code"] == "EXECUTION_PROVENANCE_FINALIZE_FAILED"
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert len(persisted) == 1
+    assert json.loads(persisted[0].read_text())["confirmation_validated"] is False

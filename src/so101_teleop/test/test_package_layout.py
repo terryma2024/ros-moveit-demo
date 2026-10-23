@@ -1,9 +1,9 @@
-from pathlib import Path
 import xml.etree.ElementTree as ET
+from teleop_paths import PACKAGE_ROOT, SOURCE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
-CPP = PACKAGE.parent / "so101_gazebo_demo_cpp"
+PACKAGE = PACKAGE_ROOT
+CPP = SOURCE_ROOT / "so101_gazebo_demo_cpp"
 
 
 def test_teleop_is_a_single_standalone_package():
@@ -22,7 +22,7 @@ def test_teleop_is_a_single_standalone_package():
     assert (PACKAGE / "scripts" / "so101_expert_validation_server.py").is_file()
     assert (PACKAGE / "web" / "src" / "expert-validation-app.tsx").is_file()
     assert (
-        PACKAGE / "config" / "expert_validation" / "top_view_projection_v1.json"
+        PACKAGE / "config" / "expert_validation" / "top_view_projection.json"
     ).is_file()
 
 

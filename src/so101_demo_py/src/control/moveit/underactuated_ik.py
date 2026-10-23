@@ -11,6 +11,13 @@ import numpy as np
 
 from ...ports.evidence import PoseEvidence
 
+try:
+    from ._ik_numeric import NumericKernel
+except ModuleNotFoundError as error:
+    if error.name != __package__ + "._ik_numeric":
+        raise
+    NumericKernel = None
+
 
 class UnderactuatedIkError(RuntimeError):
     pass
@@ -154,6 +161,47 @@ class UnderactuatedPoseIk:
         self._solve_upper = self._upper - CONTROL_JOINT_MARGIN_RAD
         if np.any(self._solve_lower >= self._solve_upper):
             raise UnderactuatedIkError("DYNAMIC_IK_JOINT_LIMIT_MARGIN_INVALID")
+        self._identity3 = np.eye(3)
+        self._identity4 = np.eye(4)
+        # Deferring unused quaternion gates is valid for rigid FK transforms.
+        # Arbitrary custom matrices keep the original eager validation path.
+        self._rigid_chain = all(
+            type(joint.origin) is np.ndarray
+            and joint.origin.dtype == np.float64
+            and joint.origin.shape == (4, 4)
+            and np.all(np.isfinite(joint.origin))
+            and np.array_equal(joint.origin[3], self._identity4[3])
+            and np.all(np.abs(joint.origin[:3, :3]) <= 1.0 + 1e-12)
+            and np.allclose(joint.origin[:3, :3].T @ joint.origin[:3, :3],
+                            self._identity3, rtol=0.0, atol=1e-12)
+            for joint in chain
+        )
+        self._axis_terms: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        # Prefix reuse assumes one independently named coordinate per moving joint.
+        # Other layouts and subclasses retain the original overridable FK path.
+        self._shared_fk = (
+            type(self) is UnderactuatedPoseIk
+            and len(set(joint_names)) == len(joint_names)
+            and sum(joint.kind != "fixed" for joint in chain) == len(joint_names)
+        )
+        self._joint_tails = {
+            joint.name: chain[index + 1:]
+            for index, joint in enumerate(chain) if joint.kind != "fixed"
+        }
+        for joint in chain:
+            if joint.kind != "fixed":
+                vector = np.asarray(joint.axis, dtype=float)
+                vector /= np.linalg.norm(vector)
+                x, y, z = vector
+                cross = np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
+                self._axis_terms[joint.name] = (cross, cross @ cross)
+        indices = {name: index for index, name in enumerate(joint_names)}
+        self._numeric = None if NumericKernel is None or not self._shared_fk else NumericKernel(
+            tuple(joint.origin for joint in chain),
+            tuple(-1 if joint.kind == "fixed" else indices[joint.name] for joint in chain),
+            tuple(self._axis_terms[name][0] for name in joint_names),
+            tuple(self._axis_terms[name][1] for name in joint_names),
+        )
 
     @classmethod
     def from_urdf(
@@ -205,17 +253,83 @@ class UnderactuatedPoseIk:
 
     def _matrix(self, positions: tuple[float, ...] | np.ndarray) -> np.ndarray:
         values = dict(zip(self._joint_names, positions, strict=True))
-        result = np.eye(4)
+        result = self._identity4.copy()
         for joint in self._chain:
             result = result @ joint.origin
             if joint.kind != "fixed":
-                result = result @ _transform(
-                    _rotation_axis(joint.axis, values[joint.name]), (0, 0, 0)
+                cross, square = self._axis_terms[joint.name]
+                angle = values[joint.name]
+                motion = self._identity4.copy()
+                motion[:3, :3] = (
+                    self._identity3 + math.sin(angle) * cross + (1.0 - math.cos(angle)) * square
                 )
+                result = result @ motion
         return result
 
     def forward(self, positions: tuple[float, ...] | np.ndarray) -> PoseEvidence:
-        matrix = self._matrix(positions)
+        return self._pose_from_matrix(self._matrix(positions))
+
+    def forward_positions(self, vectors) -> tuple[tuple[float, float, float], ...]:
+        """Compute exact sample positions, preserving custom forward implementations."""
+        if not len(vectors):
+            return ()
+        if self._can_batch_forward:
+            return self._numeric.forward_positions(np.asarray(vectors, dtype=float),
+                                                   self._pose_from_matrix)
+        return tuple(self.forward(positions).position_m for positions in vectors)
+
+    @property
+    def _can_batch_forward(self) -> bool:
+        return self._numeric is not None and self._rigid_chain and not any(
+            name in self.__dict__ for name in ("_matrix", "_pose_from_matrix", "forward"))
+
+    def _motion(self, name: str, angle: float) -> np.ndarray:
+        cross, square = self._axis_terms[name]
+        motion = self._identity4.copy()
+        motion[:3, :3] = (
+            self._identity3 + math.sin(angle) * cross + (1.0 - math.cos(angle)) * square
+        )
+        return motion
+
+    def _matrix_with_prefixes(self, positions: np.ndarray):
+        """Retain exact left-to-right prefixes for the five independent perturbations."""
+        if self._numeric is not None:
+            return self._numeric.matrix_with_prefixes(positions)
+        if not self._shared_fk:
+            return self._matrix(positions), None, None
+        values = dict(zip(self._joint_names, positions, strict=True))
+        result = self._identity4.copy()
+        prefixes = {}
+        motions = {}
+        for joint in self._chain:
+            result = result @ joint.origin
+            if joint.kind != "fixed":
+                prefixes[joint.name] = result
+                motion = self._motion(joint.name, values[joint.name])
+                motions[joint.name] = motion
+                result = result @ motion
+        return result, prefixes, motions
+
+    def _perturbed_matrices(self, positions, epsilon, prefixes, motions):
+        if self._numeric is not None:
+            yield from self._numeric.perturbed_matrices(positions, epsilon, prefixes, motions)
+            return
+        if prefixes is None:
+            for index in range(len(positions)):
+                candidate = positions.copy()
+                candidate[index] += epsilon
+                yield self._matrix(candidate)
+            return
+        for name, angle in zip(self._joint_names, positions, strict=True):
+            result = prefixes[name] @ self._motion(name, angle + epsilon)
+            for joint in self._joint_tails[name]:
+                result = result @ joint.origin
+                if joint.kind != "fixed":
+                    result = result @ motions[joint.name]
+            yield result
+
+    @staticmethod
+    def _pose_from_matrix(matrix: np.ndarray) -> PoseEvidence:
         return PoseEvidence(
             tuple(float(item) for item in matrix[:3, 3]),
             _matrix_quaternion(matrix[:3, :3]),
@@ -232,15 +346,28 @@ class UnderactuatedPoseIk:
 
     @staticmethod
     def orientation_error_rad(actual: PoseEvidence, target: PoseEvidence) -> float:
-        dot = abs(sum(a * b for a, b in zip(actual.orientation_xyzw, target.orientation_xyzw)))
-        return 2.0 * math.acos(min(1.0, max(-1.0, dot)))
+        # theta = 2*acos(|a.b|) loses half the digits near zero (acos'(1) is infinite: a 1e-16 rounding of |a.b| became 3e-8 rad
+        # and made an identical pose "differ"). For unit quaternions theta = 4*atan2(|a - s*b|, |a + s*b|), s = sign(a.b),
+        # which is exactly 0 for identical inputs and keeps full relative accuracy.
+        a, b = actual.orientation_xyzw, target.orientation_xyzw
+        sign = -1.0 if sum(x * y for x, y in zip(a, b)) < 0.0 else 1.0
+        difference = math.sqrt(sum((x - sign * y) ** 2 for x, y in zip(a, b)))
+        total = math.sqrt(sum((x + sign * y) ** 2 for x, y in zip(a, b)))
+        return 4.0 * math.atan2(difference, total)
 
     def _residual(self, positions: np.ndarray, target: PoseEvidence) -> np.ndarray:
-        matrix = self._matrix(positions)
-        position = np.asarray(target.position_m) - matrix[:3, 3]
-        orientation = _rotation_vector(
-            _quaternion_matrix(target.orientation_xyzw) @ matrix[:3, :3].T
+        return self._residual_from_matrix(
+            self._matrix(positions),
+            np.asarray(target.position_m),
+            _quaternion_matrix(target.orientation_xyzw),
         )
+
+    @staticmethod
+    def _residual_from_matrix(
+        matrix: np.ndarray, target_position: np.ndarray, target_rotation: np.ndarray
+    ) -> np.ndarray:
+        position = target_position - matrix[:3, 3]
+        orientation = _rotation_vector(target_rotation @ matrix[:3, :3].T)
         return np.concatenate((position, 0.08 * orientation))
 
     def solve(
@@ -255,19 +382,61 @@ class UnderactuatedPoseIk:
             raise UnderactuatedIkError("DYNAMIC_IK_SEED_INVALID")
         positions = np.clip(np.asarray(seed, dtype=float), self._solve_lower, self._solve_upper)
         epsilon = 1e-5
-        for _ in range(200):
-            residual = self._residual(positions, target)
+        target_position = np.asarray(target.position_m)
+        target_rotation = _quaternion_matrix(target.orientation_xyzw)
+        residual_from_matrix = self._residual_from_matrix
+        native_residual = self._numeric is not None and target_position.dtype == np.float64
+        if native_residual:
+            residual_from_matrix = self._numeric.residual
+        native_loop = (
+            native_residual
+            and self._rigid_chain
+            and positions.ndim == 1
+            and np.all(np.isfinite(positions))
+            and isinstance(position_tolerance_m, (int, float))
+            and isinstance(orientation_tolerance_rad, (int, float))
+            and not any(name in self.__dict__ for name in (
+                "_matrix", "_matrix_with_prefixes", "_perturbed_matrices",
+                "_residual_from_matrix", "_pose_from_matrix", "forward",
+                "orientation_error_rad",
+            ))
+        )
+        if native_loop:
+            success, positions = self._numeric.solve(
+                positions, target_position, target_rotation, target,
+                self._solve_lower, self._solve_upper,
+                position_tolerance_m, orientation_tolerance_rad,
+                self._pose_from_matrix, self.orientation_error_rad,
+            )
+            if success:
+                return tuple(float(item) for item in positions)
             actual = self.forward(positions)
+            raise UnderactuatedIkError(
+                "DYNAMIC_IK_RESIDUAL_EXCEEDED: "
+                f"position_m={math.dist(actual.position_m, target.position_m):.6f} "
+                f"orientation_rad={self.orientation_error_rad(actual, target):.6f}"
+            )
+        for _ in range(200):
+            matrix, prefixes, motions = self._matrix_with_prefixes(positions)
+            residual = residual_from_matrix(matrix, target_position, target_rotation)
+            actual = self._pose_from_matrix(matrix)
             if (
                 math.dist(actual.position_m, target.position_m) <= position_tolerance_m
                 and self.orientation_error_rad(actual, target) <= orientation_tolerance_rad
             ):
                 return tuple(float(item) for item in positions)
-            jacobian = np.empty((6, len(positions)))
-            for index in range(len(positions)):
-                candidate = positions.copy()
-                candidate[index] += epsilon
-                jacobian[:, index] = (self._residual(candidate, target) - residual) / epsilon
+            candidate_matrices = self._perturbed_matrices(positions, epsilon, prefixes, motions)
+            if native_residual:
+                jacobian = self._numeric.jacobian(
+                    list(candidate_matrices), target_position, target_rotation, residual, epsilon
+                )
+            else:
+                jacobian = np.empty((6, len(positions)))
+                for index, candidate_matrix in enumerate(candidate_matrices):
+                    candidate_residual = residual_from_matrix(
+                        candidate_matrix, target_position, target_rotation
+                    )
+                    jacobian[:, index] = (candidate_residual - residual) / epsilon
             damping = 1e-5
             step = -np.linalg.solve(
                 jacobian.T @ jacobian + damping * np.eye(len(positions)),

@@ -30,18 +30,16 @@ test("C09 top-view status colours, selection and evidence linkage scenario:termi
   expect(consoleErrors).toEqual([]);
 });
 
-test("C10 concurrent worker progress keeps generation and point states scenario:running-two-workers", async ({ page, scriptedServer }) => {
+test("C10 single-worker progress keeps generation and point states scenario:running-one-worker", async ({ page, scriptedServer }) => {
   const app = new ExpertValidationPage(page);
   await app.goto();
   await expect(page.locator("[data-point-id]")).toHaveCount(4);
   await expect(app.workerCard("worker-01")).toContainText("READY");
-  await expect(app.workerCard("worker-02")).toContainText("READY");
+  await expect(page.locator("article[aria-label^='Worker ']")).toHaveCount(1);
 
   await scriptedServer.control.emit();
   await expect(app.workerCard("worker-01")).toContainText("EXECUTING · task_start", { timeout: 10_000 });
-  await expect(app.workerCard("worker-02")).toContainText("EXECUTING · cup_test_forward_5cm");
   await app.expectPointColor("task_start", "blue");
-  await app.expectPointColor("cup_test_forward_5cm", "blue");
   const activeMarker = page.locator("[data-point-id='task_start'] > circle[r='10']");
   await expect(activeMarker).toHaveAttribute("stroke-width", "5");
   await app.expectEqualPointRadius([
@@ -54,13 +52,13 @@ test("C10 concurrent worker progress keeps generation and point states scenario:
   await scriptedServer.control.emitAll();
   await expect(app.workerCard("worker-01")).toContainText("STOPPED", { timeout: 10_000 });
   const progress = page.getByRole("region", { name: "Campaign progress" });
-  await expect(progress.getByText(/PARALLEL · COMPLETED/)).toBeVisible();
+  await expect(progress.getByText(/SEQUENTIAL · COMPLETED/)).toBeVisible();
   await app.expectPointColor("task_start", "green");
   await app.expectPointColor("cup_test_right_5cm", "green");
   await expect(page.getByText("First pass 4 / 4 valid")).toBeVisible();
 });
 
-test("C11 broker pause and recovery stay infrastructure scenario:running-two-workers", async ({ page, scriptedServer }) => {
+test("C11 broker pause and recovery stay infrastructure scenario:running-one-worker", async ({ page, scriptedServer }) => {
   const app = new ExpertValidationPage(page);
   await app.goto();
   await scriptedServer.control.emit();
@@ -79,29 +77,6 @@ test("C11 broker pause and recovery stay infrastructure scenario:running-two-wor
   await scriptedServer.control.emitAll();
   await expect(page.getByText("First pass 4 / 4 valid")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Failed 0")).toBeVisible();
-});
-
-test("C12 adaptive fallback and stale generation projection scenario:adaptive-fallback", async ({ page, scriptedServer }) => {
-  const app = new ExpertValidationPage(page);
-  await app.goto();
-  await expect(page.locator("[data-point-id]")).toHaveCount(20);
-  await expect(page.getByText("Levels used W8")).toBeVisible();
-
-  await scriptedServer.control.emit();
-  await expect(page.getByText("Broker degraded: RECOVERING")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("Infra attempts 1")).toBeVisible();
-
-  await scriptedServer.control.emit();
-  await expect(page.getByText("W8 -> W6: WORKER_START_FAILED")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("Levels used W8 -> W6")).toBeVisible();
-  await expect(app.workerCard("worker-06-01")).toContainText("generation 2");
-  await expect(page.getByText("Broker healthy")).toBeVisible();
-  await expect(page.getByText(/memory_pressure=HIGH/)).toBeVisible();
-
-  await scriptedServer.control.emit();
-  await expect(app.workerCard("worker-06-01")).toContainText("EXECUTING · task_start", { timeout: 10_000 });
-  await app.expectPointColor("task_start", "blue");
-  await expect(page.getByText("Levels used W8 -> W6")).toBeVisible();
 });
 
 test("C15 terminal statistics stay separated scenario:terminal-4-with-failure", async ({ page }) => {

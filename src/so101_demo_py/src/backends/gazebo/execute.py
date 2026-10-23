@@ -44,7 +44,7 @@ def _complete_runtime_options(options: argparse.Namespace) -> None:
 
         share = Path(get_package_share_directory("so101_demo_py"))
         options.policy = (
-            share / "config/policies/light_cup_wall_pick/v1/gazebo.yaml"
+            share / "config/policies/light_cup_wall_pick/gazebo.yaml"
         )
     options.policy_sha256 = options.policy_sha256 or _sha256(options.policy)
     if (

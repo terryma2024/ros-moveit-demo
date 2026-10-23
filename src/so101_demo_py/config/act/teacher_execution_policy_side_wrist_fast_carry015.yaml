@@ -1,0 +1,57 @@
+# SO-101 Teacher execution policy: the minimal runtime gates (design
+# docs/superpowers/specs/2026-10-10-so101-teacher-minimal-runtime-gates-design.md, ledger CP-3502, CP-3504).
+# The Teacher's motion, the carry scaling, the tilt-compensated place height with its closed fallback, and the fields below.
+# What is not in the Teacher runtime: cup force/compression/collision/hazard stops, the release proofs, the grasp/settle waits,
+# the place refusals and the whole RECOVER_* chain. Their facts are recorded in `teacher_process_summary` and never stop,
+# refuse or branch the Teacher. The only aborts are input availability, execution failure, the operator and watchdog stops,
+# TEACHER_JOINT_STATE_UNAVAILABLE and SIM_INTEGRITY_*. The r10b limits and the contact calibration hash are unchanged: they
+# are only the thresholds of the telemetry flags.
+#
+# Schema 4 variant of `teacher_execution_policy.yaml` (plan docs/superpowers/specs/2026-10-20-so101-act-teacher-speed-and-recording-throughput-plan.md,
+# tiers 1 and 2). Every value is the schema 3 file's except the five speed keys below. Schema 4 also switches on the tier 1
+# sequencing (the telemetry safety inputs load while the physics is paused for the cup pose, and the pick-prefix IK horizon is
+# computed during PREPARE_OPEN_GRIPPER); the arm motion those two produce is unchanged.
+kind: ACT_TEACHER_EXECUTION_POLICY
+schema_version: 4
+# MoveIt scaling of the free-space approach (MOVE_ABOVE_OBJECT) and of RETREAT; the file for schema 3 uses the template's 0.03 / 0.03.
+# DESCEND, MICRO_LIFT and the carry (carry_max_* below) are not touched.
+move_above_object_velocity_scaling: 0.10
+move_above_object_acceleration_scaling: 0.10
+retreat_velocity_scaling: 0.10
+retreat_acceleration_scaling: 0.10
+# The PREPARE_OPEN_GRIPPER trajectory duration (s); CLOSE_GRIPPER and OPEN_GRIPPER keep their 2.0 s.
+prepare_open_gripper_duration_s: 1.0
+state_max_age_s: 0.5
+state_unavailable_stop_s: 1.0
+execution_deadline_s: 180.0
+# The CLOSE_GRIPPER target (joint 6, rad): the grasp_close_q6 baseline the contact calibration was fitted under. The general
+# runtime keeps its own -0.0485 and never reads this value.
+gripper_close_target_rad: -0.047608632840292
+# MoveIt scaling of the carry (LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE); the acceleration scaling is a quarter of the velocity's so
+# the base-yaw ramp does not run the cup compression away. Used only with frozen inputs.
+carry_max_velocity_scaling: 0.03
+carry_max_acceleration_scaling: 0.015
+# Place height (a strategy): target = z_touch(theta) + k + tracking offset - guard. Outside the calibrated tilt range, the k band
+# or the deviation bound, or when the measurement fails, the Teacher uses the fallback target (hover + place_reference_offset_m)
+# and records the closed reason; it never refuses.
+place_height_mode: tilt_compensated
+place_touchdown_guard_m: 0.0007
+place_tracking_offset_m: 0.000158
+place_tilt_min_rad: 0.05235987755982989
+place_tilt_max_rad: 0.0959931088596881
+place_grasp_offset_m: 0.037454
+place_grasp_offset_half_band_m: 0.0003
+place_target_max_deviation_m: 0.002
+# The constant place offset (-13.25 mm): the fallback target offset and the reference of the deviation bound.
+place_reference_offset_m: -0.01325
+place_geometry_scene_sha256: ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb
+# Fixed dwells that replace the grasp-stable and release-settle waits (the states and their order are unchanged).
+grasp_stable_dwell_s: 0.25
+release_settle_dwell_s: 0.5
+# Release sequence: bounded wait for the arm to stop before the detach (an execution precondition, not a safety proof).
+arm_stop_wait_s: 1.0
+arm_stop_velocity_rad_s: 0.002
+# Provenance recorded in the episode metadata: the pre-grasp cup pose is the broker's RGB-D localization, the verdict reads the
+# simulator truth (the Teacher observer's world evidence).
+cup_pose_source: broker_rgbd
+verdict_source: sim_truth

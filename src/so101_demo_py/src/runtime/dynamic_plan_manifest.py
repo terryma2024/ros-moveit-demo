@@ -1,4 +1,4 @@
-"""Atomic `so101-dynamic-plan-v1` evidence writer."""
+"""Atomic `so101-dynamic-plan` evidence writer."""
 
 from __future__ import annotations
 
@@ -57,7 +57,8 @@ def write_dynamic_plan_manifest(
     trajectory = getattr(plan.trajectory, "joint_trajectory", None)
     points = getattr(trajectory, "points", ()) if trajectory is not None else ()
     document = {
-        "schema": "so101-dynamic-plan-v1",
+        "schema": "so101-dynamic-plan",
+        "schema_version": 1,
         "strategy": "dynamic",
         "backend": backend,
         "execution_allowed": False,

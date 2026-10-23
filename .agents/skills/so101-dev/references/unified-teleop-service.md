@@ -26,7 +26,7 @@ scripts/so101-teleop-macos.zsh cleanup   # 只向身份仍匹配的已记录服�
 | Python | `/opt/ros/jazzy/.venv/bin/python` | `/data/work/so101-evidence/full-ut-linux/20260923-5a0b87a8/venv/bin/python` |
 | 项目 install | `/opt/data/so101/workspace/install` | 当前仓库的 `install/` |
 | ROS setup | `/opt/ros/jazzy/install/setup.zsh`、`/opt/ros/jazzy/extra_ws/install/setup.zsh` | `/opt/ros/jazzy/setup.zsh` |
-| 执行配置 | `parallel_batch_v4_macos_mps_w2.yaml` | `parallel_batch_v3.yaml` |
+| 执行配置 | `parallel_batch_macos_mps_two_worker.yaml` | `parallel_batch_linux_cuda.yaml` |
 | YOLO 权重 | `/opt/data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71/models/yolo/best.pt` | `/data/work/models/so101-perception/yolo11n-seg-plastic-cup/best.pt` |
 | Grounded 模型目录 | `/opt/data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71/models/grounded` | `/data/work/models/so101-perception/grounded-sam-cup-pickplace/bundle` |
 

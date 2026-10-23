@@ -24,7 +24,7 @@ from so101_demo.runtime.parallel_perception_runtime import (
     ParallelPerceptionRuntime, canonical_json, checked_path, frozen_options,
     normalize_batch, write_receipt,
 )
-from so101_demo.parallel_batch.resources import runtime_ipc_base
+from so101_demo.parallel_batch.resource_allocation.models import runtime_ipc_base
 
 
 def broker_argv():
@@ -40,11 +40,55 @@ def broker_argv():
             '--sam-min-mask-pixels', '64', '--sam-max-mask-area-ratio', '0.5']
 
 
+#: Where the image keeps the `so101_demo` it was built with (2026-09-24). Its parser predates later contract changes, so a run mounts
+#: the qualified package over it instead of trusting the baked one.
+IMAGE_PACKAGE_PATH = '/opt/venv/lib/python3.12/site-packages/so101_demo'
+
+
+def qualified_package_root(environ=None):
+    """The `so101_demo` package of the running (qualified) install; inside `$SO101_QUALIFIED_FREEZE/qualified-install` when that is set."""
+    import so101_demo
+
+    environ = os.environ if environ is None else environ
+    root = Path(os.path.realpath(so101_demo.__file__)).parent
+    freeze = environ.get('SO101_QUALIFIED_FREEZE')
+    if freeze and not root.is_relative_to(Path(os.path.realpath(Path(freeze) / 'qualified-install'))):
+        raise ValueError('QUALIFIED_PACKAGE_OUTSIDE_INSTALL')
+    return root
+
+
+def _file_sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+#: Where the detector the broker runs sits inside the package that is mounted over the image's own (it is the freeze's
+#: own `yolo_seg.py`; the baked 09-24 file that was pinned earlier is gone. Cup geometry filtering in the Worker's
+#: localizer rejects the flat landing-ring candidate returned alongside the cup).
+DETECTOR_RELATIVE_PATH = Path('adapters') / 'perception' / 'yolo_seg.py'
+
+
+def broker_source_record(package):
+    """The facts a run records about the broker's code: the install's package and the detector in it, with their hashes."""
+    package = Path(package)
+    detector = package / DETECTOR_RELATIVE_PATH
+    return {'kind': 'ACT_BROKER_SOURCE_PIN', 'schema_version': 2, 'package_root': str(package),
+            'package_source_sha256': source_hash(package), 'detector_path': str(detector),
+            'detector_sha256': _file_sha256(detector), 'detector_source': 'freeze'}
+
+
+def _checked_package(package):
+    package = Path(package)
+    if (not package.is_absolute() or package.is_symlink() or not package.is_dir()
+            or not (package / '__init__.py').is_file() or not (package / 'cli' / 'parallel_perception_broker.py').is_file()):
+        raise ValueError('QUALIFIED_PACKAGE_INVALID')
+    return package
+
+
 def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
                        gpu_groups, uid, gid, batch_id, broker_generation,
                        runtime_root=None,
                        runtime_ipc_root=None,
-                       input_root=None, path_checker=checked_path):
+                       input_root=None, path_checker=checked_path, source_package=None):
     if type(uid) is not int or uid <= 0 or uid != os.getuid() or gid != os.getgid():
         raise ValueError('HOST_NONROOT_IDENTITY_REQUIRED')
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
@@ -86,16 +130,19 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
             raise ValueError('EXISTING_RUNTIME_ENDPOINT')
     yolo_weights = path_checker(yolo_weights)
     grounded_root = path_checker(grounded_root, directory=True)
+    package = None if source_package is None else _checked_package(source_package)
     argv = ['docker', 'run', '--rm', '--init', '--cidfile', str(ipc / 'container.cid'),
             '--label', f'com.so101.batch-id={batch_id}',
             '--label', f'com.so101.broker-generation={broker_generation}',
+            *([] if package is None else ['--label', f'com.so101.source-sha256={source_hash(package)}']),
             '--gpus', 'all', '--network', 'none', '--ipc', 'private',
             '--read-only', '--security-opt', 'no-new-privileges', '--user', f'{uid}:{gid}',
             '--tmpfs', f'/tmp:rw,nosuid,nodev,mode=0700,uid={uid},gid={gid}']
     for group in sorted(set(gpu_groups)):
         argv.extend(['--group-add', str(group)])
     for mount in (f'{ipc}:/runtime:rw', f'{inputs}:/inputs:ro',
-                  f'{yolo_weights}:/models/yolo/best.pt:ro', f'{grounded_root}:/models/grounded:ro'):
+                  f'{yolo_weights}:/models/yolo/best.pt:ro', f'{grounded_root}:/models/grounded:ro',
+                  *([] if package is None else [f'{package}:{IMAGE_PACKAGE_PATH}:ro'])):
         argv.extend(['--volume', mount])
     # Thread bounds are part of the measured runtime identity, and docker does not forward
     # the host environment: without this the container's torch and BLAS open one thread per
@@ -259,6 +306,7 @@ def smoke_models(runtime, frame, *, clock=time.monotonic):
     Both measured service latency and the adapter's inference latency are kept.
     """
     from so101_demo.core.detection import DetectionQuery
+    from so101_demo.runtime.parallel_perception_runtime import query_class_for
     last_time = None
 
     def now():
@@ -289,7 +337,7 @@ def smoke_models(runtime, frame, *, clock=time.monotonic):
                     raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
                 record['executed'] = True
                 candidate = normalize_batch(
-                    built.detector.detect(frame, DetectionQuery('plastic_cup')),
+                    built.detector.detect(frame, DetectionQuery(query_class_for(built.detector, 'plastic_cup'))),
                     frame,
                 )
                 record.update(
@@ -364,6 +412,11 @@ def _validate_runtime_concurrency(spec):
             raise ValueError("BROKER_RUNTIME_CONCURRENCY")
 
 
+#: the flags that name *where* something is, as opposed to *what* it is; a host run supplies its own
+LOCATION_FLAGS = frozenset({"--endpoint", "--input-root", "--ready-receipt", "--runtime-spec", "--yolo-weights",
+                            "--grounded-root"})
+
+
 def main(argv=None, *, transport=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == 'container':
@@ -384,13 +437,20 @@ def main(argv=None, *, transport=None):
 
             parser.add_argument(flag, required=True, choices=list(REQUESTED_DEVICES))
             index += 2
+        elif flag in LOCATION_FLAGS:
+            # the locations name where this deployment's things are, so a host run supplies its own paths; the
+            # substantive values below stay single-literal, which is what the frozen list is really protecting
+            parser.add_argument(flag, type=Path if flag.endswith("root") or flag.endswith("weights")
+                                or flag.endswith("receipt") or flag.endswith("spec") else str,
+                                required=True)
+            index += 2
         else:
             parser.add_argument(flag, required=True, choices=[frozen[index + 1]])
             index += 2
     parser.add_argument('--smoke-input', type=Path)
     args = parser.parse_args(argv)
     if args.smoke_input is None and transport is None:
-        from so101_demo.runtime.parallel_ipc import build_broker_transport
+        from so101_demo.runtime.parallel_ipc.broker_transport import build_broker_transport
 
         transport = build_broker_transport(Path(args.runtime_spec))
     versions = {}
@@ -479,7 +539,7 @@ def main(argv=None, *, transport=None):
         write_receipt(Path('/runtime/smoke.json'), {'provenance': provenance, 'results': results})
         return int(any(item['outcome'] not in {'QUALIFIED', 'NORMAL_REJECTION'}
                        for item in results.values()))
-    # The only real framing/auth protocol is implemented by Task 11.
+    # The only real framing/auth protocol is implemented by the parallel transport.
     try:
         return transport.serve(runtime, endpoint=Path(args.endpoint))
     except Exception:

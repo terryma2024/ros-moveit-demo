@@ -1,4 +1,4 @@
-from so101_demo.runtime.launch_composition import (
+from so101_demo.runtime.launch_composition.text_pick_agent import (
     build_text_pick_agent_e2e_launch_description,
 )
 

@@ -1,0 +1,9 @@
+<class_libraries>
+  <library path="so101_head_neck_trajectory_controller">
+    <class name="so101_mujoco_support/HeadNeckTrajectoryController"
+           type="so101_mujoco_support::HeadNeckTrajectoryController"
+           base_class_type="controller_interface::ControllerInterface">
+      <description>Head neck: the stock joint trajectory controller with closed inputs, a dead-man latch and per-tick refusals.</description>
+    </class>
+  </library>
+</class_libraries>

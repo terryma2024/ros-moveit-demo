@@ -1,0 +1,69 @@
+"""The public macOS MPS single-worker `FIRST_PASS` entry point (schema v6).
+
+This entry names exactly one profile of the design's support matrix:
+
+    schema_version     6
+    execution_profile  MPS_SINGLE_WORKER_FIRST_PASS
+    batch_kind         FIRST_PASS
+    worker_count       1
+
+One slot, one Worker, one ROS domain, and no retry semantics: the single Worker drains the whole
+selected set through the durable queue. The routing key is not a set of flags - there is no
+``--batch-kind`` and no ``--execution-profile`` switch - and a retry (v5) or exact two-worker (v4)
+document handed to this entry is refused before anything is spawned. The ``campaign_status``
+helper is this profile's verdict: one Worker, at least three served requests on MPS, cleanup
+proven complete and nothing refused.
+"""
+
+from __future__ import annotations
+
+import sys
+
+from ..parallel_batch.single_worker_composition import (
+    MPS_SINGLE_WORKER_FIRST_PASS,
+    SINGLE_WORKER_FIRST_PASS_BATCH_KIND,
+)
+from so101_demo.cli.macos_campaign.guard import route_spec
+from so101_demo.cli.macos_campaign.selection import campaign_verdict
+from so101_demo.cli.macos_two_worker_campaign import (
+    build_single_worker_parser,
+    main_single_worker,
+    run_single_worker,
+)
+
+#: The one route this entry point executes. Named so a caller can check it without parsing argv.
+EXECUTION_PROFILE = MPS_SINGLE_WORKER_FIRST_PASS
+BATCH_KIND = SINGLE_WORKER_FIRST_PASS_BATCH_KIND
+WORKER_COUNT = 1
+
+
+def build_parser():
+    """The v6 single-worker parser. It accepts no generic batch-kind or profile flag."""
+
+    return build_single_worker_parser(EXECUTION_PROFILE)
+
+
+def run(argv: list[str] | None = None) -> int:
+    """Resolve the route, compose and drive the single-Worker first-pass campaign."""
+
+    return run_single_worker(argv, execution_profile=EXECUTION_PROFILE)
+
+
+def campaign_status(*, cleanup_complete, results, workers, served, refused, points) -> str:
+    """This profile's verdict, as a pure function so the rule is testable and readable.
+
+    `points` is the campaign's own executed-point summary: a pass requires every selected point to
+    have exactly one committed result, so a campaign that executed nothing cannot report one.
+    """
+
+    return campaign_verdict(spec=route_spec(EXECUTION_PROFILE), cleanup_complete=cleanup_complete,
+                            results=results, workers=workers, served=served, refused=refused,
+                            points=points)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return main_single_worker(EXECUTION_PROFILE, argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

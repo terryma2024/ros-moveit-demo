@@ -7,7 +7,7 @@ import { RuntimeProvider } from "@/state/runtime-provider";
 
 import { ExpertValidationApp, type ExpertValidationApi } from "./expert-validation-app";
 import type { Lease, Manifest } from "@/api/expert-validation-types";
-import golden from "@/fixtures/top_view_projection_v1.json";
+import golden from "@/fixtures/top_view_projection.json";
 
 beforeEach(() => {
   sessionStorage.removeItem("so101-expert-validation-lease");
@@ -91,33 +91,16 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
     async capabilities() {
       return {
         available: true,
-        // The unified capabilities contract requires the per-N qualification view; until the
-        // budget provider is integrated every exact N reports the fail-closed UNKNOWN view.
-        worker_qualifications: [2, 3, 4, 5, 6, 7, 8].map((selected_n) => ({
-          selected_n,
-          status: "UNKNOWN",
-          reasons: ["BUDGET_PROVIDER_NOT_READY"],
-          runtime_identity: "test-runtime",
-          contract_version: 2,
-          profile_sha256: null,
-          approval_sha256: null,
-        })),
-        execution_modes: ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"],
+        // The unified capabilities contract still carries the (now empty) qualification list.
+        worker_qualifications: [],
+        execution_modes: ["SEQUENTIAL"],
         default_execution_mode: "SEQUENTIAL",
         minimum_points: 4,
         maximum_points: 20,
-        fixed_worker_counts: [1, 2, 3],
-        worker_count_availability: [
-          { worker_count: 2, selectable: true, status: "APPROVED", reason_codes: [] },
-          { worker_count: 3, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
-          { worker_count: 4, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
-          { worker_count: 5, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
-          { worker_count: 6, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
-          { worker_count: 7, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
-          { worker_count: 8, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
-        ],
-        adaptive_default_ladder: [8, 6, 4, 2, 1],
-        // A host without a platform-bound matrix: the per-N qualification view is authoritative.
+        fixed_worker_counts: [1],
+        worker_count_availability: [],
+        adaptive_default_ladder: [],
+        // A host without a platform-bound matrix.
         support_matrix: [],
         lease_duration_s: 30,
         lease_renewal_margin_s: 10,
@@ -217,9 +200,8 @@ describe("ExpertValidationApp", () => {
     ["RUNNING", "UNRUN", "blue", "SEQUENTIAL"],
     ["RUNNING", "INDETERMINATE", "red", "SEQUENTIAL"],
     ["RUNNING", "INFRA_INTERRUPTED", "red", "SEQUENTIAL"],
-    ["RUNNING", "INFRA_INTERRUPTED", "blue", "ADAPTIVE"],
-    ["INFRA_FAILED", "UNRUN", "red", "ADAPTIVE"],
-    ["INFRA_FAILED", "INFRA_INTERRUPTED_REQUEUEABLE", "red", "ADAPTIVE"],
+    ["INFRA_FAILED", "UNRUN", "red", "SEQUENTIAL"],
+    ["INFRA_FAILED", "INFRA_INTERRUPTED_REQUEUEABLE", "red", "SEQUENTIAL"],
   ] as const)("map preserves authoritative point semantics for %s/%s", async (status, pointStatus, color, executionMode) => {
     render(<ExpertValidationApp api={fakeApi({ restoreCampaign: async () => ({
       campaign_id: "campaign-1", manifest_id: "manifest-4", sequence: 5, status, execution_mode: executionMode,
@@ -368,92 +350,60 @@ describe("ExpertValidationApp", () => {
     expect(start.disabled).toBe(true);
   });
 
-  test("parallel setup shows capacity admission and worker lanes", async () => {
+  test("setup offers no mode selector, worker count or adaptive panel and still runs a single-worker preflight", async () => {
     const user = userEvent.setup();
     const campaign = {
-      campaign_id: "campaign-1", sequence: 3, execution_mode: "PARALLEL" as const,
+      campaign_id: "campaign-1", sequence: 3, execution_mode: "SEQUENTIAL" as const,
       batch_cleanup_complete: false, points: [],
       workers: [
         { worker_id: "worker-1", generation: 1, state: "EXECUTING", lease_count: 1 },
-        { worker_id: "worker-2", generation: 1, state: "EXECUTING", lease_count: 1 },
       ],
       requested: 20, evaluated: 2, execution_started: 2, valid_succeeded: 0,
       valid_failed: 0, indeterminate: 0, not_executed: 18,
-      evaluation_coverage: 0.1, execution_coverage: 0.1, levels_used: [],
-      fallback_history: [], infra_attempts: 0, resource_observations: {},
+      evaluation_coverage: 0.1, execution_coverage: 0.1,
     };
     render(<ExpertValidationApp api={fakeApi({ restoreCampaign: async () => campaign })} />);
-    await user.selectOptions(await screen.findByLabelText("Execution mode"), "PARALLEL");
-    await user.selectOptions(screen.getByLabelText("Worker count"), "2");
+    await screen.findByRole("button", { name: "Acquire lease" });
+    expect(screen.queryByLabelText("Execution mode")).toBeNull();
+    expect(screen.queryByLabelText("Worker count")).toBeNull();
     expect(screen.queryByLabelText("Max points per worker")).toBeNull();
-    expect(screen.queryByText(/^Capacity/)).toBeNull();
-    expect(screen.getByText("共享队列 · 每 worker 一次一任务")).toBeTruthy();
+    expect(screen.queryByText(/W8|fallback|Resource observations only|共享队列/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Acquire lease" }));
     await user.click(screen.getByRole("button", { name: "Generate points" }));
     await user.click(screen.getByRole("button", { name: "Check resources" }));
-    expect(await screen.findByText("Parallel admission passed")).toBeTruthy();
+    expect(await screen.findByText("Preflight passed")).toBeTruthy();
     expect(screen.getByLabelText("Worker worker-1")).toBeTruthy();
-    expect(screen.getByLabelText("Worker worker-2")).toBeTruthy();
+    expect(screen.queryByLabelText("Worker worker-2")).toBeNull();
   });
-
-  test("adaptive setup shows fallback timeline and observational resources", async () => {
-    const user = userEvent.setup();
-    const campaign = {
-      campaign_id: "campaign-1", sequence: 8, execution_mode: "ADAPTIVE" as const,
-      status: "RUNNING", batch_cleanup_complete: false, points: [], workers: [],
-      requested: 20, evaluated: 5, execution_started: 5, valid_succeeded: 4,
-      valid_failed: 0, indeterminate: 1, not_executed: 15,
-      evaluation_coverage: 0.25, execution_coverage: 0.25,
-      levels_used: [8, 6],
-      fallback_history: [{ from_count: 8, to_count: 6, reason: "WORKER_START_FAILED" }],
-      infra_attempts: 1, resource_observations: { memory_pressure: "HIGH" },
-    };
-    render(<ExpertValidationApp api={fakeApi({ restoreCampaign: async () => campaign })} />);
-    await user.selectOptions(await screen.findByLabelText("Execution mode"), "ADAPTIVE");
-    expect(screen.queryByLabelText("Max points per worker")).toBeNull();
-    expect(screen.getByText("W8 -> W6 -> W4 -> W2 -> W1")).toBeTruthy();
-    expect(screen.getByText("Resource observations only")).toBeTruthy();
-    expect(await screen.findByText("W8 -> W6: WORKER_START_FAILED")).toBeTruthy();
-  });
-
 
 });
 
 
-test("server capability supplies all eight options and exact twenty-point N8 K3 request", async () => {
+test("a twenty-point preflight sends exactly one SEQUENTIAL worker and no routing key", async () => {
   const user = userEvent.setup();
   const preflight = vi.fn(fakeApi().preflight);
-  const original = fakeApi();
-  render(<ExpertValidationApp api={fakeApi({
-    capabilities: async () => ({ ...await original.capabilities(), fixed_worker_counts: [1,2,3,4,5,6,7,8] }),
-    preflight,
-  })} />);
+  render(<ExpertValidationApp api={fakeApi({ preflight })} />);
   await act(async () => {});
-  const workers = screen.getByRole("combobox", { name: "Worker count" }) as HTMLSelectElement;
-  expect(Array.from(workers.options).map(option => option.value)).toEqual(["1","2","3","4","5","6","7","8"]);
-  await user.selectOptions(screen.getByRole("combobox", { name: "Execution mode" }), "PARALLEL");
-  expect(workers.options[0].disabled).toBe(true);
-  expect(workers.options[0].text).toMatch(/SEQUENTIAL/);
   fireEvent.change(screen.getByRole("spinbutton", { name: "Final point count" }), { target: { value: "20" } });
-  expect(screen.queryByText(/^Capacity/)).toBeNull();
-  await user.selectOptions(workers, "8");
-  expect(screen.getByText("NOT_MEASURED · BUDGET_PROFILE_UNAVAILABLE")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Acquire lease" }));
   await user.click(screen.getByRole("button", { name: "Generate points" }));
   await user.click(screen.getByRole("button", { name: "Check resources" }));
-  expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ contract_version: 3, execution_mode: "PARALLEL", worker_count: 8 }), expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }));
+  expect(preflight).toHaveBeenCalledWith(
+    expect.objectContaining({ contract_version: 3, execution_mode: "SEQUENTIAL", worker_count: 1 }),
+    expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }),
+  );
   // A host that publishes no support matrix keeps the existing request: no routing key is invented.
   expect(preflight.mock.calls[0][0]).not.toHaveProperty("execution_profile");
+  expect(preflight.mock.calls[0][0]).not.toHaveProperty("preferred_worker_count");
 });
 
-test("worker choices follow a narrower server capability without invented counts", async () => {
+test("a service that publishes no worker count cannot be started from the page", async () => {
   const original = fakeApi();
   render(<ExpertValidationApp api={fakeApi({ capabilities: async () => ({
-    ...await original.capabilities(), fixed_worker_counts: [1,2,4],
+    ...await original.capabilities(), fixed_worker_counts: [],
   }) })} />);
   await act(async () => {});
-  const workers = screen.getByRole("combobox", { name: "Worker count" }) as HTMLSelectElement;
-  expect(Array.from(workers.options).map(option => option.value)).toEqual(["1","2","4"]);
+  expect((screen.getByRole("button", { name: "Start validation" }) as HTMLButtonElement).disabled).toBe(true);
 });
 
 test("acquiring a lease presents instance authority through the runtime transport", async () => {
@@ -531,14 +481,14 @@ test("a stored lease does not restore execution permission", async () => {
 });
 
 /**
- * The macOS platform document (design section 6): three matrix rows and fixed W1/W2. The page
- * claims the matrix row it selected; it never derives a profile from the point count, and it
- * never lets a per-N qualification view decide what this host may run.
+ * The macOS platform document: the single-worker matrix rows (the two-worker row is no longer startable, so it
+ * is not advertised). The page claims the matrix row it selected; it never derives a profile from the point
+ * count, and it never lets a per-N qualification view decide what this host may run.
  */
 function matrixRow(
   profile: string,
   schema_version: number,
-  execution_mode: "SEQUENTIAL" | "PARALLEL",
+  execution_mode: "SEQUENTIAL",
   worker_count: number,
   batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY",
 ) {
@@ -562,27 +512,15 @@ function matrixRow(
 const macosCapabilities = {
   available: true,
   platform: "macos",
-  execution_modes: ["SEQUENTIAL", "PARALLEL"],
-  default_execution_mode: "PARALLEL",
+  execution_modes: ["SEQUENTIAL"],
+  default_execution_mode: "SEQUENTIAL",
   minimum_points: 4,
   maximum_points: 20,
-  fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8],
-  worker_count_availability: [
-    { worker_count: 1, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
-    { worker_count: 2, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
-    ...[3, 4, 5, 6, 7, 8].map((worker_count) => ({
-      worker_count,
-      selectable: false,
-      status: "UNSUPPORTED_ON_MACOS",
-      reason_codes: ["UNSUPPORTED_ON_MACOS"],
-      profile_sha256: null,
-      qualification_sha256: null,
-    })),
-  ],
+  fixed_worker_counts: [1],
+  worker_count_availability: [],
   support_matrix: [
-    matrixRow("MPS_W2_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
-    matrixRow("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
-    matrixRow("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+    matrixRow("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    matrixRow("MPS_SINGLE_WORKER_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
   ],
   adaptive_default_ladder: [],
   worker_qualifications: [],
@@ -609,7 +547,7 @@ test("macOS claims the matrix profile and the point count never changes it", asy
   expect(preflight.mock.calls[0][0]).toMatchObject({
     execution_mode: "SEQUENTIAL",
     worker_count: 1,
-    execution_profile: "MPS_W1_FIRST_PASS",
+    execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS",
     batch_kind: "FIRST_PASS",
   });
 
@@ -618,18 +556,7 @@ test("macOS claims the matrix profile and the point count never changes it", asy
   await user.click(screen.getByRole("button", { name: "Generate points" }));
   await user.click(screen.getByRole("button", { name: "Check resources" }));
   expect(preflight.mock.calls[1][0]).toMatchObject({
-    execution_profile: "MPS_W1_FIRST_PASS",
-    batch_kind: "FIRST_PASS",
-  });
-
-  // W2 is the exact-W2 path: two parallel workers, still the same twenty points.
-  await user.selectOptions(screen.getByLabelText("Execution mode"), "PARALLEL");
-  await user.selectOptions(screen.getByLabelText("Worker count"), "2");
-  await user.click(screen.getByRole("button", { name: "Check resources" }));
-  expect(preflight.mock.calls[2][0]).toMatchObject({
-    execution_mode: "PARALLEL",
-    worker_count: 2,
-    execution_profile: "MPS_W2_FIRST_PASS",
+    execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS",
     batch_kind: "FIRST_PASS",
   });
 
@@ -638,39 +565,36 @@ test("macOS claims the matrix profile and the point count never changes it", asy
   await user.click(screen.getByRole("button", { name: "Start validation" }));
   expect(startCampaign).toHaveBeenCalledTimes(1);
   expect(startCampaign.mock.calls[0][0]).toMatchObject({
-    execution_profile: "MPS_W2_FIRST_PASS",
+    execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS",
     batch_kind: "FIRST_PASS",
     preflight_receipt_id: "receipt-1",
   });
 });
 
-test("macOS keeps N3 to N8 unselectable and refuses to preflight or start them", async () => {
+test("macOS offers no mode or worker control and refuses to start without a single-worker row", async () => {
   const user = userEvent.setup();
   const base = fakeApi();
   const preflight = vi.fn(base.preflight);
+  const retryOnly = {
+    ...(macosCapabilities as object),
+    support_matrix: [
+      matrixRow("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    ],
+  } as never;
   render(<ExpertValidationApp api={fakeApi({
-    capabilities: async () => macosCapabilities,
+    capabilities: async () => retryOnly,
     preflight,
   })} />);
   await act(async () => {});
 
-  const modes = screen.getByRole("combobox", { name: "Execution mode" }) as HTMLSelectElement;
-  expect(Array.from(modes.options).map((option) => option.value))
-    .toEqual(["SEQUENTIAL", "PARALLEL"]);
-  await user.selectOptions(modes, "PARALLEL");
-  const workers = screen.getByRole("combobox", { name: "Worker count" }) as HTMLSelectElement;
-  for (const count of [3, 4, 5, 6, 7, 8]) {
-    const option = Array.from(workers.options).find((entry) => entry.value === String(count));
-    expect(option?.disabled, `N${count} must be disabled`).toBe(true);
-    expect(option?.text).toContain("UNSUPPORTED_ON_MACOS");
-  }
-  expect(screen.getByText("N8 unavailable · UNSUPPORTED_ON_MACOS")).toBeTruthy();
+  expect(screen.queryByRole("combobox", { name: "Execution mode" })).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "Worker count" })).toBeNull();
+  expect(screen.queryByLabelText("Unavailable worker counts")).toBeNull();
 
-  // The service would refuse this selection with UNSUPPORTED_ON_MACOS, so the console must not
-  // even offer it: no request may leave the page for an N outside the matrix.
+  // The service would refuse a first pass without its matrix row, so the console must not even offer
+  // it: no request may leave the page for a selection the matrix does not carry.
   await user.click(screen.getByRole("button", { name: "Acquire lease" }));
   await user.click(screen.getByRole("button", { name: "Generate points" }));
-  fireEvent.change(workers, { target: { value: "3" } });
   expect((screen.getByRole("button", { name: "Check resources" }) as HTMLButtonElement).disabled)
     .toBe(true);
   expect((screen.getByRole("button", { name: "Start validation" }) as HTMLButtonElement).disabled)

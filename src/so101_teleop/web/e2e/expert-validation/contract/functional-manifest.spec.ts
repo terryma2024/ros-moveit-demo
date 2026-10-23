@@ -4,9 +4,9 @@ import { test, expect } from "@playwright/test";
 
 /**
  * The functional manifest is the acceptance's own input, so it is checked against the execution
- * contract rather than trusted.  A worker count of one *is* the sequential mode in the contract:
- * a case that asks for PARALLEL at one worker can never be accepted by the service, and a retry
- * batch is by definition a single point on a freshly restarted stack.
+ * contract rather than trusted.  A native campaign is one SEQUENTIAL worker: a case that asks for
+ * PARALLEL or ADAPTIVE can never be accepted by the service, and a retry batch is by definition a
+ * single point on a freshly restarted stack.
  */
 
 type FunctionalCase = {
@@ -31,7 +31,7 @@ type FunctionalManifest = {
   };
 };
 
-const REQUIRED_MODES = ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"];
+const REQUIRED_MODES = ["SEQUENTIAL"];
 
 function loadManifest(): FunctionalManifest {
   const path = process.env.SO101_FUNCTIONAL_MANIFEST ?? "";
@@ -44,14 +44,7 @@ test("every functional case is a valid execution contract", () => {
   expect(manifest.cases.length).toBeGreaterThan(0);
   for (const entry of manifest.cases) {
     expect(REQUIRED_MODES, `${entry.id}: mode`).toContain(entry.mode);
-    if (entry.mode === "PARALLEL") {
-      expect(entry.worker_count, `${entry.id}: PARALLEL worker count`).toBeGreaterThanOrEqual(2);
-      expect(entry.point_count, `${entry.id}: first-pass point count`).toBeGreaterThanOrEqual(4);
-      expect(entry.point_count, `${entry.id}: first-pass point count`).toBeLessThanOrEqual(20);
-    }
-    if (entry.mode === "SEQUENTIAL") {
-      expect(entry.worker_count, `${entry.id}: SEQUENTIAL worker count`).toBe(1);
-    }
+    expect(entry.worker_count, `${entry.id}: SEQUENTIAL worker count`).toBe(1);
     if (entry.lifecycle === "FULL_RESTART_RETRY") {
       expect(entry.point_count, `${entry.id}: retry point count`).toBe(1);
       expect(entry.worker_count, `${entry.id}: retry worker count`).toBe(1);

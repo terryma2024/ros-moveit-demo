@@ -1,0 +1,38 @@
+# SO-101 act_episode_recorder policy: bounds of the independent Recorder process. These are data-side bounds only;
+# they never affect the Teacher. The file is frozen with the attempt inputs and its sha256 is recorded in the
+# Recorder's ready file and result.
+kind: ACT_EPISODE_RECORDER_POLICY
+schema_version: 1
+# The Recorder ends at the Teacher terminal event, on SIGTERM, or after this many seconds, whichever is first. It must
+# outlast the Teacher's independent execution deadline (180 s, teacher_execution_policy) plus start-up and finish.
+max_duration_s: 300.0
+# Recorder-side bound on Teacher events waiting to be handled (the Teacher publishes at most 64 at a time).
+event_inbox_capacity: 256
+# Bounded time to catch the sources up to the Teacher's end observation after the terminal event.
+finish_budget_s: 5.0
+# Idle sleep of the engine loop between passes.
+poll_s: 0.005
+# Orchestrator bounds (act_diagnostic_episode, Teacher-independent). The orchestrator starts the Recorder first and waits at
+# most ready_timeout_s for its LISTENING ready file and then at most capturing_timeout_s for CAPTURING (the capture started and
+# its initial boundary is committed, CP-3425), then starts the Teacher whether or not the Recorder is there (data INVALID if
+# it never got there, with its own reason). After the Teacher ended it waits at most exit_wait_s for the Recorder to exit by
+# itself, then sends SIGTERM and allows term_grace_s before the process tree is stopped.
+# capturing_timeout_s: from LISTENING the Recorder needs its first read of the scene, one physics source, the alignment
+# verification (about 50 ms on its executor), a fresh camera pair and the first world after the start. Observed after the
+# alignment existed (L2 5daa904e, cefacd37, 81fa2857, rRQGirke): seed pair and provider ready 0.3 to 1.0 s, first world after
+# the start within one pass. 10 s is about 10x the worst and costs the Teacher a start delay only when the Recorder is broken.
+ready_timeout_s: 10.0
+capturing_timeout_s: 10.0
+exit_wait_s: 30.0
+term_grace_s: 5.0
+# Raw physics chunks (CP-3410, user-authorized data-contract change). There is NO per-chunk delivery-age rule: a late chunk is
+# admitted and its lateness is recorded in the Recorder telemetry (sample -> handoff -> publish -> receipt, percentiles and max).
+# Continuity, session/epoch and every content check are unchanged. The data fails on what endangers it, with these bounds:
+#   physics_spool_backlog_frames_max: chunks written by the spooler and not yet processed by the Recorder. Nominal peak
+#     observed: 6 (L2 runs 22bab88c-9a0f708d: writer queue depth 6, 951-956 chunks). 64 is ~10x, 13 MB of 200 KB chunks, and
+#     below the adapter's 128-chunk pending queue.
+#   physics_receiver_lag_max_s: the newest received sample's begin behind now. Worst observed: 0.85 s at startup (first
+#     chunk, discovery) and 0.28-0.38 s stalls while the Teacher stack started (857c9e1c). 5.0 s is ~6x the worst and inside
+#     the adapter's 4096-step lookup history (8.19 s at 2 ms steps).
+physics_spool_backlog_frames_max: 64
+physics_receiver_lag_max_s: 5.0

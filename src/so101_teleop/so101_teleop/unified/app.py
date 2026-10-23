@@ -9,10 +9,11 @@ JSON 404 instead of an HTML page.
 
 from __future__ import annotations
 
-import asyncio
 import inspect
+
+import asyncio
 import json
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -62,6 +63,7 @@ from so101_teleop.models import (
     TelemetrySnapshot,
 )
 from so101_teleop.task_artifacts import ArtifactAccessError
+from so101_teleop.head_camera import head_camera_router
 from so101_teleop.task_gateway import TaskGatewayError
 
 from .contracts import ChannelBinding, Domain, LeaseIdentity, MutationError, RequestAuthority
@@ -75,6 +77,7 @@ EXECUTION_GENERATION_HEADER = "X-SO101-Execution-Generation"
 
 #: Namespaces that must never be answered with the SPA fallback.
 API_NAMESPACES = (
+    "api",
     "tasks",
     "expert-validation",
     "control",
@@ -383,6 +386,35 @@ def instance_router(services: UnifiedServices) -> APIRouter:
     return router
 
 
+def act_router(services: UnifiedServices) -> APIRouter:
+    """ACT command and status routes, delegating to the allow-listed gateway."""
+
+    from so101_teleop.act_gateway import ActGateway
+
+    # the command route moves the arm, so it carries the same authority gate as the teleop mutations
+    router = APIRouter(dependencies=[Depends(require_authority("teleop"))])
+
+    @router.get("/act/status", tags=["act"])
+    async def act_status():
+        gateway = ActGateway(getattr(services, "act_gateway_service", None))
+        try:
+            return gateway.status()
+        except ValueError as error:
+            return unavailable(str(error), "No ACT session is available.")
+
+    @router.post("/act/command", tags=["act"])
+    async def act_command(body: dict):
+        gateway = ActGateway(getattr(services, "act_gateway_service", None))
+        if not isinstance(body, dict) or not isinstance(body.get("name"), str):
+            raise HTTPException(status_code=422, detail="ACT_COMMAND_INVALID")
+        try:
+            return gateway.command(body["name"], body.get("payload") or {})
+        except ValueError as error:
+            return unavailable(str(error), "The ACT command was refused.")
+
+    return router
+
+
 def health_router(services: UnifiedServices) -> APIRouter:
     router = APIRouter()
 
@@ -436,11 +468,16 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
             return None
         return services.teleop
 
-    async def command(name: str, body: dict):
+    def bound_lease(authority: RequestAuthority) -> LeaseIdentity:
+        # The lease is a server-side projection of the bound controller, never a caller claim.
+        return services.instances.current_lease(authority.domain)
+
+    async def command(name: str, body: dict, authority: RequestAuthority | None = None):
         service = owner()
         if service is None:
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
-        result = await service.command(name, body)
+        lease = bound_lease(authority) if authority is not None else None
+        result = await service.command(name, body, authority=authority, lease=lease)
         # A port implementation may answer with either a typed result or a plain mapping, so the
         # success test has to read the payload rather than an attribute of the object.
         payload = result.model_dump() if hasattr(result, "model_dump") else dict(result)
@@ -480,7 +517,9 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
     async def execute(plan_id: str, body: dict, authority: RequestAuthority = mutation):
         if owner() is None:
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
-        result = await services.teleop.execute_plan(plan_id, body)
+        result = await services.teleop.execute_plan(
+            plan_id, body, authority=authority, lease=bound_lease(authority)
+        )
         payload = result.model_dump() if hasattr(result, "model_dump") else dict(result)
         if not payload.get("succeeded"):
             code = str(payload.get("code", ""))
@@ -494,7 +533,9 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
     async def execute_all(plan_id: str, body: dict, authority: RequestAuthority = mutation):
         if owner() is None or not hasattr(services.teleop, "execute_all"):
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
-        projection = await services.teleop.execute_all({**body, "plan_id": plan_id}, authority=authority)
+        projection = await services.teleop.execute_all(
+            {**body, "plan_id": plan_id}, authority=authority, lease=bound_lease(authority)
+        )
         return {
             "operation_id": projection.operation_id,
             "phase": projection.phase,
@@ -521,55 +562,55 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
 
     @router.post("/control/lease/renew")
     async def renew_lease(body: dict, authority: RequestAuthority = mutation):
-        return await command("lease_renew", body)
+        return await command("lease_renew", body, authority)
 
     @router.post("/plan/joints")
     async def plan_joints(body: dict, authority: RequestAuthority = mutation):
-        return await command("plan_joints", body)
+        return await command("plan_joints", body, authority)
 
     @router.post("/plan/tcp")
     async def plan_tcp(body: dict, authority: RequestAuthority = mutation):
-        return await command("plan_tcp", body)
+        return await command("plan_tcp", body, authority)
 
     @router.post("/gripper/execute")
     async def gripper(body: dict, authority: RequestAuthority = mutation):
-        return await command("gripper", body)
+        return await command("gripper", body, authority)
 
     @router.post("/execution/cancel")
     async def cancel(body: dict, authority: RequestAuthority = mutation):
-        return await command("cancel", body)
+        return await command("cancel", body, authority)
 
     @router.post("/attachment/{operation}")
     async def attachment(operation: str, body: dict, authority: RequestAuthority = mutation):
-        return await command(f"attachment_{operation}", body)
+        return await command(f"attachment_{operation}", body, authority)
 
     @router.post("/scene/repair")
     async def scene_repair(body: dict, authority: RequestAuthority = mutation):
-        return await command("scene_repair", body)
+        return await command("scene_repair", body, authority)
 
     @router.post("/robot/home")
     async def home(body: dict, authority: RequestAuthority = mutation):
-        return await command("robot_home", body)
+        return await command("robot_home", body, authority)
 
     @router.post("/simulation/reset")
     async def reset_simulation(body: dict, authority: RequestAuthority = mutation):
-        return await command("simulation_reset", body)
+        return await command("simulation_reset", body, authority)
 
     @router.post("/gazebo/screenshot")
     async def screenshot(body: dict, authority: RequestAuthority = mutation):
-        return await command("screenshot", body)
+        return await command("screenshot", body, authority)
 
     @router.post("/gazebo/camera/presets/{preset}")
     async def camera_preset(preset: str, body: dict, authority: RequestAuthority = mutation):
-        return await command("camera_preset", {**body, "preset": preset})
+        return await command("camera_preset", {**body, "preset": preset}, authority)
 
     @router.post("/parameters/{operation}")
     async def parameters(operation: str, body: dict, authority: RequestAuthority = mutation):
-        return await command(f"parameters_{operation}", body)
+        return await command(f"parameters_{operation}", body, authority)
 
     @router.post("/workflow/{operation}")
     async def workflow(operation: str, body: dict, authority: RequestAuthority = mutation):
-        return await command(f"workflow_{operation}", body)
+        return await command(f"workflow_{operation}", body, authority)
 
     @router.websocket("/telemetry")
     async def telemetry(websocket: WebSocket):
@@ -950,6 +991,7 @@ def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
         async def web_root():
             return FileResponse(root / "index.html")
 
+        @app.get("/archives", include_in_schema=False)
         @app.get("/tasks", include_in_schema=False)
         @app.get("/expert-validation", include_in_schema=False)
         async def compat_pages():
@@ -965,6 +1007,7 @@ def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
     else:
 
         @app.get("/", include_in_schema=False)
+        @app.get("/archives", include_in_schema=False)
         @app.get("/tasks", include_in_schema=False)
         @app.get("/expert-validation", include_in_schema=False)
         async def web_assets_missing():
@@ -983,9 +1026,14 @@ def create_unified_app(
     static_dir: str | Path | None = None,
     capture_dir: str | Path | None = None,
     bind_address: str = "127.0.0.1",
+    archive_roots: tuple[Path, ...] = (),
 ) -> FastAPI:
     validate_bind_address(bind_address)
     lifecycle = lifecycle_for(services)
+    from so101_teleop.archive_viewer.config import ArchiveConfig
+    from so101_teleop.archive_viewer.scan import ArchiveStore
+    from so101_teleop.archive_viewer.api import archive_router
+    archives = ArchiveStore(ArchiveConfig(archive_roots))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -993,10 +1041,20 @@ def create_unified_app(
         try:
             yield
         finally:
-            await lifecycle.shutdown()
+            try:
+                await lifecycle.shutdown()
+            finally:
+                await asyncio.to_thread(archives.verifier.close)
 
     app = FastAPI(title="SO-101 Unified", version="1.0.0", lifespan=lifespan)
     app.state.services = services
+    app.state.archives = archives
+
+    @app.middleware("http")
+    async def archive_availability(request: Request, call_next):
+        if (request.url.path == "/api/archives" or request.url.path.startswith("/api/archives/")) and not archives.roots:
+            return JSONResponse(status_code=404, content={"code": "ARCHIVES_DISABLED", "message": "no archive root configured"})
+        return await call_next(request)
 
     @app.exception_handler(HTTPException)
     async def structured_http_error(request: Request, error: HTTPException):
@@ -1011,10 +1069,13 @@ def create_unified_app(
 
     # Registration order is part of the contract: concrete API and WS routes first.
     app.include_router(instance_router(services))
+    app.include_router(act_router(services))
     app.include_router(health_router(services))
     app.include_router(teleop_router(services))
     app.include_router(tasks_router(services))
     app.include_router(validation_router(services))
+    app.include_router(head_camera_router(services))
+    app.include_router(archive_router(archives))
     _mount_static(app, static_dir, capture_dir)
     return app
 
@@ -1052,10 +1113,10 @@ class _SchemaOnlyService:
     async def telemetry_wait(self):
         return None
 
-    async def command(self, name, body):
+    async def command(self, name, body, *, authority=None, lease=None):
         return _SchemaOnlyResult()
 
-    async def execute_plan(self, plan_id, body):
+    async def execute_plan(self, plan_id, body, *, authority=None, lease=None):
         return _SchemaOnlyResult()
 
     async def presets(self):
@@ -1118,6 +1179,7 @@ def schema_services() -> UnifiedServices:
 
 __all__ = [
     "API_NAMESPACES",
+    "act_router",
     "create_unified_app",
     "health_router",
     "instance_router",

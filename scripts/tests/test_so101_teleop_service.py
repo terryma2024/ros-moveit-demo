@@ -40,9 +40,9 @@ class ServiceManagerTests(unittest.TestCase):
     def test_host_profiles_keep_platform_execution_config(self) -> None:
         mac = service.defaults("darwin")
         linux = service.defaults("linux")
-        self.assertEqual(mac["config"], "parallel_batch_v4_macos_mps_w2.yaml")
+        self.assertEqual(mac["config"], "parallel_batch_macos_mps_two_worker.yaml")
         self.assertEqual(mac["coordinator"], "so101_macos_service_campaign")
-        self.assertEqual(linux["config"], "parallel_batch_v3.yaml")
+        self.assertEqual(linux["config"], "parallel_batch_linux_cuda.yaml")
         self.assertEqual(linux["coordinator"], "so101_parallel_batch")
 
     def test_validation_service_does_not_enable_unconfigured_ros_bridge(self) -> None:

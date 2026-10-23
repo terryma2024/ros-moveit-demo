@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 PROTOCOL_VERSION = 1
 DEFAULT_MAX_BYTES = 64 * 1024
@@ -28,9 +28,10 @@ MOTION_OPERATIONS = (
     "workflow",
 )
 OBSERVE_OPERATIONS = ("observe", "plan_joints", "plan_tcp")
-ALLOWED_OPERATIONS = OBSERVE_OPERATIONS + MOTION_OPERATIONS
+ACT_OPERATIONS = ("pick_place_validation_phase", "pick_place_validation_full", "act_collection_start", "act_collection_resume", "cancel")
+ALLOWED_OPERATIONS = OBSERVE_OPERATIONS + MOTION_OPERATIONS + ACT_OPERATIONS
 #: Operations that must carry a dispatch token; observe-only reads must not.
-TOKEN_REQUIRED_OPERATIONS = MOTION_OPERATIONS
+TOKEN_REQUIRED_OPERATIONS = MOTION_OPERATIONS + ACT_OPERATIONS
 
 
 class IpcProtocolError(ValueError):
@@ -46,6 +47,81 @@ class DispatchTokenModel(BaseModel):
     execution_generation: int = Field(ge=0)
     deadline_ns: int = Field(ge=0)
     revocation_revision: int = Field(ge=0)
+
+
+class _ActPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class _StackOwner(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    pid: int = Field(gt=0, strict=True)
+    pgid: int = Field(gt=0, strict=True)
+    started_ticks: int = Field(gt=0, strict=True)
+    argv_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    environment_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def _isolated(self):
+        if self.pgid != self.pid:
+            raise ValueError("IPC_STACK_OWNER_GROUP_INVALID")
+        return self
+
+
+class _PickPlacePayload(_ActPayload):
+    scenario_id: str = Field(min_length=1)
+    # the support distance the case admits for "the cup is supported": part of the case definition, because the
+    # evidence that says so is derived from it and an invented default would be a measurement nobody admitted
+    support_distance_max_m: float = Field(gt=0)
+    # the gripper's closed position is the case's own admitted target: CLOSE must not invent it, and a case that
+    # omits it fails closed by name when CLOSE runs
+    gripper_closed_rad: float = Field(gt=0)
+    # and the time it takes: a duration the phase would otherwise have to invent
+    close_duration_s: float = Field(gt=0)
+    # the admitted motion policy the case runs under, named as its VARIANT DIRECTORY
+    # (<share>/config/policies/<policy_id>/<version>). The production variant loader composes the manifest and the
+    # variant, validates the schema, the backend and execution_allowed, and returns the template - so the policy stays
+    # the single source of its own numbers instead of being copied into this payload
+    pick_policy: str = Field(min_length=1)
+    motion_duration_s: float = Field(gt=0)
+    manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    contact_policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    stack_owner: _StackOwner
+
+
+class _PickPlacePhasePayload(_PickPlacePayload):
+    stop_after: Literal[
+        "SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
+        "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK",
+    ]
+
+
+class _CollectionStart(_ActPayload):
+    launch_generation: int = Field(gt=0,strict=True)
+    manifest_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
+    runtime_config_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
+    collection_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    contact_policy_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
+
+
+class _CollectionResume(_PickPlacePayload):
+    collection_config_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
+    checkpoint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class _ActCancel(_ActPayload):
+    reason: str = Field(min_length=1, max_length=200)
+
+
+ACT_PAYLOADS = {
+    "pick_place_validation_phase": _PickPlacePhasePayload,
+    "pick_place_validation_full": _PickPlacePayload,
+    "act_collection_start": _CollectionStart,
+    "act_collection_resume": _CollectionResume,
+    "cancel": _ActCancel,
+}
 
 
 class IpcRequest(BaseModel):
@@ -67,12 +143,22 @@ class IpcRequest(BaseModel):
         "camera_preset",
         "parameters",
         "workflow",
+        "pick_place_validation_phase",
+        "pick_place_validation_full",
+        "act_collection_start",
+        "act_collection_resume",
+        "cancel",
     ]
     command_id: str = Field(min_length=1, max_length=200)
     deadline_ns: int = Field(ge=1)
     service_epoch: str = Field(min_length=1, max_length=200)
     runtime_id: str = Field(min_length=1, max_length=200)
     service_token: str = Field(min_length=1, max_length=512)
+    campaign_id: str | None = Field(default=None, min_length=1, max_length=200)
+    worker_id: str | None = Field(default=None, min_length=1, max_length=100)
+    session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
+    execution_generation: int | None = Field(default=None, ge=0)
     token: DispatchTokenModel | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -83,6 +169,29 @@ class IpcRequest(BaseModel):
             if isinstance(item, float) and (item != item or item in (float("inf"), float("-inf"))):
                 raise ValueError("IPC_PAYLOAD_NOT_FINITE")
         return value
+
+    @model_validator(mode="after")
+    def _act_identity_and_payload(self):
+        if self.operation not in ACT_PAYLOADS:
+            if any(getattr(self, name) is not None for name in (
+                "campaign_id", "worker_id", "session_id", "attempt_id", "execution_generation",
+            )):
+                raise ValueError("IPC_LEGACY_IDENTITY_UNEXPECTED")
+            return self
+        if any(getattr(self, name) is None for name in (
+            "campaign_id", "worker_id", "session_id", "attempt_id", "execution_generation",
+        )):
+            raise ValueError("IPC_ACT_IDENTITY_REQUIRED")
+        if self.token is None:
+            raise ValueError("IPC_TOKEN_REQUIRED")
+        if self.token.child_id != self.worker_id:
+            raise ValueError("IPC_WORKER_MISMATCH")
+        if self.token.execution_generation != self.execution_generation:
+            raise ValueError("IPC_GENERATION_MISMATCH")
+        if self.token.deadline_ns != self.deadline_ns:
+            raise ValueError("IPC_DEADLINE_MISMATCH")
+        ACT_PAYLOADS[self.operation].model_validate(self.payload)
+        return self
 
 
 class IpcReply(BaseModel):
@@ -163,6 +272,16 @@ def decode_safety_packet(raw: bytes, *, max_bytes: int = DEFAULT_MAX_BYTES) -> S
         return SafetyPacket(**document)
     except ValidationError as error:
         raise IpcProtocolError(f"IPC_SAFETY_SCHEMA_REJECTED: {error.errors()[:1]}") from error
+
+
+def decode_container_task(raw: bytes, *, max_bytes: int = DEFAULT_MAX_BYTES, now_ns=None):
+    """Decode the container task subset without legacy ACT tokens or callbacks."""
+    from so101_demo.runtime.container_campaign.task_contracts import decode_task_request
+
+    try:
+        return decode_task_request(raw, max_bytes=max_bytes, now_ns=now_ns)
+    except (ValueError, TypeError, UnicodeError) as error:
+        raise IpcProtocolError('CONTAINER_TASK_REJECTED: '+str(error)) from error
 
 
 def _reject_constant(name: str):

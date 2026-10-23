@@ -19,6 +19,10 @@ class CupSceneObservation:
     simulation_session_id: str | None = None
     reset_epoch: int | None = None
     paused: bool | None = None
+    simulation_time_s: float | None = None
+    simulation_step: int | None = None
+    publisher_sequence: int | None = None
+    cup_body: str | None = None
 
     def __post_init__(self) -> None:
         times = (self.simulator_received_monotonic_s, self.moveit_received_monotonic_s)

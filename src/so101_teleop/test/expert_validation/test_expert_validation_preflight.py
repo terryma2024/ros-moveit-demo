@@ -1,0 +1,592 @@
+import hashlib
+
+import sys
+
+import pytest
+
+from so101_teleop.expert_validation.catalog import CatalogPoint, PointSelection
+from so101_teleop.expert_validation.preflight import (
+    CampaignStartRequest,
+    PreflightEngine,
+    PreflightRejected,
+)
+from teleop_paths import REPOSITORY, SOURCE_ROOT
+
+
+SHA = "a" * 64
+
+REPO = REPOSITORY
+CONFIG_DIR = REPO / "src" / "so101_demo_py" / "config" / "mujoco"
+
+#: The three installed macOS combinations (design section 6). The document, not the caller,
+#: decides which profile/config hash/scope a preflight binds.
+MACOS_DOCUMENTS = {
+    4: CONFIG_DIR / "parallel_batch_macos_mps_two_worker.yaml",
+    5: CONFIG_DIR / "parallel_batch_macos_mps_single_worker_retry.yaml",
+    6: CONFIG_DIR / "parallel_batch_macos_mps_single_worker_first_pass.yaml",
+}
+LINUX_CUDA_DOCUMENT = CONFIG_DIR / "parallel_batch_linux_cuda.yaml"
+
+TWO_WORKER_CLAIM = {"execution_profile": "MPS_TWO_WORKER_FIRST_PASS", "batch_kind": "FIRST_PASS"}
+SINGLE_WORKER_RETRY_CLAIM = {
+    "execution_profile": "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
+    "batch_kind": "FULL_RESTART_RETRY",
+}
+SINGLE_WORKER_FIRST_PASS_CLAIM = {
+    "execution_profile": "MPS_SINGLE_WORKER_FIRST_PASS",
+    "batch_kind": "FIRST_PASS",
+}
+
+#: (profile, schema_version, execution_mode, worker_count, batch_kind) per installed document.
+MATRIX = {
+    4: ("MPS_TWO_WORKER_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
+    5: ("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    6: ("MPS_SINGLE_WORKER_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+}
+CLAIMS = {4: TWO_WORKER_CLAIM, 5: SINGLE_WORKER_RETRY_CLAIM, 6: SINGLE_WORKER_FIRST_PASS_CLAIM}
+
+
+def _selection(count):
+    points = tuple(
+        CatalogPoint(
+            id=f"point_{index}",
+            label=f"Point {index}",
+            source="generated",
+            stratum="near/center",
+            position_world_m=(float(index), 0.0, 0.0),
+            display_id=f"P{index:02d}",
+        )
+        for index in range(1, count + 1)
+    )
+    return PointSelection("catalog", 1, SHA, points, tuple(p.id for p in points), SHA)
+
+
+class Resources:
+    def __init__(self, admitted=True, reasons=(), observations=None):
+        self.admitted = admitted
+        self.reasons = tuple(reasons)
+        self.observations = observations or {"memory_pressure": "LOW"}
+
+    def probe(self, _request, _config):
+        return self.admitted, self.reasons, dict(self.observations)
+
+
+def _request(tmp_path, mode="SEQUENTIAL", count=4, **changes):
+    values = dict(
+        campaign_id="campaign-1",
+        batch_id="b001",
+        manifest_id="manifest-1",
+        selection=_selection(count),
+        execution_mode=mode,
+        evidence_root=tmp_path.resolve(),
+        points_path=(tmp_path / "points.yaml").resolve(),
+        parallel_config_path=(tmp_path / "parallel.yaml").resolve(),
+        adaptive_config_path=(tmp_path / "adaptive.yaml").resolve(),
+        worker_count=2 if mode == "PARALLEL" else (1 if mode == "SEQUENTIAL" else 8),
+        max_points_per_worker=None,
+        fallback_worker_counts=(6, 4, 2, 1),
+        initial_points_per_worker=3,
+        worker_start_timeout_s=120.0,
+        max_infra_attempts_per_point=5,
+        yolo_executor_count=2,
+        service_session_id="session-1",
+        lease_generation=1,
+        source_commit="1" * 40,
+        install_prefix="/opt/validation",
+        coordinator_executable_sha256=SHA,
+        adaptive_runner_module_sha256=SHA,
+        adaptive_pool_module_sha256=SHA,
+        adaptive_cleanup_executable_sha256=SHA,
+        adaptive_wrapper_sha256=SHA,
+        parallel_config_sha256=SHA,
+        adaptive_config_sha256=SHA,
+        yolo_weights_sha256=SHA,
+        grounded_sam_manifest_sha256=SHA,
+        broker_image_id="sha256:" + SHA,
+        resource_manifest_sha256=SHA,
+    )
+    values.update(changes)
+    return CampaignStartRequest(**values)
+
+
+def _macos_request(tmp_path, schema_version, *, count=4, claim=None, **changes):
+    """A request that names one installed macOS document and its exact routing-key claim."""
+
+    document = MACOS_DOCUMENTS[schema_version]
+    _profile, _schema, mode, workers, _batch_kind = MATRIX[schema_version]
+    values = dict(
+        mode=mode,
+        count=count,
+        worker_count=workers,
+        parallel_config_path=document,
+        parallel_config_sha256=hashlib.sha256(document.read_bytes()).hexdigest(),
+        **(CLAIMS[schema_version] if claim is None else claim),
+    )
+    values.update(changes)
+    return _request(
+        tmp_path, mode=values.pop("mode"), count=values.pop("count"), **values)
+
+
+def test_fixed_selection_capacity_is_shared_and_quota_free(tmp_path):
+    receipt = PreflightEngine(Resources()).preflight(
+        _request(tmp_path, mode="SEQUENTIAL", count=5, worker_count=1)
+    )
+    assert receipt.admitted
+    assert not hasattr(receipt.execution_config, "max_points_per_worker")
+    assert receipt.capacity == 5
+
+
+@pytest.mark.parametrize(
+    ("mode", "worker_count", "error"),
+    [
+        ("SEQUENTIAL", 2, "SEQUENTIAL_WORKER_COUNT"),
+        ("PARALLEL", 1, "NATIVE_MULTI_WORKER_UNSUPPORTED"),
+        ("PARALLEL", 2, "NATIVE_MULTI_WORKER_UNSUPPORTED"),
+        ("PARALLEL", 9, "NATIVE_MULTI_WORKER_UNSUPPORTED"),
+    ],
+)
+def test_fixed_worker_count_is_closed(tmp_path, mode, worker_count, error):
+    with pytest.raises(PreflightRejected, match=error):
+        PreflightEngine(Resources()).require_admitted(
+            _request(tmp_path, mode=mode, worker_count=worker_count)
+        )
+
+
+def test_fixed_legacy_quota_is_refused_without_downgrade(tmp_path):
+    resources = Resources(admitted=False, reasons=("GPU_HEADROOM",))
+    receipt = PreflightEngine(resources).preflight(
+        _request(tmp_path, count=5, worker_count=1, max_points_per_worker=2)
+    )
+    assert not receipt.admitted
+    assert receipt.reason_codes == (
+        "LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED", "GPU_HEADROOM")
+    assert receipt.execution_config.worker_count == 1
+
+
+def test_adaptive_is_refused_before_any_ladder_is_read(tmp_path):
+    engine = PreflightEngine(Resources())
+    with pytest.raises(PreflightRejected, match="NATIVE_MULTI_WORKER_UNSUPPORTED"):
+        engine.require_admitted(_request(tmp_path, mode="ADAPTIVE"))
+    with pytest.raises(PreflightRejected, match="NATIVE_MULTI_WORKER_UNSUPPORTED"):
+        engine.require_admitted(
+            _request(tmp_path, mode="ADAPTIVE", fallback_worker_counts=(6, 6, 1))
+        )
+
+
+def test_receipt_binds_canonical_request_session_and_expiry(tmp_path):
+    receipt = PreflightEngine(Resources(), clock_ns=lambda: 100).preflight(
+        _request(tmp_path)
+    )
+    assert receipt.service_session_id == "session-1"
+    assert receipt.lease_generation == 1
+    assert receipt.observed_at_ns == 100
+    assert receipt.expires_at_monotonic_ns > receipt.observed_at_ns
+    assert len(receipt.canonical_start_request_sha256) == 64
+
+
+def test_twenty_points_keeps_exact_requested_capacity(tmp_path):
+    receipt = PreflightEngine(Resources()).preflight(
+        _request(tmp_path, count=20, worker_count=1))
+    assert receipt.admitted
+    assert receipt.capacity == 20
+    assert receipt.execution_config.worker_count == 1
+    assert not hasattr(receipt.execution_config, "max_points_per_worker")
+
+
+def test_resource_rejection_keeps_the_single_worker_count(tmp_path):
+    receipt = PreflightEngine(Resources(False, ("CPU_HEADROOM",))).preflight(
+        _request(tmp_path, count=20, worker_count=1))
+    assert not receipt.admitted
+    assert receipt.reason_codes == ("CPU_HEADROOM",)
+    assert receipt.capacity == 20
+    assert receipt.execution_config.worker_count == 1
+
+
+def test_host_fixed_eight_without_a_guard_is_refused():
+    """No composed guard means no admission; the probe never fabricates a pass."""
+
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    admitted, reasons, observations = _HostResourceProbe().probe(
+        None, FixedExecutionConfig("PARALLEL", 8))
+    assert not admitted
+    assert reasons == ("START_GUARD_UNAVAILABLE",)
+    assert observations["requested_worker_count"] == 8
+
+
+def _local_check(self, policy, scope):
+    """Real reads, real decision; only the probe process boundary is replaced."""
+
+    import dataclasses
+    import time
+
+    from so101_demo.parallel_batch import start_guard
+
+    started = time.monotonic()
+    ports = dataclasses.replace(start_guard.host_ports(), busy_window_s=0.0)
+    try:
+        snapshot = start_guard.probe_snapshot(policy, scope, started + policy.timeout_s,
+                                              ports=ports)
+        return start_guard.evaluate_snapshot(snapshot, policy, scope,
+                                             started_monotonic_s=started,
+                                             completed_monotonic_s=time.monotonic())
+    except start_guard.ProbeError as error:
+        return start_guard.GuardResult(
+            scope=scope, status=start_guard.FAIL, started_monotonic_s=started,
+            completed_monotonic_s=time.monotonic(),
+            checks={"probe": start_guard.GuardCheck(start_guard.FAIL, error.reason, None, None,
+                                                   "state")},
+            snapshot=None, cleanup_state="CLEAR")
+
+
+#: What each host declares. Linux keeps its W8/CUDA contract; macOS declares W2/MPS.
+DECLARED_HOST_PROFILES = (
+    ("linux", 8, "INDEX:0"),
+    ("darwin", 2, "MPS:default"),
+)
+
+
+@pytest.mark.parametrize(("host", "worker_count", "gpu_selector"), DECLARED_HOST_PROFILES)
+def test_every_declared_host_profile_admits_through_a_deterministic_guard(
+    monkeypatch, tmp_path, host, worker_count, gpu_selector
+):
+    """The product contract is per host, and neither declaration is a second-class path."""
+
+    from so101_demo.parallel_batch.start_guard import (
+        PASS, GuardCheck, GuardResult, StartGuardPolicy)
+    from so101_demo.parallel_batch.start_guard_probe import (
+        EpochStartGuard, ProbeCoordinator)
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    class AdmittingCoordinator(ProbeCoordinator):
+        def check(self, policy, scope):
+            return GuardResult(
+                scope=scope, status=PASS, started_monotonic_s=0.0, completed_monotonic_s=0.0,
+                checks={
+                    "ram": GuardCheck(PASS, "RAM_HEADROOM_OK", 0, 1 << 30, "bytes"),
+                    "gpu": GuardCheck(PASS, "GPU_HEADROOM_OK", 0, 1 << 30, "bytes"),
+                },
+                snapshot=None, cleanup_state="CLEAR")
+
+    monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path))
+    policy = StartGuardPolicy()
+    guard = EpochStartGuard(AdmittingCoordinator(tmp_path / f"state-{host}"), policy)
+
+    admitted, reasons, observations = _HostResourceProbe(
+        start_guard=guard, gpu_selector=gpu_selector).probe(
+            None, FixedExecutionConfig("PARALLEL", worker_count))
+
+    assert admitted, reasons
+    assert observations["requested_worker_count"] == worker_count
+    assert observations["start_guard_status"] in ("PASS", "WARN")
+
+
+def test_the_native_host_admits_its_declared_profile(monkeypatch, tmp_path):
+    """The real guard, on the host that is actually running this suite.
+
+    Darwin has no CUDA target, so asking for ``INDEX:0`` there is not a product failure - it is the
+    wrong question. The smoke asks each host for the profile that host declares: W8/CUDA on Linux,
+    W2/MPS on macOS. A host that genuinely cannot admit its own profile is reported as an explicit
+    environment result, and the deterministic contract above keeps the product boundary covered.
+    """
+
+    from so101_demo.parallel_batch.start_guard import StartGuardPolicy
+    from so101_demo.parallel_batch.start_guard_probe import (
+        compose_darwin_start_guard, compose_default_start_guard)
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    # Each host asks for the composition it really installs: Darwin runs the MPS guard, Linux keeps
+    # the NVML-backed default. Asking Darwin for INDEX:0 would test a profile macOS does not ship.
+    monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path))
+    # A smoke is only a smoke if it runs the composition the product runs: real probe process,
+    # real decision. The deterministic contract above is what pins the accept/refuse boundary.
+    policy = StartGuardPolicy()
+    if sys.platform == "darwin":
+        # The MPS floor is an installed-document value, not a default: read it from the v4 profile.
+        import yaml
+
+        document = yaml.safe_load(
+            (SOURCE_ROOT / "so101_demo_py/config/mujoco"
+             / "parallel_batch_macos_mps_two_worker.yaml").read_text(encoding="utf-8"))
+        policy = StartGuardPolicy(
+            mps_minimum_headroom_bytes=document["start_guard"]["mps_minimum_headroom_bytes"])
+        worker_count, gpu_selector = 2, "MPS:default"
+        guard = compose_darwin_start_guard(policy)
+    else:
+        worker_count, gpu_selector = 8, "INDEX:0"
+        guard = compose_default_start_guard(policy)
+
+    admitted, reasons, observations = _HostResourceProbe(
+        start_guard=guard, gpu_selector=gpu_selector).probe(
+            None, FixedExecutionConfig("PARALLEL", worker_count))
+
+    environment_reasons = {
+        "GPU_TARGET_UNAVAILABLE", "RAM_FREE_BELOW_MINIMUM", "GPU_FREE_BELOW_MINIMUM",
+        "MPS_HEADROOM_BELOW_MINIMUM", "PROBE_TIMEOUT", "PROBE_DEADLINE_EXCEEDED",
+        "SNAPSHOT_UNAVAILABLE",
+    }
+    if not admitted and set(reasons) <= environment_reasons:
+        pytest.skip(
+            f"{sys.platform} cannot admit worker_count={worker_count}: {reasons}")
+    assert admitted, reasons
+    assert observations["requested_worker_count"] == worker_count
+    assert observations["start_guard_status"] in ("PASS", "WARN")
+    guard_document = observations["start_guard"]
+    assert guard_document["status"] in ("PASS", "WARN")
+    accelerator_check = "mps_headroom" if sys.platform == "darwin" else "gpu"
+    assert set(guard_document["checks"]) == {
+        "cpu_capacity", "cpu_busy", "ram", accelerator_check}
+    assert guard_document["checks"]["ram"]["unit"] == "bytes"
+
+
+def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
+    """A FAIL from the guard becomes the preflight reason, unchanged."""
+
+    from so101_demo.parallel_batch.start_guard import (
+        FAIL, GuardCheck, GuardResult, StartGuardPolicy)
+    from so101_demo.parallel_batch.start_guard_probe import (
+        EpochStartGuard, ProbeCoordinator)
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    class RefusingCoordinator(ProbeCoordinator):
+        def check(self, policy, scope):
+            return GuardResult(scope=scope, status=FAIL, started_monotonic_s=0.0,
+                               completed_monotonic_s=0.0,
+                               checks={"gpu": GuardCheck(FAIL, "GPU_FREE_BELOW_MINIMUM",
+                                                         1, 1 << 30, "bytes")},
+                               snapshot=None, cleanup_state="CLEAR")
+
+    policy = StartGuardPolicy()
+    guard = EpochStartGuard(RefusingCoordinator(tmp_path / "state"), policy)
+    admitted, reasons, observations = _HostResourceProbe(
+        start_guard=guard, gpu_selector="INDEX:0").probe(
+            None, FixedExecutionConfig("PARALLEL", 8))
+
+    assert not admitted
+    assert reasons == ("GPU_FREE_BELOW_MINIMUM",)
+    assert observations["start_guard"]["checks"]["gpu"]["status"] == "FAIL"
+
+
+# --------------------------------------------------------------------------------------
+# The macOS W1/W2 support matrix, driven from the installed v4/v5/v6 documents
+#
+# The routing key is `(schema_version, execution_profile, batch_kind, worker_count)` and the
+# document - not the caller, and never the selected-point count - decides it. A request that
+# does not name the combination its document declares is refused before any resource work.
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("schema_version", [5, 6])
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_a_macos_document_admits_only_its_own_routing_key(tmp_path, schema_version):
+    profile, schema, mode, workers, batch_kind = MATRIX[schema_version]
+    document = MACOS_DOCUMENTS[schema_version]
+
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, schema_version)
+    )
+
+    assert receipt.admitted, receipt.reason_codes
+    assert receipt.execution_config.worker_count == workers
+    assert receipt.execution_config.execution_mode == mode
+    assert receipt.parallel_config_sha256 == hashlib.sha256(document.read_bytes()).hexdigest()
+    assert receipt.execution_profile == profile
+    assert receipt.schema_version == schema
+    assert receipt.batch_kind == batch_kind
+    observations = receipt.resource_observations
+    assert observations["execution_profile"] == profile
+    assert observations["execution_schema_version"] == schema
+    assert observations["execution_batch_kind"] == batch_kind
+    assert observations["execution_config_sha256"] == receipt.parallel_config_sha256
+    assert observations["execution_worker_count"] == workers
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_the_macos_two_worker_route_is_refused_as_a_native_multi_worker_request(tmp_path):
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 4)
+    )
+
+    assert receipt.admitted is False
+    assert "NATIVE_MULTI_WORKER_UNSUPPORTED" in receipt.reason_codes
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_a_macos_mps_two_worker_document_refuses_a_single_worker_claim(tmp_path):
+    """v4 is frozen exact-W2: a W1 claim is a different platform claim, not a W2 run."""
+
+    from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
+
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 4, claim=SINGLE_WORKER_FIRST_PASS_CLAIM,
+                       mode="SEQUENTIAL", worker_count=1)
+    )
+
+    assert receipt.admitted is False
+    assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
+    assert receipt.execution_config.worker_count == 1
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_a_macos_mps_single_worker_retry_document_refuses_a_first_pass_claim(tmp_path):
+    from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
+
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 5, claim=SINGLE_WORKER_FIRST_PASS_CLAIM)
+    )
+
+    assert receipt.admitted is False
+    assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_a_macos_mps_single_worker_first_pass_document_refuses_a_retry_claim(tmp_path):
+    from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
+
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 6, claim=SINGLE_WORKER_RETRY_CLAIM)
+    )
+
+    assert receipt.admitted is False
+    assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_adaptive_is_refused_on_a_macos_document(tmp_path):
+    from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
+
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 4, mode="ADAPTIVE", count=8, **TWO_WORKER_CLAIM)
+    )
+
+    assert receipt.admitted is False
+    assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(tmp_path):
+    """Four points do not mean one profile and twenty points do not mean another."""
+
+    from so101_teleop.expert_validation.preflight import (
+        EXECUTION_PROFILE_REQUIRED,
+        UNSUPPORTED_ON_MACOS,
+    )
+
+    for count in (4, 5, 8, 20):
+        receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+            _macos_request(tmp_path, 6, count=count)
+        )
+        assert receipt.admitted, (count, receipt.reason_codes)
+        assert receipt.execution_config.worker_count == 1
+        assert receipt.execution_config.execution_mode == "SEQUENTIAL"
+
+    # Without the explicit routing key nothing is inferred, however many points were selected.
+    unclaimed = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 6, count=8, claim={})
+    )
+    assert unclaimed.admitted is False
+    assert EXECUTION_PROFILE_REQUIRED in unclaimed.reason_codes
+
+    # N>1 is refused with the stable platform reason, claim or no claim.
+    oversized = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 6, count=20, worker_count=8)
+    )
+    assert oversized.admitted is False
+    assert UNSUPPORTED_ON_MACOS in oversized.reason_codes
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
+def test_a_declared_config_hash_that_does_not_match_the_document_is_refused(tmp_path):
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
+        _macos_request(tmp_path, 4, parallel_config_sha256="b" * 64)
+    )
+
+    assert receipt.admitted is False
+    assert "PARALLEL_CONFIG_HASH_MISMATCH" in receipt.reason_codes
+
+
+def test_a_linux_cuda_document_keeps_the_existing_fixed_semantics(tmp_path):
+    """The Linux v3 fixture is untouched: no matrix, no profile, one SEQUENTIAL worker."""
+
+    receipt = PreflightEngine(Resources()).preflight(
+        _request(
+            tmp_path,
+            mode="SEQUENTIAL",
+            count=20,
+            worker_count=1,
+            parallel_config_path=LINUX_CUDA_DOCUMENT,
+            parallel_config_sha256=hashlib.sha256(LINUX_CUDA_DOCUMENT.read_bytes()).hexdigest(),
+        )
+    )
+
+    assert receipt.admitted, receipt.reason_codes
+    assert receipt.execution_config.worker_count == 1
+    assert receipt.execution_profile is None
+    assert "execution_profile" not in receipt.resource_observations
+
+
+def test_the_macos_binding_follows_the_accelerator_not_the_schema_number():
+    """A Linux/CUDA v4 document is not a macOS profile; only MPS gets the platform matrix."""
+
+    from types import SimpleNamespace
+
+    from so101_teleop.expert_validation.preflight import (
+        MACOS_EXECUTION_PROFILES,
+        macos_execution_profile_for_config,
+    )
+
+    def document(kind, worker_count=2):
+        return SimpleNamespace(
+            schema_version=4,
+            worker_count=worker_count,
+            accelerator=SimpleNamespace(kind=kind, resolved_selector="default"),
+            start_guard=SimpleNamespace(mps_minimum_headroom_bytes=1 << 30),
+        )
+
+    assert macos_execution_profile_for_config(document("mps")) is MACOS_EXECUTION_PROFILES[0]
+    assert macos_execution_profile_for_config(document("cuda")) is None
+    # A v3 document has no accelerator selection at all and keeps its NVML semantics.
+    assert macos_execution_profile_for_config(
+        SimpleNamespace(schema_version=3, worker_count=8)
+    ) is None
+
+
+def test_a_macos_document_probes_with_the_mps_selector_and_a_fresh_epoch_per_request(tmp_path):
+    """One fresh StartGuard epoch per request; the composition is reused, the verdict is not."""
+
+    from so101_demo.parallel_batch.start_guard import PASS, GuardCheck, GuardResult
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    scopes = []
+
+    class RecordingGuard:
+        gpu_selector = "MPS:default"
+
+        def begin_epoch(self, scope):
+            scopes.append(scope)
+            return GuardResult(
+                scope=scope, status=PASS, started_monotonic_s=1.0, completed_monotonic_s=2.0,
+                checks={"mps_headroom": GuardCheck(PASS, "MPS_HEADROOM_OK", 8 << 30,
+                                                   1 << 30, "bytes")},
+                snapshot=None, cleanup_state="CLEAR")
+
+    request = _macos_request(tmp_path, 4)
+    config = FixedExecutionConfig("PARALLEL", 2)
+    probe = _HostResourceProbe(start_guard=RecordingGuard())
+
+    first = probe.probe(request, config)
+    second = probe.probe(request, config)
+
+    assert first[0] and second[0], (first[1], second[1])
+    assert [scope.gpu_selector for scope in scopes] == ["MPS:default", "MPS:default"]
+    assert scopes[0].epoch != scopes[1].epoch
+    assert scopes[0].worker_count == 2
+    assert scopes[0].owner_pid == scopes[1].owner_pid
+    observations = first[2]["start_guard"]
+    assert observations["admission_kind"] == "unified-memory-proxy"
+    assert "gpu" not in observations["checks"]

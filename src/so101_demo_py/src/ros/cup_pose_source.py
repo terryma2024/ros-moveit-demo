@@ -124,6 +124,7 @@ class RosCupPoseSource:
                     status_line("ERROR", failure="CUP_POSE_INVALID", message=error), flush=True
                 ),
                 timeout_s=timeout_s,
+                stop_check=getattr(self, "stop_check", None),
             )
         finally:
             self._node.destroy_subscription(self._subscription)

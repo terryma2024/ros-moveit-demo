@@ -74,7 +74,8 @@ def main() -> int:
     policy = load_place_alignment_policy(POLICY_PATH)
     target = release_alignment_target(PLACE_XYZ, policy)
     result: dict = {
-        "schema": "so101-live-place-alignment-v1",
+        "schema": "so101-live-place-alignment",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "reset_epoch": EXPECTED_EPOCH,
         "target_cup_position_world_m": list(target),
@@ -285,7 +286,7 @@ def main() -> int:
         result["status"] = "PRE_RELEASE_ALIGNMENT_PROVED"
         atomic_write(result)
         print(
-            f"EXP115_ALIGNMENT_OK attempts={aligned.attempt_count} position={aligned.position_m}",
+            f"PLACE_ALIGNMENT_OK attempts={aligned.attempt_count} position={aligned.position_m}",
             flush=True,
         )
         return 0
@@ -293,7 +294,7 @@ def main() -> int:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
         atomic_write(result)
-        print(f"EXP115_ALIGNMENT_FAILED {type(error).__name__}: {error}", flush=True)
+        print(f"PLACE_ALIGNMENT_FAILED {type(error).__name__}: {error}", flush=True)
         return 1
     finally:
         del subscription

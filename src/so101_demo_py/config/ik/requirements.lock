@@ -1,0 +1,6 @@
+# Native CPU IK versions validated with exact solver traces and latency benchmarks.
+# Install into the target runtime with: python -m pip install -r requirements.lock
+# Platform markers keep Linux ROS/NumPy 1.x and macOS NumPy 2.x environments separate.
+# Revalidate numerical equivalence and performance before updating either pin.
+numpy==1.26.4; sys_platform == "linux"
+numpy==2.4.6; sys_platform == "darwin"

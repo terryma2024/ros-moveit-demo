@@ -1,6 +1,8 @@
 # SO-101 ACT 首条非 Head Search 闭环 Implementation Plan
 
-> 2026-10-05：优先遵循 [Teacher 执行与 ACT 数据验证分离修订](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)。旧的 Recorder/QC 运动前置、数据异常停机及过程质量成功门禁不得继续按本文执行。用户已授权现有 ai-station Claude 更新实施步骤、清理被替代的代码/测试并执行；保留 Teacher 执行保护、严格数据 QC、历史证据和用途隔离。
+> **2026-10-05 修订（优先）**：本计划中 Teacher/Recorder/QC 耦合、过程质量成功判定与数据故障停 Teacher 的步骤已被 [`2026-10-05-so101-teacher-act-decoupling-implementation.md`](2026-10-05-so101-teacher-act-decoupling-implementation.md)（设计 [`../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md`](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)）替代；执行者不得继续按旧条款实现。
+>
+> 用户已授权现有 ai-station Claude 更新实施步骤、清理被替代的代码/测试并执行；保留 Teacher 执行保护、严格数据 QC、历史证据和用途隔离。
 
 > **2026-10-01 验收修订：** [共用端点 Pose 设计](../specs/2026-10-01-so101-act-endpoint-pose-acceptance-design.md) 及[实施修订](2026-10-01-so101-act-endpoint-pose-acceptance-implementation.md) 替代本计划的过程质量前置/成功条件，且也适用于正式采集、资格和 rollout。下文 Tasks 1/3/4/6/7 按该修订执行；安全、连续采样、实际提交与诊断不训练保持不变。原版已进入 dst 执行，本次修订未下发。
 

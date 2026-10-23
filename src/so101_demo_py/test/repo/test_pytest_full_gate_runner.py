@@ -1,0 +1,435 @@
+"""Focused contracts for the deterministic ordinary pytest gate runner."""
+
+from pathlib import Path
+
+import pytest
+from tools.so101_pytest_gate import (
+    SERIAL_MODULES,
+    CoverageError,
+    ProcessOutcome,
+    _parser,
+    _resource_metrics,
+    assign_lpt,
+    create_process_layout,
+    discover_ordinary_modules,
+    exact_executable,
+    load_module_durations,
+    preserve_porcelain_status,
+    split_lanes,
+    validate_exact_coverage,
+    validate_process_outcomes,
+    validate_process_path_budget,
+    validate_source_status,
+    validate_worker_count,
+)
+
+
+def test_cli_defaults_to_eight_workers_when_omitted(tmp_path: Path) -> None:
+    arguments = _parser().parse_args(
+        ["--evidence-root", str(tmp_path), "--run-id", "default-workers"]
+    )
+
+    assert arguments.workers == 8
+
+
+def test_cli_explicit_workers_override_the_default(tmp_path: Path) -> None:
+    arguments = _parser().parse_args(
+        [
+            "--workers",
+            "10",
+            "--evidence-root",
+            str(tmp_path),
+            "--run-id",
+            "explicit-workers",
+        ]
+    )
+
+    assert arguments.workers == 10
+
+
+def test_lpt_assignment_is_deterministic_and_balances_the_longest_module() -> None:
+    modules = tuple(Path(f"test/test_{name}.py") for name in "abcd")
+    durations = {
+        modules[0]: 10.0,
+        modules[1]: 8.0,
+        modules[2]: 3.0,
+        modules[3]: 1.0,
+    }
+
+    first = assign_lpt(modules, worker_count=2, durations=durations)
+    second = assign_lpt(tuple(reversed(modules)), worker_count=2, durations=durations)
+
+    assert first == second
+    assert first == ((modules[0], modules[3]), (modules[1], modules[2]))
+
+
+def test_lpt_uses_a_deterministic_fallback_without_timing_data() -> None:
+    modules = tuple(Path(f"test/test_{name}.py") for name in "abc")
+
+    assert assign_lpt(modules, worker_count=2, durations={}) == (
+        (modules[0], modules[2]),
+        (modules[1],),
+    )
+    assert load_module_durations(None, Path("test")) == {}
+
+
+def test_historical_junit_durations_are_summed_by_whole_module(tmp_path: Path) -> None:
+    junit = tmp_path / "history.xml"
+    junit.write_text(
+        "<testsuites><testsuite>\n"
+        '<testcase classname="test.test_a" name="one" time="1.25"/>\n'
+        '<testcase classname="test.test_a" name="two" time="0.75"/>\n'
+        '<testcase classname="test.test_b.Case" name="three" time="3.5"/>\n'
+        "</testsuite></testsuites>\n",
+        encoding="utf-8",
+    )
+
+    assert load_module_durations(junit, Path("test")) == {
+        Path("test/test_a.py"): 2.0,
+        Path("test/test_b.py"): 3.5,
+    }
+
+
+def test_historical_junit_durations_follow_modules_into_test_subdirectories(tmp_path: Path) -> None:
+    junit = tmp_path / "history.xml"
+    junit.write_text(
+        "<testsuites><testsuite>\n"
+        '<testcase classname="test.act.offline.test_a" name="one" time="1.5"/>\n'
+        '<testcase classname="test.act.offline.test_a" name="two" time="0.5"/>\n'
+        '<testcase classname="src.so101_demo_py.test.cli.test_b.Case" name="three" time="3.0"/>\n'
+        '<testcase classname="test.test_c" name="four" time="1.0"/>\n'
+        "</testsuite></testsuites>\n",
+        encoding="utf-8",
+    )
+
+    assert load_module_durations(junit, Path("pkg/test")) == {
+        Path("pkg/test/act/offline/test_a.py"): 2.0,
+        Path("pkg/test/cli/test_b.py"): 3.0,
+        Path("pkg/test/test_c.py"): 1.0,
+    }
+
+
+def test_serial_lane_is_ordered_and_excluded_from_parallel_shards() -> None:
+    # Derived from the single source of truth so adding a serial module cannot make this
+    # fixture silently incomplete (it did when the start-guard launch test was registered).
+    modules = (Path("test/test_other.py"), *(Path("test") / name for name in SERIAL_MODULES))
+
+    serial, parallel = split_lanes(modules)
+
+    assert tuple(path.name for path in serial) == SERIAL_MODULES
+    assert parallel == (Path("test/test_other.py"),)
+    assert not set(serial) & set(parallel)
+
+
+def test_source_evidenced_load_and_shared_filesystem_modules_are_serial() -> None:
+    assert "test_parallel_batch_worker_gate_watchdog.py" in SERIAL_MODULES
+    assert "test_inject_so101_parallel_fault.py" in SERIAL_MODULES
+
+
+def test_exact_node_union_accepts_each_expected_node_once() -> None:
+    expected = ("test/test_a.py::test_one", "test/test_b.py::test_two[x]")
+
+    result = validate_exact_coverage(
+        expected,
+        ((expected[0],), (expected[1],)),
+    )
+
+    assert result["expected_count"] == 2
+    assert result["actual_count"] == 2
+    assert result["collection_sha256"]
+
+
+@pytest.mark.parametrize(
+    ("actual", "message"),
+    (
+        (("test/test_a.py::test_one",), "missing"),
+        (
+            ("test/test_a.py::test_one", "test/test_a.py::test_one"),
+            "duplicate",
+        ),
+        (("test/test_a.py::test_one", "test/test_c.py::test_extra"), "unexpected"),
+    ),
+)
+def test_exact_node_union_rejects_missing_duplicate_or_unexpected(
+    actual: tuple[str, ...], message: str
+) -> None:
+    expected = ("test/test_a.py::test_one", "test/test_b.py::test_two")
+
+    with pytest.raises(CoverageError, match=message):
+        validate_exact_coverage(expected, (actual,))
+
+
+def test_exact_node_union_rejects_benchmark_and_zero_collection() -> None:
+    with pytest.raises(CoverageError, match="nonzero"):
+        validate_exact_coverage((), ())
+    with pytest.raises(CoverageError, match="benchmark"):
+        validate_exact_coverage(
+            ("benchmark_test/test_slow.py::test_model",),
+            (("benchmark_test/test_slow.py::test_model",),),
+        )
+
+
+def test_benchmark_word_in_an_ordinary_test_name_is_not_a_benchmark_path() -> None:
+    node_id = "test/test_partition.py::test_benchmark_test_is_excluded"
+    result = validate_exact_coverage((node_id,), ((node_id,),))
+    assert result["actual_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    (
+        ProcessOutcome("shard-1", 7, False, True, True),
+        ProcessOutcome("shard-1", -9, True, True, True),
+        ProcessOutcome("shard-1", 0, False, False, True),
+        ProcessOutcome("shard-1", 0, False, True, False),
+    ),
+)
+def test_shard_failures_timeouts_provenance_and_junit_fail_closed(
+    outcome: ProcessOutcome,
+) -> None:
+    with pytest.raises(RuntimeError, match="shard-1"):
+        validate_process_outcomes((outcome,))
+
+
+def test_ordinary_discovery_excludes_benchmark_tree(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    ordinary = package / "test"
+    contracts = ordinary / "contracts"
+    benchmark = package / "benchmark_test"
+    contracts.mkdir(parents=True)
+    benchmark.mkdir()
+    (ordinary / "test_fast.py").write_text("def test_fast(): pass\n", encoding="utf-8")
+    (contracts / "test_nested.py").write_text("def test_nested(): pass\n", encoding="utf-8")
+    (benchmark / "test_slow.py").write_text("def test_slow(): pass\n", encoding="utf-8")
+
+    modules = discover_ordinary_modules(package)
+
+    assert modules == (contracts / "test_nested.py", ordinary / "test_fast.py")
+    assert all("benchmark_test" not in path.parts for path in modules)
+
+
+def test_every_pytest_process_layout_has_isolated_fresh_paths(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+
+    first = create_process_layout(run_root, "serial")
+    second = create_process_layout(run_root, "shard-01")
+
+    assert first.root != second.root
+    for layout in (first, second):
+        assert layout.tmp_dir.is_dir()
+        assert layout.ros_home.is_dir()
+        assert layout.ros_log_dir.is_dir()
+        assert layout.environment["TMPDIR"] == str(layout.tmp_dir)
+        assert layout.environment["TMP"] == str(layout.tmp_dir)
+        assert layout.environment["TEMP"] == str(layout.tmp_dir)
+        assert layout.environment["ROS_HOME"] == str(layout.ros_home)
+        assert layout.environment["ROS_LOG_DIR"] == str(layout.ros_log_dir)
+        assert layout.junit_path.parent == layout.root
+        assert layout.log_path.parent == layout.root
+        assert layout.ownership_path.parent == layout.root
+    with pytest.raises(FileExistsError):
+        create_process_layout(run_root, "serial")
+
+
+def test_physical_process_identity_is_unique_across_gate_runs(tmp_path: Path) -> None:
+    first_run = tmp_path / "first"
+    second_run = tmp_path / "second"
+    first_run.mkdir()
+    second_run.mkdir()
+
+    first = create_process_layout(first_run, "shard-01")
+    second = create_process_layout(second_run, "shard-01")
+
+    assert first.name == second.name == "shard-01"
+    assert first.root.name != second.root.name
+
+
+def test_process_layout_reserves_the_linux_unix_socket_path_budget() -> None:
+    run_root = Path(
+        "/data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/c"
+    )
+
+    assert validate_process_path_budget(run_root) == 106
+    with pytest.raises(ValueError, match="AF_UNIX"):
+        validate_process_path_budget(run_root.parent / "abc")
+
+
+def test_compact_layout_preserves_existing_directory_on_collision(tmp_path: Path) -> None:
+    run_root = tmp_path / "compact"
+    run_root.mkdir()
+    layout = create_process_layout(run_root, "shard-01", process_id_chars=4)
+    assert len(layout.root.name) == 4
+    # the scratch sits three levels below the process root, which is the depth a case's socket root relies on
+    assert layout.tmp_dir.parent.parent.parent == layout.root
+    sentinel = layout.root / "retained.json"
+    sentinel.write_bytes(b'{"retained":true}\n')
+    with pytest.raises(FileExistsError):
+        create_process_layout(run_root, "shard-01", process_id_chars=4)
+    assert sentinel.read_bytes() == b'{"retained":true}\n'
+
+
+def test_compact_layout_respects_the_actual_long_evidence_path_budget() -> None:
+    run_root = Path(
+        "/data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/scratch/fw"
+    )
+    assert validate_process_path_budget(run_root, process_id_chars=4) == 107
+    with pytest.raises(ValueError, match="AF_UNIX"):
+        validate_process_path_budget(run_root.parent / "fwx", process_id_chars=4)
+
+
+@pytest.mark.parametrize("width", (0, 3, 13, True))
+def test_compact_layout_rejects_invalid_width_before_creating_paths(
+    tmp_path: Path, width: int
+) -> None:
+    with pytest.raises(ValueError, match="process ID"):
+        create_process_layout(tmp_path, "serial", process_id_chars=width)
+    with pytest.raises(ValueError, match="process ID"):
+        validate_process_path_budget(tmp_path, process_id_chars=width)
+    assert tuple(tmp_path.iterdir()) == ()
+
+
+def test_compact_cli_keeps_default_width_and_accepts_explicit_override(tmp_path: Path) -> None:
+    common = ["--evidence-root", str(tmp_path), "--run-id", "compact"]
+    assert _parser().parse_args(common).process_id_chars == 12
+    assert _parser().parse_args([*common, "--process-id-chars", "4"]).process_id_chars == 4
+
+
+def test_resource_metrics_accept_gnu_time_label_indentation(tmp_path: Path) -> None:
+    resource = tmp_path / "resource.txt"
+    resource.write_text(
+        "\tUser time (seconds): 859.00\n"
+        "\tSystem time (seconds): 12.53\n"
+        "\tPercent of CPU this job got: 103%\n"
+        "\tMaximum resident set size (kbytes): 2553912\n",
+        encoding="utf-8",
+    )
+
+    assert _resource_metrics(resource) == (2553912, 859.0, 12.53, 103.0)
+
+
+@pytest.mark.parametrize("worker_count", (1, 2, 4))
+def test_required_runtime_worker_counts_are_supported(worker_count: int) -> None:
+    assert validate_worker_count(worker_count) == worker_count
+
+
+@pytest.mark.parametrize("worker_count", (0, -1))
+def test_nonpositive_worker_counts_are_rejected(worker_count: int) -> None:
+    with pytest.raises(ValueError, match="worker"):
+        validate_worker_count(worker_count)
+
+
+def test_exact_python_symlink_spelling_is_preserved(tmp_path: Path) -> None:
+    assert exact_executable(Path("/usr/bin/python3"), tmp_path) == Path("/usr/bin/python3")
+    assert exact_executable(Path("bin/python3"), tmp_path) == tmp_path / "bin/python3"
+
+
+def test_only_explicit_audit_paths_may_be_dirty() -> None:
+    ledger = "docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md"
+
+    validate_source_status(f" M {ledger}", (ledger,), allow_dirty=False)
+    with pytest.raises(RuntimeError, match="tools/runner.py"):
+        validate_source_status(
+            f" M {ledger}\n M tools/runner.py",
+            (ledger,),
+            allow_dirty=False,
+        )
+
+
+def test_broad_dirty_override_is_diagnostic_only() -> None:
+    validate_source_status(" M tools/runner.py", (), allow_dirty=True)
+
+
+def test_porcelain_status_preserves_the_leading_index_column() -> None:
+    assert preserve_porcelain_status(" M docs/ledger.md\n") == " M docs/ledger.md"
+
+
+# --------------------------------------------------------------------------------------
+# The colcon split of a recorded collection
+# --------------------------------------------------------------------------------------
+
+
+def _write_collection(tmp_path, node_ids):
+    import json
+
+    path = tmp_path / "collection.json"
+    path.write_text(json.dumps(node_ids), encoding="utf-8")
+    return path
+
+
+def test_emit_colcon_split_refuses_a_missing_or_empty_collection(tmp_path):
+    from tools.so101_pytest_gate import SplitError, emit_colcon_split
+
+    with pytest.raises((SplitError, OSError)):
+        emit_colcon_split(tmp_path / "missing.json", tmp_path / "out")
+    empty = _write_collection(tmp_path, [])
+    with pytest.raises(SplitError, match="COLLECTION_EMPTY"):
+        emit_colcon_split(empty, tmp_path / "out")
+
+
+def test_emit_colcon_split_refuses_foreign_and_duplicate_identity(tmp_path):
+    from tools.so101_pytest_gate import SplitError, emit_colcon_split
+
+    foreign = _write_collection(
+        tmp_path, ["benchmark_test/test_x.py::test_a", "test/test_y.py::test_b"])
+    with pytest.raises(SplitError, match="COLLECTION_FOREIGN_NODEID"):
+        emit_colcon_split(foreign, tmp_path / "foreign-out")
+
+    duplicate = _write_collection(
+        tmp_path, ["test/test_y.py::test_b", "test/test_y.py::test_b"])
+    with pytest.raises(SplitError, match="COLLECTION_DUPLICATE_NODEID"):
+        emit_colcon_split(duplicate, tmp_path / "duplicate-out")
+
+
+def test_emit_colcon_split_keeps_nested_and_parametrised_identity(tmp_path):
+    import json
+
+    from tools.so101_pytest_gate import SERIAL_MODULES, emit_colcon_split
+
+    serial_module = SERIAL_MODULES[0]
+    node_ids = [
+        f"test/{serial_module}::TestNested::test_case[param-1]",
+        "test/parallel_batch/test_parallel_start_guard.py::test_equal_floor_passes",
+    ]
+    coverage = emit_colcon_split(_write_collection(tmp_path, node_ids), tmp_path / "out")
+
+    assert coverage["exact"] is True
+    assert coverage["intersection_count"] == 0
+    assert coverage["union_count"] == len(node_ids)
+    serial_lines = (tmp_path / "out/serial-nodeids.txt").read_text().splitlines()
+    assert serial_lines == [node_ids[0]]
+    deselect = (tmp_path / "out/deselect-args.txt").read_text().splitlines()
+    assert deselect == [f"--deselect={node_ids[0]}"]
+    parallel = json.loads((tmp_path / "out/parallel-nodeids.json").read_text())
+    assert parallel == [node_ids[1]]
+    assert serial_module in coverage["serial_modules"]
+
+
+def test_process_layout_tmpdir_is_three_levels_below_its_own_root(tmp_path):
+    """A case's socket path is derived from ``TMPDIR.parents[2]``, so the layout must place it there.
+
+    The per-process root stays the shard's private root, and each run gets its own
+    previously-nonexistent ``root/scratch/<id>/tmp`` at mode 0700, so two runs under one root share only ``root/ipc``.
+    """
+
+    from tools.so101_pytest_gate import create_process_layout
+
+    run_root = tmp_path / "scratch" / "run-0929-01"
+    run_root.mkdir(mode=0o700, parents=True)   # the gate creates the run root before any layout
+    layout = create_process_layout(run_root, "collection")
+    for name in ("TMPDIR", "TMP", "TEMP"):
+        value = Path(layout.environment[name])
+        assert value == layout.tmp_dir
+        assert value.name == "tmp"
+        assert value.parent.parent.parent == layout.root, value
+        assert value.parent.parent.parent == layout.root
+        assert value.parent.parent.parent.parent == run_root, "the shard root stays private to this run"
+        assert oct(value.stat().st_mode & 0o777) == "0o700"
+    assert not (run_root / "tmp").exists(), "no shallower tmp directory may be left behind"
+
+    second = create_process_layout(run_root, "shard-02")
+    assert second.tmp_dir != layout.tmp_dir
+    assert second.root != layout.root
+    # both runs reach the same ipc root through parents[2], which is what makes their sockets private but co-located
+    assert second.tmp_dir.parents[2] == second.root
+    assert second.tmp_dir.parents[2] != layout.tmp_dir.parents[2]

@@ -1,0 +1,116 @@
+{
+  "schema": "COHERENT_NOMINAL_LAUNCH_ASTRA_REVIEW_001",
+  "reviewer": "Independent GPT-6 Astra / High",
+  "verdict": "PASS",
+  "scope": "Concrete task-owned worker and fixed three-attempt nominal 120-second FULL_RESTART launch package. No actual-clock injection, clock traces or exit-phase observations. This is launch readiness, not runtime results or full Head qualification.",
+  "manifest_sha256": "6cbc5c64b3911788e03f6a3c67f142f471c804219dc908ea5f2126589238a7ee",
+  "blocking_findings": [],
+  "runtime_eligibility": {
+    "at_review": false,
+    "conditional_after_root_rehash_and_admission": true,
+    "count": 3,
+    "duration_s": 120,
+    "stop_on_first_failure": true,
+    "replacement_attempts_authorized": false,
+    "condition": "Root must rehash the reviewed source/input/install closure and write batch plus three per-run admissions binding this review and every executable helper/config/planned/prepared input dependency before invoking the frozen batch. Continue only via its authoritative guardian promotion; stop on the first failure. No implementation changes are covered by this PASS."
+  },
+  "verified": {
+    "snapshot_current_source_sha_match": 61,
+    "snapshot_sizes_match": 61,
+    "current_source_inventory_entries_match": 184,
+    "current_install_entries_match": 233,
+    "install_extra_or_missing_files": [],
+    "all_three_helper_sha256": "08ac6330f2e75b04a783a58478d32406e9fc627d61ea09f0a5f320570cc9cdd2",
+    "input_refs_all_match": true,
+    "prepared_sessions": [
+      "hfp1010-nominal-001",
+      "hfp1010-nominal-002",
+      "hfp1010-nominal-003"
+    ],
+    "generations": [
+      109960001,
+      109960002,
+      109960003
+    ],
+    "domain_id": 228,
+    "all_three_retained_scope_preflights_observers_off": true,
+    "all_three_retained_graph_checks_rc0_empty": true,
+    "all_three_canonical_ipc_private_empty": true,
+    "batch_and_all_three_runtime_output_started_admission_absent": true,
+    "nominal_runtime_scratch_absent": true,
+    "reviewer_executed_tests_builds_services_or_runtime": false
+  },
+  "N1": {
+    "verdict": "PASS",
+    "files": [
+      "nominal_contract.py:13",
+      "nominal_scope_preflight.py:11",
+      "nominal_worker.py:24",
+      "nominal_worker.py:84",
+      "prepare_nominal.py:38"
+    ],
+    "assessment": "Forbidden prefixes are rejected in the inherited environment, merged worker environment, parsed input and actual installed resource-plan child environment. Live owner and node environment observations additionally reject activation. Original copied helper SHA is enforced before launch; no owner diagnostic bootstrap or phase/clock reader is used. Native timing remains enabled. C manager/node prefixes and R native/product paths lead the prepared environment."
+  },
+  "N2": {
+    "verdict": "PASS",
+    "files": [
+      "nominal_contract.py:20",
+      "nominal_worker.py:160"
+    ],
+    "assessment": "All three complete native streams are read after exact owner/descendant absence. Format, controller ID/readiness/kind, status counts/faults, duration bounds, update periods, full update sequence/monotonic order, hold-window simulation continuity and >=60000 holding updates per controller are mandatory. Startup simulation discontinuities are retained separately. Neck proof availability is applied only to neck. Reader failures prevent promotion. Raw native readback does not substitute for the original protocol seal."
+  },
+  "N3": {
+    "verdict": "PASS",
+    "files": [
+      "nominal_contract.py:84",
+      "nominal_contract.py:98",
+      "nominal_worker.py:81",
+      "nominal_worker.py:167",
+      "nominal_worker.py:175",
+      "nominal_batch.py:44"
+    ],
+    "assessment": "Worker PASS remains provisional. Original owner rc0, qualified report with no problem, strict installed startup/Stop/close predicate, original seal, three distinct original child rc0 values bound to tracked descendants, exact owner/node role maps and report native-child identity, full native validity, exact absence and independent graph are required. Maps preserve wrong-library/path/inode/SHA refusal. Parent persists actual guardian stdout/stderr/return code before checking CLOCK_GUARD_001, worker rc0, all-owned absence, elapsed bound and absence of error/cancel/force. Only the conjunction of guardian_valid and worker_valid promotes PASS. Original report graph_empty is not rewritten or used instead of the independent postflight."
+  },
+  "N4": {
+    "verdict": "PASS",
+    "files": [
+      "prepare_nominal.py:26",
+      "nominal_worker.py:58",
+      "nominal_worker.py:69",
+      "nominal_batch.py:23",
+      "nominal_batch.py:33",
+      "nominal_batch.py:67"
+    ],
+    "assessment": "Three distinct fresh input/output/IPC/ROS roots and exact fixed sessions/generations are prepared. Unchanged original helper retains 120s and one-second finish; original Stop/native grace and guardian 240/255/256/285/300 deadlines remain. Batch is deliberately non-resumable, uses the exact bounded guardian, marks only accepted results PASS, breaks immediately on failure and retains later NOT_RUN rows. Interrupted or unexpectedly aborted batch execution must be inspected from retained process/evidence state, never rerun automatically."
+  },
+  "N5": {
+    "verdict": "PASS_WITH_DISCLOSED_SCOPE",
+    "files": [
+      "test_nominal_contract.py",
+      "legacy_nominal_test_adapter.py",
+      "run_nominal_gate.py"
+    ],
+    "assessment": "Independently counted JUnit leaves: legacy test-only boundary adapter 68 cases = 41 failures/27 pass/no errors; strict module 68 pass/no errors. Receipts show exact /usr/bin/python3, xdist8, 24 logical CPUs and distinct durable NVMe scratch with tempfile proofs. Tests cover all-controller omission/truncation, count/fault/identity/sequence/period/body/hold gaps, insufficient holding count, neck proof, inherited observer activation, missing worker evidence, guardian schema/intervention/actual-rc refusal and fixed-row advancement. The legacy adapter explicitly is not an old nominal production implementation or actual runtime RED. New tests exercise contracts; executable integration is additionally assessed by source inspection and three actual readonly preflights, not claimed as an already successful nominal batch."
+  },
+  "admission_binding_requirements": [
+    "Bind this immutable manifest and review, nominal_batch.py, nominal_worker.py, nominal_contract.py, nominal_scope_preflight.py, unchanged bounded_guardian.py, process_provenance.py, map_evidence.py, receipt_facts.py and native_scope_preflight.py.",
+    "Bind prepared.json and each exact guard-config/planned/input/freeze/original-helper plus source/install manifests and the approved nominal plan; preserve existing source/install rehashes and reference validation.",
+    "Maintain original product/source/install identities and the forbidden-observer effective environment; any change to the reviewed executable closure requires appropriate review before launch."
+  ],
+  "limits": [
+    "No nominal runtime was launched or accepted by this review.",
+    "The three successful readonly preflights do not prove future live maps, controller timing, Stop/close or retirement; each is required from its actual run.",
+    "Unchanged accepted package gates remain the source basis; this reviewer did not rerun them.",
+    "Optional clock and phase observers being disabled means nominal results cannot establish a new detailed clock/exit causal account.",
+    "Earlier injected repaired diagnostic is not one of the three nominal runs.",
+    "Full Head search/live20/fresh40/48-attempt/visual acceptance remains pending even if all three holds pass.",
+    "Historical shared-period cause and old evidence-close timeout remain UNKNOWN; holding005 remains INVALID.",
+    "Ordinary 176 baseline failures remain unwaived."
+  ],
+  "retention": {
+    "retain_all": true,
+    "archived_runs_changed": false,
+    "deletion_performed_or_authorized": false,
+    "candidates_only": "Completed read-back scratch and retired canonical IPC under the existing policy; all failure and NOT_RUN evidence retained."
+  }
+}

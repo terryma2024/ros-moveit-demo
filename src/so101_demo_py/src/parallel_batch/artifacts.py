@@ -18,9 +18,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import ClassVar, Mapping
 
-from .contracts import (
-    AttemptIdentity, AttemptStatus, LeaseIdentity, RunMode, ValidationIdentity,
-    ValidationStatus,
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode, ValidationStatus
+from so101_demo.parallel_batch.contracts.identity import (
+    AttemptIdentity,
+    LeaseIdentity,
+    ValidationIdentity,
 )
 from ..runtime.task_artifacts import atomic_json, fsync_directory
 
@@ -655,7 +657,7 @@ def write_recovery_receipt(root, identity, *, succeeded, fault_hook=None):
 
 
 class SealedResultAdapter:
-    """Coordinator result port; Task 11 supplies the trusted Worker-root mapping.
+    """Coordinator result port; the parallel runtime supplies the trusted Worker-root mapping.
 
     discover accepts only the deterministic execution parent reserved by the
     journal: Worker root / attempts|validations / point / execution ID. It never

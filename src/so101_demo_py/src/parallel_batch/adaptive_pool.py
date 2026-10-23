@@ -17,7 +17,7 @@ import time
 import traceback
 from typing import Callable
 
-from ..runtime.parallel_ipc import IpcError, require_transport_basename
+from so101_demo.runtime.parallel_ipc.frames import IpcError, require_transport_basename
 from .adaptive_contracts import (
     AdaptiveWorkerOptions,
     CommittedPointResult,
@@ -27,8 +27,9 @@ from .adaptive_contracts import (
     PoolRequest,
 )
 from .adaptive_queue import AdaptivePointSelector
-from .contracts import AttemptStatus, BatchSummary, PointStatus, RunMode
-from .resources import configured_runtime_ipc_root
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, PointStatus, RunMode
+from so101_demo.parallel_batch.contracts.identity import BatchSummary
+from so101_demo.parallel_batch.resource_allocation.models import configured_runtime_ipc_root
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,7 +414,7 @@ class ProductionAdaptivePoolFactory:
         if getattr(prepared, "request", object()) is not None or adaptive_request is None:
             raise ValueError("ADAPTIVE_PREPARED_BATCH_REQUIRED")
         if composition_factory is None:
-            from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+            from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
             composition_factory = ProductionBatchComposition
         if not callable(composition_factory):

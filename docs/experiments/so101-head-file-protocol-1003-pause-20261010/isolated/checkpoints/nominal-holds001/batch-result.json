@@ -1,0 +1,33 @@
+{
+  "rows": [
+    {
+      "index": 1,
+      "session": "hfp1010-nominal-001",
+      "generation": 109960001,
+      "status": "FAIL",
+      "guardian_actual_rc": 1,
+      "worker_rc": 1,
+      "error": null
+    },
+    {
+      "index": 2,
+      "session": "hfp1010-nominal-002",
+      "generation": 109960002,
+      "status": "NOT_RUN"
+    },
+    {
+      "index": 3,
+      "session": "hfp1010-nominal-003",
+      "generation": 109960003,
+      "status": "NOT_RUN"
+    }
+  ],
+  "nominal_holds_pass": false,
+  "count": 3,
+  "duration_s": 120,
+  "stop_on_first_failure": true,
+  "production_qualified": false,
+  "live20_pass": false,
+  "fresh40_pass": false,
+  "visual_pass": false
+}

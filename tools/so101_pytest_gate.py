@@ -24,7 +24,16 @@ import xml.etree.ElementTree as ET
 
 
 SERIAL_MODULE_REASONS = {
-    "test_parallel_batch_resources.py": (
+    "test_parallel_batch_resources_claims.py": (
+        "preserves the established first-module ordering for process/resource probes"
+    ),
+    "test_parallel_batch_resources_process_scan.py": (
+        "preserves the established first-module ordering for process/resource probes"
+    ),
+    "test_parallel_batch_resources_layout.py": (
+        "preserves the established first-module ordering for process/resource probes"
+    ),
+    "test_parallel_batch_resources_allocation.py": (
         "preserves the established first-module ordering for process/resource probes"
     ),
     "test_parallel_start_guard_launch.py": (
@@ -36,7 +45,19 @@ SERIAL_MODULE_REASONS = {
     "test_parallel_adaptive_integration.py": (
         "starts and signals real process groups, including an unowned sentinel"
     ),
-    "test_parallel_batch_worker.py": (
+    "test_parallel_batch_worker_stop_commit.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_gate_watchdog.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_fencing_recovery.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_coordinator.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_diagnostics.py": (
         "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
     ),
     "test_inject_so101_parallel_fault.py": (
@@ -168,19 +189,26 @@ def load_module_durations(
     root = ET.parse(junit_path).getroot()
     for case in root.iter("testcase"):
         classname = case.attrib.get("classname", "")
-        module_name = next(
-            (part for part in classname.split(".") if part.startswith("test_")),
+        parts = classname.split(".")
+        module_index = next(
+            (index for index, part in enumerate(parts) if part.startswith("test_")),
             None,
         )
-        if module_name is None:
+        if module_index is None:
             continue
+        module_name = parts[module_index]
+        # The directories between the test root and the module are part of the module's identity: the
+        # classname is dotted from the rootdir, so keep what follows the last root-named component.
+        directories = parts[:module_index]
+        if test_root.name in directories:
+            directories = directories[len(directories) - directories[::-1].index(test_root.name):]
         try:
             duration = float(case.attrib.get("time", "0"))
         except ValueError:
             continue
         if not math.isfinite(duration) or duration < 0:
             continue
-        path = test_root / f"{module_name}.py"
+        path = test_root.joinpath(*directories, f"{module_name}.py")
         durations[path] = durations.get(path, 0.0) + duration
     return durations
 
@@ -289,11 +317,23 @@ def create_process_layout(
     physical_name = hashlib.sha256(identity_input).hexdigest()[:width]
     root = run_root / physical_name
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
-    tmp_dir = root / "tmp"
+    # A test module reaches its shared task root as ``Path(TMPDIR).parents[2]`` (the controller reservation client does
+    # exactly that, so distinct runs get private socket directories under one ``root/ipc``), so this process's scratch is
+    # placed three levels below its own root: ``root/scratch/<unique-run-id>/tmp``. The id is derived from the same
+    # identity as ``physical_name``, so one process cannot collide with another's scratch, and every directory is created
+    # explicitly with mode 0700 on a previously nonexistent path.
+    # the scratch path shares the 107-byte AF_UNIX budget with every socket a shard binds under TMPDIR, and this task's
+    # evidence root is already 63 characters - so the layout is deliberately minimal: a one-character directory and a
+    # four-hex id. The id only has to disambiguate within one run root, and ``physical_name`` already carries the process
+    # identity in the same hash input, so shortening it costs no collision safety between processes.
+    scratch_id = hashlib.sha256(identity_input + b"\0scratch").hexdigest()[:4]
+    scratch_root = root / "s"
+    scratch_run = scratch_root / scratch_id
+    tmp_dir = scratch_run / "tmp"
     ros_home = root / "ros-home"
     ros_log_dir = root / "ros-log"
-    for directory in (tmp_dir, ros_home, ros_log_dir):
-        directory.mkdir(mode=0o700)
+    for directory in (scratch_root, scratch_run, tmp_dir, ros_home, ros_log_dir):
+        directory.mkdir(mode=0o700, exist_ok=False)
     return ProcessLayout(
         name=name,
         root=root,

@@ -26,19 +26,14 @@ export default defineConfig({
       dependencies: ["live-preflight"],
     },
     {
-      name: "parallel-resource",
-      testMatch: /\/live-sim\/(02-parallel|04-start-guard)\.spec\.ts$/,
+      name: "start-guard",
+      testMatch: "**/live-sim/04-start-guard.spec.ts",
       dependencies: ["r01-sequential"],
     },
     {
       name: "functional-cases",
       testMatch: "**/live-sim/05-functional-manifest.spec.ts",
       dependencies: ["live-preflight"],
-    },
-    {
-      name: "adaptive",
-      testMatch: "**/live-sim/03-adaptive.spec.ts",
-      dependencies: ["r01-sequential"],
     },
     {
       // One real campaign per supported configured option; declared last because it is the long

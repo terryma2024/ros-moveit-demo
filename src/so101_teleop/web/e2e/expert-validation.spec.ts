@@ -1,28 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
-import golden from "../src/fixtures/top_view_projection_v1.json" with { type: "json" };
+import golden from "../src/fixtures/top_view_projection.json" with { type: "json" };
 
 const baseCampaign = {
-  campaign_id: "campaign-adaptive",
+  campaign_id: "campaign-sequential",
   manifest_id: "manifest-e2e-20",
   sequence: 4,
-  execution_mode: "ADAPTIVE",
-  owner_kind: "ADAPTIVE_WRAPPER",
-  batch_id: "adaptive-first-pass",
+  execution_mode: "SEQUENTIAL",
+  owner_kind: "COORDINATOR",
+  batch_id: "first-pass-b1",
   status: "RUNNING",
   points: [{
     point_id: "sample_05_near_center",
     display_id: "P09",
     status: "INFRA_INTERRUPTED_REQUEUEABLE",
     retry_eligible: false,
-    active_worker_id: "worker-2",
+    active_worker_id: "worker-1",
     reason: "BROKER_PAUSED",
     attempts: [{ generation: 1, kind: "FIRST_PASS", status: "INDETERMINATE", reason: "BROKER_PAUSED" }],
     artifact_ids: [],
     artifacts: [],
   }],
   workers: [
-    { worker_id: "worker-1", generation: 2, state: "READY", lease_count: 2 },
-    { worker_id: "worker-2", generation: 2, state: "EXECUTING", current_point_id: "sample_05_near_center", lease_count: 2 },
+    { worker_id: "worker-1", generation: 2, state: "EXECUTING", current_point_id: "sample_05_near_center", lease_count: 2 },
   ],
   broker: { available: false, reason: "RECOVERING" },
   requested: 20,
@@ -35,11 +34,7 @@ const baseCampaign = {
   evaluation_coverage: 0.4,
   execution_coverage: 0.4,
   batch_cleanup_complete: false,
-  levels_used: [8, 6],
-  fallback_history: [{ from_count: 8, to_count: 6, reason: "WORKER_START_FAILED" }],
   current_generation: 2,
-  infra_attempts: 1,
-  resource_observations: { memory_pressure: "HIGH" },
 };
 
 const terminalCampaign = {
@@ -78,10 +73,10 @@ async function installFakeRunner(page: Page) {
         super();
         setTimeout(() => {
           this.dispatchEvent(new MessageEvent("message", {
-            data: JSON.stringify({ campaign_id: "campaign-adaptive", sequence: 5 }),
+            data: JSON.stringify({ campaign_id: "campaign-sequential", sequence: 5 }),
           }));
           this.dispatchEvent(new MessageEvent("message", {
-            data: JSON.stringify({ campaign_id: "campaign-adaptive", sequence: 7 }),
+            data: JSON.stringify({ campaign_id: "campaign-sequential", sequence: 7 }),
           }));
         }, 25);
       }
@@ -94,13 +89,12 @@ async function installFakeRunner(page: Page) {
     contentType: "application/json",
     body: JSON.stringify({
       available: true,
-      execution_modes: ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"],
+      execution_modes: ["SEQUENTIAL"],
       default_execution_mode: "SEQUENTIAL",
       minimum_points: 4,
       maximum_points: 20,
-      fixed_worker_counts: [1, 2, 3],
-      fixed_max_points_per_worker: 20,
-      adaptive_default_ladder: [8, 6, 4, 2, 1],
+      fixed_worker_counts: [1],
+      adaptive_default_ladder: [],
       lease_duration_s: 30,
       lease_renewal_margin_s: 10,
     }),
@@ -128,11 +122,11 @@ async function installFakeRunner(page: Page) {
     contentType: "application/json",
     body: JSON.stringify([baseCampaign]),
   }));
-  await page.route("**/expert-validation/campaigns/campaign-adaptive", (route) => {
+  await page.route("**/expert-validation/campaigns/campaign-sequential", (route) => {
     state.campaignGets += 1;
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(terminalCampaign) });
   });
-  await page.route("**/expert-validation/campaigns/campaign-adaptive/full-restart-retries", async (route) => {
+  await page.route("**/expert-validation/campaigns/campaign-sequential/full-restart-retries", async (route) => {
     state.lastRetryBody = route.request().postDataJSON();
     const retryCampaign = {
       ...terminalCampaign,
@@ -192,14 +186,13 @@ test("reload restores exactly four server-projected markers, including fixed ind
     .toHaveAttribute("transform", "translate(640.2 597.4)");
 });
 
-test("restores an adaptive campaign and retries a business-failed point", async ({ page }) => {
+test("restores a single-worker campaign and retries a business-failed point", async ({ page }) => {
   const fake = await installFakeRunner(page);
   await page.goto("/expert-validation");
 
   await expect(page.getByLabel("P09 FAILED TARGET_TOLERANCE_EXCEEDED")).toBeVisible();
   await expect(page.getByLabel("Worker worker-1")).toBeVisible();
-  await expect(page.getByLabel("Worker worker-2")).toBeVisible();
-  await expect(page.getByText("W8 -> W6: WORKER_START_FAILED")).toBeVisible();
+  await expect(page.getByLabel("Worker worker-2")).toHaveCount(0);
   await expect(page.getByText("Broker healthy")).toBeVisible();
   expect(fake.campaignGets).toBeGreaterThan(0);
 
@@ -217,12 +210,12 @@ test("restores an adaptive campaign and retries a business-failed point", async 
 test("selected committed point loads inline RGB and opaque numeric evidence", async ({ page }) => {
   await installFakeRunner(page);
   const image = {
-    artifact_id: "rgb-opaque", campaign_id: "campaign-adaptive", batch_id: "adaptive-first-pass",
-    worker_id: "worker-2", worker_generation: 2, attempt_id: "attempt-a",
+    artifact_id: "rgb-opaque", campaign_id: "campaign-sequential", batch_id: "first-pass-b1",
+    worker_id: "worker-1", worker_generation: 2, attempt_id: "attempt-a",
     role: "task-rgb-before", media_type: "image/png", size_bytes: 68, sha256: "a".repeat(64),
   };
   const numeric = { ...image, artifact_id: "numeric-opaque", role: "physical-evidence", media_type: "application/json" };
-  await page.route("**/expert-validation/campaigns/campaign-adaptive", route => route.fulfill({
+  await page.route("**/expert-validation/campaigns/campaign-sequential", route => route.fulfill({
     contentType: "application/json", body: JSON.stringify({ ...terminalCampaign, points: [{
       ...terminalCampaign.points[0], artifact_ids: [image.artifact_id, numeric.artifact_id],
       artifacts: [image, numeric],

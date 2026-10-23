@@ -49,9 +49,11 @@ _UNILATERAL_FAILURE_CODES = {
     "left_only": "GRASP_RIGHT_CONTACT_MISSING",
     "right_only": "GRASP_LEFT_CONTACT_MISSING",
 }
+DIAGNOSTIC_CONTACT_PROPOSAL_KIND = "diagnostic_contact_proposal"
 _DIAGNOSTIC_PROPOSAL_KEYS = frozenset(
     {
         "schema_version",
+        "kind",
         "proposal_kind",
         "policy_id",
         "acceptance_role",
@@ -367,7 +369,7 @@ def _validate_dynamic_run(
     if item["run_role"] != expected_role:
         raise ValueError(f"run {index} must use run_role {expected_role}")
     if item["status"] != "VALID" or item["outcome_class"] != "PHYSICAL_TRANSPORT_SUCCESS":
-        raise ValueError("schema-v4 proposal requires five physical transport successes")
+        raise ValueError("diagnostic proposal requires five physical transport successes")
     if item["physical_transport_outcome"] != "FORMAL_MOVE_ABOVE_PLACE_PROVED":
         raise ValueError("physical transport outcome is not formally proved")
     _nonempty_string(item["simulation_session_id"], "simulation_session_id")
@@ -404,20 +406,22 @@ def _validate_dynamic_run(
 
 
 def validate_dynamic_diagnostic_proposal(value: object) -> dict[str, object]:
-    """Validate a schema-v4 proposal that can never become a runtime threshold policy."""
+    """Validate a diagnostic contact proposal: a different kind from the contact policy, never a runtime threshold policy."""
 
     document = _mapping(value, "diagnostic proposal")
     _exact_keys(document, _DIAGNOSTIC_PROPOSAL_KEYS, "diagnostic proposal")
-    if document["schema_version"] != 4:
-        raise ValueError("diagnostic proposal schema_version must be 4")
+    if document["kind"] != DIAGNOSTIC_CONTACT_PROPOSAL_KIND:
+        raise ValueError("diagnostic proposal kind must be diagnostic_contact_proposal")
+    if type(document["schema_version"]) is not int or document["schema_version"] != 1:
+        raise ValueError("diagnostic proposal schema_version must be 1")
     if document["proposal_kind"] != "phase_aware_dynamic_transport_diagnostic":
         raise ValueError("unsupported diagnostic proposal_kind")
     if document["policy_id"] != "light_cup_wall_pick-contact":
         raise ValueError("unsupported policy_id")
     if document["acceptance_role"] != "diagnostic_only":
-        raise ValueError("schema-v4 acceptance_role must be diagnostic_only")
+        raise ValueError("diagnostic proposal acceptance_role must be diagnostic_only")
     if document["independent_experiment_units"] != 5:
-        raise ValueError("schema-v4 requires exactly five independent experiment units")
+        raise ValueError("diagnostic proposal requires exactly five independent experiment units")
 
     statistical = _mapping(document["statistical_design"], "statistical_design")
     _exact_keys(
@@ -431,7 +435,7 @@ def validate_dynamic_diagnostic_proposal(value: object) -> dict[str, object]:
         "waypoint_role": "repeated_measure",
         "fits_dynamic_threshold": False,
     }:
-        raise ValueError("schema-v4 statistical design is invalid")
+        raise ValueError("diagnostic proposal statistical design is invalid")
 
     static = _mapping(document["static_contact_contract"], "static_contact_contract")
     _exact_keys(
@@ -505,13 +509,13 @@ def validate_dynamic_diagnostic_proposal(value: object) -> dict[str, object]:
 
     runs = document["runs"]
     if not isinstance(runs, list) or len(runs) != 5:
-        raise ValueError("schema-v4 requires exactly five independent runs")
+        raise ValueError("diagnostic proposal requires exactly five independent runs")
     run_ids = [
         _validate_dynamic_run(item, index=index, provenance=provenance)
         for index, item in enumerate(runs, start=1)
     ]
     if len(set(run_ids)) != 5:
-        raise ValueError("schema-v4 requires a unique run_id for every run")
+        raise ValueError("diagnostic proposal requires a unique run_id for every run")
 
     descriptive = _mapping(document["descriptive_results"], "descriptive_results")
     _exact_keys(
@@ -557,7 +561,7 @@ def validate_dynamic_diagnostic_proposal(value: object) -> dict[str, object]:
         or approval["approved_by"] is not None
         or approval["approved_at"] is not None
     ):
-        raise ValueError("schema-v4 diagnostic proposal must remain disabled and unapproved")
+        raise ValueError("diagnostic proposal must remain disabled and unapproved")
     stored_hash = _identifier(approval["proposal_sha256"], "proposal_sha256", 64)
     if stored_hash != proposal_sha256(document):
         raise ValueError("proposal hash mismatch")
@@ -655,14 +659,12 @@ def _validate_proposal_content(
     ContactEvaluationPolicy,
     frozenset[str],
 ]:
-    schema_version = document.get("schema_version")
-    if schema_version not in {2, 3}:
-        raise ValueError("contact policy schema_version must be 2 or 3")
+    if type(document.get("schema_version")) is not int or document["schema_version"] != 3:
+        raise ValueError("contact policy schema_version must be 3")
     _nonempty_string(document.get("policy_id"), "policy_id")
     if document.get("calibration_status") != "VALID":
         raise ValueError("approved contact policy requires calibration_status VALID")
-    if schema_version == 3:
-        validate_unilateral_rejection_contracts(document.get("unilateral_rejection_contracts"))
+    validate_unilateral_rejection_contracts(document.get("unilateral_rejection_contracts"))
     return (
         _fingerprint(document),
         _thresholds(document),

@@ -80,7 +80,8 @@ def main() -> int:
     assert task_policy.contact is not None
     maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result = {
-        "schema": "so101-live-noslip-policy-lift-waypoint1-v1",
+        "schema": "so101-live-noslip-policy-lift-waypoint1",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "lift_target_arm_rad": list(LIFT_TARGET),
         "physics_pause_calls": 0,
@@ -169,7 +170,7 @@ def main() -> int:
             )
             > 0.01
         ):
-            raise RuntimeError("robot is not at the verified EXP-081 arm endpoint")
+            raise RuntimeError("robot is not at the verified micro-lift arm endpoint")
         if abs(start_positions[-1] - PRELOAD_Q6) > 0.01:
             raise RuntimeError("gripper is not holding the verified seating preload")
         contact_evidence, pre_lift_samples = stable_bilateral(before.reset_epoch)
@@ -299,7 +300,7 @@ def main() -> int:
         result["status"] = "POLICY_LIFT_WAYPOINT1_PHYSICAL_TRANSFER_PROVED"
         write_result(result)
         print(
-            f"EXP104_OK lift_m={cup_lift_m:.9f} lateral_m={lateral:.9f} "
+            f"POLICY_LIFT_WAYPOINT1_OK lift_m={cup_lift_m:.9f} lateral_m={lateral:.9f} "
             f"left={len(after.left_fingertip_contacts)} right={len(after.right_fingertip_contacts)}",
             flush=True,
         )
@@ -308,7 +309,7 @@ def main() -> int:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
         write_result(result)
-        print(f"EXP104_FAILED {type(error).__name__}: {error}", flush=True)
+        print(f"POLICY_LIFT_WAYPOINT1_FAILED {type(error).__name__}: {error}", flush=True)
         return 1
     finally:
         del subscription

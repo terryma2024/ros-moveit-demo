@@ -26,6 +26,7 @@ coverage.xml
 .venv/
 venv/
 env/
+!/scripts/env/
 ENV/
 __pypackages__/
 *.egg-info/

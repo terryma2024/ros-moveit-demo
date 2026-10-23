@@ -1,0 +1,16 @@
+# Groups of the upstream ros2_control / joint_trajectory_controller tests for the parallel gate (GATE_UPSTREAM_PARALLEL=1).
+# Format: <group> | <weight> | <package> | <selector>   (fields are separated by ` | ` with blanks; a regex may contain `|` without blanks)
+#   group     runs its entries one after the other on its own CPUs (weight = its share of the upstream CPUs; repeat it on every line of the group)
+#   selector  `-R <ctest regex>` for the named tests, or `rest` for every test of the package that no other group of it names
+# Every ctest test of a package must belong to exactly one group; the gate checks that against `ctest -N` before it runs anything.
+# Entry order matters: a group's entries run one after the other, and starts of one package are spaced by upstream_slot.zsh, so a group puts the
+# packages that no other group is starting first and the package every group needs last.
+# Times (s, one serial gate, ctest -j1, 8c8ef3c686dd): test_trajectory_actions 278; test_controller_manager 147 + test_controller_manager_srvs 31;
+# test_spawner_unspawner 89 + test_advanced_spawner 59; the rest of controller_manager ~51; hardware_interface_testing 17; the rest of
+# joint_trajectory_controller ~97 (test_trajectory_controller 96).
+slow-jtc | 1 | joint_trajectory_controller | -R ^test_trajectory_actions$
+slow-cm-a | 1 | controller_manager | -R ^(test_controller_manager|test_controller_manager_srvs)$
+slow-cm-b | 1 | controller_manager | -R ^(test_spawner_unspawner|test_advanced_spawner)$
+other | 1 | hardware_interface_testing | rest
+other | 1 | joint_trajectory_controller | rest
+other | 1 | controller_manager | rest

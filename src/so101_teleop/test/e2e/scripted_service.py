@@ -37,7 +37,7 @@ _GOLDEN_TOP_VIEW = (
     Path(__file__).resolve().parents[2]
     / "config"
     / "expert_validation"
-    / "top_view_projection_v1.json"
+    / "top_view_projection.json"
 )
 _CANDIDATE_BOUNDS = (-0.045, 0.08, -0.34, -0.24)
 
@@ -96,24 +96,13 @@ class _WorkerCountAvailabilityModel(_ClosedModel):
 
 class _CapabilitiesModel(_ClosedModel):
     available: bool = True
-    execution_modes: tuple[str, ...] = ("SEQUENTIAL", "PARALLEL", "ADAPTIVE")
+    execution_modes: tuple[str, ...] = ("SEQUENTIAL",)
     default_execution_mode: str = "SEQUENTIAL"
     minimum_points: int = 4
     maximum_points: int = 20
-    fixed_worker_counts: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
-    worker_count_availability: tuple[_WorkerCountAvailabilityModel, ...] = (
-        _WorkerCountAvailabilityModel(
-            worker_count=2, selectable=True, status="APPROVED"),
-        _WorkerCountAvailabilityModel(
-            worker_count=3, selectable=True, status="APPROVED"),
-        *(
-            _WorkerCountAvailabilityModel(
-                worker_count=count, selectable=False, status="NOT_MEASURED",
-                reason_codes=("BUDGET_PROFILE_UNAVAILABLE",))
-            for count in range(4, 9)
-        ),
-    )
-    adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
+    fixed_worker_counts: tuple[int, ...] = (1,)
+    worker_count_availability: tuple[_WorkerCountAvailabilityModel, ...] = ()
+    adaptive_default_ladder: tuple[int, ...] = ()
 
 
 class _EventModel(_ClosedModel):
@@ -493,7 +482,7 @@ class ScriptedValidationService:
         return {
             "manifest_id": manifest_id,
             "point_count": total_points,
-            "catalog_sha256": hashlib.sha256(b"ai_station_baseline_v1").hexdigest(),
+            "catalog_sha256": hashlib.sha256(b"ai_station_baseline").hexdigest(),
             "selection_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
             "stale": False,
             "points": document_points,
@@ -501,10 +490,10 @@ class ScriptedValidationService:
                 (manifest_id + canonical).encode("utf-8")
             ).hexdigest(),
             "source_commit": "scripted",
-            "sampler_id": "ai_station_baseline_v1",
+            "sampler_id": "ai_station_baseline",
             "sampler_version": 1,
             "catalog_seed": 20260911,
-            "geometry_sha256": hashlib.sha256(b"top_view_projection_v1").hexdigest(),
+            "geometry_sha256": hashlib.sha256(b"top_view_projection").hexdigest(),
             "source_hashes": None,
             "top_view": _golden_top_view(total_points),
         }

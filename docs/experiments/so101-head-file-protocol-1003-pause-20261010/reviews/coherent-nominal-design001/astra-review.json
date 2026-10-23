@@ -1,0 +1,90 @@
+{
+  "schema": "COHERENT_NOMINAL_DESIGN_ASTRA_REVIEW_001",
+  "reviewer": "Independent GPT-6 Astra / High",
+  "verdict": "DESIGN_PASS",
+  "scope": "Design only: three fixed nominal 120-second FULL_RESTART holding attempts using the frozen isolated coherent-cycle overlay, original helper and native recorder, without actual-clock injection, optional clock traces or exit-phase observations.",
+  "runtime_eligible": false,
+  "implementation_design_approved": true,
+  "manifest_sha256": "7973ec0e4bb4ad5e20aaf49914bda344c17d30d6fdb990daa5d099d7163e0d80",
+  "plan_sha256": "91b91213c6b1218b74d02566c85d1e7823fe0aed6c271eba10bef24a905a67b5",
+  "integrity": {
+    "snapshot_and_current_source_files_checked": 11,
+    "sha256_and_sizes_match": true,
+    "plan_frozen_references_checked": 5,
+    "all_reference_sha256_match": true,
+    "tests_builds_services_or_runtime_executed_by_reviewer": false
+  },
+  "blocking_findings": [],
+  "assessment": [
+    "The fixed three-run, stop-on-first-failure design is an appropriate next nominal discriminator after the separately accepted repaired injected diagnostic. It does not replace the remaining search, fresh-run and visual acceptance gates.",
+    "Using a separate worker and the original helper avoids modifying the accepted diagnostic evidence and original finish/Stop predicates. The original helper requires exactly 120 seconds and retains the one-second writer finish; the plan preserves the exact bounded guardian and all intervention deadlines.",
+    "Exact owner and node role maps remain necessary with observers disabled. Owner evidence must attest the R transport in the Python owner; node evidence must attest the C manager/hardware and linked diagnostic DSOs plus R native, with PID/start/UID/session/executable and path/device/inode/SHA binding. A linked default-off diagnostic DSO is compatible with this nominal design.",
+    "Independent full-stream readback for all three native controllers is a meaningful strengthening beyond the original helper neck-only timing checks, provided original protocol records and controller-specific stream semantics remain intact.",
+    "The original helper explicitly allows its own graph observation to remain nonempty before owner exit. Its graph_empty value must be retained verbatim; successful outer postflight requires the independently observed empty graph and exact owned-process retirement.",
+    "The repaired production control_cycle header is called by the node independently of tracing; disabling trace and probe does not disable the coherent simulation-time dispatch."
+  ],
+  "implementation_acceptance_conditions": [
+    {
+      "id": "N1",
+      "files": [
+        "0-nominal-hold-plan001.json",
+        "1-holding-supervisor.py:75",
+        "1-holding-supervisor.py:96",
+        "7-mujoco_ros2_control_node.cpp:92"
+      ],
+      "requirement": "Enforce absence of optional clock/probe/exit configuration in the effective merged parent/owner/resource-plan child environment, not only in inputs.json. Verify the exact original helper SHA and absence of diagnostic owner bootstrap/wrapper activation; retain original native timing output. Do not invoke clock/phase readers or require their outputs for nominal runs."
+    },
+    {
+      "id": "N2",
+      "files": [
+        "0-nominal-hold-plan001.json",
+        "5-head_neck_timing_probe.py:68",
+        "5-head_neck_timing_probe.py:286"
+      ],
+      "requirement": "For every controller, parse and validate the complete retired raw stream and status, exact controller ID, valid record kinds/readiness, counts, no loss/fault, full update sequence, all relevant original duration/period bounds, and at least 60000 updates within the original monotonic hold interval. Preserve original continuous_updates semantics: full update sequence continuity and 2ms simulated increments within the hold interval. Record pre-hold simulation discontinuities explicitly rather than silently dropping them or treating an expected startup reset as a hold failure. Never exempt a discontinuity within the hold. Apply neck proof/publication predicates according to the actual controller record schema, not a fabricated requirement that all controllers emit neck-only records."
+    },
+    {
+      "id": "N3",
+      "files": [
+        "0-nominal-hold-plan001.json",
+        "2-bounded_guardian.py",
+        "3-map_evidence.py",
+        "4-receipt_facts.py"
+      ],
+      "requirement": "Require original owner rc0 and report qualified true/problem absent, original verified seal and strict startup/Stop/close, original child rc0, exact role maps and PID/start absence, independent postflight graph rc0/empty, and no cancellation/fallback/forced cleanup. Persist and validate exact guardian stdout/schema, actual tool rc0 and worker rc0 with all_owned_absent and no error/intervention before promoting the run or launching the next fixed row. Do not promote a provisional worker PASS alone."
+    },
+    {
+      "id": "N4",
+      "files": [
+        "0-nominal-hold-plan001.json"
+      ],
+      "requirement": "Prepare fresh per-run canonical IPC, inputs, outputs, ROS homes and NVMe scratch with frozen source/install/helper bindings. Retain all three fixed result rows, including failure and subsequent NOT_RUN; no automatic replacement or until-green retry. Preserve original one-second Stop/writer and native grace, as well as exact guardian deadlines."
+    },
+    {
+      "id": "N5",
+      "files": [
+        "0-nominal-hold-plan001.json"
+      ],
+      "requirement": "Before launch, complete the planned meaningful negative tests and independent worker/launch review. Include controller omission/truncation/count/status/identity/sequence/period/body/hold-continuity failures; inherited observer activation; bad/missing guardian result or actual rc; missing map/retirement/graph/seal evidence; and advancement refusal after the first failed row. Generated fixtures remain offline evidence, not nominal runtime results."
+    }
+  ],
+  "pending_gates": [
+    "New nominal worker implementation and meaningful negative regression results",
+    "Fresh concrete launch inputs/admission, effective environment, exact maps and source/install/helper binding review",
+    "Three actual nominal FULL_RESTART attempts with authoritative per-run result promotion",
+    "Remaining live20, fresh40/48-attempt and visual/perception acceptance"
+  ],
+  "limits": [
+    "No nominal run was executed or qualified by this review.",
+    "The accepted injected diagnostic is not counted as one of the three nominal holds.",
+    "Three successful holds alone would not establish complete Head search stability.",
+    "Historical original shared-period cause and earlier evidence-close timeout remain UNKNOWN.",
+    "Old holding005 remains INVALID; no retroactive qualification.",
+    "The ordinary 176 baseline failures remain unwaived."
+  ],
+  "retention": {
+    "retain": "All frozen review snapshots, prior successful/failed/setup-invalid/RED/GREEN evidence and future fixed run records.",
+    "archived_runs_changed": false,
+    "deletion": "No deletion authorized or performed; completed read-back scratch and retired IPC remain only candidates."
+  }
+}

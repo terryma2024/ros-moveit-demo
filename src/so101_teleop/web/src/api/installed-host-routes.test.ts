@@ -39,9 +39,9 @@ const MACOS: CapabilitiesDocument = {
     { worker_count: 4, selectable: false, reason_codes: ["UNSUPPORTED_ON_MACOS"] },
   ],
   support_matrix: [
-    { profile: "MPS_W2_FIRST_PASS", schema_version: 4, execution_mode: "PARALLEL", worker_count: 2, batch_kind: "FIRST_PASS" },
-    { profile: "MPS_W1_FIRST_PASS", schema_version: 6, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FIRST_PASS" },
-    { profile: "MPS_W1_FULL_RESTART_RETRY", schema_version: 5, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FULL_RESTART_RETRY" },
+    { profile: "MPS_TWO_WORKER_FIRST_PASS", schema_version: 4, execution_mode: "PARALLEL", worker_count: 2, batch_kind: "FIRST_PASS" },
+    { profile: "MPS_SINGLE_WORKER_FIRST_PASS", schema_version: 6, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FIRST_PASS" },
+    { profile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", schema_version: 5, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FULL_RESTART_RETRY" },
   ],
   start_guard_policy: { timeout_s: 600 },
 };
@@ -71,7 +71,7 @@ describe("hostRoute", () => {
     const route = hostRoute(MACOS, { mode: "PARALLEL", workerCount: 2, batchKind: "FIRST_PASS" });
     expect(route.runnable).toBe(true);
     expect(route.platformBound).toBe(true);
-    if (route.runnable) expect(route.profile).toBe("MPS_W2_FIRST_PASS");
+    if (route.runnable) expect(route.profile).toBe("MPS_TWO_WORKER_FIRST_PASS");
   });
 
   it("refuses a shape the platform-bound matrix does not carry, with its reason", () => {
@@ -186,18 +186,18 @@ describe("readProcessState", () => {
 
 describe("the execution document and coordinator this host runs", () => {
   it("names the active execution document and its own coordinator default on linux", () => {
-    // `require_v3_execution` refuses new execution for any contract version but 3, and the installed
+    // `require_linux_cuda_execution` refuses new execution for any contract version but 3, and the installed
     // v2 document declares 2. The gate runner and the plan's own profiles are v3/v4/v5/v6 for that
     // reason; pointing the legacy host at v2 refused every preflight with
     // CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION.
-    expect(hostExecutionDocument("linux")).toBe("parallel_batch_v3.yaml");
+    expect(hostExecutionDocument("linux")).toBe("parallel_batch_linux_cuda.yaml");
     expect(hostCoordinatorRelative("linux")).toBeNull();
   });
 
   it("names the macOS profile document and the macOS coordinator on darwin", () => {
     // The probe admitted nothing with the legacy v2 document here: its rows are the ai-station
     // ladder, and the macOS profiles resolve only beside a macOS document.
-    expect(hostExecutionDocument("darwin")).toBe("parallel_batch_v6_macos_mps_w1_first_pass.yaml");
+    expect(hostExecutionDocument("darwin")).toBe("parallel_batch_macos_mps_single_worker_first_pass.yaml");
     expect(hostCoordinatorRelative("darwin")).toBe(
       "lib/so101_demo_py/so101_macos_service_campaign",
     );

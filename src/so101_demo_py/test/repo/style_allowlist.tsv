@@ -1,0 +1,92 @@
+# Style-guard allowlist (refactor step 0, 2026-10-10): every current hit of the three guards.
+# Tab-separated: scan | path | kind | name | classification | target | confidence | reason
+# An entry may only be removed (when its phase renames or deletes the name); the guards fail on a hit that is
+# not listed and on an entry no hit uses. Classification and confidence are defined in style_classification.py.
+versioned	src/so101_demo_py/assets/common/visual/base_motor_holder_so101_v1.stl	file	base_motor_holder_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/base_so101_v2.stl	file	base_so101_v2.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/motor_holder_so101_base_v1.stl	file	motor_holder_so101_base_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/motor_holder_so101_wrist_v1.stl	file	motor_holder_so101_wrist_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/moving_jaw_so101_v1.stl	file	moving_jaw_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/rotation_pitch_so101_v1.stl	file	rotation_pitch_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/sts3215_03a_no_horn_v1.stl	file	sts3215_03a_no_horn_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/sts3215_03a_v1.stl	file	sts3215_03a_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/under_arm_so101_v1.stl	file	under_arm_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/upper_arm_so101_v1.stl	file	upper_arm_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/waveshare_mounting_plate_so101_v2.stl	file	waveshare_mounting_plate_so101_v2.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/wrist_roll_follower_so101_v1.stl	file	wrist_roll_follower_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/common/visual/wrist_roll_pitch_so101_v2.stl	file	wrist_roll_pitch_so101_v2.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/base_motor_holder_so101_v1.stl	file	base_motor_holder_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/base_so101_v2.stl	file	base_so101_v2.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/motor_holder_so101_base_v1.stl	file	motor_holder_so101_base_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/motor_holder_so101_wrist_v1.stl	file	motor_holder_so101_wrist_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/moving_jaw_so101_v1.stl	file	moving_jaw_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/rotation_pitch_so101_v1.stl	file	rotation_pitch_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/sts3215_03a_no_horn_v1.stl	file	sts3215_03a_no_horn_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/sts3215_03a_v1.stl	file	sts3215_03a_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/under_arm_so101_v1.stl	file	under_arm_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/upper_arm_so101_v1.stl	file	upper_arm_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/waveshare_mounting_plate_so101_v2.stl	file	waveshare_mounting_plate_so101_v2.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/wrist_roll_follower_so101_v1.stl	file	wrist_roll_follower_so101_v1.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/assets/mujoco/assets/wrist_roll_pitch_so101_v2.stl	file	wrist_roll_pitch_so101_v2.stl	permanent	-	design	vendor SO-101 CAD part revision; the MJCF/URDF reference the file name (design B, not versions)
+versioned	src/so101_demo_py/config/act/rig-v1.yaml	file	rig-v1.yaml	permanent	-	decided	rig profile files named by the confirmed camera-rig design (rig v1 = the sealed head+wrist rig, rig v2 = side+wrist): the number is the rig generation, bound by the profile digest, not a format version (schema_version is 1)
+versioned	src/so101_demo_py/config/act/rig-v2.yaml	file	rig-v2.yaml	permanent	-	decided	rig profile files named by the confirmed camera-rig design (rig v1 = the sealed head+wrist rig, rig v2 = side+wrist): the number is the rig generation, bound by the profile digest, not a format version (schema_version is 1)
+versioned	src/so101_demo_py/config/perception/grounded_sam_nonpenetrating_candidate_v1.json	file	grounded_sam_nonpenetrating_candidate_v1.json	permanent	-	decided	root decision 9: dataset and candidate identity bound into trained artifacts and benchmark evidence, not a format version
+versioned	src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_test_v1.yaml	file	plastic_cup_grounding_dino_nonpenetrating_test_v1.yaml	permanent	-	decided	root decision 9: dataset and candidate identity bound into trained artifacts and benchmark evidence, not a format version
+versioned	src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml	file	plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml	permanent	-	decided	root decision 9: dataset and candidate identity bound into trained artifacts and benchmark evidence, not a format version
+wire	src/so101_demo_py/config/act/pick-place-calibration-measurement-contract.json	str	docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
+wire	src/so101_demo_py/config/act/pick-place-calibration-measurement-contract.json	str	docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
+wire	src/so101_demo_py/config/act/pick-place-calibration-search-candidate.json	str	docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
+wire	src/so101_demo_py/config/act/pick-place-calibration-search-candidate.json	str	docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
+wire	src/so101_demo_py/config/act/pick-place-calibration-search-policy.json	str	docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
+wire	src/so101_demo_py/config/act/pick-place-calibration-search-policy.json	str	docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
+wire	src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml	str	so101-head-search-yolo-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/perception/head_camera_yolo_seg_smoke.yaml	str	so101-head-search-yolo-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_test_v1.yaml	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/perception_benchmark/benchmark.yaml	str	plastic-cup-yolo11s-seg-v2	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_single_worker_first_pass.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_two_worker.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset/models.py	str	so101-head-search-yolo-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset/config.py	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset/config.py	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset/generate.py	str	task-visual-nonpenetration-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/cli/macos_campaign/admission.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/cli/mujoco_batch/outcome.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/parallel_batch/contracts/linux_cuda.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/perception_benchmark/contracts.py	str	plastic-cup-yolo11s-seg-v2	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/ros/rgbd_object_pose_node.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/runtime/composition.py	str	fusion-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/runtime/parallel_perception_runtime.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/runtime/provenance.py	str	fusion-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/training/grounding_dino_dataset/contracts.py	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/training/grounding_dino_dataset/contracts.py	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/training/grounding_dino_dataset/contracts.py	str	task-visual-nonpenetration-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+
+wire	src/so101_demo_py/config/act/training.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-002.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist-004.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist-005.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist-005-bf16.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist-007a-bf16.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/act/training-side-wrist-007b-bf16.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	base_motor_holder_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	base_so101_v2.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	motor_holder_so101_base_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	motor_holder_so101_wrist_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	moving_jaw_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	rotation_pitch_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	sts3215_03a_no_horn_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	sts3215_03a_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	under_arm_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	upper_arm_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	waveshare_mounting_plate_so101_v2.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	wrist_roll_follower_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	wrist_roll_pitch_so101_v2.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/src/adapters/planner/deepseek.py	str	deepseek-v4-flash	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/src/cli/text_pick_agent.py	str	deepseek-v4-flash	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/src/parallel_batch/start_guard.py	str	nvmlDeviceGetCount_v2	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
+wire	src/so101_demo_py/src/parallel_batch/start_guard.py	str	nvmlInit_v2	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version

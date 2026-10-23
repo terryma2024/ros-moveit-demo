@@ -184,24 +184,6 @@ export function fixedConfig(lease: Lease, session: string, manifestId: string) {
   };
 }
 
-export function adaptiveConfig(lease: Lease, session: string, manifestId: string) {
-  return {
-    contract_version: EXECUTION_CONTRACT_VERSION,
-    service_session_id: session,
-    lease_id: lease.lease_id,
-    lease_generation: lease.generation,
-    manifest_id: manifestId,
-    execution_mode: "ADAPTIVE",
-    preferred_worker_count: 2,
-    fallback_worker_counts: [1],
-    initial_points_per_worker: 2,
-    worker_start_timeout_s: 30,
-    max_infra_attempts_per_point: 2,
-    yolo_executor_count: 2,
-    ...hostClaimFor("ADAPTIVE", 2),
-  };
-}
-
 /**
  * Add the profile claim a platform-bound host requires.
  *

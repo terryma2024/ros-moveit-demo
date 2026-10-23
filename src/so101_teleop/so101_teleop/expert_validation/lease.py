@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import time
 import uuid
 
-from .store import StoreConflict
+from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 
 
 class LeaseConflict(RuntimeError):

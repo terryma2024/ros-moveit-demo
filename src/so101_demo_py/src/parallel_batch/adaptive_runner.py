@@ -19,7 +19,7 @@ from .adaptive_contracts import (
     PoolExecutionResult,
     _new_pool_request_for_production_factory,
 )
-from .contracts import PointStatus
+from so101_demo.parallel_batch.contracts.common import PointStatus
 from .journal import CoordinatorJournal
 
 

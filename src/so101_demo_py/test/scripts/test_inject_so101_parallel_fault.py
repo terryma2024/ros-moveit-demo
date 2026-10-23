@@ -1,0 +1,486 @@
+"""Safety contract for the explicit process-group fault injector."""
+
+import importlib.util
+import json
+import os
+
+import pytest
+from paths import REPOSITORY
+
+
+SCRIPT = REPOSITORY / "scripts/inject_so101_parallel_fault.py"
+
+
+def task_roots(tmp_path):
+    """Return per-test task roots on the host-selected pytest filesystem."""
+    base = tmp_path / "task-evidence"
+    return (
+        base / "parallel-multipoint-validation" / "run-v1",
+        base / "parallel-adaptive-worker" / "run-a01",
+    )
+
+
+@pytest.fixture
+def module(tmp_path):
+    spec = importlib.util.spec_from_file_location("inject_so101_parallel_fault", SCRIPT)
+    value = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(value)
+    value.TASK_EVIDENCE_ROOTS = task_roots(tmp_path)
+    value.TASK_EVIDENCE_ROOT = value.TASK_EVIDENCE_ROOTS[0]
+    return value
+
+
+def worker_command(root, worker_id="worker-01", batch_id="batch-1"):
+    path = root / "workers" / worker_id / "worker-spec.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "batch_id": batch_id,
+                "resources": {"worker_id": worker_id, "generation": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return (
+        "/usr/bin/python3",
+        "-m",
+        "so101_demo.cli.mujoco_parallel_batch",
+        "--internal-worker",
+        str(path),
+    )
+
+
+def write_manifest(root, entries, *, batch_id="batch-1", extra=None):
+    scratch_root = next(parent for parent in root.parents if parent.name == "scratch")
+    root.mkdir(parents=True, exist_ok=True)
+    current = root
+    while current != scratch_root:
+        current.chmod(0o700)
+        current = current.parent
+    document = {
+        "schema_version": 1,
+        "batch_id": batch_id,
+        "processes": entries,
+    }
+    if extra:
+        document.update(extra)
+    path = root / "owned-processes.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    path.chmod(0o600)
+
+
+def evidence_root(tmp_path, suffix):
+    """Keep fixtures inside pytest's platform-selected temporary filesystem."""
+    task_root, _ = task_roots(tmp_path)
+    return task_root / "scratch" / "fault-injector" / suffix
+
+
+def adaptive_evidence_root(tmp_path, suffix):
+    _, task_root = task_roots(tmp_path)
+    return task_root / "scratch" / "fault-injector" / suffix
+
+
+def entry(root, target="worker-01", *, broker_generation=1, **changes):
+    batch_id = changes.pop("batch_id", "batch-1")
+    role = "broker" if target == "broker" else "worker"
+    if role == "broker":
+        runtime_name = (
+            "broker" if broker_generation == 1
+            else f"broker-g{broker_generation}"
+        )
+        broker_spec = root / "ipc" / runtime_name / "broker-spec.json"
+        broker_spec.parent.mkdir(parents=True, exist_ok=True)
+        broker_spec.write_text(
+            json.dumps({
+                "schema_version": 1,
+                "kind": "so101_parallel_broker_runtime",
+                "batch_id": batch_id,
+                "coordinator_epoch": 1,
+                "broker_generation": broker_generation,
+            }),
+            encoding="utf-8",
+        )
+        (root / "ipc").chmod(0o700)
+        broker_spec.parent.chmod(0o700)
+        broker_spec.chmod(0o600)
+    command = (
+        (
+            "docker",
+            "run",
+            "--volume",
+            f"{broker_spec.parent}:/runtime:rw",
+            "sha256:" + "a" * 64,
+        )
+        if role == "broker"
+        else worker_command(root, target, batch_id)
+    )
+    value = {
+        "batch_id": batch_id,
+        "role": role,
+        "pid": 41001,
+        "pgid": 41001,
+        "cmdline": list(command),
+        "start_time": 123456,
+    }
+    value.update(changes)
+    return value
+
+
+def proc(value):
+    return {
+        "pid": value["pid"],
+        "pgid": value["pgid"],
+        "cmdline": tuple(value["cmdline"]),
+        "start_time": value["start_time"],
+        "session_id": value["pgid"],
+        "uid": os.getuid(),
+    }
+
+
+@pytest.mark.parametrize("target", ["worker-01", "worker-02", "worker-03", "broker"])
+def test_exact_owned_identity_is_rechecked_before_term(module, tmp_path, target):
+    root = evidence_root(tmp_path, target)
+    value = entry(root, target)
+    write_manifest(root, [value])
+    sent = []
+
+    result = module.inject_fault(
+        [str(root), target, "TERM"],
+        proc_reader=lambda _pid: proc(value),
+        signal_group=lambda pgid, signal_number: sent.append((pgid, signal_number)),
+    )
+
+    assert result["batch_id"] == "batch-1"
+    assert result["target"] == target
+    assert result["pid"] == value["pid"]
+    assert result["pgid"] == value["pgid"]
+    assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+
+def test_adaptive_flag_interface_targets_worker_sixteen_and_rejects_seventeen(
+    module, tmp_path
+):
+    root = adaptive_evidence_root(tmp_path, "worker-16")
+    value = entry(root, "worker-16", batch_id="su01-g01-w16")
+    write_manifest(
+        root,
+        [value],
+        batch_id="su01-g01-w16",
+    )
+    sent = []
+
+    result = module.inject_fault(
+        [
+            "--batch-root",
+            str(root),
+            "--worker-id",
+            "worker-16",
+            "--signal",
+            "TERM",
+        ],
+        proc_reader=lambda _pid: proc(value),
+        signal_group=lambda pgid, number: sent.append((pgid, number)),
+    )
+
+    assert result["batch_id"] == "su01-g01-w16"
+    assert result["target"] == "worker-16"
+    assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+    with pytest.raises(ValueError, match="TARGET_NOT_ALLOWED"):
+        module.inject_fault(
+            [str(root), "worker-17", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda _pgid, _number: None,
+        )
+
+
+def test_recovered_broker_generation_is_resolved_from_its_exact_runtime_mount(
+        module, tmp_path):
+    root = evidence_root(tmp_path, "broker-g2")
+    value = entry(root, "broker", broker_generation=2)
+    write_manifest(root, [value])
+    sent = []
+
+    result = module.inject_fault(
+        [str(root), "broker", "TERM"],
+        proc_reader=lambda _pid: proc(value),
+        signal_group=lambda pgid, signal_number: sent.append((pgid, signal_number)),
+    )
+
+    assert result["target"] == "broker"
+    assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+
+def test_default_signal_port_is_monkeypatched_and_never_targets_an_unrelated_group(
+    module, tmp_path, monkeypatch
+):
+    root = evidence_root(tmp_path, "default-signal")
+    value = entry(root)
+    write_manifest(root, [value])
+    sent = []
+    monkeypatch.setattr(module.os, "killpg", lambda *args: sent.append(args))
+
+    module.inject_fault(
+        [str(root), "worker-01", "TERM"],
+        proc_reader=lambda _pid: proc(value),
+    )
+
+    assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "relative",
+        "outside-task",
+        "wrong-target",
+        "wrong-signal",
+    ],
+)
+def test_rejects_out_of_scope_paths_targets_and_signals(module, tmp_path, case):
+    task_root, _ = task_roots(tmp_path)
+    argv = {
+        "relative": ["relative", "worker-01", "TERM"],
+        "outside-task": [str(task_root.parent / "other"), "worker-01", "TERM"],
+        "wrong-target": [str(task_root), "worker-04", "TERM"],
+        "wrong-signal": [str(task_root), "worker-01", "KILL"],
+    }[case]
+    with pytest.raises(ValueError):
+        module.inject_fault(argv, proc_reader=lambda _pid: None, signal_group=lambda *_: None)
+
+
+@pytest.mark.parametrize("argument_count", [0, 1, 2])
+def test_rejects_partial_argument_vectors_without_parser_exit(
+    module, tmp_path, argument_count
+):
+    task_root, _ = task_roots(tmp_path)
+    argv = [str(task_root), "broker"][:argument_count]
+    with pytest.raises(ValueError, match="ARGUMENT"):
+        module.inject_fault(argv, proc_reader=lambda _pid: None, signal_group=lambda *_: None)
+
+
+@pytest.mark.parametrize(
+    "mutation,error",
+    [
+        (lambda root, value: [], "TARGET_COUNT"),
+        (lambda root, value: [value, dict(value, pid=41002, pgid=41002)], "TARGET_COUNT"),
+        (lambda root, value: [dict(value, batch_id="other")], "BATCH_MISMATCH"),
+        (lambda root, value: [dict(value, role="broker")], "ROLE_MISMATCH"),
+        (lambda root, value: [dict(value, pgid=41002)], "UNOWNED_PGID"),
+        (lambda root, value: [dict(value, cmdline=[])], "MANIFEST"),
+    ],
+)
+def test_rejects_missing_duplicate_malformed_or_mismatched_target(
+    module, tmp_path, mutation, error
+):
+    root = evidence_root(tmp_path, error)
+    value = entry(root)
+    write_manifest(root, mutation(root, value))
+    with pytest.raises(ValueError, match=error):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+@pytest.mark.parametrize(
+    "field,replacement,error",
+    [
+        ("pid", 41002, "PID"),
+        ("pgid", 41002, "PGID"),
+        ("cmdline", ("different",), "CMDLINE"),
+        ("start_time", 123457, "START_TIME"),
+        ("session_id", 41002, "UNOWNED_PGID"),
+        ("uid", 1 + os.getuid(), "UID"),
+    ],
+)
+def test_rejects_fresh_proc_identity_drift_without_signalling(
+    module, tmp_path, field, replacement, error
+):
+    root = evidence_root(tmp_path, field)
+    value = entry(root)
+    write_manifest(root, [value])
+    observed = proc(value)
+    observed[field] = replacement
+    sent = []
+    with pytest.raises(ValueError, match=error):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: observed,
+            signal_group=lambda *args: sent.append(args),
+        )
+    assert sent == []
+
+
+def test_rejects_identity_drift_between_readback_and_signal(module, tmp_path):
+    root = evidence_root(tmp_path, "race")
+    value = entry(root)
+    write_manifest(root, [value])
+    observations = [proc(value), proc(value) | {"start_time": 999999}]
+    sent = []
+
+    with pytest.raises(ValueError, match="IDENTITY_DRIFT"):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: observations.pop(0),
+            signal_group=lambda *args: sent.append(args),
+        )
+    assert sent == []
+
+
+def test_rejects_manifest_drift_between_proc_readback_and_signal(module, tmp_path):
+    root = evidence_root(tmp_path, "manifest-race")
+    value = entry(root)
+    write_manifest(root, [value])
+    reads = 0
+    sent = []
+
+    def read(_pid):
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            write_manifest(root, [dict(value, start_time=value["start_time"] + 1)])
+        return proc(value)
+
+    with pytest.raises(ValueError, match="MANIFEST_DRIFT"):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=read,
+            signal_group=lambda *args: sent.append(args),
+        )
+    assert sent == []
+
+
+def test_rejects_symlinked_root_manifest_and_worker_spec(module, tmp_path):
+    real = evidence_root(tmp_path, "real")
+    value = entry(real)
+    write_manifest(real, [value])
+    linked_root = evidence_root(tmp_path, "linked")
+    linked_root.parent.mkdir(parents=True, exist_ok=True)
+    linked_root.symlink_to(real, target_is_directory=True)
+    with pytest.raises(ValueError, match="SYMLINK"):
+        module.inject_fault(
+            [str(linked_root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+    worker_root = evidence_root(tmp_path, "worker-spec-link")
+    worker_value = entry(worker_root)
+    write_manifest(worker_root, [worker_value])
+    worker_spec = worker_root / "workers/worker-01/worker-spec.json"
+    worker_saved = worker_spec.with_name("worker-spec-real.json")
+    worker_spec.rename(worker_saved)
+    worker_spec.symlink_to(worker_saved)
+    with pytest.raises(ValueError, match="TARGET_COUNT"):
+        module.inject_fault(
+            [str(worker_root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(worker_value),
+            signal_group=lambda *_: None,
+        )
+
+    manifest = real / "owned-processes.json"
+    saved = real / "manifest-real.json"
+    manifest.rename(saved)
+    manifest.symlink_to(saved)
+    with pytest.raises(ValueError, match="SYMLINK"):
+        module.inject_fault(
+            [str(real), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+def test_rejects_broker_spec_batch_mismatch(module, tmp_path):
+    root = evidence_root(tmp_path, "broker-batch")
+    value = entry(root, "broker")
+    write_manifest(root, [value])
+    spec = root / "ipc/broker/broker-spec.json"
+    document = json.loads(spec.read_text(encoding="utf-8"))
+    document["batch_id"] = "other-batch"
+    spec.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="BATCH_MISMATCH"):
+        module.inject_fault(
+            [str(root), "broker", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+def test_rejects_broker_cmdline_bound_to_a_different_ipc_mount(module, tmp_path):
+    root = evidence_root(tmp_path, "broker-mount")
+    value = entry(root, "broker")
+    value["cmdline"][3] = f"{root / 'ipc/not-broker'}:/runtime:rw"
+    write_manifest(root, [value])
+
+    with pytest.raises(ValueError, match="TARGET_COUNT"):
+        module.inject_fault(
+            [str(root), "broker", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+def test_rejects_worker_cmdline_that_does_not_bind_exact_target(module, tmp_path):
+    root = evidence_root(tmp_path, "wrong-worker")
+    value = entry(root, "worker-02")
+    write_manifest(root, [value])
+    with pytest.raises(ValueError, match="TARGET_COUNT"):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+def test_manifest_schema_is_closed_and_rejects_partial_or_duplicate_json(module, tmp_path):
+    root = evidence_root(tmp_path, "schema")
+    value = entry(root)
+    write_manifest(root, [value], extra={"unexpected": True})
+    with pytest.raises(ValueError, match="MANIFEST"):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+    (root / "owned-processes.json").write_text(
+        '{"schema_version":1,"batch_id":"batch-1","batch_id":"batch-2","processes":[]}',
+        encoding="utf-8",
+    )
+    (root / "owned-processes.json").chmod(0o600)
+    with pytest.raises(ValueError, match="MANIFEST"):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+@pytest.mark.parametrize("target", ["root", "manifest"])
+def test_rejects_group_or_world_access_before_deriving_signal_authority(
+        module, tmp_path, target):
+    root = evidence_root(tmp_path, f"permissions-{target}")
+    value = entry(root)
+    write_manifest(root, [value])
+    if target == "root":
+        root.chmod(0o750)
+    else:
+        (root / "owned-processes.json").chmod(0o640)
+
+    with pytest.raises(ValueError, match="(EVIDENCE_ROOT|MANIFEST)"):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+def test_proc_stat_parser_handles_process_names_with_spaces(module):
+    fields = ["S", *[str(value) for value in range(4, 23)]]
+    raw = "41001 (worker process name) " + " ".join(fields)
+    assert module._proc_start_time(raw) == 22

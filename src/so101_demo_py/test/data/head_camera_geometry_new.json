@@ -1,0 +1,226 @@
+{
+  "anchors": [
+    "default",
+    "left",
+    "forward"
+  ],
+  "camera": {
+    "camera_name": "head_camera",
+    "distortion": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "distortion_model": "plumb_bob",
+    "fovy_rad": 1.0471975511965976,
+    "height": 480,
+    "local_position_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "local_xyaxes": [
+      -1.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.5999999999999999,
+      0.8
+    ],
+    "parent_body": "head_mount",
+    "width": 640
+  },
+  "camera_mount_origin_m": [
+    -0.06,
+    0.06,
+    0.5791703831546664
+  ],
+  "camera_mount_xyaxes": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0
+  ],
+  "camera_name": "head_camera",
+  "coarse_step_candidate_rad": 0.3,
+  "fov_union_covers_required_domain": true,
+  "horizontal_fov_rad": 1.3121067481206794,
+  "image_height": 480,
+  "image_width": 640,
+  "in_frame_failures": [],
+  "in_frame_matrix": {
+    "default": {
+      "centre_angle_rad": 0.23109066719589708,
+      "neck_start_rad": 0.1,
+      "out_of_frame_rad": [],
+      "samples": [
+        {
+          "in_frame": true,
+          "neck_rad": 0.1,
+          "projected_points": 9,
+          "projected_points_in_frame": 9,
+          "visible_pixels": 5596
+        },
+        {
+          "in_frame": true,
+          "neck_rad": 0.23109066719589708,
+          "projected_points": 9,
+          "projected_points_in_frame": 9,
+          "visible_pixels": 5526
+        }
+      ]
+    },
+    "forward": {
+      "centre_angle_rad": 0.18822150530477078,
+      "neck_start_rad": 0.0,
+      "out_of_frame_rad": [],
+      "samples": [
+        {
+          "in_frame": true,
+          "neck_rad": 0.0,
+          "projected_points": 9,
+          "projected_points_in_frame": 9,
+          "visible_pixels": 4569
+        },
+        {
+          "in_frame": true,
+          "neck_rad": 0.18822150530477078,
+          "projected_points": 9,
+          "projected_points_in_frame": 9,
+          "visible_pixels": 4427
+        }
+      ]
+    },
+    "left": {
+      "centre_angle_rad": -0.0587558227157227,
+      "neck_start_rad": 0.0,
+      "out_of_frame_rad": [],
+      "samples": [
+        {
+          "in_frame": true,
+          "neck_rad": 0.0,
+          "projected_points": 9,
+          "projected_points_in_frame": 9,
+          "visible_pixels": 5684
+        },
+        {
+          "in_frame": true,
+          "neck_rad": -0.0587558227157227,
+          "projected_points": 9,
+          "projected_points_in_frame": 9,
+          "visible_pixels": 5664
+        }
+      ]
+    }
+  },
+  "lock_valid_neck_rad": [
+    -6.283175307179587,
+    6.283175307179587
+  ],
+  "required_search_domain_rad": [
+    -0.17559216195018026,
+    0.08047101126546086
+  ],
+  "safe_interval_contains_required_domain": true,
+  "schema_version": 1,
+  "seal_sha256": "8c20afb86ee5fc35eaf0fab6dec74eeaa2f40bd2b380f5cc63be8d347ed14892",
+  "source_digests": {
+    "camera_source_sha256": "08ce4a35388102eb67a55144631cc40ea52543c9191e3abe647d74c26658164e",
+    "coarse_step_candidate_rad": 0.3,
+    "contract_sha256": "ad90937dbab202e7015d7aecfa29f4ab3152a0325da601fcc2a0fbed6bfb41ed",
+    "scene_sha256": "aea2df3b0bfb608d7d3aec2e58cd8f45b51affd8bf92511de5e99475fcc47f14"
+  },
+  "support_height_m": 0.12000000000000001,
+  "validation_arm_rad": [
+    -0.25,
+    0.0,
+    0.6,
+    0.8,
+    0.0,
+    0.8
+  ],
+  "workspace_matrix": {
+    "in_frame": 120,
+    "key_samples": [
+      {
+        "first_hit_body": null,
+        "in_frame": true,
+        "kind": "required_domain_endpoint",
+        "neck_rad": -0.17559216195018026,
+        "point_m": [
+          -0.115,
+          -0.25,
+          0.165
+        ],
+        "u": 320.0,
+        "v": 358.32658693604174,
+        "visible_pixels": 6097
+      },
+      {
+        "first_hit_body": null,
+        "in_frame": true,
+        "kind": "required_domain_endpoint",
+        "neck_rad": 0.08047101126546086,
+        "point_m": [
+          -0.035,
+          -0.25,
+          0.165
+        ],
+        "u": 320.0,
+        "v": 360.9798042904084,
+        "visible_pixels": 6213
+      },
+      {
+        "anchor": "default",
+        "first_hit_body": null,
+        "in_frame": true,
+        "kind": "anchor",
+        "neck_rad": 0.23109066719589708,
+        "point_m": [
+          0.02,
+          -0.28,
+          0.165
+        ],
+        "visible_pixels": 5526
+      },
+      {
+        "anchor": "left",
+        "first_hit_body": null,
+        "in_frame": true,
+        "kind": "anchor",
+        "neck_rad": -0.0587558227157227,
+        "point_m": [
+          -0.08,
+          -0.28,
+          0.165
+        ],
+        "visible_pixels": 5664
+      },
+      {
+        "anchor": "forward",
+        "first_hit_body": "plastic_cup",
+        "in_frame": true,
+        "kind": "anchor",
+        "neck_rad": 0.18822150530477078,
+        "point_m": [
+          0.02,
+          -0.36,
+          0.165
+        ],
+        "visible_pixels": 4427
+      }
+    ],
+    "min_anchor_visible_pixels": 4427,
+    "min_rendered_visible_pixels": 4427,
+    "rendered_key_samples": 5,
+    "required_domain_rad": [
+      -0.17559216195018026,
+      0.08047101126546086
+    ],
+    "samples": 120
+  }
+}

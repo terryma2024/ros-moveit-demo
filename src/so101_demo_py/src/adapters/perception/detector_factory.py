@@ -34,6 +34,7 @@ class DetectorFactoryOptions:
     yolo_weights_sha256: str | None = None
     yolo_model_id: str | None = None
     yolo_imgsz: int | None = None
+    yolo_score_threshold: float | None = None
     grounded_model_root: Path | None = None
     grounded_manifest_sha256: str | None = None
     grounded_thresholds: GroundedSamThresholds | None = None
@@ -57,6 +58,13 @@ def _validate_options(options: DetectorFactoryOptions) -> None:
         raise ValueError("backend configuration has an invalid device")
     if not isinstance(options.allow_cpu_fallback, bool):
         raise ValueError("backend configuration has an invalid CPU fallback")
+    if options.yolo_score_threshold is not None and (
+        options.backend != "yolo_seg"
+        or type(options.yolo_score_threshold) not in (float, int)
+        or not math.isfinite(options.yolo_score_threshold)
+        or not 0.0 <= options.yolo_score_threshold <= 1.0
+    ):
+        raise ValueError("backend configuration has invalid score_threshold")
 
     yolo_values = (
         options.yolo_weights_path,
@@ -131,6 +139,8 @@ def build_detector(
             allow_cpu_fallback=options.allow_cpu_fallback,
             model_id=options.yolo_model_id,
             imgsz=options.yolo_imgsz,
+            **({"score_threshold": options.yolo_score_threshold}
+               if options.yolo_score_threshold is not None else {}),
         )
         return BuiltDetector(
             detector=detector,

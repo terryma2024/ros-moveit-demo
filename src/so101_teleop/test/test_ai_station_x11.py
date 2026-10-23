@@ -1,11 +1,11 @@
 import importlib.util
-from pathlib import Path
 
 import pytest
+from teleop_paths import PACKAGE_ROOT
 
 
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1]
+    PACKAGE_ROOT
     / 'so101_teleop'
     / 'gui'
     / 'x11.py'

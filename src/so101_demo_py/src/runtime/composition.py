@@ -24,7 +24,6 @@ class RuntimeCompositionError(ValueError):
 class CompositionRequest:
     backend: str
     policy_id: str
-    policy_version: str
     share_dir: Path
     source_commit: str
     installed_prefix: Path | None
@@ -88,7 +87,6 @@ def compose_backend(
         raise RuntimeCompositionError("backend adapter context is required")
     policy = load_policy_variant(
         request.policy_id,
-        request.policy_version,
         request.backend,
         request.share_dir,
     )

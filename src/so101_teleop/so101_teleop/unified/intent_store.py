@@ -53,7 +53,13 @@ from .contracts import (
     RevokeTarget,
 )
 
-SCHEMA_VERSION = 1
+#: 2: `act_worker_slots` is keyed by (campaign, worker, generation) alone; the per-slot ROS domain, namespace and
+#: controller columns and their three partial unique indexes are gone (the fixed in-instance identity). A version 1 store
+#: is migrated in place by `_migrate_slot_identity_schema`; its slot rows stay readable in `act_worker_slots_v1`.
+#: 3: `act_campaign_contexts.campaign_id` is no longer UNIQUE: a staged collection admits once per stage, each admission with its
+#: own operation and context row. A second FIRST admission of a campaign id is refused by admission (not by the table). A
+#: version 2 store is migrated in place by `_migrate_campaign_context_schema`; its rows are copied unchanged.
+SCHEMA_VERSION = 3
 LOCK_FILE_NAME = "service.lock"
 
 LEASE_CLAIMING = "CLAIMING"
@@ -125,7 +131,119 @@ CREATE TABLE IF NOT EXISTS children (
   cleanup_confirmed INTEGER,
   UNIQUE (operation_id, child_id)
 );
+CREATE TABLE IF NOT EXISTS gpu_workload_leases (
+  stable_host_id TEXT NOT NULL,
+  physical_gpu_uuid TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  service_epoch TEXT NOT NULL,
+  owner_pid INTEGER NOT NULL,
+  owner_started_ticks INTEGER NOT NULL,
+  workload TEXT NOT NULL,
+  execution_generation INTEGER NOT NULL,
+  deadline_ns INTEGER NOT NULL,
+  PRIMARY KEY (stable_host_id, physical_gpu_uuid)
+);
+CREATE TABLE IF NOT EXISTS act_campaign_contexts (
+  operation_id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  context_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS act_worker_slots (
+  campaign_id TEXT NOT NULL,
+  worker_id TEXT NOT NULL,
+  execution_generation INTEGER NOT NULL,
+  slot_json TEXT NOT NULL,
+  active INTEGER NOT NULL CHECK (active IN (0,1)),
+  PRIMARY KEY (campaign_id, worker_id, execution_generation)
+);
 """
+
+_PER_SLOT_RESOURCE_INDEXES = ("act_active_slot_domain", "act_active_slot_namespace", "act_active_slot_controller")
+
+
+def _stored_schema_version(connection: sqlite3.Connection) -> int | None:
+    """The version of an existing store, or None for a store with no tables yet (a fresh database)."""
+    tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "schema_meta" in tables:
+        row = connection.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
+        if row is not None:
+            return int(row[0])
+    if "act_worker_slots" in tables:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(act_worker_slots)")}
+        return 1 if "ros_domain_id" in columns else 2
+    return None
+
+
+def _migrate_slot_identity_schema(connection: sqlite3.Connection) -> None:
+    """Move a version 1 store to version 2 in one immediate transaction, or refuse and change nothing.
+
+    The store must be IDLE with no active ACT slot and no GPU lease, so nothing live depends on the dropped uniqueness.
+    The v1 slot table is renamed, not copied: its rows stay as the audit record. Only the ACT slot table is touched."""
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        state = connection.execute("SELECT state FROM global_state WHERE singleton = 1").fetchone()
+        if state is not None and state[0] != IDLE:
+            raise MutationError(f"STORE_MIGRATION_REFUSED: state is {state[0]}, not {IDLE}")
+        active = connection.execute("SELECT COUNT(*) FROM act_worker_slots WHERE active = 1").fetchone()[0]
+        if active:
+            raise MutationError(f"STORE_MIGRATION_REFUSED: {active} active ACT worker slot(s)")
+        leases = connection.execute("SELECT COUNT(*) FROM gpu_workload_leases").fetchone()[0]
+        if leases:
+            raise MutationError(f"STORE_MIGRATION_REFUSED: {leases} GPU workload lease(s)")
+        for name in _PER_SLOT_RESOURCE_INDEXES:
+            connection.execute(f"DROP INDEX IF EXISTS {name}")
+        connection.execute("ALTER TABLE act_worker_slots RENAME TO act_worker_slots_v1")
+        connection.execute(
+            "CREATE TABLE act_worker_slots (campaign_id TEXT NOT NULL, worker_id TEXT NOT NULL, "
+            "execution_generation INTEGER NOT NULL, slot_json TEXT NOT NULL, "
+            "active INTEGER NOT NULL CHECK (active IN (0,1)), "
+            "PRIMARY KEY (campaign_id, worker_id, execution_generation))"
+        )
+        connection.execute("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            ("2",),
+        )
+    except BaseException:
+        with contextlib.suppress(sqlite3.Error):
+            connection.execute("ROLLBACK")
+        raise
+    connection.execute("COMMIT")
+
+
+def _migrate_campaign_context_schema(connection: sqlite3.Connection) -> None:
+    """Move a version 2 store to version 3 in one immediate transaction: the context table is rebuilt without the
+    UNIQUE on `campaign_id`, every row copied as it is (operations and their contexts stay readable)."""
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "act_campaign_contexts" in tables:
+            before = connection.execute("SELECT COUNT(*) FROM act_campaign_contexts").fetchone()[0]
+            connection.execute(
+                "CREATE TABLE act_campaign_contexts_next (operation_id TEXT PRIMARY KEY, "
+                "campaign_id TEXT NOT NULL, context_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO act_campaign_contexts_next SELECT operation_id, campaign_id, context_json "
+                "FROM act_campaign_contexts"
+            )
+            after = connection.execute("SELECT COUNT(*) FROM act_campaign_contexts_next").fetchone()[0]
+            if before != after:
+                raise MutationError(f"STORE_MIGRATION_REFUSED: {before} context rows, {after} copied")
+            connection.execute("DROP TABLE act_campaign_contexts")
+            connection.execute("ALTER TABLE act_campaign_contexts_next RENAME TO act_campaign_contexts")
+        connection.execute("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(SCHEMA_VERSION),),
+        )
+    except BaseException:
+        with contextlib.suppress(sqlite3.Error):
+            connection.execute("ROLLBACK")
+        raise
+    connection.execute("COMMIT")
 
 
 @dataclass(frozen=True)
@@ -171,15 +289,32 @@ class IntentStore:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=FULL")
         connection.execute("PRAGMA foreign_keys=ON")
-        connection.executescript(_SCHEMA)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
-            (str(SCHEMA_VERSION),),
-        )
-        connection.execute(
-            "INSERT OR IGNORE INTO global_state (singleton, state, updated_ns) VALUES (1, ?, 0)",
-            (IDLE,),
-        )
+        try:
+            stored = _stored_schema_version(connection)
+            if stored == 1:
+                _migrate_slot_identity_schema(connection)
+                stored = 2
+            if stored == 2:
+                _migrate_campaign_context_schema(connection)
+            elif stored is not None and stored != SCHEMA_VERSION:
+                raise MutationError(f"STORE_SCHEMA_UNSUPPORTED: version {stored}")
+            connection.executescript(_SCHEMA)
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO global_state (singleton, state, updated_ns) VALUES (1, ?, 0)",
+                (IDLE,),
+            )
+        except BaseException:
+            with contextlib.suppress(sqlite3.Error):
+                connection.close()
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock_fd)
+            raise
         with contextlib.suppress(OSError):
             os.chmod(database_path, 0o600)
         store = cls(root, lock_fd, connection)
@@ -307,8 +442,8 @@ class IntentStore:
         if fences:
             raise MutationError(f"LEASE_FENCE_OPEN: {', '.join(fences)}")
 
-    def insert_parent(self, spec: OperationSpec) -> Reservation:
-        operation_id = uuid.uuid4().hex
+    def insert_parent(self, spec: OperationSpec, *, operation_id: str | None = None) -> Reservation:
+        operation_id = operation_id or uuid.uuid4().hex
         now = self._now_ns()
         self._connection.execute(
             "INSERT INTO parents (operation_id, command_id, fingerprint, domain, kind, payload_json,"

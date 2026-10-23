@@ -1,0 +1,189 @@
+"""The bottom-I/O values the formal entry must build for ITSELF.
+
+The verdict's finding is that the formal entry reaches `SO101_PICK_PLACE_CALIBRATION_BOTTOM_IO_SEAM` for six values - the client, the
+detector factory, the frame source, the phase path, the target and the occluder geometry - so with nothing set in the
+environment it cannot produce the bottom I/O at all. This module starts replacing those six with the model's own
+answers, beginning with the two the headless model can supply directly.
+
+**And it starts with the one where the seam's substitute is provably not the model's answer.** The seam hands the
+evaluator the same invented geometry for every occluder:
+
+    {"fixed_fingertip_00": {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005}}
+
+while the ACT scene's own geoms are at entirely different places - `fixed_fingertip_pad_visual` at
+`[0.0204, -0.3623, 0.4491]`, `moving_fingertip_pad_visual` at `[0.0205, -0.3721, 0.4632]`. A visibility decision made
+against the seam's numbers is a decision about a scene that does not exist.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+
+class BottomIOError(ValueError):
+    """A bottom-I/O value the composition cannot build, named so a caller can refuse by name."""
+
+
+def occluder_geometry_from_model(scene_path, names=None, *, joints_rad=None) -> dict:
+    """The admitted occluders' geometry, read from the model's own world poses after a forward pass.
+
+    Returns, per occluder, the world position MuJoCo computes for that geom's centre, its half-extents, and its geom
+    type - enough for `PhaseCameraMatrixEvaluator._occluded` to decide whether the geom stands between the camera and
+    the target. `joints_rad` optionally poses the arm first, so the occluders that are MOUNTED on the gripper are read
+    where the arm actually is rather than where it rests.
+    """
+
+    import mujoco
+
+    from so101_demo.act.pick_place_calibration_measurement_schema import EXPECTED_OCCLUDERS
+
+    wanted = tuple(EXPECTED_OCCLUDERS if names is None else names)
+    scene = Path(scene_path)
+    if not scene.is_file():
+        raise BottomIOError(f"BOTTOM_IO_SCENE_MISSING: {scene}")
+    model = mujoco.MjModel.from_xml_path(str(scene))
+    data = mujoco.MjData(model)
+    if joints_rad is not None:
+        values = [float(value) for value in joints_rad]
+        if len(values) > model.nq:
+            raise BottomIOError(f"BOTTOM_IO_JOINTS_TOO_MANY: {len(values)} > {model.nq}")
+        data.qpos[:len(values)] = values
+    mujoco.mj_forward(model, data)
+
+    geometry = {}
+    for name in wanted:
+        geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+        if geom_id < 0:
+            raise BottomIOError(f"BOTTOM_IO_OCCLUDER_GEOM_MISSING: {name}")
+        size = [float(value) for value in model.geom_size[geom_id]]
+        geometry[name] = {
+            "position_m": [float(value) for value in data.geom_xpos[geom_id]],
+            # the evaluator's own vocabulary: one radius. The geom's largest half-extent is the conservative reading -
+            # a smaller radius would under-report an occluder, which is the direction that hides a real occlusion
+            "radius_m": max(size) if size else 0.0,
+            "size_m": size,
+            "geom_type": int(model.geom_type[geom_id]),
+        }
+    return geometry
+
+
+class ModelFrameSource:
+    """The detector's frame source: the model's own camera, rendered headless.
+
+    the seam's `frame_source(request)` returns `object()` and records the call, so the detector is
+    handed something no model produced. The composition can do better - a headless EGL context renders
+    `head_camera` at the admitted 640x480 into a real image here - so this renders the camera the request names and
+    returns the frame.
+
+    Two operational facts from that probe are built in rather than rediscovered:
+      * the renderer is created ONCE and reused, because each `mujoco.Renderer` allocates a GL context;
+      * `close()` is explicit, because **the EGL context's destructor raises on this host** - so a caller that owns one
+        of these should close it (or use the context manager) rather than let it be collected during interpreter exit.
+    """
+
+    def __init__(self, scene_path, *, camera: str = "head_camera", width: int = 640, height: int = 480,
+                 joints_rad=None) -> None:
+        import mujoco
+
+        scene = Path(scene_path)
+        if not scene.is_file():
+            raise BottomIOError(f"BOTTOM_IO_SCENE_MISSING: {scene}")
+        self.model = mujoco.MjModel.from_xml_path(str(scene))
+        if mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, camera) < 0:
+            raise BottomIOError(f"BOTTOM_IO_FRAME_CAMERA_MISSING: {camera}")
+        self.data = mujoco.MjData(self.model)
+        self.camera = camera
+        self.width = int(width)
+        self.height = int(height)
+        self.joints_rad = None if joints_rad is None else [float(value) for value in joints_rad]
+        self._renderer = None
+
+    def pose(self, joints_rad) -> None:
+        """Where the arm is when the next frame is rendered - the frames follow the run, not a constant pose."""
+
+        self.joints_rad = None if joints_rad is None else [float(value) for value in joints_rad]
+
+    def __call__(self, request=None) -> "object":
+        import mujoco
+
+        camera = self.camera
+        if isinstance(request, dict) and request.get("camera"):
+            camera = str(request["camera"])
+            if mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, camera) < 0:
+                raise BottomIOError(f"BOTTOM_IO_FRAME_CAMERA_MISSING: {camera}")
+        if self._renderer is None:
+            self._renderer = mujoco.Renderer(self.model, height=self.height, width=self.width)
+        if self.joints_rad is not None:
+            values = self.joints_rad
+            if len(values) > self.model.nq:
+                raise BottomIOError(f"BOTTOM_IO_JOINTS_TOO_MANY: {len(values)} > {self.model.nq}")
+            self.data.qpos[:len(values)] = values
+        mujoco.mj_forward(self.model, self.data)
+        self._renderer.update_scene(self.data, camera=camera)
+        # the real `YoloSegDetector.detect(frame: DetectionFrame, query)` declares a DetectionFrame, and the
+        # production ACT detector additionally requires a STRICTLY INCREASING `source_stamp_ns` (`detector.py:131/138`).
+        # A bare ndarray satisfies neither, so the frame carries its pixels, the instant it was rendered on the real
+        # clock, and the camera it was rendered from - which is this source's identity, exactly as a ROS image's
+        # `header.frame_id` identifies the camera it came from (`ros_search.py:131-132`).
+        import time as _time
+
+        import numpy as _numpy
+
+        from so101_demo.core.detection import DetectionFrame
+
+        rgb8 = _numpy.ascontiguousarray(self._renderer.render()[..., :3], dtype=_numpy.uint8)
+        return DetectionFrame(rgb8=rgb8, source_stamp_ns=int(_time.monotonic_ns()),
+                              source_frame_id=str(camera))
+
+    def close(self) -> None:
+        if self._renderer is not None:
+            self._renderer.close()
+            self._renderer = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exception):
+        self.close()
+        return False
+
+
+def target_from_model(scene_path, *, body: str = "plastic_cup", class_id: str = "plastic_cup",
+                      joints_rad=None) -> dict:
+    """What the camera is looking for: the cup's own pose and size, read from the model.
+
+    The seam's `target()` returns a fixed `{"position_m": [0.10, 0.10, 0.02], "radius_m": 0.03}` regardless of where
+    the cup actually is - and the cup is a FREE body in this scene (`plastic_cup`, `free=True`), so its pose is a
+    property of the run rather than a constant. The radius comes from the geoms attached to that very body, so it is
+    the size the scene gives the object rather than a number chosen to make a projection look reasonable.
+    """
+
+    import mujoco
+
+    scene = Path(scene_path)
+    if not scene.is_file():
+        raise BottomIOError(f"BOTTOM_IO_SCENE_MISSING: {scene}")
+    model = mujoco.MjModel.from_xml_path(str(scene))
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body)
+    if body_id < 0:
+        raise BottomIOError(f"BOTTOM_IO_TARGET_BODY_MISSING: {body}")
+    data = mujoco.MjData(model)
+    if joints_rad is not None:
+        values = [float(value) for value in joints_rad]
+        if len(values) > model.nq:
+            raise BottomIOError(f"BOTTOM_IO_JOINTS_TOO_MANY: {len(values)} > {model.nq}")
+        data.qpos[:len(values)] = values
+    mujoco.mj_forward(model, data)
+
+    extents = [float(value) for index in range(model.ngeom) if model.geom_bodyid[index] == body_id
+               for value in model.geom_size[index]]
+    if not extents:
+        raise BottomIOError(f"BOTTOM_IO_TARGET_GEOM_MISSING: {body}")
+    return {
+        "class_id": class_id,
+        "position_m": [float(value) for value in data.xpos[body_id]],
+        # the largest half-extent across the body's own geoms: the conservative reading, for the same reason the
+        # occluders use it - a smaller radius would under-report what the camera is looking for
+        "radius_m": max(extents),
+        "body": body,
+    }

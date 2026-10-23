@@ -25,7 +25,8 @@ from .owner_tree import (
     OwnerTreeError,
     OwnerTreeRecovery,
 )
-from .store import StoreConflict, SupervisorStore, _json
+from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.supervisor_store.schema import _json, StoreConflict
 
 
 class RecoveryError(RuntimeError):
@@ -50,7 +51,7 @@ def _containers(batch_id):
 
 
 def _domain_in_use(domain):
-    from so101_demo.parallel_batch.resources import SystemResourceProbe
+    from so101_demo.parallel_batch.resource_allocation.probe import SystemResourceProbe
     return SystemResourceProbe().ros_domain_in_use(domain)
 
 

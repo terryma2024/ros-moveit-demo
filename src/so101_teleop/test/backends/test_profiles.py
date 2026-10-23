@@ -1,14 +1,14 @@
 from dataclasses import FrozenInstanceError
-from pathlib import Path
 
 import pytest
 import yaml
 from so101_teleop.backends.profile import ProfileError, load_profile_file
 from so101_teleop.backends.protocol import BackendOperation
 from so101_teleop.backends.registry import BACKEND_IDS, load_backend_profile
+from teleop_paths import PACKAGE_ROOT, SOURCE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[2]
-DEMO_PACKAGE = PACKAGE.parent / "so101_demo_py"
+PACKAGE = PACKAGE_ROOT
+DEMO_PACKAGE = SOURCE_ROOT / "so101_demo_py"
 
 
 def test_registry_accepts_only_fixed_backend_ids():

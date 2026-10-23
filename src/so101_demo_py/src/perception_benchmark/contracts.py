@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -134,6 +136,71 @@ def _require_bool(name: str, value: object) -> bool:
     if not isinstance(value, bool):
         raise ValueError(f"{name} must be boolean")
     return value
+
+
+def _require_positive_finite(name: str, value: object) -> float:
+    result = _require_nonnegative_finite(name, value)
+    if result <= 0.0:
+        raise ValueError(f"{name} must be finite and positive")
+    return result
+
+
+def canonical_sha256(value: object) -> str:
+    """Return the SHA256 of one document's canonical JSON encoding.
+
+    Canonical means sorted object keys, no insignificant whitespace, and no NaN or infinity, so two
+    documents describing the same identity digest identically on every host.
+    """
+
+    try:
+        encoded = json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "canonical_sha256 requires a JSON-serializable value with finite numbers"
+        ) from error
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+OPERATING_POINT_KEYS = ("min_confidence", "min_bbox_aspect", "min_area_px2", "tracking_iou")
+
+
+@dataclass(frozen=True, slots=True)
+class OperatingPoint:
+    """One camera domain's frozen perception operating point for a candidate.
+
+    These four values are calibrated once on val and calibration episodes, frozen into the
+    candidate identity, and then only verified: opening the test split must never retune them.
+    """
+
+    min_confidence: float
+    min_bbox_aspect: float
+    min_area_px2: float
+    tracking_iou: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "min_confidence", _require_probability("min_confidence", self.min_confidence)
+        )
+        object.__setattr__(
+            self, "min_bbox_aspect", _require_positive_finite("min_bbox_aspect", self.min_bbox_aspect)
+        )
+        object.__setattr__(
+            self, "min_area_px2", _require_positive_finite("min_area_px2", self.min_area_px2)
+        )
+        object.__setattr__(self, "tracking_iou", _require_probability("tracking_iou", self.tracking_iou))
+
+    def to_document(self) -> dict[str, float]:
+        return {name: getattr(self, name) for name in OPERATING_POINT_KEYS}
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> OperatingPoint:
+        if not isinstance(document, Mapping) or set(document) != set(OPERATING_POINT_KEYS):
+            raise ValueError(
+                "OPERATING_POINT_FIELDS_INVALID: document must hold exactly the operating-point keys"
+            )
+        return cls(**{name: document[name] for name in OPERATING_POINT_KEYS})  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True, slots=True)

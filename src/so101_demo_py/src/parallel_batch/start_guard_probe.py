@@ -1,6 +1,6 @@
 """Bounded, single-flight startup probe: the owner coordinates, a helper does the reads.
 
-Task 4 of the lightweight start guard plan. The design requires that every potentially
+The lightweight start guard design requires that every potentially
 blocking read (``/proc``, cgroup, NVML) happens in a short-lived helper process, that the
 whole request is bounded by the policy deadline, that concurrent requests share one
 task-level lock across processes, and that a helper which cannot be reaped becomes a durable
@@ -654,7 +654,7 @@ def _write_all(descriptor: int, payload: bytes) -> None:
         offset += os.write(descriptor, payload[offset:])
 
 
-def _v4_cpu_ram_result(policy: StartGuardPolicy, scope: GuardScope,
+def _darwin_cpu_ram_result(policy: StartGuardPolicy, scope: GuardScope,
                        deadline_monotonic_s: float, started_monotonic_s: float) -> GuardResult:
     """The Darwin half of the guard: real CPU/RAM checks, no NVIDIA probe, no fabricated GPU.
 
@@ -734,7 +734,7 @@ def run_helper(request_fd: int, result_fd: int) -> int:
             # must not touch NVML, which is what `probe_snapshot`'s GPU read does. A GPU-less
             # snapshot is not representable in the frozen v3 model, so no snapshot is emitted and
             # no CUDA-shaped device is fabricated.
-            result = _v4_cpu_ram_result(policy, scope, deadline, request_started)
+            result = _darwin_cpu_ram_result(policy, scope, deadline, request_started)
     except ProbeError as error:
         completed = time.monotonic()
         result = GuardResult(

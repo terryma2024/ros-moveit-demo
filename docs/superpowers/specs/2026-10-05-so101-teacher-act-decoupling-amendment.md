@@ -1,6 +1,8 @@
 # SO-101 Teacher 执行与 ACT 数据验证分离修订
 
 日期：2026-10-05
+> 2026-10-06 修订：Teacher 执行部分已由 [`2026-10-06-so101-teacher-moveit-simplification-amendment.md`](2026-10-06-so101-teacher-moveit-simplification-amendment.md)（sha256 `9d54f821f4cca6ab234cb0f247fd06c1d94e9f6348928e0cfe49ae3641ae61c9`）修订，冲突时以该文为准。
+
 状态：用户已确认两个原则，并授权 ai-station 的现有 Claude 修订执行计划、清理旧实现和测试、按新计划执行。本文经过编写者 inline self review；未宣称代码、集成或运行验收通过。
 
 ## 1. 适用范围与优先级

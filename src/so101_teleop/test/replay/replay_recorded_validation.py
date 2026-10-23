@@ -11,14 +11,14 @@ synthetic fixture can prove: that the installed reader accepts the raw recording
 recorded store carries is the frame of that batch's own committed cleanup event, and that the
 per-point documents match the results the journal committed. The ordinary gate asserts the same
 behaviour over deterministic bytes in
-``test/teleop/test_expert_validation_campaign_layout_projection.py``; this module is the historical
+``test/expert_validation/test_expert_validation_campaign_layout_projection.py``; this module is the historical
 counterpart, never the only test of any behaviour.
 
 Each recording root is read from the environment, with the recorded default path as the fallback:
 
-* ``SO101_TASK12_CLEANUP_STATE`` - the state root of the recorded W1 first pass ``bf16a``;
-* ``SO101_TASK12_RETRY_STATE``   - the state root of the recorded retry closed loop;
-* ``SO101_TASK12_REAL_BATCH``    - the recorded live batch root of campaign ``cand-w2-…``.
+* ``SO101_RECORDED_CLEANUP_STATE`` - the state root of the recorded W1 first pass ``bf16a``;
+* ``SO101_RECORDED_RETRY_STATE``   - the state root of the recorded retry closed loop;
+* ``SO101_RECORDED_REAL_BATCH``    - the recorded live batch root of campaign ``cand-w2-…``.
 
 Nothing here writes into a recording. The readers are read-only by construction - no store and no
 service is composed - and each case fingerprints the tree before and after its own read, so a read
@@ -39,7 +39,7 @@ RECORDED_RUN = Path(
 )
 
 CLEANUP_STATE = Path(os.environ.get(
-    "SO101_TASK12_CLEANUP_STATE", RECORDED_RUN / "task12/service-runs/retryafterfix/state",
+    "SO101_RECORDED_CLEANUP_STATE", RECORDED_RUN / "task12/service-runs/retryafterfix/state",
 ))
 CLEANUP_CAMPAIGN_ID = "campaign-4d9af7fca30f49939f952db367338454"
 CLEANUP_BATCH_ID = "bf16a"
@@ -50,7 +50,7 @@ CLEANUP_RECEIPT = "f43880c1f5afea5fdcf28bd8ab56218a7200df7e714134c495ebd0e11a5b0
 CLEANUP_SELECTION_SIZE = 20
 
 RETRY_STATE = Path(os.environ.get(
-    "SO101_TASK12_RETRY_STATE", RECORDED_RUN / "task12/service-runs/retrycl/state",
+    "SO101_RECORDED_RETRY_STATE", RECORDED_RUN / "task12/service-runs/retrycl/state",
 ))
 RETRY_CAMPAIGN_ID = "campaign-e94a4b7470644a59a3cf921ce6e64444"
 RETRY_FIRST_PASS_ID = "bca3f"
@@ -62,7 +62,7 @@ RETRY_FIRST_PASS_POINTS = 15
 RETRY_FIRST_PASS_RECEIPT = "9def6124ebdeaded52534b85617bc60f76db7216c51d78b8095fc3a74285a6e4"
 
 REAL_BATCH = Path(os.environ.get(
-    "SO101_TASK12_REAL_BATCH", RECORDED_RUN / "task11/after-fix/w2-20260922T011804Z/batch",
+    "SO101_RECORDED_REAL_BATCH", RECORDED_RUN / "task11/after-fix/w2-20260922T011804Z/batch",
 ))
 REAL_BATCH_ID = "w2-b001"
 REAL_BATCH_CAMPAIGN_ID = "cand-w2-20260922T011804Z"
@@ -134,7 +134,7 @@ def _read_batch(batch_root: Path, batch_id: str, campaign_id: str):
     ).read_after(AcceptedCoordinatorCursor.initial(binding))
 
 
-def test_the_recorded_w1_first_pass_carries_the_receipt_its_console_retry_needed():
+def test_the_recorded_single_worker_first_pass_carries_the_receipt_its_console_retry_needed():
     """The recorded 409's first pass: terminal-clean bytes, a genuine ``FAILED`` point, one receipt.
 
     The recorded store carried the receipt ``f43880c1…`` for ``bf16a`` while the durable column
@@ -146,11 +146,11 @@ def test_the_recorded_w1_first_pass_carries_the_receipt_its_console_retry_needed
     from so101_teleop.expert_validation.campaign_layout import read_selection_binding
 
     state_root = _recording(
-        CLEANUP_STATE, variable="SO101_TASK12_CLEANUP_STATE",
+        CLEANUP_STATE, variable="SO101_RECORDED_CLEANUP_STATE",
         what="the recorded W1 first pass retryafterfix/state",
     )
     batch_root = _batch_root(state_root, CLEANUP_CAMPAIGN_ID, CLEANUP_BATCH_ID)
-    _recording(batch_root, variable="SO101_TASK12_CLEANUP_STATE",
+    _recording(batch_root, variable="SO101_RECORDED_CLEANUP_STATE",
                what=f"the recorded batch {CLEANUP_BATCH_ID}")
     before = _tree_fingerprint(batch_root)
 
@@ -187,11 +187,11 @@ def test_the_recorded_retry_closed_loop_is_read_in_its_own_binding_vocabulary():
     from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
 
     state_root = _recording(
-        RETRY_STATE, variable="SO101_TASK12_RETRY_STATE",
+        RETRY_STATE, variable="SO101_RECORDED_RETRY_STATE",
         what="the recorded retry closed loop retrycl/state",
     )
     batch_root = _batch_root(state_root, RETRY_CAMPAIGN_ID, RETRY_BATCH_ID)
-    _recording(batch_root, variable="SO101_TASK12_RETRY_STATE",
+    _recording(batch_root, variable="SO101_RECORDED_RETRY_STATE",
                what=f"the recorded retry batch {RETRY_BATCH_ID}")
     before = _tree_fingerprint(batch_root)
 
@@ -232,11 +232,11 @@ def test_the_recorded_first_pass_of_the_retry_campaign_still_reads_unchanged():
     from so101_teleop.expert_validation.campaign_layout import read_selection_binding
 
     state_root = _recording(
-        RETRY_STATE, variable="SO101_TASK12_RETRY_STATE",
+        RETRY_STATE, variable="SO101_RECORDED_RETRY_STATE",
         what="the recorded retry closed loop retrycl/state",
     )
     batch_root = _batch_root(state_root, RETRY_CAMPAIGN_ID, RETRY_FIRST_PASS_ID)
-    _recording(batch_root, variable="SO101_TASK12_RETRY_STATE",
+    _recording(batch_root, variable="SO101_RECORDED_RETRY_STATE",
                what=f"the recorded first pass {RETRY_FIRST_PASS_ID}")
     before = _tree_fingerprint(batch_root)
 
@@ -265,7 +265,7 @@ def test_the_recorded_live_batch_projects_from_its_own_bytes():
     """The same reader over the raw bytes of a real macOS campaign batch, in place."""
 
     batch_root = _recording(
-        REAL_BATCH, variable="SO101_TASK12_REAL_BATCH", what="the recorded live w2 batch",
+        REAL_BATCH, variable="SO101_RECORDED_REAL_BATCH", what="the recorded live w2 batch",
     )
     before = _tree_fingerprint(batch_root)
 

@@ -50,7 +50,7 @@ def recovery_evidence_from_simulation(
     moveit_task_object_attached: bool | None,
     intended_support_collision: str,
 ) -> RecoveryEvidence:
-    """Map Task 5 evidence to the simulator-neutral recovery facts."""
+    """Map atomic recovery evidence to the simulator-neutral recovery facts."""
     return RecoveryEvidence(
         simulator_task_object_constrained=False,
         moveit_task_object_attached=moveit_task_object_attached,

@@ -8,7 +8,7 @@ from typing import Protocol
 from ..core.domain import ActionResult, State
 from ..core.dynamic_pick import DYNAMIC_MOTION_STATES, ResolvedMotionTargets
 from ..core.runner import ExecutionContext, StateAction
-from ..core.workflow import SO101_WORKFLOW
+from ..core.workflow import SO101_WORKFLOW, WorkflowDefinition
 from ..ports.evidence import PoseEvidence
 
 
@@ -36,10 +36,11 @@ class DynamicStateAction(StateAction):
 def build_dynamic_actions(
     execution: DynamicExecutionPort,
     targets: MotionTargetProvider | ResolvedMotionTargets,
+    workflow: WorkflowDefinition = SO101_WORKFLOW,
 ) -> dict[State, StateAction]:
-    """Bind dynamic targets to the repository's sole workflow definition."""
+    """Bind dynamic targets to a workflow definition (general `SO101_WORKFLOW`, Teacher `TEACHER_WORKFLOW`)."""
 
     return {
         state: DynamicStateAction(state, execution, targets)
-        for state in SO101_WORKFLOW.action_states
+        for state in workflow.action_states
     }

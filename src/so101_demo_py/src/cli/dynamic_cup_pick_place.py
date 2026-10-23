@@ -10,6 +10,7 @@ from pathlib import Path
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dynamic_cup_pick_place")
     parser.add_argument("--backend", default="gazebo")
+    parser.add_argument("--ik-backend", choices=("native", "quik"))
     parser.add_argument("--mode", choices=("plan_only", "execute"), default="plan_only")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--plan-only-state")
@@ -23,6 +24,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-reset-epoch", type=int)
     parser.add_argument("--evidence-root", type=Path)
     parser.add_argument("--ready-receipt", type=Path)
+    # The frozen input set this run executes under (Phase A4c): the Teacher loads its execution snapshot and its frozen
+    # policies from it and refuses a mismatch before any motion. The Teacher records nothing; the independent
+    # offline episode processor builds the episode from the record-only bag.
+    parser.add_argument("--frozen-inputs-manifest", type=Path)
+    # Set by the orchestrator when an independent Recorder is collecting (`--collection on`): the Teacher then publishes
+    # its confirmed final normal-stop proof. It changes nothing else about the run.
+    parser.add_argument("--final-stop-proof", action="store_true")
+    # Diagnostic only: inject one execution failure at the execute boundary of this state (policy v3 only; default off)
+    parser.add_argument("--inject-failure-at", default=None)
     parser.add_argument("--batch-id")
     parser.add_argument("--coordinator-epoch", type=int)
     parser.add_argument("--worker-id")
@@ -30,6 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-id")
     parser.add_argument("--attempt-id")
     parser.add_argument("--lease-generation", type=int)
+    parser.add_argument("--lease-issued-monotonic-s", type=float)
+    parser.add_argument("--lease-deadline-monotonic-s", type=float)
     parser.add_argument(
         "--profiling",
         choices=("off", "summary", "trace"),

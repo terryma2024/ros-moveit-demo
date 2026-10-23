@@ -1,0 +1,112 @@
+# SO-101 ACT: Teacher success boundary and uniform scene sampling — design and plan
+
+Status: CONFIRMED by the human on 2026-10-20 ("中心的ok。可以按上面来。"), with Q1–Q6 as recommended. Queued: it runs after to-do items 18 (shorter Teacher dwells) and 19 (phase-1 recording throughput), which the human wants first ("在此之前，我希望能先执行…"), so the boundary is measured with the final Teacher policy.
+
+## Why (human, 2026-10-20)
+
+"从这图看，现在的训练数据采样点分布有问题。我需要一个更合理的采样点：首先需要尝试得到Teacher Expert策略能成功抓取的边界（不用很精确，找到米字形8个点就可以），然后在这个边界内，相对均匀的采样。"
+
+The 103 formal scenes (EXP-625) all lie in a triangle of about 7 × 6 cm (x −0.049…0.020, y −0.341…−0.280); see
+`REG/act-dataset-side-wrist-103-20261019/plots/initial-positions.png`. The standard rollout points sit on its edges or outside it:
+right_5cm is 51 mm from the nearest training scene, and it fails in every rollout.
+
+## Step 1: the Teacher success boundary along 8 rays
+
+- **Centre:** C = (0.02, −0.29), between task_start and forward_5cm. It sits inside the current data and near the arm's reset-pose gripper position.
+- **Rays:** 8 directions, 45° apart (E, NE, N, NW, W, SW, S, SE in world x/y).
+- **Hard limits:** each ray stops before any of these:
+  - the table edge, keeping the 0.04 m cup radius plus a 0.01 m margin on the table;
+  - the pedestal;
+  - the place-target exclusion zone (cup centre at least 0.060 m from the target (−0.08, −0.25), as in the formal sampler).
+- **Search per ray:**
+  1. **Offline pre-filter:** the existing five-pose Teacher reachability check (`task_reachability`, the same filter the formal scene generation used), at 1 cm steps outward. It gives the kinematic limit r_kin.
+  2. **Live bisection** between the last known success and r_kin, using real Teacher episodes in a debug campaign (template `w8d-debug-side-wrist`, cap 4, 8 workers). Each round runs one scene per ray, so 8 scenes per round in parallel.
+     - Success means Teacher PASS, i.e. the cup is placed with endpoint PASS.
+     - Phase-2 data validity is also recorded, but it is not the boundary criterion.
+     - Stop when the bracket is at most 1 cm, or after 3 rounds.
+  3. The boundary point B_k is the last success on that ray. Because the boundary can be noisy, the final B_k is repeated once; if the repeat fails, step back 1 cm.
+- **Cost:** about 3–4 rounds of 8 Teacher episodes plus one repeat round, about 1.5–2 h of debug campaign time. These are exploration runs, not a formal collection.
+
+## Step 2: uniform sampling inside the boundary
+
+- **Region:** the polygon through B_1..B_8, shrunk inward by 0.01 m, with the place-target exclusion zone and the table/pedestal limits removed.
+- **Scene count:** about 103 again: train 83, validation 10, offline_test 10.
+- **Sampling:** Poisson-disk sampling with a fixed seed, so points are spread evenly. The minimum spacing is chosen so about 103 points fit, and is never below the formal sampler's 0.004 m. Splits are assigned spatially stratified: validation and offline_test are spread over the whole region, not clustered.
+- **Rollout points:** the 4 standard rollout points must fall inside the region and are never training scenes; the spacing rule keeps training scenes at least 0.004 m from them. Each rollout point's distance to its nearest training scene is reported.
+- **Gating:** every sampled scene still passes the five-pose reachability filter before it is used.
+- **Implementation:** a new pure sampler module (polygon, Poisson-disk, split stratification) with fixture tests, plus a small evidence-side script. Plain decimals in the output, as for the current lists.
+
+## Step 3: what follows (not part of this confirmation)
+
+A new formal scene list means a new qualification and a new formal collection. Per the human's rule (2026-10-19): "如果需要重新采集数据，则先把优化todo里的采集和离线处理的优化做了，再开始采集". So the collection and offline-processing optimisations (to-do items 1–5, 12; antzb queue) land and are gated first. Then: qualification → formal collection → seal → TRAIN-006 (the TRAIN-005 config: dwell compression, speed-ups) → rollout on the 4 standard points.
+
+## Decisions (recommended defaults)
+
+| # | Question | Recommendation |
+| --- | --- | --- |
+| Q1 | Centre of the 8 rays | (0.02, −0.29) |
+| Q2 | Boundary criterion | Teacher PASS (physical success). Data validity is recorded but does not count. |
+| Q3 | Resolution | 1 cm bracket, at most 3 bisection rounds, then one repeat at B_k |
+| Q4 | Scene count and splits | about 103; 83 / 10 / 10; spatially stratified |
+| Q5 | Inward margin | 0.01 m |
+| Q6 | Run the boundary search now, before the optimisations land | Yes. It is exploration (debug campaign), not the formal re-collection. |
+
+## Amendment 1 (2026-10-21, human decision after CP-3761)
+
+The boundary search (EXP-642, EXP-643) found no Teacher failure. Every ray ended at its kinematic limit or at the place-target exclusion, measured in 1 cm steps. Sampling then stopped with `ROLLOUT_POINT_OUTSIDE_REGION`:
+- forward_5cm was 9.8 mm from the shrunk edge;
+- left_5cm is 0.0603 m from the place target, only 0.3 mm outside the 0.060 m exclusion.
+
+Human decision: "Margin only on reach edges".
+- The 0.01 m inward margin applies to edges set by reachability or Teacher success.
+- The place-target exclusion is applied exactly, at 0.060 m with no extra margin, as the formal sampler does.
+- Rays capped by the exclusion use the exact intersection with the exclusion circle as B_k.
+- Every ray is refined offline within its last 1 cm step, at 2 mm steps, with the same five-pose reachability. The refined B_k are then verified live with one Teacher round and one repeat.
+- Rollout-point clearance from every scene stays ≥ 0.004 m.
+
+## Amendment 2 (2026-10-21, human decision: "我不想让left_5cm是个边界case")
+
+The place-target exclusion is reduced from 0.060 m to **0.045 m**.
+- **Basis:** the cup radius is 0.04 m, plus 5 mm. The starting cup never covers the target centre, and the start stays well outside the 0.02 m placement tolerance.
+- **Old constant:** the 0.060 m value was a sampler constant with no recorded physical basis, introduced in `generate_w8_scenes`.
+- **Effect on left_5cm:** at 0.0603 m from the target, it is then 1.5 cm inside the exclusion edge.
+
+The W and NW rays (and any other ray the old exclusion capped) are searched outward like the other rays:
+- the offline five-pose reachability first;
+- then live Teacher bisection and one repeat.
+
+**Margin:**
+- the 0.01 m inward margin applies to edges set by reachability or Teacher failure (amendment 1);
+- the 0.045 m exclusion is applied exactly.
+
+**Rollout points:** all four rollout points must be inside the region and at least 0.01 m from every reach or Teacher edge. Training scenes keep ≥ 0.004 m clearance from them.
+
+**New data range:** scenes between 0.045 and 0.060 m from the target are a new data range; the old formal set never went below 0.060 m.
+
+## Amendment 3 (2026-10-21, human decision: "Re-sample all lists jointly")
+
+The formal list of CP-3762 (`boundary-103`) is not disjoint from the old qualification list: 10 of its scenes are closer than 0.004 m to `qualification-40` (nearest 0.000651 m) and 2 to `functional-8`. Those two lists also come from the old triangle region and the old 0.060 m exclusion. The CP-3762 list is superseded, not deleted.
+
+**Decision:** one Poisson-disk sample of 151 points in the same region (amendments 1 and 2: exact 0.045 m exclusion, 0.01 m margin on reach edges, at least 0.004 m from the four rollout points), divided into:
+- 103 formal scenes (83 train, 10 validation, 10 offline_test, split spatially as before);
+- 40 qualification scenes (split `qualification`);
+- 8 functional scenes (split `functional`).
+
+**Constraints:**
+- every pair of the 151 points is at least the sample spacing apart, never below 0.004 m, and the spacing is maximised as before;
+- each list is spread over the region: the lists are taken from the smallest to the largest, a list of `n` takes one point from each of `n` k-means strata of the points still free (the one nearest the stratum centroid), and the largest list is the rest;
+- seeds are fixed: sampling seed 576020, row seeds 200+i (formal), 400+i (qualification), 600+i (functional).
+
+**Code:** `scene_sampling.sample_joint` and `assign_lists`; `act_scene_sample --lists formal:103,qualification:40,functional:8 --scenes-output-dir DIR` writes `formal-103.scenes.json`, `qualification-40.scenes.json` and `functional-8.scenes.json` plus one report (list sha256, seeds, clearances). Tests: counts, disjointness, spacing across all lists, spread against taking the first points, determinism, reachability filter, CLI format and report.
+
+**Consequence:** the staged qualification template takes the qualification and functional lists as arguments instead of pinning the old bytes; its other checks are unchanged.
+
+**Result (CP-3764, sampler run with the reachability container, seed 576020, 15 reachability calls, 1626 s, 0 positions rejected):**
+
+| List | Count | sha256 | First row seed | Nearest pair inside the list |
+| --- | --- | --- | --- | --- |
+| formal | 103 (83 / 10 / 10) | `42ea6adae990bb7c7f239072b6b3e82b7ce9a95732e8eed90124f332879ea7a3` | 200 | 0.007586 m |
+| qualification | 40 | `c0277c5a618f9ee0bf130e225ba9c2ba848d0483e5ea4e90fd93a7407af58e0b` | 400 | 0.009827 m |
+| functional | 8 | `daf1e9b20a0decc4b7538aa9ce87b042def0bc019277cdc8b52ce2727d899eea` | 600 | 0.032681 m |
+
+Sample spacing 0.007582 m (every pair of all 151 points at least 0.007586 m apart, against the 0.004 m floor). The nearest pair across lists is qualification-formal at 0.007595 m. All four rollout points are inside the region; the nearest scene to each is at least 0.004208 m. Files: `REG/act-prep-20261021/joint/lists/`, report `joint-151.report.json`, plot `joint/plots/joint-scenes.png`.

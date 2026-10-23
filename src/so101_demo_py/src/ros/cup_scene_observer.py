@@ -136,7 +136,8 @@ class RosMujocoCupSceneObserver:
         while evidence is None and time.monotonic() < deadline:
             rclpy.spin_once(self._node, timeout_sec=min(0.05, deadline - time.monotonic()))
             try:
-                evidence = self._observer.snapshot()
+                received = self._observer.snapshot_with_receipt()
+                evidence = received.evidence
             except EvidenceStale:
                 pass
         if evidence is None:
@@ -183,13 +184,17 @@ class RosMujocoCupSceneObserver:
                 tuple(float(value) for value in evidence.object_state.position_world),
                 tuple(float(value) for value in evidence.object_state.orientation_xyzw),
             ),
-            time.monotonic(),
+            received.received_monotonic_s,
             _pose(observed.pose),
             time.monotonic(),
             "plastic_cup" in attached,
             simulation_session_id=str(evidence.simulation_session_id),
             reset_epoch=int(evidence.reset_epoch),
             paused=bool(evidence.paused),
+            simulation_time_s=float(evidence.simulation_time_s),
+            simulation_step=int(evidence.simulation_step),
+            publisher_sequence=int(evidence.publisher_sequence),
+            cup_body=str(evidence.object_state.body),
         )
 
     def close(self) -> None:

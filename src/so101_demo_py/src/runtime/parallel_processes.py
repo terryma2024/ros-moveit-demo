@@ -203,6 +203,7 @@ class ProcessSupervisor:
         popen: Callable[..., object] | None = None,
         manifest_path: Path | None = None,
         group_members_reader: Callable[[int], tuple[int, ...]] = _proc_group_members,
+        qualified_prefix: Path | None = None,
     ):
         if not isinstance(batch_id, str) or not batch_id:
             raise SupervisorError("BATCH_ID")
@@ -214,6 +215,8 @@ class ProcessSupervisor:
         self.manifest_path = None if manifest_path is None else Path(manifest_path)
         self._group_members_reader = group_members_reader
         self._owned: dict[int, tuple[OwnedProcess, Callable[[], int | None]]] = {}
+        #: Where the qualified install is; role commands are resolved against it before anything starts
+        self._qualified_prefix = None if qualified_prefix is None else Path(qualified_prefix)
 
     def _read_owned_identity(self, pid: int) -> OwnedProcess | None:
         if pid not in self._owned:
@@ -238,6 +241,13 @@ class ProcessSupervisor:
     def start(self, role: str, argv, *, environment: Mapping[str, str] | None = None) -> OwnedProcess:
         if role not in _ROLES or not isinstance(argv, (list, tuple)) or not argv:
             raise SupervisorError("UNOWNED_ROLE")
+        if self._qualified_prefix is not None:
+            from .qualified_commands import QualifiedCommandError, resolve_role_command
+
+            try:
+                argv = list(resolve_role_command(argv, prefix=self._qualified_prefix))
+            except QualifiedCommandError as error:
+                raise SupervisorError(str(error)[:300]) from error
         expected_cmdline = _normalize_cmdline(
             os.fsdecode(item)
             if isinstance(item, (bytes, os.PathLike))

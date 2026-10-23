@@ -1,0 +1,40 @@
+{
+  "identities": [
+    {
+      "pid": 2082094,
+      "start_ticks": 100311906,
+      "same_process_absent": true,
+      "current": null
+    },
+    {
+      "pid": 2082114,
+      "start_ticks": 100311967,
+      "same_process_absent": true,
+      "current": null
+    },
+    {
+      "pid": 2082115,
+      "start_ticks": 100311967,
+      "same_process_absent": true,
+      "current": null
+    },
+    {
+      "pid": 2082116,
+      "start_ticks": 100311967,
+      "same_process_absent": true,
+      "current": null
+    },
+    {
+      "pid": 2083528,
+      "start_ticks": 100324203,
+      "same_process_absent": true,
+      "current": null
+    }
+  ],
+  "original_seal_files_verified": [
+    "manifest.json",
+    "events.jsonl",
+    "artifacts/d27eb1137a2cef705c5f91fd7e729b17b1805d221aa464c7f9ea7f76990dc769.log",
+    "completion.json"
+  ]
+}

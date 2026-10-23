@@ -15,11 +15,11 @@ import contextlib
 import os
 import signal
 import time
+import uuid
 from pathlib import Path
 
 from .child_runtime import ChildIpcServer, ChildRuntime
 from .contracts import (
-    ActionKey,
     ActionTerminal,
     DispatchAck,
     DispatchToken,
@@ -37,22 +37,62 @@ CHILD_HEARTBEAT_TIMEOUT_ENV = "SO101_CHILD_HEARTBEAT_TIMEOUT_S"
 CHILD_NORMAL_QUEUE_ENV = "SO101_CHILD_NORMAL_QUEUE_LIMIT"
 DEFAULT_HEARTBEAT_TIMEOUT_S = 5.0
 
+_ACT_HASH_ENV = {
+    "manifest_sha256": "SO101_ACT_MANIFEST_SHA256",
+    "runtime_config_sha256": "SO101_ACT_RUNTIME_CONFIG_SHA256",
+    "contact_policy_fingerprint": "SO101_ACT_POLICY_FINGERPRINT",
+}
+
+def act_identity_from_environment(environment) -> tuple[str | None, str | None, int | None]:
+    values = (
+        environment.get("SO101_ACT_CAMPAIGN_ID"),
+        environment.get("SO101_ACT_WORKER_ID"),
+        environment.get("SO101_ACT_GENERATION"),
+    )
+    if all(value is None for value in values):
+        return None, None, None
+    if any(not isinstance(value, str) or not value for value in values):
+        raise MutationError("ACT_CHILD_IDENTITY_INCOMPLETE")
+    if not values[2].isdecimal() or str(int(values[2])) != values[2]:
+        raise MutationError("ACT_CHILD_GENERATION_INVALID")
+    return values[0], values[1], int(values[2])
+
 
 class RclpyActionDriver:
     """Adapter over the existing Teleop ROS worker.
 
-    Imported lazily so that importing this module never pulls ROS into the web process.
+    Imported lazily so that importing this module never pulls ROS into the web process. There is no command
+    broker behind it (design 10-06): goal submission, cancellation and the ACT pick-place and collection
+    operations are not provisioned in this child, and each refuses by name rather than reaching a controller.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, act_hashes: dict[str, str] | None = None) -> None:
         from so101_teleop import server as ros_server  # noqa: F401  (ROS import boundary)
 
         self._server_module = ros_server
         self._worker = None
+        self._act_hashes = (act_hashes if act_hashes is not None else
+                            {key: os.environ.get(name) for key, name in _ACT_HASH_ENV.items()})
+        self._act_artifacts = None
+        self._act_head_search = None
+        if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
+            # An admitted ACT campaign child re-verifies the artifacts it was admitted with before it does anything.
+            from .act_artifacts import ActArtifactBinding
+            self._act_artifacts = ActArtifactBinding.verify_environment(os.environ)
+            digests = dict(self._act_artifacts.hashes)
+            if self._act_hashes != {
+                "manifest_sha256": digests["manifest"],
+                "runtime_config_sha256": digests["runtime_config"],
+                "contact_policy_fingerprint": self._act_artifacts.policy_fingerprint,
+            }:
+                raise ValueError("ACT_ARTIFACT_BINDING_INVALID")
+            from so101_demo.act.head_search_binding import validate_head_search_binding
+            self._act_head_search = validate_head_search_binding(
+                self._act_artifacts.read_hashed_json("runtime_config"),
+                self._act_artifacts.read_hashed_json("calibration_report"),
+            )
 
     def allocate_goal_uuid(self, key: PendingChildKey) -> str:
-        import uuid
-
         # The real ROS goal UUID is pre-allocated and registered before send; a proxy
         # identity is never substituted for it.
         return str(uuid.uuid4())
@@ -68,17 +108,35 @@ class RclpyActionDriver:
     async def terminal(self, goal_uuid: str) -> ActionTerminal:
         raise MutationError("ROS_DRIVER_NOT_PROVISIONED: cannot observe without a ROS worker")
 
+    async def pick_place_phase(self, request) -> dict:
+        raise MutationError("ACT_PICK_PLACE_VALIDATION_PORT_NOT_PROVISIONED")
+
+    async def pick_place_full(self, request) -> dict:
+        raise MutationError("ACT_PICK_PLACE_VALIDATION_PORT_NOT_PROVISIONED")
+
+    async def act_collection_start(self, request) -> dict:
+        raise MutationError("ACT_COLLECTION_NOT_PROVISIONED")
+
+    async def act_collection_resume(self, request) -> dict:
+        raise MutationError("ACT_COLLECTION_NOT_PROVISIONED")
+
 
 def local_owner(runtime_id: str) -> OwnerKey:
     import hashlib
     import json
+    from ..process_identity import ProcessIdentityError, read_identity
 
-    argv = list(os.environ.get("SO101_CHILD_ARGV", "").split("\0"))
+    try:
+        identity = read_identity(os.getpid())
+    except ProcessIdentityError as error:
+        raise MutationError("ACT_CHILD_OWNER_UNREADABLE") from error
+    if not identity.live:
+        raise MutationError("ACT_CHILD_OWNER_NOT_LIVE")
     return OwnerKey(
-        pid=os.getpid(),
-        pgid=os.getpgid(0),
-        started_ticks=int(time.monotonic_ns()),
-        argv_sha256=hashlib.sha256("\0".join(argv).encode()).hexdigest(),
+        pid=identity.pid,
+        pgid=identity.pgid,
+        started_ticks=identity.start_marker,
+        argv_sha256=identity.command_sha256,
         environment_sha256=hashlib.sha256(json.dumps(dict(os.environ), sort_keys=True).encode()).hexdigest(),
     )
 
@@ -116,6 +174,9 @@ async def serve(server: ChildIpcServer, runtime: ChildRuntime, watchdog_task: as
     with contextlib.suppress(asyncio.CancelledError):
         await watchdog_task
     await server.close()
+    close_driver = getattr(runtime.driver, "close", None)
+    if callable(close_driver):
+        close_driver()
     del runtime
 
 
@@ -134,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     web_pid = os.environ.get(CHILD_WEB_PID_ENV)
     heartbeat = os.environ.get(CHILD_HEARTBEAT_ENV)
     timeout_s = float(os.environ.get(CHILD_HEARTBEAT_TIMEOUT_ENV, DEFAULT_HEARTBEAT_TIMEOUT_S))
+    campaign_id, worker_id, generation = act_identity_from_environment(os.environ)
 
     runtime = ChildRuntime(
         RclpyActionDriver(),
@@ -141,6 +203,9 @@ def main(argv: list[str] | None = None) -> int:
         service_epoch=service_epoch,
         runtime_id=args.runtime_id,
         normal_queue_limit=normal_queue_limit,
+        act_campaign_id=campaign_id,
+        act_worker_id=worker_id,
+        act_generation=generation,
     )
     server = ChildIpcServer(
         runtime,

@@ -1,0 +1,112 @@
+{
+ "anchors": {
+  "default": {
+   "neck_start_rad": 0.1,
+   "requires_approved_value": false,
+   "source": "config/act/pick-place-live-anchors.yaml",
+   "source_sha256": "3f758a83077a8a597cf5c83c5bdb587fd6359b110db0a1885f9c65aa8689d278"
+  },
+  "forward": {
+   "neck_start_rad": 0.0,
+   "requires_approved_value": false,
+   "source": "config/act/pick-place-live-anchors.yaml",
+   "source_sha256": "3f758a83077a8a597cf5c83c5bdb587fd6359b110db0a1885f9c65aa8689d278"
+  },
+  "left": {
+   "neck_start_rad": 0.0,
+   "requires_approved_value": false,
+   "source": "config/act/pick-place-live-anchors.yaml",
+   "source_sha256": "3f758a83077a8a597cf5c83c5bdb587fd6359b110db0a1885f9c65aa8689d278"
+  }
+ },
+ "candidate_safe_interval": {
+  "kind": "BOOTSTRAP_ENVELOPE",
+  "lower_rad": -6.283185307179586,
+  "meaning": "the approved outer bound on the calibration search command only; it is NOT a measurement. The actual lock_valid_neck_rad must be measured by the approved full-path MuJoCo sweep - a 0.002 rad closed grid over this envelope checking the three anchors' protected contact/clearance, bisected to 1e-5 rad at state changes, with the unique safe connected component containing 0 and all three neck_start_rad selected and its endpoints shrunk 1e-5 rad toward safety - and must never be back-fitted from observations or taken from a test fixture.",
+  "requires_approved_value": false,
+  "upper_rad": 6.283185307179586
+ },
+ "detector_runtime_identity": {
+  "cuda_device_policy": "cuda_only_no_cpu_fallback",
+  "detector_weights_sha256": null,
+  "model_id": null,
+  "torch_version": null,
+  "ultralytics_version": null
+ },
+ "kind": "pick_place_calibration_search_candidate",
+ "notes": "Owner-approved: the three anchor starts are bound by value to config/act/pick-place-live-anchors.yaml (default 0.1 rad, left 0.0, forward 0.0), and [-2*pi, 2*pi] is approved as the bootstrap command envelope only. The 17 search configuration values remain null with requires_approved_value=true: they are still an independent design plus GPT-6 Astra/High review boundary and this file stays fail-closed until they are approved. lock_valid_neck_rad is a measured field, not a value to fill here.",
+ "schema_version": 1,
+ "search_values": {
+  "center_deadband_px": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "coarse_step_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "horizontal_fov_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "lock_valid_neck_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_age_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_fine_corrections": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_fine_total_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_skew_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "min_area_px2": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "min_bbox_aspect": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "min_confidence": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "search_timeout_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "stop_latency_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "stop_velocity_rad_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "submit_lead_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "tracking_iou": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "vertical_bounds_px": {
+   "requires_approved_value": true,
+   "value": null
+  }
+ },
+ "source_design": "docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md",
+ "source_plan": "docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md",
+ "status": "ANCHORS_AND_ENVELOPE_APPROVED_SEARCH_VALUES_PENDING"
+}

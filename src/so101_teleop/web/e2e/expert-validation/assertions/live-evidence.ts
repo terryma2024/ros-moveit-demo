@@ -137,14 +137,14 @@ export type ExecutionBatchKind = "FIRST_PASS" | "FULL_RESTART_RETRY";
 export type CampaignBatchLayout = "LINUX_FIXED" | "MACOS_COMPOSED";
 
 /** The document schema every composed-campaign dynamic execute manifest carries. */
-export const MACOS_DYNAMIC_MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v1";
+export const MACOS_DYNAMIC_MANIFEST_SCHEMA = "so101-dynamic-execute";
 
 /** The verdicts the composed campaign's own `campaign-result.json` may close on. */
 export const MACOS_TERMINAL_STATUSES = [
-  "W2_CAMPAIGN_PASS",
-  "W2_CAMPAIGN_INCOMPLETE",
-  "N1_CAMPAIGN_PASS",
-  "N1_CAMPAIGN_INCOMPLETE",
+  "TWO_WORKER_CAMPAIGN_PASS",
+  "TWO_WORKER_CAMPAIGN_INCOMPLETE",
+  "SINGLE_WORKER_CAMPAIGN_PASS",
+  "SINGLE_WORKER_CAMPAIGN_INCOMPLETE",
 ] as const;
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;

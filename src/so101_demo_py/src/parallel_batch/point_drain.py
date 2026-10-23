@@ -1,6 +1,6 @@
 """The campaign body drains the durable shared queue: one lease, one point (design section 8).
 
-Task 11's live gate found the gap this module closes. The campaign reported a pass while every
+The live campaign gate found the gap this module closes. The campaign reported a pass while every
 Worker refused to execute anything: the lease document the campaign wrote carried no
 `points_path`/`points_sha256`, so `single_point_input.pick_place_request` answered
 `{"requested": False, "error": "POINTS_PATH_MISSING"}` and the durable queue was never seeded from
@@ -50,7 +50,7 @@ from typing import Callable, Mapping, Sequence
 
 from ..runtime.task_artifacts import atomic_json, fsync_directory
 from .queue import CommittedResult, DurablePointQueue, PointLease, WorkerIdentity
-from .resource_identity import canonical_sha256
+from .canonical_json import canonical_sha256
 from .selection import (
     BUSINESS_FAILED,
     FirstPassSelectionBinding,
@@ -69,7 +69,7 @@ SELECTION_DOCUMENT_BASENAME = "selection-binding.json"
 POINT_RESULTS_DIRNAME = "point-results"
 POINT_RESULT_BASENAME = "point-result.json"
 DYNAMIC_MANIFEST_RELATIVE = "dynamic/dynamic-execute-manifest.json"
-INSTALLED_CATALOG_RELATIVE = "config/mujoco/moveit_expert_validation_points_v1.yaml"
+INSTALLED_CATALOG_RELATIVE = "config/mujoco/moveit_expert_validation_points.yaml"
 
 COMMITTED = "COMMITTED"
 INFRA_FAILED = "INFRA_FAILED"
@@ -789,7 +789,7 @@ def commit_attempt(*, queue: DurablePointQueue, binding, attempt: PointAttempt,
                    lease: PointLease | None, journal=None) -> PointAttempt:
     """Commit one attempt: the durable business result, or the honest infrastructure record.
 
-    A business outcome is committed only after the Task 3 durability object accepts the chain
+    A business outcome is committed only after the durability object accepts the chain
     (station ready, MoveIt/physics decision, evidence manifest, cleanup ownership, matching lease
     identity). Everything else is journalled as an infrastructure failure and never reaches the
     queue, so it can never be mistaken for an executed point.

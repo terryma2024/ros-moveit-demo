@@ -39,10 +39,8 @@ from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.profiling.session import SemanticProfiler
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
 from so101_demo.runtime.workflow_events import EventEmitter, normalize_failure_code
-from so101_demo.ros.rgbd_cup_pose_node import (
-    RgbdSubscriptionMilestones,
-    _load_subscription_event_callbacks,
-)
+from so101_demo.ros.rgbd_cup_pose.frames import RgbdSubscriptionMilestones
+from so101_demo.ros.rgbd_cup_pose.ros_runtime import _load_subscription_event_callbacks
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")

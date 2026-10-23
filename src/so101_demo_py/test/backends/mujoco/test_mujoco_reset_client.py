@@ -1,0 +1,477 @@
+from types import SimpleNamespace
+
+import pytest
+
+from so101_demo.backends.mujoco.client import (
+    FreeJointResetOverride,
+    MujocoRosClient,
+)
+from so101_demo.backends.mujoco.reset import MujocoResetClient, ResetFailed
+
+
+def _snapshot(
+    *,
+    epoch: int,
+    sequence: int,
+    session: str = "session",
+    step: int = 0,
+    position=(0.1, 0.2, 0.3),
+    orientation=(0.0, 0.0, 0.0, 1.0),
+    linear_velocity=(0.0, 0.0, 0.0),
+    angular_velocity=(0.0, 0.0, 0.0),
+):
+    return SimpleNamespace(
+        simulation_session_id=session,
+        reset_epoch=epoch,
+        publisher_sequence=sequence,
+        simulation_step=step,
+        paused=True,
+        object_state=SimpleNamespace(
+            position_world=position,
+            orientation_xyzw=orientation,
+            linear_velocity_world=linear_velocity,
+            angular_velocity_world=angular_velocity,
+        ),
+        minimum_signed_distance_m=0.0,
+        maximum_normal_force_n=0.0,
+    )
+
+
+class Observer:
+    def __init__(self, values=None) -> None:
+        self._values = iter(
+            values
+            or (
+                _snapshot(epoch=3, sequence=100),
+                _snapshot(epoch=4, sequence=101),
+                _snapshot(epoch=4, sequence=102),
+            )
+        )
+
+    def snapshot(self):
+        return next(self._values)
+
+
+class Services:
+    def __init__(self) -> None:
+        self.joint_callback_count = 10
+        self.convergence_checks = 0
+        self.pauses = []
+        self.reset_calls = []
+
+    def pause(self, paused: bool) -> bool:
+        self.pauses.append(paused)
+        return True
+
+    def switch_controllers(self, *, activate, deactivate) -> bool:
+        return True
+
+    def reset_world(self, keyframe: str, free_joint_overrides=()) -> bool:
+        self.reset_calls.append((keyframe, free_joint_overrides))
+        return keyframe == "task_start"
+
+    def controllers_active(self, names) -> bool:
+        return True
+
+    def joints_converged(self, expected, tolerance, *, after_callback_count) -> bool:
+        self.convergence_checks += 1
+        return self.convergence_checks >= 2
+
+
+def test_reset_waits_for_joint_convergence_before_final_pause() -> None:
+    services = Services()
+    resetter = MujocoResetClient(
+        services,
+        Observer(),
+        simulation_session_id="session",
+        controller_names=("arm_controller", "gripper_controller"),
+        expected_joint_positions=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        expected_object_position=(0.1, 0.2, 0.3),
+        progress=lambda: setattr(
+            services, "joint_callback_count", services.joint_callback_count + 1
+        ),
+    )
+
+    receipt = resetter.reset("task_start")
+
+    assert receipt.new_epoch == 4
+    assert services.convergence_checks >= 3
+    assert services.pauses[-1] is True
+
+
+def test_act_reset_waits_below_broker_stop_velocity_before_final_pause() -> None:
+    """A running sample at the broker limit can drift above it while pausing."""
+    from so101_demo.act.joints import ACT_JOINTS
+
+    class ActServices(Services):
+        scalar_joint_callback_count = 0
+
+        def __init__(self):
+            super().__init__()
+            self.activated = False
+            self.low_velocity_seen = False
+            self.velocity_queries = 0
+
+        def enable_reset_joint_audit(self):
+            pass
+
+        def reset_joint_snapshot(self, names):
+            assert names == ACT_JOINTS
+            return dict(callback_count=1, simulation_session_id='session',
+                reset_epoch=4, simulation_step=0, paused=True, sim_time_s=2.,
+                positions=(0.,) * 7, velocities=(0.,) * 7)
+
+        def switch_controllers(self, *, activate, deactivate):
+            if activate:
+                self.activated = True
+            return True
+
+        def latest_joint_velocities(self, names):
+            assert names == ACT_JOINTS
+            self.velocity_queries += 1
+            value = .0015 if self.velocity_queries <= 3 else .0002
+            if value == .0002:
+                self.low_velocity_seen = True
+            return (value,) + (0.,) * 6
+
+        def joints_converged(self, expected, tolerance, *, after_callback_count, names):
+            assert names == ACT_JOINTS
+            return super().joints_converged(expected, tolerance,
+                after_callback_count=after_callback_count)
+
+        def pause(self, paused):
+            if paused and self.activated:
+                assert self.low_velocity_seen, 'ACT_PAUSED_AT_UNSETTLED_VELOCITY'
+            return super().pause(paused)
+
+    initial = _snapshot(epoch=3, sequence=100)
+    reset = _snapshot(epoch=4, sequence=101)
+    reset.simulation_time_s = 2.
+    final = _snapshot(epoch=4, sequence=102)
+    services = ActServices()
+    resetter = MujocoResetClient(services, Observer((initial, reset, final)),
+        simulation_session_id='session',
+        controller_names=('arm_controller', 'gripper_controller', 'neck_controller'),
+        expected_joint_positions=(0.,) * 7, expected_joint_names=ACT_JOINTS,
+        expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1))
+
+    assert resetter.reset('task_start').new_epoch == 4
+    assert services.velocity_queries >= 4
+
+
+def test_reset_resumes_before_switch_even_if_cached_snapshot_says_running() -> None:
+    """A just paused world can still expose its last running observer frame."""
+    initial = _snapshot(epoch=3, sequence=100)
+    initial.paused = False
+
+    class ServicesRequiringRunningSwitch(Services):
+        def switch_controllers(self, *, activate, deactivate):
+            if deactivate:
+                assert self.pauses and self.pauses[-1] is False
+            return True
+
+    services = ServicesRequiringRunningSwitch()
+    resetter = MujocoResetClient(
+        services, Observer((initial, _snapshot(epoch=4, sequence=101),
+                            _snapshot(epoch=4, sequence=102))),
+        simulation_session_id='session',
+        controller_names=('arm_controller', 'gripper_controller'),
+        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1),
+    )
+
+    assert resetter.reset('task_start').new_epoch == 4
+
+
+class _CompletedFuture:
+    def __init__(self, result) -> None:
+        self._result = result
+
+    def done(self) -> bool:
+        return True
+
+    def exception(self):
+        return None
+
+    def result(self):
+        return self._result
+
+
+class _CapturingClient:
+    def __init__(self, response) -> None:
+        self.response = response
+        self.request = None
+
+    def wait_for_service(self, *, timeout_sec: float) -> bool:
+        return timeout_sec > 0.0
+
+    def call_async(self, request):
+        self.request = request
+        return _CompletedFuture(self.response)
+
+
+class _ServiceNode:
+    def __init__(self) -> None:
+        self.clients = {}
+
+    def create_client(self, _service_type, name: str):
+        response = SimpleNamespace(success=True, ok=True, controller=[])
+        client = _CapturingClient(response)
+        self.clients[name] = client
+        return client
+
+
+class _JointNode:
+    def create_subscription(self, *_args):
+        return object()
+
+
+def test_reset_world_sends_plastic_cup_override(monkeypatch) -> None:
+    from so101_demo.backends.mujoco import client as client_module
+
+    service_node = _ServiceNode()
+    monkeypatch.setattr(
+        client_module.rclpy,
+        "spin_until_future_complete",
+        lambda *_args, **_kwargs: None,
+    )
+    client = MujocoRosClient(service_node, _JointNode())
+    override = FreeJointResetOverride(
+        name="plastic_cup",
+        position_world_m=(-0.03, -0.28, 0.165),
+        orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
+    )
+
+    assert client.reset_world("task_start", (override,)) is True
+
+    request = service_node.clients[
+        "/mujoco_ros2_control_node/reset_world"
+    ].request
+    assert request.keyframe == "task_start"
+    assert len(request.state_overrides.free_joints) == 1
+    message = request.state_overrides.free_joints[0]
+    assert message.name == "plastic_cup"
+    assert message.pose.header.frame_id == ""
+    assert message.twist.header.frame_id == ""
+    assert (
+        message.pose.pose.position.x,
+        message.pose.pose.position.y,
+        message.pose.pose.position.z,
+    ) == (-0.03, -0.28, 0.165)
+    assert (
+        message.pose.pose.orientation.x,
+        message.pose.pose.orientation.y,
+        message.pose.pose.orientation.z,
+        message.pose.pose.orientation.w,
+    ) == (0.0, 0.0, 0.0, 1.0)
+    assert (
+        message.twist.twist.linear.x,
+        message.twist.twist.linear.y,
+        message.twist.twist.linear.z,
+        message.twist.twist.angular.x,
+        message.twist.twist.angular.y,
+        message.twist.twist.angular.z,
+    ) == (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: FreeJointResetOverride("", (0.0, 0.0, 0.0)),
+        lambda: FreeJointResetOverride("plastic_cup", (float("nan"), 0.0, 0.0)),
+        lambda: FreeJointResetOverride(
+            "plastic_cup", (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 2.0)
+        ),
+    ],
+)
+def test_free_joint_override_rejects_invalid_values(factory) -> None:
+    with pytest.raises(ValueError, match="free joint override"):
+        factory()
+
+
+def test_reset_world_rejects_duplicate_override_names(monkeypatch) -> None:
+    from so101_demo.backends.mujoco import client as client_module
+
+    service_node = _ServiceNode()
+    monkeypatch.setattr(
+        client_module.rclpy,
+        "spin_until_future_complete",
+        lambda *_args, **_kwargs: None,
+    )
+    client = MujocoRosClient(service_node, _JointNode())
+    override = FreeJointResetOverride("plastic_cup", (0.02, -0.28, 0.165))
+
+    with pytest.raises(ValueError, match="duplicate free joint override"):
+        client.reset_world("task_start", (override, override))
+    assert service_node.clients["/mujoco_ros2_control_node/reset_world"].request is None
+
+
+@pytest.mark.parametrize(
+    ("changed", "failure"),
+    [
+        ({"position": (0.2, 0.2, 0.3)}, "object pose convergence failed"),
+        ({"orientation": (0.0, 0.0, 0.1, 0.995)}, "object orientation convergence failed"),
+        ({"linear_velocity": (0.01, 0.0, 0.0)}, "object linear velocity convergence failed"),
+        ({"angular_velocity": (0.0, 0.01, 0.0)}, "object angular velocity convergence failed"),
+        ({"session": "other"}, "evidence session mismatch"),
+        ({"step": 1}, "reset evidence is not step zero"),
+        ({"epoch": 5}, "reset epoch mismatch"),
+    ],
+)
+def test_reset_verifies_requested_atomic_object_state(changed, failure) -> None:
+    new_snapshot = {
+        "epoch": 4,
+        "sequence": 101,
+        **changed,
+    }
+    services = Services()
+    resetter = MujocoResetClient(
+        services,
+        Observer(
+            (
+                _snapshot(epoch=3, sequence=100),
+                _snapshot(**new_snapshot),
+            )
+        ),
+        simulation_session_id="session",
+        controller_names=("arm_controller", "gripper_controller"),
+        expected_joint_positions=(0.0,) * 6,
+        expected_object_position=(0.1, 0.2, 0.3),
+    )
+
+    with pytest.raises(ResetFailed, match=failure):
+        resetter.reset("task_start")
+    assert services.pauses[-1] is True
+
+
+def test_reset_passes_free_joint_overrides_to_service() -> None:
+    services = Services()
+    resetter = MujocoResetClient(
+        services,
+        Observer(),
+        simulation_session_id="session",
+        controller_names=("arm_controller", "gripper_controller"),
+        expected_joint_positions=(0.0,) * 6,
+        expected_object_position=(0.1, 0.2, 0.3),
+        progress=lambda: setattr(
+            services, "joint_callback_count", services.joint_callback_count + 1
+        ),
+    )
+    override = FreeJointResetOverride("plastic_cup", (0.1, 0.2, 0.3))
+
+    resetter.reset("task_start", (override,))
+
+    assert services.reset_calls == [("task_start", (override,))]
+
+
+def test_atomic_reset_hook_arms_observers_before_any_resume_step():
+    events=[]
+    class TracedServices(Services):
+        def pause(self,paused):events.append(('pause',paused));return super().pause(paused)
+        def reset_world(self,*args):events.append(('reset',));return super().reset_world(*args)
+    services=TracedServices()
+    def arm(snapshot):
+        assert snapshot.paused and snapshot.simulation_step==0 and snapshot.reset_epoch==4
+        events.append(('armed',4))
+    resetter=MujocoResetClient(services,Observer(),simulation_session_id='session',
+        controller_names=('arm_controller','gripper_controller'),expected_joint_positions=(0.,)*6,
+        expected_object_position=(.1,.2,.3),on_reset_snapshot=arm,
+        progress=lambda:setattr(services,'joint_callback_count',services.joint_callback_count+1))
+    receipt=resetter.reset('task_start')
+    assert receipt.new_epoch==4
+    index=events.index(('reset',))
+    assert events[index+1]==('armed',4) and events[index+2]==('pause',False)
+
+
+def test_atomic_reset_hook_failure_prevents_resume():
+    services=Services()
+    def bad(snapshot):raise ValueError('CONTACT_OBSERVER_ARM_FAILED')
+    resetter=MujocoResetClient(services,Observer(),simulation_session_id='session',
+        controller_names=('arm_controller','gripper_controller'),expected_joint_positions=(0.,)*6,
+        expected_object_position=(.1,.2,.3),on_reset_snapshot=bad,
+        progress=lambda:setattr(services,'joint_callback_count',services.joint_callback_count+1))
+    with pytest.raises(ResetFailed,match='CONTACT_OBSERVER_ARM_FAILED'):resetter.reset('task_start')
+    assert services.pauses.count(False)==1 and services.pauses[-1] is True
+    assert len(services.reset_calls)==1
+
+
+def _convergence_resetter(services, **kwargs):
+    return MujocoResetClient(services, Observer(), simulation_session_id="session",
+        controller_names=("arm_controller", "gripper_controller"),
+        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, "joint_callback_count", services.joint_callback_count + 1),
+        **kwargs)
+
+
+def test_reset_records_and_logs_one_convergence_timeline(capfd) -> None:
+    import json
+    services = Services()
+    resetter = _convergence_resetter(services)
+    assert resetter.last_reset_convergence is None
+    assert resetter.reset("task_start").new_epoch == 4
+    marker = "MUJOCO_RESET_CONVERGENCE_EVIDENCE "
+    lines = [line for line in capfd.readouterr().err.splitlines() if marker in line]
+    assert len(lines) == 1
+    logged = json.loads(lines[0].split(marker, 1)[1])
+    assert logged == resetter.last_reset_convergence
+    evidence = resetter.last_reset_convergence
+    assert evidence["outcome"] == "converged" and evidence["polls"] == 2
+    assert evidence["converged_calls"] == 2
+    assert evidence["joint_callback_delta"] == 2
+    assert 0 <= evidence["elapsed_s"] < 5
+    assert evidence["activate_ack_monotonic_s"] <= evidence["loop_exit_monotonic_s"]
+    assert evidence["last_unconverged"] == {"stage": "positions", "abs_velocity": None}
+
+
+def test_act_reset_convergence_evidence_keeps_velocities_from_existing_read(capfd) -> None:
+    from so101_demo.act.joints import ACT_JOINTS
+
+    class ActServices(Services):
+        scalar_joint_callback_count = 0
+        velocity_queries = 0
+
+        def enable_reset_joint_audit(self):
+            pass
+
+        def reset_joint_snapshot(self, names):
+            return dict(callback_count=1, simulation_session_id='session',
+                reset_epoch=4, simulation_step=0, paused=True, sim_time_s=2.,
+                positions=(0.,) * 7, velocities=(0.,) * 7)
+
+        def latest_joint_velocities(self, names):
+            self.velocity_queries += 1
+            return (-.0015 if self.velocity_queries <= 2 else .0002, 0., 0., 0., 0., 0., 0.)
+
+        def joints_converged(self, expected, tolerance, *, after_callback_count, names):
+            return True
+
+    initial, reset, final = _snapshot(epoch=3, sequence=100), _snapshot(epoch=4, sequence=101), _snapshot(epoch=4, sequence=102)
+    reset.simulation_time_s = 2.
+    services = ActServices()
+    resetter = MujocoResetClient(services, Observer((initial, reset, final)),
+        simulation_session_id='session', controller_names=('arm_controller',),
+        expected_joint_positions=(0.,) * 7, expected_joint_names=ACT_JOINTS,
+        expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1))
+    resetter.reset('task_start')
+    evidence = resetter.last_reset_convergence
+    assert evidence["polls"] == evidence["converged_calls"] == 3
+    assert evidence["last_unconverged"] == {"stage": "velocity", "abs_velocity": [.0015, 0., 0., 0., 0., 0., 0.]}
+    assert services.velocity_queries == 4  # three loop reads plus the unchanged final check
+
+
+def test_reset_convergence_timeout_still_fails_identically_and_logs_evidence(capfd) -> None:
+    class Never(Services):
+        def joints_converged(self, *args, **kwargs):
+            return False
+
+    services = Never()
+    clock = iter(x * .5 for x in range(1000))
+    resetter = _convergence_resetter(services, timeout_s=5., monotonic=lambda: next(clock))
+    with pytest.raises(ResetFailed, match="fresh joint convergence timeout"):
+        resetter.reset("task_start")
+    assert services.pauses[-1] is True
+    evidence = resetter.last_reset_convergence
+    assert evidence["outcome"] == "timeout" and evidence["polls"] >= 1
+    assert capfd.readouterr().err.count("MUJOCO_RESET_CONVERGENCE_EVIDENCE ") == 1

@@ -8,17 +8,20 @@ is reported unavailable with a reason instead of the service guessing another ru
 from __future__ import annotations
 
 import time
+import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
 
-from .admission import AdmissionGateway, AdmissionHook
+from .admission import AdmissionGateway, UnifiedWorkloadService
 from .arbiter import GlobalMutationArbiter
-from .bridge import BridgeLaunch, BridgeClient, BridgeProcessOwner
-from .contracts import Domain
+from .bridge import BridgeLaunch, BridgeClient, BridgeProcessOwner, ActChildRegistry, process_start_marker
 from .goals import GoalRegistry
-from .instances import InstanceRegistry, LeaseBindingCoordinator
+from .gpu_workload import ActGpuWorkloadArbiter
+from .instances import InstanceRegistry
 from .intent_store import IntentStore
 from .ports import UnknownBudgetSource, UnifiedServices
+from .worker_slots import default_batch_domain_claim_probe
 from .safety import SafetyLane, SafetyLimits
 from .teleop_service import BackendView, ProductionTeleopService
 
@@ -30,6 +33,8 @@ INSTALL_PREFIX_ENV = "SO101_UNIFIED_INSTALL_PREFIX"
 DELIVERY_ENV = "SO101_UNIFIED_CANCEL_DELIVERY_S"
 STOP_ENV = "SO101_UNIFIED_CANCEL_STOP_S"
 PENDING_ENV = "SO101_UNIFIED_CANCEL_MAX_PENDING"
+ACT_GPU_SELECTOR_ENV = "SO101_ACT_GPU_SELECTOR"
+ACT_BINDING_ENV = "SO101_ACT_RESOURCE_BINDING_ID"
 
 
 class CompositionBlocked(RuntimeError):
@@ -54,6 +59,51 @@ def _build_validation(evidence_root: Path, environment: Mapping[str, str], execu
     )
 
 
+def resolve_visible_physical_uuids(devices, environment: Mapping[str, str]) -> tuple[str, ...]:
+    """Resolve CUDA visibility order against the actual NVML physical inventory."""
+    from so101_demo.parallel_batch.start_guard import ProbeError, _visible_indices
+
+    devices = tuple(devices)
+    indices = [device.index for device in devices]
+    uuids = [device.uuid for device in devices]
+    if (not devices or len(indices) != len(set(indices)) or len(uuids) != len(set(uuids))
+            or any(type(index) is not int or index < 0 for index in indices)
+            or any(not isinstance(uuid, str) or not uuid.startswith("GPU-") for uuid in uuids)):
+        raise ValueError("GPU_INVENTORY_INVALID")
+    try:
+        visible = _visible_indices(environment, devices)
+    except ProbeError as error:
+        raise ValueError(str(error)) from error
+    by_index = {device.index: device.uuid for device in devices}
+    ordered = tuple(by_index[index] for index in (
+        sorted(by_index) if visible is None else visible
+    ) if index in by_index)
+    if not ordered or (visible is not None and len(ordered) != len(visible)):
+        raise ValueError("GPU_MAPPING_AMBIGUOUS")
+    return ordered
+
+
+def _physical_gpu_inventory(environment: Mapping[str, str]) -> tuple[str, ...]:
+    from so101_demo.parallel_batch.start_guard import CtypesNvmlPort
+
+    return resolve_visible_physical_uuids(CtypesNvmlPort().devices(), environment)
+
+
+def _stable_host_id() -> str:
+    try:
+        machine_id = Path("/etc/machine-id").read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError) as error:
+        raise CompositionBlocked("ACT_HOST_ID_UNAVAILABLE") from error
+    if len(machine_id) != 32 or any(char not in "0123456789abcdef" for char in machine_id):
+        raise CompositionBlocked("ACT_HOST_ID_UNAVAILABLE")
+    return "machine-" + machine_id
+
+
+def _owner_identity() -> tuple[int, int]:
+    pid = os.getpid()
+    return pid, process_start_marker(pid)
+
+
 def compose_domain_services(
     *,
     environment: Mapping[str, str],
@@ -62,8 +112,17 @@ def compose_domain_services(
     bridge_owner: BridgeProcessOwner | None = None,
     budget_source=None,
     validation_execution_port=None,
+    act_inventory=None,
+    act_host_id=None,
+    act_owner_identity=None,
+    act_container_inspect=None,
+    act_calibration_identity=None,
+    act_batch_domain_claim_probe=None,
 ) -> UnifiedServices:
-    """Build the domain services on top of an already-owned child and store."""
+    """Build the domain services on top of an already-owned child and store.
+
+    The `act_*` arguments are the external probes of ACT admission (GPU inventory, host id, owner identity, Docker inspect, the
+    installed-profile identity). `None` selects the production probe in every case."""
     environment = dict(environment)
     evidence_root = Path(evidence_root)
     state_root = evidence_root / "unified"
@@ -87,6 +146,14 @@ def compose_domain_services(
         service_epoch=registry.service_epoch,
     )
     gateway = AdmissionGateway(arbiter, registry)
+    # the head-camera domain is composed from the closed descriptor, never from a second detector; a
+    # descriptor that drifts leaves the domain unavailable with its reason instead of failing the app
+    head_camera = None
+    head_camera_error = None
+    try:
+        head_camera = compose_head_camera_service(environment)
+    except Exception as error:  # noqa: BLE001 - a blocked domain reports a reason, not a crash
+        head_camera_error = f"{type(error).__name__}: {error}"
     teleop = None
     tasks = None
     if worker is not None:
@@ -114,6 +181,41 @@ def compose_domain_services(
         validation = _build_validation(evidence_root, environment, validation_execution_port)
     except Exception as error:  # noqa: BLE001 - a blocked domain reports a reason, not a crash
         validation_error = f"{type(error).__name__}: {error}"
+    act_workload = None
+    act_error = None
+    if ACT_GPU_SELECTOR_ENV in environment or ACT_BINDING_ENV in environment:
+        try:
+            selector = environment[ACT_GPU_SELECTOR_ENV]
+            binding = environment[ACT_BINDING_ENV]
+            if (not selector or selector != selector.strip()
+                    or not binding or binding != binding.strip()):
+                raise CompositionBlocked("ACT_CONFIG_INVALID")
+            inventory_probe = act_inventory or (lambda: _physical_gpu_inventory(environment))
+            visible = tuple(inventory_probe())
+            # Validate inventory before exposing admission, even if no campaign starts.
+            from .gpu_workload import resolve_physical_gpu
+
+            resolve_physical_gpu(selector, visible)
+            host_id = (act_host_id or _stable_host_id)()
+            owner_pid, owner_started_ticks = (act_owner_identity or _owner_identity)()
+            if (not isinstance(host_id, str) or not host_id.strip()
+                    or type(owner_pid) is not int or owner_pid <= 0
+                    or type(owner_started_ticks) is not int or owner_started_ticks <= 0):
+                raise CompositionBlocked("ACT_OWNER_IDENTITY_INVALID")
+            act_workload = UnifiedWorkloadService(
+                arbiter=arbiter, gpu_arbiter=ActGpuWorkloadArbiter(store, clock_ns=clock),
+                child_registry=ActChildRegistry(), service_epoch=registry.service_epoch,
+                runtime_id=runtime_id, stable_host_id=host_id, gpu_selector=selector,
+                visible_physical_uuids=visible, resource_binding_id=binding,
+                owner_pid=owner_pid, owner_started_ticks=owner_started_ticks,
+                clock_ns=clock, gpu_inventory_probe=inventory_probe,
+                calibration_identity_probe=act_calibration_identity, container_inspect=act_container_inspect,
+                batch_domain_claim_probe=act_batch_domain_claim_probe or default_batch_domain_claim_probe,
+                root_registration=dict(path=str(evidence_root.resolve(strict=True)),
+                                       uid=evidence_root.stat().st_uid, gid=evidence_root.stat().st_gid),
+            )
+        except Exception as error:  # noqa: BLE001 - ACT remains unavailable without physical proof
+            act_error = f"{type(error).__name__}: {error}"
     services = UnifiedServices(
         teleop=teleop,
         tasks=tasks,
@@ -123,6 +225,10 @@ def compose_domain_services(
         safety=safety,
         bridge=bridge_owner,
         budget_source=budget_source or UnknownBudgetSource(),
+        act_workload=act_workload,
+        act_error=act_error,
+        head_camera=head_camera,
+        head_camera_error=head_camera_error,
     )
     services.store = store  # type: ignore[attr-defined]
     services.validation_error = validation_error  # type: ignore[attr-defined]
@@ -148,8 +254,19 @@ def _guard_from_registry(registry: InstanceRegistry):
     return guard
 
 
-def compose_services(environment: Mapping[str, str] | None = None) -> UnifiedServices:
-    """The production entry point: own the child first, then compose the domains."""
+def compose_services(
+    environment: Mapping[str, str] | None = None,
+    *,
+    act_inventory=None,
+    act_host_id=None,
+    act_owner_identity=None,
+    act_container_inspect=None,
+    act_calibration_identity=None,
+    act_batch_domain_claim_probe=None,
+) -> UnifiedServices:
+    """The production entry point: own the child first, then compose the domains.
+
+    The keyword arguments are the external ACT probes of `compose_domain_services`; `None` (the default) is production."""
     import os
 
     environment = dict(os.environ if environment is None else environment)
@@ -177,6 +294,12 @@ def compose_services(environment: Mapping[str, str] | None = None) -> UnifiedSer
         evidence_root=Path(evidence_root),
         worker=worker,
         bridge_owner=bridge_owner,
+        act_inventory=act_inventory,
+        act_host_id=act_host_id,
+        act_owner_identity=act_owner_identity,
+        act_container_inspect=act_container_inspect,
+        act_calibration_identity=act_calibration_identity,
+        act_batch_domain_claim_probe=act_batch_domain_claim_probe,
     )
     if bridge_owner is not None:
         bridge_owner.bind(services.arbiter, services.safety)
@@ -203,9 +326,17 @@ class _DeferredBridgeOwner:
         self._client_factory = None
 
     def bind(self, arbiter, safety) -> None:
+        import os
         import secrets
 
         self.service_token = secrets.token_urlsafe(24)
+        environment = dict(self.launch.environment)
+        environment.update({
+            "SO101_CHILD_SERVICE_EPOCH": environment.get("SO101_UNIFIED_SERVICE_EPOCH", "unified"),
+            "SO101_CHILD_SERVICE_TOKEN": self.service_token,
+            "SO101_CHILD_WEB_PID": str(os.getpid()),
+        })
+        self.launch = replace(self.launch, environment=environment)
         self._owner = BridgeProcessOwner(self.launch, arbiter, safety)
 
     def bind_client_factory(self, factory) -> None:
@@ -228,3 +359,45 @@ class _DeferredBridgeOwner:
         from .child_runtime import NORMAL_SOCKET_NAME, SAFETY_SOCKET_NAME
 
         return root / NORMAL_SOCKET_NAME, root / SAFETY_SOCKET_NAME
+
+
+def compose_head_camera_service(environment: Mapping[str, str]):
+    """Compose the Head Camera domain from the closed head-search connection, or leave it unavailable.
+
+    The descriptor is the only source of the head-search runtime: the socket directory and runtime id this
+    process was started with must match its `bridge_socket_root` and `runtime_id` exactly, and a missing or
+    inherited-only connection keeps the domain unavailable rather than composing a second detector.
+    """
+
+    from so101_teleop.head_camera import (
+        CONNECTION_ENV,
+        HeadCameraBackend,
+        HeadCameraUnavailable,
+        load_descriptor,
+    )
+
+    if not environment.get(CONNECTION_ENV):
+        return None
+    try:
+        descriptor = load_descriptor(environment)
+    except HeadCameraUnavailable:
+        return None
+    socket_dir = environment.get(SOCKET_DIR_ENV)
+    runtime_id = environment.get(RUNTIME_ID_ENV)
+    if not socket_dir or Path(socket_dir).resolve() != Path(str(descriptor["bridge_socket_root"])).resolve():
+        raise CompositionBlocked(
+            "HEAD_CAMERA_CONNECTION_MISMATCH: the socket directory does not match the descriptor"
+        )
+    if not runtime_id or runtime_id != str(descriptor["runtime_id"]):
+        raise CompositionBlocked(
+            "HEAD_CAMERA_CONNECTION_MISMATCH: the runtime id does not match the descriptor"
+        )
+    if runtime_id != str(descriptor.get("head_search_runtime_id")):
+        raise CompositionBlocked(
+            "HEAD_CAMERA_CONNECTION_MISMATCH: the descriptor's runtime ids disagree"
+        )
+    from so101_teleop.head_camera import OWNER_PID_ENV, verify_owner
+
+    verify_owner(descriptor.get("owner"), expected_owner=environment.get(OWNER_PID_ENV))
+    # the domain shares the one detector through the descriptor; it never builds its own
+    return HeadCameraBackend(descriptor=dict(descriptor))

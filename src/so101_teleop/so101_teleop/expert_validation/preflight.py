@@ -16,7 +16,10 @@ import uuid
 from .catalog import PointSelection
 
 
-FIXED_WORKER_COUNTS = tuple(range(1, 9))
+#: A native campaign runs one worker. Multi-worker collection exists only as container shards, so the
+#: closed count set is exactly ``(1,)``; PARALLEL and ADAPTIVE are refused with ``NATIVE_MULTI_WORKER_UNSUPPORTED``.
+FIXED_WORKER_COUNTS = (1,)
+NATIVE_MULTI_WORKER_UNSUPPORTED = "NATIVE_MULTI_WORKER_UNSUPPORTED"
 
 #: The platform-bound macOS support matrix (design section 6). macOS exposes exactly three
 #: combinations and nothing else; every other count, mode or profile is refused with a stable
@@ -74,7 +77,7 @@ class ExecutionProfile:
 
 
 def _execution_mode_for_worker_count(worker_count: int) -> str:
-    """W1 is one sequential Worker; W2 is two parallel ones. There is no third shape."""
+    """single-worker is one sequential Worker; two-worker is two parallel ones. There is no third shape."""
 
     if worker_count == 1:
         return "SEQUENTIAL"
@@ -86,7 +89,7 @@ def _execution_mode_for_worker_count(worker_count: int) -> str:
 def _approved_execution_routes() -> tuple:
     """The shared closed support matrix: the service does not keep a second copy of it."""
 
-    from so101_demo.parallel_batch.contracts import APPROVED_EXECUTION_ROUTES
+    from so101_demo.parallel_batch.contracts.routes import APPROVED_EXECUTION_ROUTES
 
     return APPROVED_EXECUTION_ROUTES
 
@@ -109,14 +112,14 @@ def macos_execution_profiles() -> tuple[ExecutionProfile, ...]:
 #: The macOS support matrix this service advertises: exactly three combinations.
 MACOS_EXECUTION_PROFILES: tuple[ExecutionProfile, ...] = macos_execution_profiles()
 
-#: The only worker counts macOS may offer: W1 and W2.
+#: The only worker counts macOS may offer: single-worker and two-worker.
 MACOS_WORKER_COUNTS: tuple[int, ...] = (1, 2)
 
 #: The installed document each profile resolves to, beside the configured execution document.
 PROFILE_DOCUMENT_BASENAMES: Mapping[str, str] = MappingProxyType({
-    "MPS_W2_FIRST_PASS": "parallel_batch_v4_macos_mps_w2.yaml",
-    "MPS_W1_FULL_RESTART_RETRY": "parallel_batch_v5_macos_mps_w1_retry.yaml",
-    "MPS_W1_FIRST_PASS": "parallel_batch_v6_macos_mps_w1_first_pass.yaml",
+    "MPS_TWO_WORKER_FIRST_PASS": "parallel_batch_macos_mps_two_worker.yaml",
+    "MPS_SINGLE_WORKER_FULL_RESTART_RETRY": "parallel_batch_macos_mps_single_worker_retry.yaml",
+    "MPS_SINGLE_WORKER_FIRST_PASS": "parallel_batch_macos_mps_single_worker_first_pass.yaml",
 })
 
 
@@ -190,7 +193,7 @@ def macos_execution_profile_for_config(config) -> ExecutionProfile | None:
 def describe_execution_document(path: Path, *, platform: str | None = None) -> ExecutionDocument:
     """Load one installed execution document: real bytes, real hash, real platform combination."""
 
-    from so101_demo.parallel_batch.w2_composition import load_execution_config_for_schema
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config_for_schema
 
     resolved = Path(path)
     config = load_execution_config_for_schema(resolved, platform=platform)
@@ -425,12 +428,13 @@ class PreflightEngine:
     def _macos_key_reasons(self, request, profile: ExecutionProfile) -> list[str]:
         """The routing key must be named exactly; the point count never supplies it.
 
-        The key is resolved against the shared closed matrix, so a v4 document claiming W1 and a
+        The key is resolved against the shared closed matrix, so a v4 document claiming single-worker and a
         v5 document claiming first-pass are refused here for the same reason the adapter refuses
         them: the combination is not in the table.
         """
 
-        from so101_demo.parallel_batch.contracts import ContractError, resolve_execution_route
+        from so101_demo.parallel_batch.contracts.common import ContractError
+        from so101_demo.parallel_batch.contracts.routes import resolve_execution_route
 
         if request.execution_mode == "ADAPTIVE":
             return [UNSUPPORTED_ON_MACOS]
@@ -474,11 +478,9 @@ class PreflightEngine:
                     reason for reason in self._macos_key_reasons(request, profile)
                     if reason not in reasons
                 )
-        if request.execution_mode in {"SEQUENTIAL", "PARALLEL"}:
-            if request.execution_mode == "SEQUENTIAL" and request.worker_count != 1:
+        if request.execution_mode == "SEQUENTIAL":
+            if request.worker_count != 1:
                 reasons.append("SEQUENTIAL_WORKER_COUNT")
-            if request.execution_mode == "PARALLEL" and request.worker_count not in FIXED_WORKER_COUNTS[1:]:
-                reasons.append("PARALLEL_WORKER_COUNT")
             if request.max_points_per_worker is not None:
                 # The legacy lifetime quota is never part of a version-two request.
                 reasons.append("LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED")
@@ -491,32 +493,15 @@ class PreflightEngine:
             )
             if not resource_admitted:
                 reasons.extend(reason for reason in resource_reasons if reason not in reasons)
-        elif request.execution_mode == "ADAPTIVE":
-            if request.max_points_per_worker is not None:
-                reasons.append("ADAPTIVE_FIXED_FIELD")
-            levels = (request.worker_count, *request.fallback_worker_counts)
-            if (
-                not 1 <= request.worker_count <= 16
-                or any(not 1 <= level <= 16 for level in request.fallback_worker_counts)
-                or any(next_level >= level for level, next_level in zip(levels, levels[1:]))
-            ):
-                reasons.append("ADAPTIVE_FALLBACK_TIERS")
-            if _SHORT_BATCH.fullmatch(request.batch_id) is None:
-                reasons.append("ADAPTIVE_BATCH_ID")
-            config = AdaptiveExecutionConfig(
-                preferred_worker_count=request.worker_count,
-                fallback_worker_counts=tuple(request.fallback_worker_counts),
-                initial_points_per_worker=request.initial_points_per_worker,
-                worker_start_timeout_s=request.worker_start_timeout_s,
-                max_infra_attempts_per_point=request.max_infra_attempts_per_point,
-                yolo_executor_count=request.yolo_executor_count,
-                adaptive_config_sha256=request.adaptive_config_sha256 or "",
-            )
-            capacity = point_count
-            _, _, observations = self._resources.probe(request, config)
+        elif request.execution_mode in {"PARALLEL", "ADAPTIVE"}:
+            # Refused before any resource probe: nothing is allocated for a campaign that cannot run.
+            reasons.append(NATIVE_MULTI_WORKER_UNSUPPORTED)
+            config = FixedExecutionConfig(request.execution_mode, request.worker_count)
+            capacity = request.worker_count
+            observations = {}
         else:
             reasons.append("EXECUTION_MODE")
-            config = FixedExecutionConfig(request.execution_mode, request.worker_count, 1)
+            config = FixedExecutionConfig(request.execution_mode, request.worker_count)
             capacity = request.worker_count
             observations = {}
         if not self._singleton_probe():

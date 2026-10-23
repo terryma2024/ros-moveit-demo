@@ -1,0 +1,565 @@
+"""Assemble one episode's capture from the parts a physical run already holds.
+
+The diagnostic-episode path owns the episode's directory and identity; the physical side owns the producer. This module is
+the seam between them, so that neither has to know the other's internals: a caller that has a sampler (an object with
+`sample_with_audit(session_id, attempt_id, at_s)`), a `physical_audit` callable and optionally a step guard, plus the
+episode's root, scope and identity, gets back a `ContinuousEpisodeCapture` wired to a real recorder and audit writer.
+
+Everything here is proven by the chain test in `test_act_seal_and_downgrade.py`: the recorder creates the episode
+directory and refuses to reuse one, the audit writer roots at that same directory (its manifest lands in `<root>/audit/`,
+where verification resolves it), and the scope document is the audit's own `source.json` - three facts that took a
+stretch of refusals to establish, and which this function keeps in one place instead of leaving to each caller.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from .continuous_capture import ContinuousEpisodeCapture
+from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
+from .recorder import EpisodeRecorder
+from .rig_profile import rig_from_frozen
+
+__all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
+           "ProductionProducer", "assemble_episode_capture",
+           "episode_audit_pair",
+           "record_instant", "open_point_episode",
+           "physical_audit_from_captured", "physical_audit_from_observation"]
+
+
+def assemble_episode_capture(
+    *,
+    sampler,
+    physical_audit,
+    identity: dict,
+    provenance: dict,
+    inputs: dict,
+    episode_root: Path,
+    scope: dict,
+    guard=None,
+    audit_writer=None,
+    scope_path=None,
+    recorder_policy=None,
+    **capture_options,
+) -> ContinuousEpisodeCapture:
+    """Build the capture for one episode, with its recorder and audit writer.
+
+    `episode_root` is created by the recorder and owned by it; the audit writer roots at the same directory - it accepts
+    an existing one for exactly that reason - so its manifest sits at `<episode_root>/audit/audit-manifest.json`, which
+    is where `verify_episode_seal` and the endpoint QC resolve it.
+
+    `scope` is the audit's scope **document**, not a path: the writer takes the document, while `Recorder.finish` takes
+    the path of the file the writer puts it in (`<root>/audit/source.json`). Passing a `Path` here raises
+    `AUDIT_ROOT_INVALID` - the writer validating its arguments - which is how this signature was corrected.
+    """
+    episode_root = Path(episode_root)
+    if recorder_policy is not None:
+        from .collection_config import validate_recorder_policy
+        recorder_policy = validate_recorder_policy(recorder_policy)
+    # the rig of the episode is the profile its frozen inputs bind (rig v1 for inputs that bind none)
+    rig = rig_from_frozen(inputs)
+    recorder = EpisodeRecorder(
+        episode_root,
+        session_id=identity["session_id"],
+        attempt_id=identity["attempt_id"],
+        reset_epoch=identity["reset_epoch"],
+        provenance=provenance,
+        rig=rig,
+    )
+    audit = EpisodeAuditWriter(episode_root, scope, identity, inputs)
+    if recorder_policy is not None:
+        from .lossless_recorder import LosslessRecorderQueue
+        recorder = LosslessRecorderQueue(recorder, policy=recorder_policy)
+    return ContinuousEpisodeCapture(
+        recorder=recorder,
+        sampler=sampler,
+        physical_audit=physical_audit,
+        guard=guard,
+        audit=audit,
+        audit_writer=audit_writer,
+        **({} if scope_path is None else {"scope": scope_path}),
+        rig=rig,
+        # the capture's own remaining options - `scope` (the path of the file the writer puts the scope document in,
+        # which is not the document itself), `deadline_s`, `monotonic` - pass straight through rather than being
+        # duplicated here, so a caller that needs them is not forced to assemble the recorder and writer by hand
+        **capture_options,
+    )
+
+
+class ProductionProducer:
+    """The production producer behind the sampler interface the capture calls.
+
+    It owns a real `RgbObservationSynchronizer` - the class the live path uses to pair camera streams with simulation
+    time - and presents it to `ContinuousEpisodeCapture` as its `sampler`. The capture calls
+    `sample_with_audit(session_id, attempt_id, at_s)` and expects an `(observation, source_audit)` pair; this class
+    supplies the frames that instant needs and narrows the audit to what an episode row records.
+
+    Three properties are worth knowing, each learned by driving the real synchronizer rather than by reading it:
+
+    * every stream it buffers must hold a stamp within `max_age_s` of the instant and their stamps must agree within
+      `max_skew_s`, because `causal_sample` runs over all of them and refuses with `INPUT_STALE` otherwise - so a stream
+      with nothing recorded for that instant carries the instant itself;
+    * the receipt time must come from the synchronizer's own clock, which is what its sampling compares against, or the
+      frame is stale the instant it is pushed;
+    * and its audit carries `source_received_wall_s` and `neck_yaw_rad` beyond the closed sixteen keys the recorder
+      accepts, so what the capture is handed is narrowed to `source_stamps` - the same seam as `_RECORDER_LOCAL_KEYS`,
+      seen from the source side.
+    """
+
+    STREAMS = ("head", "wrist", "arm", "neck")
+
+    def __init__(self, *, max_age_s: float = 0.1, max_skew_s: float = 0.1, frames=None, rig=None) -> None:
+        from .rig_profile import DEFAULT_RIG
+        from .synchronizer import RgbObservationSynchronizer
+        self.rig = DEFAULT_RIG if rig is None else rig
+        #: the streams of the rig: its cameras, the arm and (when the rig has a neck) the neck yaw
+        self.streams = (*self.rig.camera_names, "arm", *(("neck",) if self.rig.has_neck else ()))
+        #: where a frame comes from for a stream at an index - the run's own camera frames when it has
+        #: them. The default synthesises zeroes, which is enough for a harness and wrong for a live run:
+        #: the capture compares each row's pixels against the acquisition it recorded
+        #: (`ACQUISITION_PIXEL_MISMATCH`), so a real episode must push the frames it actually captured.
+        self.frames = frames
+
+        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s, rig=self.rig)
+        #: where a frame-feeding loop records the instants it has supplied, one list per stream
+        self.stamps = {stream: [] for stream in self.streams}
+        self._pushed = 0
+        self._latest = None
+        #: the synchronizer's own audit from the last sample
+        self.last_source_audit: dict = {}
+
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        """Return the observation for `at_s` and the source audit an episode row records."""
+        import numpy as np
+
+        if self._pushed == 0:
+            self.synchronizer.reset(session_id)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        while self._pushed < max(len(self.stamps[stream]) for stream in self.streams):
+            for stream in self.streams:
+                recorded = self.stamps[stream]
+                stamp = float(recorded[self._pushed]) if self._pushed < len(recorded) else self._latest
+                if stamp is None:
+                    continue
+                if stream in self.rig.camera_names:
+                    value = frame if self.frames is None else self.frames(stream, self._pushed)
+                elif stream == "arm":
+                    value = [0.0] * 6
+                else:
+                    value = 0.0
+                self.synchronizer.push(stream, session_id, stamp, value,
+                                       received_monotonic_s=self.synchronizer.monotonic())
+                self._latest = stamp
+            self._pushed += 1
+        observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
+        # the full audit is kept here for the extraction path, which needs the receipt mapping as well
+        # (`live_evidence_sample`'s `source_received_monotonic_s`); the episode row still records only `source_stamps`,
+        # because the recorder's channel is closed at sixteen keys
+        self.last_source_audit = dict(audit)
+        return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
+
+    def source_received_monotonic_s(self) -> dict:
+        """The receipt times of the last sample, by stream - for the extraction, not for a row.
+
+        `live_evidence_sample` takes this mapping while the recorder refuses it, so the two travel separately: this
+        accessor is the extraction's, and `sample_with_audit`'s audit is the row's.
+        """
+        return dict(self.last_source_audit.get("source_received_wall_s") or {})
+
+
+def episode_audit_pair(episode_root: Path) -> tuple[Path, Path]:
+    """The manifest and scope a sealed episode's audit lives at, given the episode's own directory.
+
+    The audit writer roots at the episode directory and puts its document at `<root>/audit/`, which is where the
+    recorder, `verify_episode_seal` and the endpoint QC all resolve it by convention - measured, not assumed.
+    Callers that seal an episode and then hand it to a store or a verifier need exactly this pair, and nothing about it
+    is obvious from either side, so it lives here beside the seam rather than in each of them.
+
+    Note the phase: a store renames `working/` to `sealed/` when it publishes, so a caller verifying *before* the
+    publish uses the working path and one verifying *after* uses the published one - this function names the
+    pair inside whichever root it is given, and the caller supplies the right one.
+    """
+    audit_dir = Path(episode_root) / "audit"
+    return audit_dir / "audit-manifest.json", audit_dir / "source.json"
+
+
+class PhysicalAuditAdapter:
+    """Present the run's physical evidence as the capture's `physical_audit` callable.
+
+    The capture builds each row's audit from three pieces and then requires the recorder's closed sixteen keys
+    (`continuous_capture.py:419-422`): what this callable returns, the sampler's `source_stamps`, and the two
+    acquisition ids the capture adds. So this callable owes exactly the remaining thirteen -
+
+        reset_epoch  release_epoch  release_event  release_time_s  physical_stamps  phase
+        reference_time_s  reference_source  reference_positions
+        mujoco_truth  contacts  planning_scene  controller_state
+
+    - and that is the whole of its job: take the values the extraction produces for an instant, insist that all thirteen
+    are present, and hand them over. A missing one fails at the sample as `CAPTURE_PHYSICAL_AUDIT_INVALID`, which is
+    where a wiring mistake should surface, not at the seal after an episode has been recorded.
+
+    The extraction itself - reading those values out of the capture path - is the coordinator's side of the divided work;
+    this class exists so that whatever it produces is checked against the contract in one place.
+    """
+
+    KEYS = ("reset_epoch", "release_epoch", "release_event", "release_time_s", "physical_stamps", "phase",
+            "reference_time_s", "reference_source", "reference_positions",
+            "mujoco_truth", "contacts", "planning_scene", "controller_state")
+
+    def __init__(self, evidence) -> None:
+        #: a callable taking `at_s` and returning the thirteen physical values for that instant
+        self.evidence = evidence
+
+    def __call__(self, at_s: float) -> dict:
+        values = self.evidence(at_s)
+        missing = [key for key in self.KEYS if key not in values]
+        if missing:
+            raise ValueError(f"PHYSICAL_AUDIT_INCOMPLETE: {sorted(missing)}")
+        return {key: values[key] for key in self.KEYS}
+
+    def ready(self, at_s):
+        ready = getattr(self.evidence, "ready", None)
+        return True if ready is None else ready(at_s)
+
+    def awaiting_arrival(self, at_s):
+        hook = getattr(self.evidence, "awaiting_arrival", None)
+        return False if hook is None else hook(at_s) is True
+
+
+class LiveSampler:
+    """Present an already-fed `RgbObservationSynchronizer` to the capture as its `sampler`.
+
+    The difference from `ProductionProducer` is who feeds the synchronizer. A live run does that itself - the ROS
+    observation adapter pushes each camera frame as it arrives - so nothing here should invent or replay anything: this
+    class only delegates `sample_with_audit` and keeps the synchronizer's own audit available to the extraction, exactly
+    as `ProductionProducer` does (`last_source_audit`, `source_received_monotonic_s()`), while leaving the recorded row's
+    audit narrowed to `source_stamps`.
+
+    `ProductionProducer` remains the harness's feeder: it pushes what a test has recorded, because a test has no camera.
+    Using it against a live synchronizer would push synthetic frames alongside the real ones and, sooner or later, the
+    capture's pixel check (`ACQUISITION_PIXEL_MISMATCH`) would say so.
+    """
+
+    def __init__(self, synchronizer) -> None:
+        self.synchronizer = synchronizer
+        self.last_source_audit: dict = {}
+
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
+        self.last_source_audit = dict(audit)
+        return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
+
+    def ready(self, at_s):
+        # Inspect without advancing the synchronizer's row cursor. The original pending camera
+        # acquisitions and grid slot stay pinned while measured arm/neck delivery completes.
+        with self.synchronizer._lock:
+            from .synchronizer import source_age_ok_ns, time_ns
+            return all(any(source_age_ok_ns(time_ns(at_s), time_ns(stamp), time_ns(self.synchronizer.max_age_s))
+                           for stamp, _, _ in buffer)
+                       for buffer in self.synchronizer.buffers.values())
+
+    def source_received_monotonic_s(self) -> dict:
+        """The receipt times of the last sample, by stream - for the extraction, not for a row."""
+        return dict(self.last_source_audit.get("source_received_wall_s") or {})
+
+
+class PointEpisode:
+    """The per-point object a run's capture port and its worker runtime both hold.
+
+    A run captures RGB in one object (the `capture_rgb` port) while the episode's coordinates and lifecycle live in
+    another (the worker runtime), so the two need something shared to record through. This is it: it owns the
+    synchronizer the frames are pushed into, the capture assembled around that synchronizer, and the identity the row
+    audit and the seal need - and offers the three things the two sides ask of it.
+
+    `push` is what the capture port calls with the pixels and the simulation stamp it already has - the stamp the
+    capture receipt calls `source_stamp_monotonic_s`, which the runtime requires to be `ros_sim` and which is therefore
+    simulation time rather than wall time. `start` and `finish` are what the worker runtime calls at the episode's
+    boundaries; `finish` needs the window, or the capture does not seal at all.
+    """
+
+    def __init__(self, *, identity: dict, provenance: dict, inputs: dict, episode_root, scope,
+                 scope_path: str, physical_audit, guard=None, deadline_s: float = 120.0,
+                 monotonic=None, max_age_s: float = 0.1, max_skew_s: float = 0.1,
+                 recorder_policy=None) -> None:
+        from .synchronizer import RgbObservationSynchronizer
+
+        self.identity = dict(identity)
+        # the callable the capture asks for a row, under the name the hook and the tests use
+        self._physical_audit = physical_audit
+        self.rig = rig_from_frozen(inputs)
+        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s, rig=self.rig)
+        self.capture = assemble_episode_capture(
+            sampler=LiveSampler(self.synchronizer), physical_audit=physical_audit, identity=self.identity,
+            provenance=provenance, inputs=inputs, episode_root=episode_root, scope=scope,
+            scope_path=scope_path, guard=guard, deadline_s=deadline_s,
+            max_source_age_s=max_age_s, max_skew_s=max_skew_s, asynchronous_sources=True,
+            recorder_policy=recorder_policy,
+            **({} if recorder_policy is None else {"pending_capacity": 16, "frame_capacity": 16}),
+            **({} if monotonic is None else {"monotonic": monotonic}))
+        # the synchronizer refuses a push whose session does not match the one it was reset for, so the reset is part
+        # of beginning an episode rather than something the caller has to remember
+        self.synchronizer.reset(self.identity["session_id"])
+        # the capture asks its physical_audit for a row as it samples, and that callable was fixed at construction -
+        # so the latest audit lives in a holder the callable reads rather than being baked in
+        self._audit: dict | None = None
+        self._minter = None
+        self._started = False
+        self._start_s = 0.0
+        self._latest_s = None
+
+    def set_physical_audit(self, audit: dict) -> None:
+        """Publish the audit for the instant about to be sampled; the capture's own callable reads it."""
+        if getattr(self, "_physical_provider_bound", False):
+            raise ValueError("EPISODE_CAUSAL_SOURCE_FIXED")
+        self._audit = dict(audit)
+        holder = getattr(self, "_audit_holder", None)
+        if holder is not None:
+            holder["audit"] = dict(audit)
+
+    def bind_physical_provider(self, provider):
+        """Bind one causal source before capture starts; phase caches cannot replace it."""
+        with self.capture.ingress_lock:
+            if (self._started or self.capture._session_id is not None
+                    or getattr(self, "_physical_provider_bound", False)
+                    or not callable(provider) or not callable(getattr(provider, "ready", None))):
+                raise ValueError("EPISODE_CAUSAL_SOURCE_BINDING_INVALID")
+            from so101_demo.act.episode_audit.checks import _identity_ok
+            from .scene_association import canonical
+            identity = getattr(provider, "identity", None)
+            if (not _identity_ok(identity, formal="lease" in self.identity)
+                    or canonical(identity) != canonical(self.identity)):
+                raise ValueError("EPISODE_CAUSAL_SOURCE_IDENTITY_INVALID")
+            physical = PhysicalAuditAdapter(provider)
+            self._physical_audit = self.capture.physical_audit = physical
+            self._physical_provider_bound = True
+
+    def push(self, camera: str, *, stamp_s: float, pixels, received_monotonic_s: float | None = None) -> None:
+        """Record one captured frame: mint its acquisition, hand it to the capture, and push it for sampling.
+
+        The three steps happen here rather than at either caller because this is where the pixels, the stamp and the
+        capture are all in reach - re-reading a written PNG would need a decoder and would put the frame behind its own
+        acquisition.
+        """
+        from .acquisition import AcquisitionMinter
+
+        if self._minter is None:
+            self._minter = AcquisitionMinter(self.rig)
+        received_s = (self.synchronizer.monotonic() if received_monotonic_s is None
+                      else float(received_monotonic_s))
+        frame = self._minter.mint(
+            camera, session_id=self.identity["session_id"], reset_epoch=self.identity["reset_epoch"],
+            stamp_s=float(stamp_s), received_monotonic_ns=round(received_s * 1e9), pixels=pixels)
+        self.capture.on_acquisition(frame, pixels)
+        self.synchronizer.push(camera, self.identity["session_id"], frame.stamp_s, pixels,
+                               received_monotonic_s=received_s)
+        self._latest_s = frame.stamp_s
+
+    def push_numeric(self, *, stamp_s: float, arm=None, neck=None) -> None:
+        """Push the numeric evidence an instant needs.
+
+        `causal_sample` runs over **every** stream buffer and refuses with `INPUT_STALE` when one of them holds no
+        stamp within `max_age_s`, so the two non-camera streams the sampler reads - `arm` for the joint state
+        and `neck` for the yaw - have to be fed alongside the frames even though no acquisition is minted for them.
+        """
+        session_id = self.identity["session_id"]
+        if arm is not None:
+            self.synchronizer.push("arm", session_id, float(stamp_s), list(arm),
+                                   received_monotonic_s=self.synchronizer.monotonic())
+        if neck is not None and self.rig.has_neck:
+            self.synchronizer.push("neck", session_id, float(stamp_s), float(neck),
+                                   received_monotonic_s=self.synchronizer.monotonic())
+
+    def start(self, start_s: float) -> None:
+        """Begin the episode at the run's own start instant."""
+        self.capture.start(self.identity["session_id"], self.identity["attempt_id"],
+                           self.identity["reset_epoch"], float(start_s))
+        self._start_s = float(start_s)
+        self._started = True
+
+    def finish(self, end_s: float, *, outcome: dict, window=None):
+        """Seal with original camera coverage and distinct command, stop and label clocks."""
+        failure = None
+        try:
+            expected = {"start_s": self._start_s, "end_s": float(end_s), "label_cutoff_s": float(end_s)}
+            if window is not None and window != expected:
+                raise ValueError("EPISODE_WINDOW_INVALID")
+            return self.capture.finish(float(end_s), derive_window=True, outcome=outcome)
+        except BaseException as error:
+            failure = error
+            raise
+        finally:
+            try:
+                self.close()
+            except Exception as error:
+                if failure is None:
+                    raise
+                failure.add_note("Owned episode close also failed: " + str(error))
+
+    def close(self):
+        """Retire the owned sample writer even when the episode cannot seal."""
+        recorder = self.capture.recorder
+        if hasattr(recorder, "close"):
+            recorder.close()
+
+
+class EpisodeSink:
+    """The one object a capture port and a worker runtime can both be given before either exists.
+
+    A run builds its `capture_rgb` port first and hands it to the worker runtime afterwards, so the port cannot be
+    given the episode itself - the episode does not exist until a point starts. This is the small shared thing in
+    between: the runtime sets `current` when it opens a point's episode and clears it when the point ends, and the port
+    asks for it while it has the pixels in hand. Everything else about recording lives in `PointEpisode`.
+    """
+
+    def __init__(self) -> None:
+        self.current = None
+        #: the outcome the episode will be sealed with, set by whoever knows it - the run's own decision. It is not
+        #: derived here: an episode's status is a fact about the run, and inventing one is exactly what this task
+        #: forbids (a fabricated PASS makes every later PASS meaningless).
+        self.outcome: dict | None = None
+
+    def record(self, camera: str, *, stamp_s: float, pixels, received_monotonic_s: float | None = None) -> bool:
+        """Offer one captured frame to the current episode; returns whether anything took it.
+
+        A run without an open episode - a calibration pass, a dry run, a port used outside an episode - is not an error,
+        and returning a boolean rather than raising keeps that distinction where it belongs.
+        """
+        episode = self.current
+        if episode is None:
+            return False
+        episode.push(camera, stamp_s=stamp_s, pixels=pixels, received_monotonic_s=received_monotonic_s)
+        return True
+
+    def finish(self, end_s: float):
+        """Seal the current episode at the run's own end boundary; no episode means nothing to seal.
+
+        The outcome has to have been set first - `Recorder.finish` refuses a document whose status and reason do not
+        agree with themselves, and this class has no business guessing either.
+        """
+        episode = self.current
+        if episode is None:
+            return None
+        if self.outcome is None:
+            raise ValueError("EPISODE_OUTCOME_MISSING")
+        return episode.finish(end_s, outcome=dict(self.outcome))
+
+
+def physical_audit_from_captured(captured: dict, *, reset_epoch: int, release_epoch: int, release_event: bool,
+                                 release_time_s: float, phase: str, controller_state: dict) -> dict:
+    """Compose one row's physical audit from a readback capture and the run's own facts.
+
+    The thirteen names the recorder's closed channel requires come from two places, and this is where they
+    meet. Seven ride on the capture itself - a readback capture returns them under its own names, and
+    they are the physics and perception facts nothing else can supply: the MuJoCo world, the planning scene, the
+    contacts, the source stamps, and the reference the endpoint rule measures against. The other six are facts about
+    the run rather than about an instant - the two epochs, the release event and its time, the phase the sequence is
+    in, and the controller state - which is why they are arguments here instead of being dug out of the capture.
+
+    Deliberately a pure function: what it does is rename and gather, so it can be tested without a robot, and the only
+    thing it must not do is invent a value it cannot see.
+    """
+    try:
+        world = captured["world"]
+        scene = captured["scene"]
+        contact = captured["contact"]
+        reference = captured["reference"]
+        stamps = captured["source_stamps_s"]
+    except KeyError as error:
+        raise ValueError(f"CAPTURE_EVIDENCE_MISSING: {error.args[0]}") from error
+    return {
+        "reset_epoch": int(reset_epoch), "release_epoch": int(release_epoch),
+        "release_event": bool(release_event), "release_time_s": float(release_time_s),
+        "physical_stamps": dict(stamps), "phase": str(phase),
+        "reference_time_s": float(reference["time_s"]), "reference_source": str(reference["source"]),
+        "reference_positions": reference["positions"], "mujoco_truth": world,
+        "contacts": contact, "planning_scene": scene, "controller_state": dict(controller_state),
+    }
+
+
+def physical_audit_from_observation(observation, *, release_epoch: int, release_event: bool, release_time_s: float,
+                                    phase: str, contacts, physical_stamps: dict, reference: dict,
+                                    controller_state: dict) -> dict:
+    """Compose one row's physical audit from the scene observation and the run's own facts.
+
+    `CupSceneObservation` is the boundary that already exists in the episode's own process: it carries the
+    simulator's pose beside MoveIt's, which is exactly the pair the physical-outcome rule wants kept independent - the
+    simulator is the fact about where the cup is, the Planning Scene is the collision-planning shadow - plus the
+    attachment, the reset epoch and whether the physics is paused. So four of the thirteen names come straight from it,
+    and the rest from what the same process already holds: the joint reader, the cup-pose sample, and the phase
+    sequence.
+
+    Deliberately separate from `physical_audit_from_captured`, which was written for a readback on the parent side of
+    the process boundary; that one is kept because it is tested and may serve another path, but this is the one the
+    episode's own process should use.
+    """
+    epoch = getattr(observation, "reset_epoch", None)
+    if epoch is None:
+        raise ValueError("OBSERVATION_EPOCH_MISSING")
+    return {
+        "reset_epoch": int(epoch), "release_epoch": int(release_epoch),
+        "release_event": bool(release_event), "release_time_s": float(release_time_s),
+        "physical_stamps": dict(physical_stamps), "phase": str(phase),
+        "reference_time_s": float(reference["time_s"]), "reference_source": str(reference["source"]),
+        "reference_positions": reference["positions"],
+        "mujoco_truth": {"pose_world": observation.simulator_pose_world,
+                         "received_monotonic_s": float(observation.simulator_received_monotonic_s),
+                         "simulation_session_id": observation.simulation_session_id},
+        "contacts": contacts,
+        "planning_scene": {"pose_world": observation.moveit_pose_world,
+                           "received_monotonic_s": float(observation.moveit_received_monotonic_s),
+                           "attached": bool(observation.moveit_attached), "paused": observation.paused},
+        "controller_state": dict(controller_state),
+    }
+
+
+def record_instant(recorder, observation, *, release_epoch: int, release_event: bool, release_time_s: float,
+                   phase: str, contacts, physical_stamps: dict, reference: dict,
+                   controller_state: dict) -> dict:
+    """Turn one observation into one row's audit, and tell the episode what it says.
+
+    The composition itself is `physical_audit_from_observation`; this adds the handover, which is the step that has to
+    happen before the capture samples for that instant - the row is assembled from the audit the capture asks for, so
+    telling the episode after sampling would date the row from the previous instant. A run with no recorder still gets
+    the audit back, so a caller can log or assert on it.
+    """
+    audit = physical_audit_from_observation(
+        observation, release_epoch=release_epoch, release_event=release_event, release_time_s=release_time_s,
+        phase=phase, contacts=contacts, physical_stamps=physical_stamps, reference=reference,
+        controller_state=controller_state)
+    if recorder is not None:
+        recorder.set_physical_audit(audit)
+    return audit
+
+
+def open_point_episode(*, episode_root, session_id: str, attempt_id: str, reset_epoch: int, release_epoch: int,
+                       scene_id: str, seed: int, mode: str, scope, scope_path: str,
+                       inputs: dict, provenance: dict, guard=None, monotonic=None, max_age_s: float = 0.1,
+                       max_skew_s: float = 0.1, lease: dict | None = None,
+                       recorder_policy=None) -> PointEpisode:
+    """Open the episode a run records into, with the row supplied by the process that owns the facts.
+
+    The circularity this exists to break: the capture asks its `physical_audit` for a row, and that callable has to be
+    fixed when the capture is built - but the rows are composed later, by the execution's own `_record`, which only
+    exists after this object does. So the callable closes over a holder that both sides share: the capture reads it,
+    `set_physical_audit` writes it, and reading it before anything has been published is a refusal by name rather than a
+    row of nulls.
+    """
+    holder: dict = {}
+
+    def physical_audit(_at_s):
+        audit = holder.get("audit")
+        if audit is None:
+            raise ValueError("EPISODE_AUDIT_MISSING: no row has been published for this instant yet")
+        return dict(audit)
+
+    episode = PointEpisode(
+        # the seven the writer's identity check insists on - the same set the scope carries, which is why they are
+        # arguments rather than something read back out of the scope document
+        identity={"session_id": session_id, "attempt_id": attempt_id, "reset_epoch": int(reset_epoch),
+                  "release_epoch": int(release_epoch), "scene_id": str(scene_id), "seed": int(seed),
+                  "mode": str(mode), **({} if lease is None else {"lease": dict(lease)})},
+        provenance=provenance, inputs=inputs, episode_root=episode_root, scope=scope, scope_path=scope_path,
+        physical_audit=physical_audit, guard=guard, monotonic=monotonic, max_age_s=max_age_s,
+        max_skew_s=max_skew_s, recorder_policy=recorder_policy)
+    episode._audit_holder = holder
+    return episode

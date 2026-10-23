@@ -1,0 +1,94 @@
+diff --git a/src/joint_trajectory_controller.cpp b/src/joint_trajectory_controller.cpp
+index c41dcdd21..7dcec42c5 100644
+--- a/src/joint_trajectory_controller.cpp
++++ b/src/joint_trajectory_controller.cpp
+@@ -28,6 +28,7 @@
+ #include "joint_trajectory_controller/trajectory.hpp"
+ #include "lifecycle_msgs/msg/state.hpp"
+ #include "rclcpp/logging.hpp"
++#include "rcl_interfaces/msg/parameter_descriptor.hpp"
+ #include "rclcpp/qos.hpp"
+ #include "rclcpp/time.hpp"
+ #include "rclcpp_action/create_server.hpp"
+@@ -878,6 +879,33 @@ controller_interface::CallbackReturn JointTrajectoryController::on_configure(
+   const rclcpp_lifecycle::State &)
+ {
+   auto logger = get_node()->get_logger();
++  constexpr char kSpeedScalingInputEnabled[] = "speed_scaling_input_enabled";
++  bool speed_scaling_input_enabled = true;
++  try
++  {
++    auto node = get_node();
++    if (!node->has_parameter(kSpeedScalingInputEnabled))
++    {
++      rcl_interfaces::msg::ParameterDescriptor descriptor;
++      descriptor.read_only = true;
++      node->declare_parameter<bool>(kSpeedScalingInputEnabled, true, descriptor);
++    }
++    const auto parameter = node->get_parameter(kSpeedScalingInputEnabled);
++    if (parameter.get_type() != rclcpp::ParameterType::PARAMETER_BOOL ||
++      !node->describe_parameter(kSpeedScalingInputEnabled).read_only)
++    {
++      RCLCPP_ERROR(
++        logger, "Parameter '%s' must be a read-only boolean.", kSpeedScalingInputEnabled);
++      return CallbackReturn::FAILURE;
++    }
++    speed_scaling_input_enabled = parameter.as_bool();
++  }
++  catch (const std::exception & error)
++  {
++    RCLCPP_ERROR(
++      logger, "Unable to declare or read '%s': %s", kSpeedScalingInputEnabled, error.what());
++    return CallbackReturn::FAILURE;
++  }
+ 
+   // START DEPRECATE
+   if (params_.open_loop_control)
+@@ -895,6 +923,18 @@ controller_interface::CallbackReturn JointTrajectoryController::on_configure(
+   // get parameters from the listener in case they were updated
+   params_ = param_listener_->get_params();
+ 
++  if (!speed_scaling_input_enabled &&
++    (!params_.speed_scaling.state_interface.empty() ||
++    !params_.speed_scaling.command_interface.empty() ||
++    params_.speed_scaling.initial_scaling_factor != 1.0))
++  {
++    RCLCPP_ERROR(
++      logger,
++      "Speed scaling interfaces and non-unit initial factor require "
++      "'speed_scaling_input_enabled=true'.");
++    return CallbackReturn::FAILURE;
++  }
++
+   // get degrees of freedom
+   dof_ = params_.joints.size();
+ 
+@@ -1155,7 +1195,7 @@ controller_interface::CallbackReturn JointTrajectoryController::on_configure(
+     std::string(get_node()->get_name()) + "/query_state",
+     std::bind(&JointTrajectoryController::query_state_service, this, _1, _2));
+ 
+-  if (
++  if (speed_scaling_input_enabled &&
+     !has_velocity_command_interface_ && !has_acceleration_command_interface_ &&
+     !has_effort_command_interface_)
+   {
+@@ -1169,7 +1209,7 @@ controller_interface::CallbackReturn JointTrajectoryController::on_configure(
+       params_.speed_scaling.initial_scaling_factor);
+     scaling_factor_ = params_.speed_scaling.initial_scaling_factor;
+   }
+-  else
++  else if (speed_scaling_input_enabled)
+   {
+     RCLCPP_WARN_EXPRESSION(
+       logger, params_.speed_scaling.initial_scaling_factor != 1.0,
+@@ -1177,6 +1217,10 @@ controller_interface::CallbackReturn JointTrajectoryController::on_configure(
+       "of speed scaling, please only use a position interface when configuring this controller.");
+     scaling_factor_ = 1.0;
+   }
++  else
++  {
++    scaling_factor_ = 1.0;
++  }
+   if (!params_.speed_scaling.state_interface.empty())
+   {
+     RCLCPP_INFO(

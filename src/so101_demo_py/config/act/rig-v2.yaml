@@ -1,0 +1,16 @@
+# SO-101 ACT camera rig profile, version 2 (design 2026-10-18-so101-act-camera-rig-v2-design.md): a side camera on a tripod
+# and a wrist camera on the moving jaw; the head camera and the neck are not part of the rig, so the state is the six arm joints.
+# `/side_camera/color` follows the plugin config convention (config/mujoco/act/*_camera_plugins.yaml: key `<name>_camera`,
+# topics /<name>_camera/color and /<name>_camera/camera_info), the same convention config/act/rollout.yaml already uses for `side`.
+kind: act_rig_profile
+schema_version: 1
+rig: side-wrist
+cameras:
+  - {name: side, image_topic: /side_camera/color, info_topic: /side_camera/camera_info, frame_key: side_png}
+  - {name: wrist, image_topic: /wrist_camera/color, info_topic: /wrist_camera/camera_info, frame_key: wrist_png}
+has_head: false
+has_neck: false
+state:
+  arm_joints: ["1", "2", "3", "4", "5", "6"]
+  neck_features: []
+  state_dim: 6

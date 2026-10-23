@@ -8,6 +8,8 @@
 
 状态：本版按2026-10-12用户决定简化：保留可配置证据ROOT，同路径挂载；RGB经socket传输；Host退出即结束旧campaign；资源只记录并设磁盘停派；两类镜像承载三个容器角色。当前Sol会话内自检，旧Astra PASS仅对应其历史冻结稿。见[修订处置记录](../plans/2026-10-11-so101-act-containerized-campaign-implementation-astra-review.md)。修改文档的批准不授权实施，实施仍须单独确认。
 
+> **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+
 关联文档：
 
 - [双 RGB ACT 总体设计](2026-09-10-so101-act-head-wrist-rgb-design.md)

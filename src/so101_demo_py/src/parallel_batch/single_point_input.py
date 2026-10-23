@@ -1,4 +1,4 @@
-"""One Worker lease executes exactly one hash-bound point (plan Task 3, design section 8).
+"""One Worker lease executes exactly one hash-bound point (design section 8).
 
 The campaign never hands a Worker the installed catalog. Each lease becomes one immutable
 single-point YAML under the batch root, written through an fsynced temporary file and an atomic

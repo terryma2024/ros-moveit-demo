@@ -1,0 +1,439 @@
+{
+  "schema": "ROS2_CONTROL_PINNED_SOURCE_001",
+  "upstream_repository": "https://github.com/ros-controls/ros2_control",
+  "upstream_commit": "4324cabf03a1371951f0a039d239fcf09f563e54",
+  "upstream_version": "4.45.2",
+  "license": "Apache-2.0; see LICENSE",
+  "original_files": [
+    {
+      "relative": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    },
+    {
+      "relative": "controller_manager/CHANGELOG.rst",
+      "sha256": "f25aebb7df21e0e635561a2e58c814ed7d64e7b43aa69e2c05c88eb5c3df0681",
+      "bytes": 75317
+    },
+    {
+      "relative": "controller_manager/CMakeLists.txt",
+      "sha256": "ee1a39a82619ea6d13753f9a513b336bec77072f845f8a57b4567011de6ce287",
+      "bytes": 9638
+    },
+    {
+      "relative": "controller_manager/controller_manager/__init__.py",
+      "sha256": "a5874b7a102d45e6313bd5dd51194d2ad5dfa3d07359a91a9a9018d7cc66c35b",
+      "bytes": 1520
+    },
+    {
+      "relative": "controller_manager/controller_manager/controller_manager_services.py",
+      "sha256": "801b304e9a8738c2ded25c7c247817db8fbac4f42853290e481fd9513987eb7a",
+      "bytes": 17777
+    },
+    {
+      "relative": "controller_manager/controller_manager/hardware_spawner.py",
+      "sha256": "c628a74a988b02e96d6bac19cb63aebda0e1ad71dddd3ae45b1a6182ea53b847",
+      "bytes": 6974
+    },
+    {
+      "relative": "controller_manager/controller_manager/launch_utils.py",
+      "sha256": "c6cbba1c8a14307c3f9bf91c3c0024246292bd67f18ec9ac70f561effbf6621b",
+      "bytes": 9849
+    },
+    {
+      "relative": "controller_manager/controller_manager/spawner.py",
+      "sha256": "5316c804327f975d99be13afa69aa89cc28e7a8bc34a46cf9fe426e3b9de5764",
+      "bytes": 24686
+    },
+    {
+      "relative": "controller_manager/controller_manager/test_utils.py",
+      "sha256": "4a396b35f3d1b31edf9c7768065aff93eda251581ed66d4b74fe28a1970a99f0",
+      "bytes": 6229
+    },
+    {
+      "relative": "controller_manager/controller_manager/unspawner.py",
+      "sha256": "a68dfa61602f5fe20de97ae86729de459e7329e20b7c3c4233f6a1750bd64e29",
+      "bytes": 3039
+    },
+    {
+      "relative": "controller_manager/doc/controller_chaining.rst",
+      "sha256": "0a8c459d2315ffb27961355866c187d6676d8b56522d495b0eabd7053594b42d",
+      "bytes": 11519
+    },
+    {
+      "relative": "controller_manager/doc/images/chaining_example2.png",
+      "sha256": "be77ebba10426bdb6eafc2334ca5b93023f044f86b1988cdc6d3a92c663af493",
+      "bytes": 89572
+    },
+    {
+      "relative": "controller_manager/doc/images/global_general_remap.png",
+      "sha256": "393d1638e2a6bcd86a139eb1abe1bf63535abb083f03b2c5aca761401fb07213",
+      "bytes": 40923
+    },
+    {
+      "relative": "controller_manager/doc/images/global_specific_remap.png",
+      "sha256": "07fb76522c9592d00b271a627aaf8280a0be2e43fe404efdbe2c6d3e9d3e9465",
+      "bytes": 36592
+    },
+    {
+      "relative": "controller_manager/doc/images/rqt_controller_manager.png",
+      "sha256": "68c4fca822188129ae5b0bb05ca86ba7b92d7678c367fcd6d5d80c653d2c1420",
+      "bytes": 90357
+    },
+    {
+      "relative": "controller_manager/doc/parameters_context.yaml",
+      "sha256": "b1211e05f4f6c995de7e3f1f3015719a263c5733456c636de30fe29843226414",
+      "bytes": 2428
+    },
+    {
+      "relative": "controller_manager/doc/running_controllers_asynchronously.rst",
+      "sha256": "79eceaf9a52f8f1096b10207628d80f05503ff815e7e0fe6c3eecdfb992a263c",
+      "bytes": 6121
+    },
+    {
+      "relative": "controller_manager/doc/userdoc.rst",
+      "sha256": "50c633d8afc826e248fab9b999f817ab402ade75ffdd17d720b5346a10aaf301",
+      "bytes": 26208
+    },
+    {
+      "relative": "controller_manager/include/controller_manager/controller_manager.hpp",
+      "sha256": "28fac36b33f898ec3af9cec5eed99b10ef4998741d7230c3528f50637a4cdefa",
+      "bytes": 33684
+    },
+    {
+      "relative": "controller_manager/include/controller_manager/controller_spec.hpp",
+      "sha256": "79135ea5032af895e9d696cb839d7bb6de1d41c38ee4686d550dac3b712a40ad",
+      "bytes": 2113
+    },
+    {
+      "relative": "controller_manager/package.xml",
+      "sha256": "4b76543163da4e617d5a7dd6b3c0f2bbf5fcc7961059ff21af1f1d08645d917b",
+      "bytes": 2278
+    },
+    {
+      "relative": "controller_manager/setup.cfg",
+      "sha256": "a8fab740448acb03e285b0b0cee94013435e133fd4ee08de48ee966329e8af21",
+      "bytes": 201
+    },
+    {
+      "relative": "controller_manager/src/controller_manager.cpp",
+      "sha256": "abb0f3eaf7f6deec65ad16749f421ffda831341eb527eb13241b1568941c5b54",
+      "bytes": 204030
+    },
+    {
+      "relative": "controller_manager/src/controller_manager_parameters.yaml",
+      "sha256": "5bc709f724c9e95388401f5872cf38b2d8a1ff3dbf2b07b57c92f36b1d8ec738",
+      "bytes": 12102
+    },
+    {
+      "relative": "controller_manager/src/ros2_control_node.cpp",
+      "sha256": "81615aad93e5e061a4388c692f1793cc8ecd6a3b76d03873ba7a0a99aad62a7d",
+      "bytes": 7184
+    },
+    {
+      "relative": "controller_manager/test/controller_manager_test_common.hpp",
+      "sha256": "cf0feaaebfec3aae64668efc04e95957b387d0d4da82a2697fe4d7a10fb1e131",
+      "bytes": 8777
+    },
+    {
+      "relative": "controller_manager/test/test_advanced_spawner.cpp",
+      "sha256": "9480b56f0d46bce283382cddec404cea2239b7e101e8ca6d4e4bd1c1fc8719be",
+      "bytes": 39558
+    },
+    {
+      "relative": "controller_manager/test/test_chainable_controller/test_chainable_controller.cpp",
+      "sha256": "0f226a26b33e58cf3ffa71f2a9964e3ee4e851088bef13e93632c917e24e2352",
+      "bytes": 10757
+    },
+    {
+      "relative": "controller_manager/test/test_chainable_controller/test_chainable_controller.hpp",
+      "sha256": "b54bab185ab007129ff4617de9a2441912dffced16accb7187c1140e36934738",
+      "bytes": 4066
+    },
+    {
+      "relative": "controller_manager/test/test_chainable_controller/test_chainable_controller.xml",
+      "sha256": "b356c786fc8fa8c57d46dc9a805040fa2408a9566909788d5364ee43d01a087f",
+      "bytes": 345
+    },
+    {
+      "relative": "controller_manager/test/test_cleanup_controller.cpp",
+      "sha256": "d621619ebc5b8e73f8711739edb6ee8519b44eca84908bf1addc190a6934cf87",
+      "bytes": 4251
+    },
+    {
+      "relative": "controller_manager/test/test_controller/test_controller.cpp",
+      "sha256": "16d9f1ab1621087b421862e308d7f49bff989c3307b2d48f23132ed189bdc040",
+      "bytes": 9059
+    },
+    {
+      "relative": "controller_manager/test/test_controller/test_controller.hpp",
+      "sha256": "3ecdbe412cc36ccb90bcd188f4a652c81f19179ffc3b4392c1307482fb376b5a",
+      "bytes": 3671
+    },
+    {
+      "relative": "controller_manager/test/test_controller/test_controller.xml",
+      "sha256": "33af05bd71f853fbb8b3f91e6bbf38e94879e8983375f6c5879b46309fc00302",
+      "bytes": 279
+    },
+    {
+      "relative": "controller_manager/test/test_controller_failed_activate/test_controller_failed_activate.cpp",
+      "sha256": "8dfbe484fdc29e664fd18ff42695333d1d0ec9fa5c2ea7de334768fea5f6777e",
+      "bytes": 2403
+    },
+    {
+      "relative": "controller_manager/test/test_controller_failed_activate/test_controller_failed_activate.hpp",
+      "sha256": "ee6a87d1eeac38114cdd92c581aa57e945102dc840190e1732c402f4c1a5a6e3",
+      "bytes": 2703
+    },
+    {
+      "relative": "controller_manager/test/test_controller_failed_activate/test_controller_failed_activate.xml",
+      "sha256": "4b5e53bbd08f161938043e7544e00d0c0cf70e6d152dff371796c215b4a22a20",
+      "bytes": 341
+    },
+    {
+      "relative": "controller_manager/test/test_controller_failed_init/test_controller_failed_init.cpp",
+      "sha256": "64aa8f53d0b76bd3ad280a880941df65e81276e9fe0c8b587b72b10aebd0d39e",
+      "bytes": 1407
+    },
+    {
+      "relative": "controller_manager/test/test_controller_failed_init/test_controller_failed_init.hpp",
+      "sha256": "0372514a8396346cd5bf56aabd91557f841c74292552a387f0411b3bd1812272",
+      "bytes": 2344
+    },
+    {
+      "relative": "controller_manager/test/test_controller_failed_init/test_controller_failed_init.xml",
+      "sha256": "0bb3c028a6cf7569d7659d8298bb1769799e53ca05e6515e44502814a0b5118d",
+      "bytes": 325
+    },
+    {
+      "relative": "controller_manager/test/test_controller_manager.cpp",
+      "sha256": "e076d03c0045064922c04293a53387c205fa1b02da8cd319639b02f8b1345894",
+      "bytes": 156848
+    },
+    {
+      "relative": "controller_manager/test/test_controller_manager_hardware_error_handling.cpp",
+      "sha256": "419211a25fc2a7eb6e0397ba1e6fdc69082cb63941835f87ee446bbed500bd53",
+      "bytes": 49643
+    },
+    {
+      "relative": "controller_manager/test/test_controller_manager_srvs.cpp",
+      "sha256": "849f06ed93db78fd7c5887df76f07da0fef2e8b7790d5803ad4d2d02c60d0641",
+      "bytes": 160037
+    },
+    {
+      "relative": "controller_manager/test/test_controller_manager_urdf_passing.cpp",
+      "sha256": "9b8cfb18597422a4f8fc0effeae840d6ef38f30539026b65d68d36f8335dd635",
+      "bytes": 9020
+    },
+    {
+      "relative": "controller_manager/test/test_controller_manager_with_namespace.cpp",
+      "sha256": "2998babe0a47ab076db3d645693130791e69ae458f64cf230d24ff9ce1e6b146",
+      "bytes": 5229
+    },
+    {
+      "relative": "controller_manager/test/test_controller_overriding_parameters.yaml",
+      "sha256": "a29c1174b4edf30de357b7c57255d4b219d7cec88f800461e15e90487d2bef29",
+      "bytes": 133
+    },
+    {
+      "relative": "controller_manager/test/test_controller_spawner_wildcard_entries.yaml",
+      "sha256": "f6f105cb2551a52e6561a655a77a7cb00cd9892573fb0cdc78a78f80d67718ed",
+      "bytes": 184
+    },
+    {
+      "relative": "controller_manager/test/test_controller_spawner_wildcard_entries_global.yaml",
+      "sha256": "1d4c80039253041bafa053213e0d7fde84a2dd2bee5ebd5dfc38e1a758b10f80",
+      "bytes": 182
+    },
+    {
+      "relative": "controller_manager/test/test_controller_spawner_with_fallback_controllers.yaml",
+      "sha256": "dbca24c1f2be929111e32e5a19dd585dd6cf907276c36c75d60dc0a200df0cc0",
+      "bytes": 261
+    },
+    {
+      "relative": "controller_manager/test/test_controller_spawner_with_interfaces.yaml",
+      "sha256": "9b1a7db7553ccbaae238d232ce71f28d009801ebdcc96d5304d825e0dc0baacf",
+      "bytes": 665
+    },
+    {
+      "relative": "controller_manager/test/test_controller_spawner_with_type.yaml",
+      "sha256": "fca47e50008058c457061c0ea1e96606b65da6b0ef90fb3aeb235bd8621d5e39",
+      "bytes": 1202
+    },
+    {
+      "relative": "controller_manager/test/test_controller_with_interfaces/test_controller_with_interfaces.cpp",
+      "sha256": "2a1394ad9915f34f4d18cc7c8b7361f779029c6112cb344f1861a0eb05487d71",
+      "bytes": 2393
+    },
+    {
+      "relative": "controller_manager/test/test_controller_with_interfaces/test_controller_with_interfaces.hpp",
+      "sha256": "be17b733327a478554a41648f6780577f0c50d8098c183e03c9ff1fb2c37897d",
+      "bytes": 2670
+    },
+    {
+      "relative": "controller_manager/test/test_controller_with_interfaces/test_controller_with_interfaces.xml",
+      "sha256": "3ff7f1602c6bd8a5f611ea47556268bc91729aa447754d900fa331d0f788b978",
+      "bytes": 341
+    },
+    {
+      "relative": "controller_manager/test/test_controllers_chaining_with_controller_manager.cpp",
+      "sha256": "ed4d9bca429cd904bb49b4841266e71bf3f9ff800f7b2425100b5b0dec75dac0",
+      "bytes": 105830
+    },
+    {
+      "relative": "controller_manager/test/test_hardware_management_srvs.cpp",
+      "sha256": "086251074cefec24012d1a285d85f8f8c5c4145435c655bd2fb9b3ad652aed1b",
+      "bytes": 18381
+    },
+    {
+      "relative": "controller_manager/test/test_hardware_spawner.cpp",
+      "sha256": "d04443f737ccd52ed1bbdd966924a4b88a06546bd6b2122f9a32554a2f931bf2",
+      "bytes": 9999
+    },
+    {
+      "relative": "controller_manager/test/test_load_controller.cpp",
+      "sha256": "5218bd1f23300fb609d660fef2cabc5a1e883decc63b838310013d0c89c1ce31",
+      "bytes": 19575
+    },
+    {
+      "relative": "controller_manager/test/test_release_interfaces.cpp",
+      "sha256": "17465e2118fab836c16d721f1c76abd745be3a06ad2fea005dd66b8ad9ad266e",
+      "bytes": 21698
+    },
+    {
+      "relative": "controller_manager/test/test_ros2_control_node.yaml",
+      "sha256": "4d0a6db934ced6d3dc1523d30a65f92d98e1412cb9be3f2b83492b4a9c14948d",
+      "bytes": 192
+    },
+    {
+      "relative": "controller_manager/test/test_ros2_control_node_launch.py",
+      "sha256": "b5523bc5009806a83d7b61809550fb10a365ce228d71c536a1393fdcc347c5eb",
+      "bytes": 4389
+    },
+    {
+      "relative": "controller_manager/test/test_spawner_unspawner.cpp",
+      "sha256": "9b7273bfac7ab73425cb444d553ee6ece4167e8d506016d5261776d070bec357",
+      "bytes": 63412
+    },
+    {
+      "relative": "controller_manager/test/test_test_utils.py",
+      "sha256": "e850779840f8fb65cb676f9aa2e1f82a7e1c97324a5226914a4183f20a61e15e",
+      "bytes": 2978
+    },
+    {
+      "relative": "hardware_interface_testing/CHANGELOG.rst",
+      "sha256": "40b5c3da663d250e745f5b44ac328e992c3411c43ca1dd297552bb8813505210",
+      "bytes": 11209
+    },
+    {
+      "relative": "hardware_interface_testing/CMakeLists.txt",
+      "sha256": "cdc15359c044813b7ad004a65e0d437bbf7d5b77ac87deaa917e93ca1902bef2",
+      "bytes": 2132
+    },
+    {
+      "relative": "hardware_interface_testing/README.md",
+      "sha256": "919851bd3c029d08cb745650c2fa50409ac70795b33a9f8a32c5ec0aab491bbc",
+      "bytes": 162
+    },
+    {
+      "relative": "hardware_interface_testing/package.xml",
+      "sha256": "776ba778a3bbc3feea1f02845d13bfb0bbdd69b45e20c9e34604f6e9aedc5f09",
+      "bytes": 1024
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_components/test_actuator.cpp",
+      "sha256": "c905c46c013381e6a2eb34c8fdb38183959a8dd074d903eddb31536417532fcd",
+      "bytes": 7640
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_components/test_actuator_exclusive_interfaces.cpp",
+      "sha256": "bedc86a20e6f92c895f37c10bfc5bec681661f9c8eea1ef23ecf4a14a49d19a7",
+      "bytes": 7573
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_components/test_components.xml",
+      "sha256": "f49e7bb084789a8dc3a64b6e62063aef7fc5c9d3eb7f8f8fceb15be21e2d51f7",
+      "bytes": 1667
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_components/test_sensor.cpp",
+      "sha256": "704895ca5e1a3c71bb2f994f2015a81173958be11e8c9fe1faf7302dd3942439",
+      "bytes": 2633
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_components/test_system.cpp",
+      "sha256": "4d067641565d8c1edad563a466047e6a76daeda3abcf399cd71fd9ce1999495e",
+      "bytes": 7664
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_resource_manager.cpp",
+      "sha256": "cc95c666070fa504734dd7ff33320ad4ba272f96c055fcace85de2a641b108a4",
+      "bytes": 121611
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_resource_manager.hpp",
+      "sha256": "b8c4fa8490bbb3fa3c345a5910ce613f61afac08dc751da3ad95a2d5e1b20a74",
+      "bytes": 3040
+    },
+    {
+      "relative": "hardware_interface_testing/test/test_resource_manager_prepare_perform_switch.cpp",
+      "sha256": "f47d6ec95224d8a068578f2acfcea11908d6bd514414cf2e6b0737f86215b61f",
+      "bytes": 48911
+    },
+    {
+      "relative": "hardware_interface/test/test_hardware_components/test_force_torque_sensor.cpp",
+      "sha256": "9f2b61b909901e28963ace92c58cc3a9c9b027efb91419c51b4270efaea1ca4e",
+      "bytes": 3602
+    },
+    {
+      "relative": "hardware_interface/test/test_hardware_components/test_hardware_components.xml",
+      "sha256": "362155514ad440fd11fb14a3d4358e52bcd021da8100c895113b3408fbad19d4",
+      "bytes": 1483
+    },
+    {
+      "relative": "hardware_interface/test/test_hardware_components/test_imu_sensor.cpp",
+      "sha256": "41d4103727699d16548addaf42f712de50030b1f199019cc8945052478bf48af",
+      "bytes": 5481
+    },
+    {
+      "relative": "hardware_interface/test/test_hardware_components/test_single_joint_actuator.cpp",
+      "sha256": "2dfe8b96e71aeeb0eebe7d76061e7494cc7f7637ff21496f266d96faa5ec81bf",
+      "bytes": 4172
+    },
+    {
+      "relative": "hardware_interface/test/test_hardware_components/test_system_with_command_modes.cpp",
+      "sha256": "4c913348a02a3a430bbb0a2a0ec2ffb8b0b985e56417756f22cb866b4b62ab50",
+      "bytes": 7613
+    },
+    {
+      "relative": "hardware_interface/test/test_hardware_components/test_two_joint_system.cpp",
+      "sha256": "829024aa4d6ea0adcebbbfad955e7e5fdb61d308ba3a7f020dfe24cb6c986b2c",
+      "bytes": 4030
+    }
+  ],
+  "local_changes": [
+    {
+      "relative": "controller_manager/src/controller_manager.cpp",
+      "original_sha256": "abb0f3eaf7f6deec65ad16749f421ffda831341eb527eb13241b1568941c5b54",
+      "patched_sha256": "8c3fe498a2879fc84e596c445c0d95759051f5e4cf53fa81158380a7f86a0311",
+      "reason": "Use the actual caller sampled cycle timestamp in sim-time for controller period and trigger; retain non-sim clock behavior."
+    },
+    {
+      "relative": "controller_manager/package.xml",
+      "original_sha256": "4b76543163da4e617d5a7dd6b3c0f2bbf5fcc7961059ff21af1f1d08645d917b",
+      "patched_sha256": "8d26d357bed57be4c88e8be3eadc403fe5e686de9d6b5aa5005d8ee20ddea3ef",
+      "reason": "Add tests-only official hardware plugin closure dependency so101_clock_test_hardware."
+    },
+    {
+      "relative": "controller_manager/test/test_controller_manager.cpp",
+      "original_sha256": "e076d03c0045064922c04293a53387c205fa1b02da8cd319639b02f8b1345894",
+      "patched_sha256": "99134964c1d15e2c37c88955a6f089507c26826d2c40eaca6a8f1df23861dfd8",
+      "reason": "Synchronize existing async-at-CM-rate stop test with real public deactivation-prepared state and retain one quiescent counter baseline through completion; preserve original timing/rate/lifecycle assertions."
+    }
+  ],
+  "fixture_source_mapping": {
+    "upstream_directory": "hardware_interface/test/test_hardware_components",
+    "local_directory": "so101_clock_test_hardware/upstream",
+    "scope": "Unmodified upstream sources; build and plugin registration only when BUILD_TESTING=ON"
+  }
+}

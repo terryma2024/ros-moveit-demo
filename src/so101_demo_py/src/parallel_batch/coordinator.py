@@ -4,7 +4,7 @@ The journal alone is authoritative. Every transition holds one state lock and
 appends a projection delta before applying it or acknowledging authorization.
 The injected result port verifies sealed artifacts and discovers a completed
 artifact in the workspace reserved by LEASE_GRANTED. It must not call back into
-the coordinator or authorize worker actions; Task 4 supplies the disk adapter.
+the coordinator or authorize worker actions; the disk adapter supplies persistence.
 """
 
 import hashlib
@@ -20,12 +20,15 @@ from functools import wraps
 from pathlib import Path
 from typing import Callable, Protocol
 
-from .contracts import (
-    ParallelRuntimeConfigV3,
-    ParallelRuntimeConfigV2,
-    AttemptStatus, BatchSummary, LeaseIdentity, ParallelRuntimeConfig,
-    PointStatus, RunMode, ValidationStatus, WorkerState,
+from so101_demo.parallel_batch.contracts.common import (
+    AttemptStatus,
+    PointStatus,
+    RunMode,
+    ValidationStatus,
+    WorkerState,
 )
+from so101_demo.parallel_batch.contracts.identity import BatchSummary, LeaseIdentity
+from so101_demo.parallel_batch.contracts.linux_cuda import ParallelRuntimeConfigLinuxCuda
 
 
 _START_AUTHORIZATION_FROM_PROJECTION = object()
@@ -140,8 +143,7 @@ class BatchCoordinator:
         if point_selector is not None and not callable(point_selector):
             raise ValueError('POINT_SELECTOR_CALLABLE')
         self._point_selector = point_selector
-        if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2,
-                                   ParallelRuntimeConfigV3)):
+        if not isinstance(config, ParallelRuntimeConfigLinuxCuda):
             raise ValueError('FROZEN_CONFIG_REQUIRED')
         self.config = config
         self._state = {'workers': {}, 'points': {}}
@@ -773,7 +775,19 @@ class BatchCoordinator:
         self._emit('LEASE_RENEWED', {'workers': {lease.worker_id: worker}})
         return LeaseIdentity(**worker['lease'])
 
+    @_locked
+    def heartbeat_projection(self, lease):
+        """Return the same committed renewal's detached phase/heartbeat projection.
+
+        The enclosing existing Coordinator lock keeps renewal and readback one
+        transaction. There is exactly one renewal and no new deadline policy.
+        """
+        self.heartbeat(lease)
+        return self.snapshot().workers[lease.worker_id]
+
     def _commit(self, lease, location, request_key, *, validation, discovered=False):
+        from so101_demo.act.result_store import (
+            ACT_POINT_RESULT_KEYS, ACT_RESULT_RECEIPT_KEYS, ActCollectionResultVerifier)
         kind = 'VALIDATION_COMMITTED' if validation else 'RESULT_COMMITTED'
         identity = {**self._identity(lease), 'location': str(location)}
         duplicate = self._duplicate(request_key, kind, identity)
@@ -782,6 +796,13 @@ class BatchCoordinator:
             if lease.coordinator_epoch != self.journal.coordinator_epoch:
                 raise ValueError('STALE_COORDINATOR_EPOCH')
             return deepcopy(duplicate.payload['response'])
+        # The ACT QC gate applies to an ACT execution commit and nothing else: it is
+        # selected by the result contract the port implements — the generic production adapter must keep its own
+        # paths — and it runs after the acknowledged-request branch so a replay stays journal-backed rather than
+        # depending on the filesystem. ACT validation commits are not episodes and are not gated here.
+        if (isinstance(self.result_port, ActCollectionResultVerifier)
+                and self.request.run_mode is RunMode.EXECUTE):
+            self.result_port.verify(lease, str(location), self.request.run_mode)
         point = self._state['points'].get(lease.point_id)
         worker_state = self._state['workers'].get(lease.worker_id)
         if (point is None or point.get('active_attempt') != lease.attempt_id
@@ -816,8 +837,17 @@ class BatchCoordinator:
             'recovery_deadline_monotonic_s': worker[
                 'recovery_deadline_monotonic_s'],
         }
-        self._emit(kind, {'points': {lease.point_id: point}, 'workers': {lease.worker_id: worker}},
-                   request_key=request_key, identity=identity, response=response)
+        delta = {'points': {lease.point_id: point}, 'workers': {lease.worker_id: worker}}
+        if isinstance(self.result_port, ActCollectionResultVerifier) and 'qc_report_sha256' in result:
+            response.update({key:result[key] for key in ('qc_report_sha256','episode_seal_sha256','inputs_sha256',
+                'scope_sha256','audit_manifest_sha256','collection_mode')})
+        if isinstance(self.result_port, ActCollectionResultVerifier) and 'act_data_qc' in result:
+            # Schema 3: the attempt status above is the Teacher's. The data verdict is recorded beside it in the
+            # receipt, the journal event and the index, and never changes the point status.
+            response.update({key:result[key] for key in ACT_RESULT_RECEIPT_KEYS})
+            delta['act_results'] = {**self._state.get('act_results', {}),
+                lease.point_id: {key:result[key] for key in ACT_POINT_RESULT_KEYS}}
+        self._emit(kind, delta, request_key=request_key, identity=identity, response=response)
         self._evaluate()
         return response
 
@@ -1096,7 +1126,8 @@ class BatchCoordinator:
             validation_statuses={p: v.validation_status for p, v in points.items()
                                  if v.validation_status is not None},
             batch_cleanup_complete=value['batch_cleanup_complete'],
-            terminal_reason=value['terminal_reason'])
+            terminal_reason=value['terminal_reason'],
+            act_results=value.get('act_results', {}))
         return CoordinatorSnapshot(
             workers, points, value['batch_started_monotonic_s'],
             value['batch_deadline_monotonic_s'], value['broker_healthy'],

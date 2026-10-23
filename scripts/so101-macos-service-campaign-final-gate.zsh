@@ -169,11 +169,11 @@ record_step() {
 # The full static gate, in the order the plan fixes.
 record_step demo-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[demo-pytest]" src/so101_demo_py/test -q \
   --junitxml="$run_root/demo-pytest.xml"
-record_step teleop-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[teleop-pytest]" src/so101_teleop/test/teleop -q \
+record_step teleop-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[teleop-pytest]" src/so101_teleop/test/api src/so101_teleop/test/expert_validation src/so101_teleop/test/unified src/so101_teleop/test/pick_place_validation -q \
   --junitxml="$run_root/teleop-pytest.xml"
 record_step copied-install "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[copied-install]" -q \
-  src/so101_demo_py/test/test_copied_installed_entrypoint.py \
-  src/so101_demo_py/test/test_macos_install_contract.py \
+  src/so101_demo_py/test/packaging/test_copied_installed_entrypoint.py \
+  src/so101_demo_py/test/packaging/test_macos_install_contract.py \
   --junitxml="$run_root/copied-install.xml"
 # `--log-base` is a global colcon option: it has to precede the verb, and `--event-handlers` takes
 # the remaining values, so the handlers stay last.
@@ -202,7 +202,7 @@ record_step web-test "$web_root" env -u NODE_ENV bun run test
 record_step web-build "$web_root" env -u NODE_ENV bun run build
 
 if (( with_playwright )); then
-  # The required contract projects for this remediation are the two whose subject Task 7 changed:
+  # The required contract projects for this remediation are the two whose subject this remediation changed:
   # `live-preflight.spec.ts` (the whole-machine scanner is isolated, production still fails closed)
   # and `live-evidence-layouts.spec.ts` (the evidence layouts). The rest of `contract/` drives the
   # dev-server UI through a mock harness this host does not stand up - measured at 43 passed / 18

@@ -1,0 +1,48 @@
+schema_version: 2
+kind: act_training
+action:
+  chunk_size: 10
+  execution_prefix: 1
+  temporal_ensembling: false
+  tail_padding_mask: true
+observation:
+  cameras: [head, wrist]
+  state_dim: 8
+  action_dim: 6
+normalization:
+  split: train
+  # floor for the per-dimension std: the neck sin/cos state dimensions have zero spread under a fixed head
+  std_floor: 0.01
+# TRAIN-002 configuration (O7). Same as training.yaml except steps, learning_rate(_backbone), batch_size, num_workers and sample_selection.
+# These are the ACT reference values for TRAIN-002, not yet validated on real data.
+training:
+  steps: 60000
+  # TRAIN-002 (plan item O7): the ACT reference rates, learning_rate for the transformer and learning_rate_backbone for the ResNet
+  learning_rate: 1.0e-4
+  learning_rate_backbone: 1.0e-5
+  batch_size: 16
+  # training-view sample selection. trim_leading_idle drops the chunk START rows before max(0, r* - lead_in_rows), where r* is the first row
+  # whose max over the six arm joints of |action - state| (raw radians) exceeds idle_threshold_rad. The idle stretch after the reset is
+  # the Teacher's perception and planning time; its start is unobservable. Rows stay available as action-window targets. Applied to the
+  # train samples and to the validation subset alike. An episode that never exceeds the threshold is kept whole.
+  sample_selection:
+    trim_leading_idle: true
+    idle_threshold_rad: 0.005
+    lead_in_rows: 10
+  # progress and validation. None of these changes the training maths, the seed or the sampling order.
+  # one stdout line and one metrics.jsonl record (window means, learning rate, samples/s, ETA, DataLoader wait vs compute) every N steps
+  log_interval_steps: 100
+  # validation loss on a fixed evenly spaced subset of the validation split every M steps (and at the last step)
+  validation_interval_steps: 2000
+  validation_samples: 512
+  # DataLoader worker processes of the training loader (an explicit argument to the trainer wins)
+  num_workers: 8
+  # ImageNet ResNet18 (torchvision ResNet18_Weights.IMAGENET1K_V1, https://download.pytorch.org/models/resnet18-f37072fd.pth); the file
+  # is given to the trainer by path and is hash-verified, never downloaded. null = random initialisation.
+  pretrained_backbone:
+    name: ResNet18_Weights.IMAGENET1K_V1
+    sha256: f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec
+frozen:
+  seed: 20260924
+  # sha256 of adapters/act/lerobot.py PREPROCESSING (the D8 decode table and image scaling). Quoted: an all-digit hash is a YAML integer
+  preprocessing_sha256: "47fea5806bd7cd5f6a2753eddb27d13f63424f4df6eed67f4b580b7ca8016083"

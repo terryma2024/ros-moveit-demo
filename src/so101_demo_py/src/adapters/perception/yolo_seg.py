@@ -204,10 +204,15 @@ class YoloSegDetector:
         allow_cpu_fallback: bool,
         model_id: str,
         imgsz: int,
+        score_threshold: float = 0.25,
         torch_api: Any | None = None,
         model_factory: Callable[[str], Any] | None = None,
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> None:
+        if (type(score_threshold) not in (int, float) or not math.isfinite(score_threshold)
+                or not 0.0 <= score_threshold <= 1.0):
+            raise ValueError("score_threshold must be finite and in [0, 1]")
+        self._score_threshold = float(score_threshold)
         if imgsz <= 0:
             raise ModelSetupError("MODEL_UNAVAILABLE", "imgsz must be positive")
         self._monotonic_ns = monotonic_ns
@@ -234,10 +239,10 @@ class YoloSegDetector:
     def _predict(self, source: np.ndarray) -> list[Any]:
         try:
             results = self._model.predict(
-                source=source,
+                source=np.ascontiguousarray(source[:, :, ::-1]),
                 imgsz=self._imgsz,
                 device=self.runtime_device,
-                conf=0.25,
+                conf=self._score_threshold,
                 verbose=False,
             )
         except Exception as error:

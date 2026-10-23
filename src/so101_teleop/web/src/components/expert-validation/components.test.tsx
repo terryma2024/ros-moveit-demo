@@ -6,6 +6,7 @@ import { describe, expect, test, vi } from "vitest";
 import { CampaignProgress } from "./campaign-progress";
 import {
   CampaignSetup,
+  SINGLE_WORKER,
   START_GUARD_NOT_A_QUALIFICATION,
   executionClaim,
 } from "./campaign-setup";
@@ -13,7 +14,7 @@ import { PointEvidence } from "./point-evidence";
 import { RetryPanel } from "./retry-panel";
 
 const campaign = {
-  campaign_id: "campaign-1", sequence: 9, execution_mode: "PARALLEL" as const,
+  campaign_id: "campaign-1", sequence: 9, execution_mode: "SEQUENTIAL" as const,
   status: "COMPLETED_WITH_FAILURES", batch_cleanup_complete: true,
   points: [
     { point_id: "p1", display_id: "P01", status: "PASSED", retry_eligible: false, attempts: [], artifact_ids: [], artifacts: [] },
@@ -103,7 +104,7 @@ describe("expert validation campaign components", () => {
 
 describe("campaign setup start guard", () => {
   const props = {
-    state: { pointCount: 4, executionMode: "PARALLEL" as const, workerCount: 4 },
+    state: { pointCount: 4 },
     leaseHeld: true,
     manifestReady: true,
     onChange: vi.fn(),
@@ -129,9 +130,9 @@ describe("campaign setup start guard", () => {
   });
 });
 
-describe("CampaignSetup exact-N qualification", () => {
+describe("CampaignSetup single native worker", () => {
   const base = {
-    state: { pointCount: 4, executionMode: "PARALLEL" as const, workerCount: 4 },
+    state: { pointCount: 4 },
     leaseHeld: true,
     manifestReady: true,
     onChange: () => undefined,
@@ -142,101 +143,51 @@ describe("CampaignSetup exact-N qualification", () => {
   };
   const capabilities = {
     available: true,
-    execution_modes: ["SEQUENTIAL", "PARALLEL"] as const,
-    default_execution_mode: "PARALLEL" as const,
+    execution_modes: ["SEQUENTIAL"] as const,
+    default_execution_mode: "SEQUENTIAL" as const,
     minimum_points: 4,
     maximum_points: 20,
-    fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8],
-    worker_count_availability: [
-      { worker_count: 4, selectable: true, status: "APPROVED", reason_codes: [] },
-    ],
-    adaptive_default_ladder: [2, 4, 8],
+    fixed_worker_counts: [1],
+    worker_count_availability: [],
+    adaptive_default_ladder: [],
   } as never;
 
-  test("an unknown exact N is disabled and shows the provider reason", () => {
-    render(
-      <CampaignSetup
-        {...base}
-        capabilities={capabilities}
-        qualifications={[
-          {
-            selected_n: 4,
-            status: "UNKNOWN",
-            reasons: ["BUDGET_PROVIDER_NOT_READY"],
-            runtime_identity: "R",
-            contract_version: 2,
-            profile_sha256: null,
-            approval_sha256: null,
-          },
-        ]}
-      />,
-    );
-    const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
-    const four = Array.from(select.options).find((option) => option.value === "4");
-    expect(four?.disabled).toBe(true);
-    expect(screen.getByText(/BUDGET_PROVIDER_NOT_READY/)).toBeTruthy();
-  });
-
-  test("a configured Linux v3 count can reach resource preflight without budget promotion", () => {
-    const configured = {
-      ...(capabilities as object),
-      worker_count_availability: [
-        { worker_count: 4, selectable: true, status: "CONFIGURED", reason_codes: [] },
-      ],
-    } as never;
-    render(
-      <CampaignSetup
-        {...base}
-        capabilities={configured}
-        qualifications={[
-          {
-            selected_n: 4,
-            status: "UNKNOWN",
-            reasons: ["BUDGET_PROVIDER_NOT_READY"],
-            runtime_identity: "uncomposed-runtime",
-            contract_version: 2,
-            profile_sha256: null,
-            approval_sha256: null,
-          },
-        ]}
-      />,
-    );
-    const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
-    const four = Array.from(select.options).find((option) => option.value === "4");
-    expect(four?.disabled).toBe(false);
-    expect(screen.getByRole("button", { name: "Start validation" }).hasAttribute("disabled")).toBe(false);
-    expect(screen.getByText(/CONFIGURED.*resource check required/)).toBeTruthy();
-  });
-
-  test("an available promoted N stays selectable and there is no K input", () => {
-    render(
-      <CampaignSetup
-        {...base}
-        capabilities={capabilities}
-        qualifications={[
-          {
-            selected_n: 4,
-            status: "AVAILABLE",
-            reasons: [],
-            runtime_identity: "R",
-            contract_version: 2,
-            profile_sha256: "profile",
-            approval_sha256: "approval",
-          },
-        ]}
-      />,
-    );
-    const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
-    const four = Array.from(select.options).find((option) => option.value === "4");
-    expect(four?.disabled).toBe(false);
+  test("there is no mode selector, no worker-count control and no adaptive panel", () => {
+    render(<CampaignSetup {...base} capabilities={capabilities} />);
+    expect(screen.queryByLabelText("Execution mode")).toBeNull();
+    expect(screen.queryByLabelText("Worker count")).toBeNull();
     expect(screen.queryByLabelText(/max points per worker/i)).toBeNull();
+    expect(document.body.textContent ?? "").not.toMatch(/ADAPTIVE|PARALLEL|W8|W6|fallback/i);
+    expect(screen.getByLabelText("Execution").textContent).toContain("SEQUENTIAL");
+  });
+
+  test("a service that publishes its one worker count can preflight and start", () => {
+    render(<CampaignSetup {...base} capabilities={capabilities} />);
+    expect(screen.getByRole("button", { name: "Check resources" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Start validation" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  test("nothing starts before the service has published its capabilities", () => {
+    render(<CampaignSetup {...base} />);
+    expect(screen.getByRole("button", { name: "Check resources" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Start validation" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  test("the point count is the only setup choice and it reports through onChange", async () => {
+    const onChange = vi.fn();
+    render(<CampaignSetup {...base} capabilities={capabilities} onChange={onChange} />);
+    await userEvent.setup().type(screen.getByLabelText("Final point count"), "0");
+    expect(onChange).toHaveBeenCalled();
+    expect(onChange.mock.calls.at(-1)?.[1]).toBe("pointCount");
+    expect(Object.keys(onChange.mock.calls.at(-1)?.[0] ?? {})).toEqual(["pointCount"]);
   });
 });
 
 /**
  * The macOS platform document. Every value is the published service shape
- * (`expert_validation/production.py::_macos_capabilities`): three matrix rows, fixed W1/W2, and a
- * start guard that protects a start rather than qualifying a host.
+ * (`expert_validation/production_service/capabilities.py::_macos_capabilities`): the single-worker matrix rows
+ * (the two-worker row is no longer startable, so it is not advertised), and a start guard that protects a start
+ * rather than qualifying a host.
  */
 const MACOS_START_GUARD_NOTE =
   "The StartGuard policy and status describe one bounded startup check only; they are not a "
@@ -245,7 +196,7 @@ const MACOS_START_GUARD_NOTE =
 function matrixRow(
   profile: string,
   schema_version: number,
-  execution_mode: "SEQUENTIAL" | "PARALLEL",
+  execution_mode: "SEQUENTIAL",
   worker_count: number,
   batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY",
 ) {
@@ -269,27 +220,15 @@ function matrixRow(
 const macosCapabilities = {
   available: true,
   platform: "macos",
-  execution_modes: ["SEQUENTIAL", "PARALLEL"],
-  default_execution_mode: "PARALLEL",
+  execution_modes: ["SEQUENTIAL"],
+  default_execution_mode: "SEQUENTIAL",
   minimum_points: 4,
   maximum_points: 20,
-  fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8],
-  worker_count_availability: [
-    { worker_count: 1, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
-    { worker_count: 2, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
-    ...[3, 4, 5, 6, 7, 8].map((worker_count) => ({
-      worker_count,
-      selectable: false,
-      status: "UNSUPPORTED_ON_MACOS",
-      reason_codes: ["UNSUPPORTED_ON_MACOS"],
-      profile_sha256: null,
-      qualification_sha256: null,
-    })),
-  ],
+  fixed_worker_counts: [1],
+  worker_count_availability: [],
   support_matrix: [
-    matrixRow("MPS_W2_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
-    matrixRow("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
-    matrixRow("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+    matrixRow("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    matrixRow("MPS_SINGLE_WORKER_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
   ],
   adaptive_default_ladder: [],
   worker_qualifications: [],
@@ -308,7 +247,7 @@ const macosCapabilities = {
 
 const macosBase = {
   capabilities: macosCapabilities,
-  state: { pointCount: 4, executionMode: "SEQUENTIAL" as const, workerCount: 1 },
+  state: { pointCount: 4 },
   leaseHeld: true,
   manifestReady: true,
   onChange: () => undefined,
@@ -318,109 +257,40 @@ const macosBase = {
   onStart: () => undefined,
 };
 
-function workerOptionByValue(count: number): HTMLOptionElement {
-  const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
-  const option = Array.from(select.options).find((entry) => entry.value === String(count));
-  if (!option) throw new Error(`worker option N${count} is missing`);
-  return option;
-}
-
-describe("macOS W1/W2 support matrix", () => {
-  test("only the matrix profiles are offered as execution modes", () => {
+describe("macOS single-worker support matrix", () => {
+  test("no mode or worker control is offered; the matrix single-worker row is the profile", () => {
     render(<CampaignSetup {...macosBase} />);
-    const modes = screen.getByLabelText("Execution mode") as HTMLSelectElement;
-    expect(Array.from(modes.options).map((option) => option.value))
-      .toEqual(["SEQUENTIAL", "PARALLEL"]);
-    expect(Array.from(modes.options).map((option) => option.value)).not.toContain("ADAPTIVE");
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
-  });
-
-  test("N3 to N8 are unavailable with the macOS reason and no profile or qualification hash", () => {
-    render(<CampaignSetup {...macosBase} state={{ ...macosBase.state, executionMode: "PARALLEL", workerCount: 2 }} />);
-    expect(workerOptionByValue(2).disabled).toBe(false);
-    for (const count of [3, 4, 5, 6, 7, 8]) {
-      const option = workerOptionByValue(count);
-      expect(option.disabled, `N${count} must be disabled`).toBe(true);
-      expect(option.text, `N${count} reason`).toContain("UNSUPPORTED_ON_MACOS");
-      expect(screen.getByText(`N${count} unavailable · UNSUPPORTED_ON_MACOS`)).toBeTruthy();
-    }
+    expect(screen.queryByLabelText("Execution mode")).toBeNull();
+    expect(screen.queryByLabelText("Worker count")).toBeNull();
+    expect(screen.queryByLabelText("Unavailable worker counts")).toBeNull();
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_SINGLE_WORKER_FIRST_PASS");
     // The matrix carries no budget profile and no qualification hash, so none may be rendered.
     expect(document.body.textContent ?? "").not.toMatch(/[0-9a-f]{64}/);
   });
 
-  test("a qualification view can neither enable nor disable the macOS selection", () => {
-    render(
-      <CampaignSetup
-        {...macosBase}
-        state={{ ...macosBase.state, executionMode: "PARALLEL", workerCount: 2 }}
-        qualifications={[
-          {
-            selected_n: 2,
-            status: "UNKNOWN",
-            reasons: ["BUDGET_PROVIDER_NOT_READY"],
-            runtime_identity: "test-runtime",
-            contract_version: 2,
-            profile_sha256: null,
-            approval_sha256: null,
-          },
-          {
-            selected_n: 8,
-            status: "AVAILABLE",
-            reasons: [],
-            runtime_identity: "test-runtime",
-            contract_version: 2,
-            profile_sha256: "f".repeat(64),
-            approval_sha256: "e".repeat(64),
-          },
-        ]}
-      />,
-    );
-    // N2 stays selectable because the matrix supports it, not because a provider approved it.
-    expect(workerOptionByValue(2).disabled).toBe(false);
-    // And a promoted N8 stays unselectable: on macOS the matrix, not a qualification, decides.
-    expect(workerOptionByValue(8).disabled).toBe(true);
-    expect(workerOptionByValue(8).text).toContain("UNSUPPORTED_ON_MACOS");
-    expect(screen.queryByText(/BUDGET_PROVIDER_NOT_READY/)).toBeNull();
-    expect(document.body.textContent ?? "").not.toContain("f".repeat(64));
-    expect(document.body.textContent ?? "").not.toContain("e".repeat(64));
-  });
-
-  test("the selected point count never selects the profile and W2 is the exact-W2 path", () => {
+  test("the selected point count never selects the profile", () => {
     const { rerender } = render(<CampaignSetup {...macosBase} />);
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
-    rerender(<CampaignSetup {...macosBase} state={{ ...macosBase.state, pointCount: 20 }} />);
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
-    rerender(
-      <CampaignSetup
-        {...macosBase}
-        state={{ ...macosBase.state, pointCount: 20, executionMode: "PARALLEL", workerCount: 2 }}
-      />,
-    );
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W2_FIRST_PASS");
-    rerender(
-      <CampaignSetup
-        {...macosBase}
-        state={{ ...macosBase.state, pointCount: 4, executionMode: "PARALLEL", workerCount: 2 }}
-      />,
-    );
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W2_FIRST_PASS");
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_SINGLE_WORKER_FIRST_PASS");
+    rerender(<CampaignSetup {...macosBase} state={{ pointCount: 20 }} />);
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_SINGLE_WORKER_FIRST_PASS");
 
     // The claim is a pure function of the matrix row and the selection: no point count is an input.
-    expect(executionClaim(macosCapabilities, { executionMode: "SEQUENTIAL", workerCount: 1 }))
-      .toEqual({ execution_profile: "MPS_W1_FIRST_PASS", batch_kind: "FIRST_PASS" });
-    expect(executionClaim(macosCapabilities, { executionMode: "PARALLEL", workerCount: 2 }))
-      .toEqual({ execution_profile: "MPS_W2_FIRST_PASS", batch_kind: "FIRST_PASS" });
-    expect(executionClaim(macosCapabilities, { executionMode: "PARALLEL", workerCount: 8 })).toBeNull();
+    expect(executionClaim(macosCapabilities, SINGLE_WORKER))
+      .toEqual({ execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS", batch_kind: "FIRST_PASS" });
+    expect(executionClaim(macosCapabilities, SINGLE_WORKER, "FULL_RESTART_RETRY"))
+      .toEqual({ execution_profile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", batch_kind: "FULL_RESTART_RETRY" });
+    expect(executionClaim(macosCapabilities, { executionMode: "SEQUENTIAL", workerCount: 2 })).toBeNull();
     expect(executionClaim(macosCapabilities, { executionMode: "SEQUENTIAL", workerCount: 3 })).toBeNull();
   });
 
-  test("an N outside the matrix cannot preflight or start", () => {
-    render(
-      <CampaignSetup
-        {...macosBase}
-        state={{ ...macosBase.state, executionMode: "PARALLEL", workerCount: 3 }}
-      />,
-    );
+  test("a matrix without a first-pass single-worker row cannot preflight or start", () => {
+    const retryOnly = {
+      ...(macosCapabilities as object),
+      support_matrix: [
+        matrixRow("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+      ],
+    } as never;
+    render(<CampaignSetup {...macosBase} capabilities={retryOnly} />);
     expect((screen.getByRole("button", { name: "Check resources" }) as HTMLButtonElement).disabled)
       .toBe(true);
     expect((screen.getByRole("button", { name: "Start validation" }) as HTMLButtonElement).disabled)

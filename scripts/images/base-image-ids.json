@@ -1,0 +1,18 @@
+{
+  "inference": {
+    "tag": "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
+    "id": "sha256:010dca70ce3ce995367793642c2e5515718986253cecacc032e9f7f7ec6c5457"
+  },
+  "shard-deps": {
+    "tag": "so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115",
+    "id": "sha256:5998505c1debdd1a3410ed6bd1aec8796ef3f82e3b3dc403bbc992423b6304fd"
+  },
+  "shard": {
+    "tag": "so101-campaign-shard-deps:ros-jazzy-yolo11n-v1",
+    "id": null
+  },
+  "mount-base": {
+    "tag": "so101-mount-base:ros-jazzy-torch2.13.0-cu130-v1",
+    "id": "sha256:2c70618b654e8dd456a51f38f28fa8d7e7f274d158526174f48f77fe57b20f92"
+  }
+}

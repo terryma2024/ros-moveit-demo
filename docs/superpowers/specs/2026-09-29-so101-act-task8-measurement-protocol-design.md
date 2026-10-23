@@ -1,6 +1,8 @@
 # SO-101 ACT Task 8 MuJoCo measurement protocol 补充设计
 
-2026-10-05 优先修订：[Teacher 执行与 ACT 数据验证分离](2026-10-05-so101-teacher-act-decoupling-amendment.md)。Teacher 按起终点杯子 Pose 和最终直立结果判定任务；过程质量项以审计为主，保留真正的执行保护。ACT 采集/QC 故障不得阻断或撤销 Teacher 运动，数据标准和用途隔离不放宽。下文冲突条款以该修订为准；用户已授权现有 ai-station Claude 更新计划、清理旧逻辑/测试并执行，尚未形成新运行验收。
+> **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+>
+> Teacher 按起终点杯子 Pose 和最终直立结果判定任务；过程质量项以审计为主，保留真正的执行保护。ACT 采集/QC 故障不得阻断或撤销 Teacher 运动，数据标准和用途隔离不放宽。用户已授权现有 ai-station Claude 更新计划、清理旧逻辑/测试并执行，尚未形成新运行验收。
 
 **日期：** 2026-09-29  
 **状态：** 独立 GPT-6 Astra / High 三轮审查通过  

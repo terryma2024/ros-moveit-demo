@@ -1,10 +1,10 @@
-"""Immutable MuJoCo grasp actions proved by the TASK15 five-win campaign."""
+"""Immutable MuJoCo grasp actions proved by the five-win grasp campaign."""
 
 from __future__ import annotations
 
 import math
 
-# This is an actuator target, not a contact-classification threshold. TASK15-FULL-B
+# This is an actuator target, not a contact-classification threshold. The full-B campaign
 # proved this exact target through five consecutive physical micro-lifts. Keep it
 # shared by CONTACT_HOLD and MICRO_LIFT until Project B replaces these transitional
 # phase scripts with the typed state-action implementation.

@@ -1,7 +1,7 @@
 """Pure historical reading of retained parallel-validation documents.
 
 This module is deliberately tiny and dependency-free: it decodes bytes from an earlier
-generation so the operator can still inspect old runs, and it must never import the active
+run so the operator can still inspect old runs, and it must never import the active
 budget/measurement implementation, never start a probe and never perform a product action.
 Reading a historical record cannot authorize execution; :func:`describe` says so explicitly.
 """
@@ -16,14 +16,15 @@ from typing import Mapping
 
 import yaml
 
-#: Versions that may be read for history. Version 3 is the active generation; reading it
-#: here is still read-only and grants nothing.
-SUPPORTED_HISTORY_VERSIONS = (1, 2, 3)
+#: Profile documents that may be read for history. Reading one here is read-only and grants
+#: nothing.
+SUPPORTED_HISTORY_VERSIONS = (3, 4, 5, 6)
 
 HISTORY_KINDS = {
-    1: "LEGACY_V1",
-    2: "CERTIFIED_V2",
-    3: "ACTIVE_V3",
+    3: "LINUX_CUDA",
+    4: "MACOS_MPS_TWO_WORKER",
+    5: "MACOS_MPS_SINGLE_WORKER_RETRY",
+    6: "MACOS_MPS_SINGLE_WORKER_FIRST_PASS",
 }
 
 

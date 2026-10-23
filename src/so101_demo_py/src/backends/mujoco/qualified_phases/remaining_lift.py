@@ -80,7 +80,8 @@ def main() -> int:
     assert task_policy.contact is not None
     maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result = {
-        "schema": "so101-live-noslip-remaining-lift-v1",
+        "schema": "so101-live-noslip-remaining-lift",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "targets_arm_rad": [list(target) for target in TARGETS],
         "physics_pause_calls": 0,
@@ -163,9 +164,9 @@ def main() -> int:
             raise RuntimeError("unexpected initial MuJoCo provenance")
         start_positions = tuple(float(latest_joint[name]) for name in ALL_JOINTS)
         if maximum_joint_error(start_positions[:5], EXPECTED_START_ARM) > 0.01:
-            raise RuntimeError("robot is not at the verified EXP-104 endpoint")
+            raise RuntimeError("robot is not at the verified policy-lift endpoint")
         if abs(start_positions[-1] - EXPECTED_Q6) > 0.002:
-            raise RuntimeError("q6 is not at the verified EXP-104 endpoint")
+            raise RuntimeError("q6 is not at the verified policy-lift endpoint")
         stable = stable_bilateral(before.reset_epoch)
         initial_cup = tuple(stable.object_state.position_world)
         result["before_joints_rad"] = list(start_positions)
@@ -287,7 +288,7 @@ def main() -> int:
         )
         atomic_write(result)
         print(
-            f"EXP105_OK lift_m={total_lift:.9f} lateral_m={total_lateral:.9f} "
+            f"REMAINING_LIFT_OK lift_m={total_lift:.9f} lateral_m={total_lateral:.9f} "
             f"segments={len(TARGETS)}",
             flush=True,
         )
@@ -296,7 +297,7 @@ def main() -> int:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
         atomic_write(result)
-        print(f"EXP105_FAILED {type(error).__name__}: {error}", flush=True)
+        print(f"REMAINING_LIFT_FAILED {type(error).__name__}: {error}", flush=True)
         return 1
     finally:
         del subscription

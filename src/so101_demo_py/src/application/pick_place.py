@@ -153,6 +153,16 @@ def _default_command_runner(
     environment: Mapping[str, str],
     log_path: Path,
 ) -> int:
+    action_options = {}
+    if environment.get("SO101_ACT_PROFILE") in ("1", "true"):
+        context_path = environment.get("SO101_ACT_CONTROL_CONTEXT")
+        if not context_path:raise PermissionError("CONTROL_CONTEXT_REQUIRED")
+        context = json.loads(Path(context_path).read_text())
+        if context.get("owner") != "teacher":raise PermissionError("LEASE_OWNER_INVALID")
+        fd = context.get("connection_fd")
+        if type(fd) is not int or fd < 0:raise PermissionError("INHERITED_CONTROL_CONNECTION_REQUIRED")
+        os.fstat(fd)
+        action_options["pass_fds"] = (fd,)
     with log_path.open("w", encoding="utf-8") as output:
         completed = subprocess.run(
             spec.command,
@@ -160,6 +170,7 @@ def _default_command_runner(
             stdout=output,
             stderr=subprocess.STDOUT,
             check=False,
+            **action_options,
         )
     return int(completed.returncode)
 
@@ -427,7 +438,8 @@ def run_live_workflow(
         _atomic_manifest(
             manifest_path,
             {
-                "schema": "so101-mujoco-live-runtime-v1",
+                "schema": "so101-mujoco-live-runtime",
+                "schema_version": 1,
                 "status": "FAILED",
                 "simulation_session_id": config.simulation_session_id,
                 "expected_reset_epoch": config.expected_reset_epoch,
@@ -492,7 +504,8 @@ def run_live_workflow(
         if spec.evidence_path.is_file()
     }
     manifest = {
-        "schema": "so101-mujoco-live-runtime-v1",
+        "schema": "so101-mujoco-live-runtime",
+        "schema_version": 1,
         "status": "DONE" if failure is None else "FAILED",
         "simulation_session_id": config.simulation_session_id,
         "expected_reset_epoch": config.expected_reset_epoch,

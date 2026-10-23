@@ -1,0 +1,553 @@
+"""Lossless episode spool and immutable, uncommitted terminal seal."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import stat
+import struct
+import tempfile
+import zlib
+from concurrent.futures import ThreadPoolExecutor
+
+from .contracts import finite, identifier, integer, sha256, validate_action, validate_observation, vector
+from .rig_profile import DEFAULT_RIG
+from .synchronizer import bracketed_age_ok_ns, source_age_ok_ns, time_ns
+
+
+class RecorderInfraError(RuntimeError):
+    """Lossless evidence or seal durability could not be established."""
+
+
+_AUDIT_KEYS = frozenset({
+    "session_id", "attempt_id", "reset_epoch", "release_epoch", "release_event",
+    "release_time_s", "physical_stamps",
+    "phase", "reference_time_s", "reference_source", "reference_positions", "source_stamps",
+    "mujoco_truth", "contacts", "planning_scene", "controller_state",
+})
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
+from so101_demo.act.episode_audit.checks import rig_of_audit
+from .qc_session import file_signature, session_memo, tree_signature
+
+_PROVENANCE_KEYS = frozenset({
+    "source_sha256", "scene_sha256", "config_sha256", "policy_fingerprint", "seed",
+})
+_OUTCOME_KEYS = frozenset({"status", "reason", "pick_place_validation_success", "stopped_confirmed"})
+
+
+def _canonical(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, allow_nan=False).encode("utf-8")
+
+
+def _hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def require_grid(times: list[float] | tuple[float, ...], dt: float = 0.1) -> None:
+    step = finite(dt)
+    if step <= 0 or not isinstance(times, (list, tuple)) or len(times) < 2:
+        raise ValueError("EPISODE_TIME_GAP")
+    checked = [finite(value, nonnegative=True) for value in times]
+    if any(not math.isclose(b - a, step, rel_tol=0, abs_tol=1e-6)
+           for a, b in zip(checked, checked[1:])):
+        raise ValueError("EPISODE_TIME_GAP")
+
+
+def _png_chunk(kind: bytes, payload: bytes) -> bytes:
+    return (struct.pack(">I", len(payload)) + kind + payload
+            + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff))
+
+
+def _rgb_png(frame) -> bytes:
+    # validate_observation has already checked 480x640x3 uint8. PNG color type 2
+    # with filter 0 preserves every original RGB byte and needs no image library.
+    raw = b"".join(b"\x00" + frame[row].tobytes() for row in range(480))
+    return (b"\x89PNG\r\n\x1a\n"
+            + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 640, 480, 8, 2, 0, 0, 0))
+            + _png_chunk(b"IDAT", zlib.compress(raw, level=6))
+            + _png_chunk(b"IEND", b""))
+
+
+def _decoded_pixel_sha256(path: Path) -> str:
+    """Decode a lossless RGB PNG and hash its pixels exactly as the acquisition did.
+
+    The writer stores filter-0 rows, so decoding needs only zlib; hashing the concatenated RGB bytes
+    reproduces the digest the camera boundary minted over the (480, 640, 3) uint8 array.
+    """
+
+    payload = path.read_bytes()
+    if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("EPISODE_FRAME_INVALID")
+    offset, chunks, header = 8, [], None
+    while offset + 8 <= len(payload):
+        length = struct.unpack(">I", payload[offset:offset + 4])[0]
+        kind = payload[offset + 4:offset + 8]
+        body = payload[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            chunks.append(body)
+        elif kind == b"IEND":
+            break
+    if header != (640, 480, 8, 2, 0, 0, 0) or not chunks:
+        raise ValueError("EPISODE_FRAME_INVALID")
+    raw = zlib.decompress(b"".join(chunks))
+    if len(raw) != 480 * (1 + 1920):
+        raise ValueError("EPISODE_FRAME_INVALID")
+    import numpy as np
+
+    # 480 rows of one filter byte (which must be 0) and 1920 RGB bytes: strip the filter column in one pass
+    scanlines = np.frombuffer(raw, dtype=np.uint8).reshape(480, 1 + 1920)
+    if scanlines[:, 0].any():
+        raise ValueError("EPISODE_FRAME_INVALID")
+    return hashlib.sha256(np.ascontiguousarray(scanlines[:, 1:])).hexdigest()
+
+
+#: threads that decode and hash the frames of a seal while it is verified; zlib, hashlib and numpy release the GIL for the large calls
+PIXEL_HASH_THREADS = 4
+
+
+def _pixel_hashes_ahead(pool, paths):
+    """One future per path (None where there is no path), started in order: `result()` is what `_decoded_pixel_sha256(path)` returns or
+    raises. The caller reads them in the order it always checked the frames in, so the first failure is the same one."""
+    return [None if path is None else pool.submit(_decoded_pixel_sha256, path) for path in paths]
+
+
+def _regular_hash(path: Path) -> tuple[str, int]:
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("EPISODE_FILE_INVALID")
+        data = stream.read()
+    return _hash(data), len(data)
+
+
+class EpisodeRecorder:
+    def __init__(self, root: Path, *, session_id: str, attempt_id: str,
+                 reset_epoch: int, provenance: dict, dt_s: float = 0.1,
+                 max_source_age_s: float = 0.1, rig=DEFAULT_RIG) -> None:
+        self.rig = rig
+        self.root = Path(root)
+        if not self.root.is_absolute() or ".." in self.root.parts:
+            raise ValueError("EPISODE_ROOT_INVALID")
+        self.session_id = identifier(session_id)
+        self.attempt_id = identifier(attempt_id)
+        self.reset_epoch = integer(reset_epoch)
+        if not isinstance(provenance, dict) or set(provenance) != _PROVENANCE_KEYS:
+            raise ValueError("EPISODE_PROVENANCE_INVALID")
+        for key in _PROVENANCE_KEYS - {"seed"}:
+            sha256(provenance[key])
+        integer(provenance["seed"])
+        self.provenance = dict(provenance)
+        self.dt_s = finite(dt_s)
+        self.max_source_age_s = finite(max_source_age_s)
+        if self.dt_s != 0.1 or self.max_source_age_s != 0.1:
+            raise ValueError("EPISODE_CONFIG_INVALID")
+        self.root.mkdir(parents=False, exist_ok=False)
+        (self.root / "frames").mkdir()
+        self._records = (self.root / "records.jsonl").open("xb")
+        self._times: list[float] = []
+        self._release_epoch: int | None = None
+        self._release_time_s: float | None = None
+        self._files: dict[str, dict] = {}
+        self._failed = False
+        self._closed = False
+
+    def _audit(self, observation: dict, action: tuple, audit: dict) -> None:
+        if not isinstance(audit, dict) or set(audit) != _AUDIT_KEYS:
+            raise ValueError("EPISODE_AUDIT_SCHEMA")
+        if (audit["session_id"] != self.session_id
+                or audit["attempt_id"] != self.attempt_id
+                or type(audit["reset_epoch"]) is not int
+                or audit["reset_epoch"] != self.reset_epoch):
+            raise ValueError("EPISODE_SCOPE_INVALID")
+        epoch = integer(audit["release_epoch"])
+        if type(audit["release_event"]) is not bool:
+            raise ValueError("RELEASE_EPOCH_INVALID")
+        if self._release_epoch is None:
+            if audit["release_event"]:
+                raise ValueError("RELEASE_EPOCH_INVALID")
+        elif epoch == self._release_epoch:
+            if audit["release_event"]:
+                raise ValueError("RELEASE_EPOCH_INVALID")
+        elif not (epoch == self._release_epoch + 1 and audit["release_event"] is True
+                  and audit["phase"] == "RELEASE"):
+            raise ValueError("RELEASE_EPOCH_INVALID")
+        t = observation["sim_time_s"]
+        if (audit["reference_source"] != "CONTROLLER_REFERENCE"
+                or not math.isclose(finite(audit["reference_time_s"]), t + self.dt_s,
+                                    rel_tol=0, abs_tol=1e-6)
+                or any(not math.isclose(actual, expected, rel_tol=0, abs_tol=1e-6)
+                       for actual, expected in zip(action,
+                           validate_action(audit["reference_positions"]), strict=True))):
+            raise ValueError("EPISODE_REFERENCE_INVALID")
+        stamps = audit["source_stamps"]
+        if not isinstance(stamps, dict) or set(stamps) != {*self.rig.camera_names, "arm",
+                                                           *(("neck",) if self.rig.has_neck else ())}:
+            raise ValueError("EPISODE_SOURCE_STAMPS_INVALID")
+        if any(not source_age_ok_ns(time_ns(t), time_ns(stamp), time_ns(self.max_source_age_s))
+               for stamp in stamps.values()):
+            raise ValueError("EPISODE_SOURCE_STALE")
+        physical = audit["physical_stamps"]
+        if not isinstance(physical, dict) or set(physical) != {"cup", "contacts", "planning_scene"}:
+            raise ValueError("EPISODE_PHYSICAL_STAMPS_INVALID")
+        scene = audit["planning_scene"]
+        bracket = scene.get("bracket") if isinstance(scene, dict) else None
+        record = scene.get("record") if isinstance(scene, dict) else None
+        if (isinstance(record, dict) and record.get("service") == "/apply_planning_scene" and bracket is None):
+            # An apply is a scene source only together with the read that follows it
+            raise ValueError("EPISODE_SOURCE_STALE")
+        for name, stamp in physical.items():
+            if name == "planning_scene" and bracket is not None:
+                # a read older than the age rule is admitted only with the next read it was bracketed by
+                if (not isinstance(bracket, dict) or set(bracket) != {"next_query_id", "next_record"}
+                        or not isinstance(bracket["next_record"], dict)
+                        or not bracketed_age_ok_ns(time_ns(t), time_ns(stamp),
+                                                   bracket["next_record"]["response_ros_clock"]["sim_time_ns"])):
+                    raise ValueError("EPISODE_SOURCE_STALE")
+            elif not source_age_ok_ns(time_ns(t), time_ns(stamp), time_ns(self.max_source_age_s)):
+                raise ValueError("EPISODE_SOURCE_STALE")
+        if audit["release_event"]:
+            release_time = finite(audit["release_time_s"], nonnegative=True)
+            if (not self._times or not self._times[-1] < release_time <= t
+                    or any(stamp < release_time for stamp in physical.values())):
+                raise ValueError("RELEASE_EVIDENCE_STALE")
+        elif self._release_time_s is None:
+            if audit["release_time_s"] is not None:
+                raise ValueError("RELEASE_EPOCH_INVALID")
+        elif (audit["release_time_s"] != self._release_time_s
+              or any(stamp < self._release_time_s for stamp in physical.values())):
+            raise ValueError("RELEASE_EVIDENCE_STALE")
+        identifier(audit["phase"])
+        if (not isinstance(audit["mujoco_truth"], dict)
+                or not isinstance(audit["contacts"], list)
+                or not isinstance(audit["planning_scene"], dict)
+                or not isinstance(audit["controller_state"], dict)):
+            raise ValueError("EPISODE_AUDIT_SCHEMA")
+
+    def _write_file(self, relative: str, data: bytes) -> None:
+        path = self.root / relative
+        with path.open("xb") as stream:
+            stream.write(data)
+            stream.flush()
+        self._files[relative] = {"sha256": _hash(data), "size": len(data)}
+
+    def append(self, observation: dict, action: tuple, audit: dict) -> None:
+        if self._failed or self._closed:
+            raise RecorderInfraError("RECORDER_NOT_WRITABLE")
+        checked = validate_observation(observation, rig=self.rig)
+        if checked["session_id"] != self.session_id or checked["attempt_id"] != self.attempt_id:
+            raise ValueError("EPISODE_SCOPE_INVALID")
+        label = validate_action(action)
+        t = checked["sim_time_s"]
+        if self._times and not math.isclose(t - self._times[-1], self.dt_s,
+                                            rel_tol=0, abs_tol=1e-6):
+            raise ValueError("EPISODE_TIME_GAP")
+        self._audit(checked, label, audit)
+        index = len(self._times)
+        paths = {camera: f"frames/{index:06d}-{camera}.png" for camera in self.rig.camera_names}
+        row = {
+            "observation": {"sim_time_s": t, "state": checked["state"],
+                            **{self.rig.frame_key(camera): path for camera, path in paths.items()}},
+            "action": label, "audit": audit,
+        }
+        try:
+            for camera, path in paths.items():
+                self._write_file(path, _rgb_png(checked[camera]))
+            self._records.write(_canonical(row) + b"\n")
+            self._records.flush()
+        except (OSError, ValueError, TypeError) as error:
+            self._failed = True
+            raise RecorderInfraError("RECORDER_WRITE_FAILED") from error
+        self._times.append(t)
+        self._release_epoch = audit["release_epoch"]
+        if audit["release_event"]:
+            self._release_time_s = audit["release_time_s"]
+
+    def finish(self, outcome: dict, *, audit_manifest: Path | None = None,
+               scope: Path | None = None) -> Path:
+        if audit_manifest is None or scope is None:
+            # a seal names both the raw audit and the scope it was collected under
+            raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
+        audit_manifest, scope = Path(audit_manifest), Path(scope)
+        for target in (audit_manifest, scope):
+            if not target.is_absolute() or ".." in target.parts:
+                raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+        verify_audit_manifest(audit_manifest)
+        if not scope.is_file() or scope.is_symlink():
+            raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+        # the audit must belong to this episode, and the scope it names must be the scope handed in
+        with (audit_manifest.parent / "episode.json").open("rb") as stream:
+            audit_identity = json.loads(stream.read())
+        with (audit_manifest.parent / "source.json").open("rb") as stream:
+            audit_scope = json.loads(stream.read())
+        if (audit_identity.get("session_id") != self.session_id
+                or audit_identity.get("attempt_id") != self.attempt_id
+                or audit_identity.get("reset_epoch") != self.reset_epoch):
+            raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+        with scope.open("rb") as stream:
+            scope_document = json.loads(stream.read())
+        if scope_document != audit_scope or _hash(scope.read_bytes()) != _hash(
+                (audit_manifest.parent / "source.json").read_bytes()):
+            # the scope the seal names must be byte-for-byte the payload the audit recorded
+            raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
+        # one approved immutable scope payload: the audit's own source.json is the scope, and the
+        # seal names that same payload's digest under its own name for the file the caller supplied
+        audit_block = {"audit_manifest_sha256": _hash(audit_manifest.read_bytes()),
+                       "scope_sha256": _hash((audit_manifest.parent / "source.json").read_bytes())}
+        if self._failed or self._closed:
+            raise RecorderInfraError("RECORDER_NOT_SEALABLE")
+        if not isinstance(outcome, dict) or set(outcome) != _OUTCOME_KEYS:
+            raise ValueError("EPISODE_OUTCOME_SCHEMA")
+        if (outcome["status"] not in ("PASSED", "FAILED")
+                or not isinstance(outcome["reason"], str) or not outcome["reason"]
+                or type(outcome["pick_place_validation_success"]) is not bool
+                or outcome["stopped_confirmed"] is not True
+                or outcome["pick_place_validation_success"] != (outcome["status"] == "PASSED")):
+            raise ValueError("EPISODE_OUTCOME_INVALID")
+        if outcome["status"] == "PASSED":
+            require_grid(self._times, self.dt_s)
+        try:
+            self._records.flush()
+            os.fsync(self._records.fileno())
+            self._records.close()
+            self._files["records.jsonl"] = dict(zip(
+                ("sha256", "size"), _regular_hash(self.root / "records.jsonl"), strict=True))
+            for relative in self._files:
+                if relative != "records.jsonl":
+                    fd = os.open(self.root / relative, os.O_RDONLY | os.O_NOFOLLOW)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+            frames_fd = os.open(self.root / "frames", os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(frames_fd)
+            finally:
+                os.close(frames_fd)
+            # every referenced file and the parent directory are durable before the seal exists
+            for target in (audit_manifest, scope):
+                fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+            parent_fd = os.open(self.root.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(parent_fd)
+            finally:
+                os.close(parent_fd)
+            seal = {
+                "schema_version": 2,
+                "kind": "ACT_EPISODE_SEAL",
+                "status": outcome["status"], "reason": outcome["reason"],
+                "pick_place_validation_success": outcome["pick_place_validation_success"],
+                "stopped_confirmed": True, "qc_passed": outcome["status"] == "PASSED",
+                "committed": False, "session_id": self.session_id,
+                "attempt_id": self.attempt_id, "reset_epoch": self.reset_epoch,
+                "record_count": len(self._times), "provenance": self.provenance,
+                "files": dict(sorted(self._files.items())),
+                **audit_block,
+            }
+            seal["manifest_sha256"] = _hash(_canonical(seal))
+            data = _canonical(seal) + b"\n"
+            fd, staging = tempfile.mkstemp(prefix=".seal.", dir=self.root)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            path = self.root / "seal.json"
+            os.link(staging, path)
+            os.unlink(staging)
+            root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(root_fd)
+            finally:
+                os.close(root_fd)
+            verify_episode_seal(path, audit_manifest=audit_manifest, scope=scope)
+            self._closed = True
+            return path
+        except (OSError, ValueError, TypeError) as error:
+            self._failed = True
+            raise RecorderInfraError("RECORDER_SEAL_FAILED") from error
+
+
+def _seal_key(path: Path, *, audit_manifest: Path | None = None, scope: Path | None = None) -> tuple:
+    path = Path(path).absolute()
+    audit = None if audit_manifest is None else Path(audit_manifest).absolute()
+    return (str(path), tree_signature(path.parent), None if audit is None else (str(audit), tree_signature(audit.parent)),
+            None if scope is None else file_signature(Path(scope).absolute()))
+
+
+@session_memo(_seal_key)
+def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
+                        scope: Path | None = None) -> dict:
+    path = Path(path)
+    if path.name != "seal.json" or not path.is_file() or path.is_symlink():
+        raise ValueError("EPISODE_SEAL_MISSING")
+    source_bytes = path.read_bytes()
+    document = json.loads(source_bytes)
+    keys = {"schema_version", "kind", "status", "reason", "pick_place_validation_success",
+            "stopped_confirmed", "qc_passed", "committed", "session_id",
+            "attempt_id", "reset_epoch", "record_count", "provenance", "files",
+            "manifest_sha256", "audit_manifest_sha256", "scope_sha256"}
+    if not isinstance(document, dict) or set(document) != keys:
+        raise ValueError("EPISODE_SEAL_SCHEMA")
+    if source_bytes != _canonical(document) + b"\n":
+        raise ValueError("EPISODE_SEAL_NONCANONICAL")
+    digest = document["manifest_sha256"]
+    sha256(digest)
+    if digest != _hash(_canonical({key: value for key, value in document.items()
+                                   if key != "manifest_sha256"})):
+        raise ValueError("EPISODE_SEAL_HASH_MISMATCH")
+    if (document["schema_version"] != 2 or document["kind"] != "ACT_EPISODE_SEAL"
+            or document["status"] not in ("PASSED", "FAILED")
+            or document["committed"] is not False
+            or document["stopped_confirmed"] is not True
+            or document["qc_passed"] is not (document["status"] == "PASSED")):
+        raise ValueError("EPISODE_SEAL_ROLE_INVALID")
+    root = path.parent
+    files = document["files"]
+    if not isinstance(files, dict) or "records.jsonl" not in files:
+        raise ValueError("EPISODE_SEAL_FILES_INVALID")
+    frames_dir = root / "frames"
+    if not frames_dir.is_dir() or frames_dir.is_symlink():
+        raise ValueError("EPISODE_SEAL_FILES_INVALID")
+    for relative, expected in files.items():
+        rel = Path(relative)
+        if (rel.is_absolute() or ".." in rel.parts
+                or (relative != "records.jsonl"
+                    and (len(rel.parts) != 2 or rel.parts[0] != "frames"
+                         or rel.suffix != ".png"))
+                or not isinstance(expected, dict) or set(expected) != {"sha256", "size"}):
+            raise ValueError("EPISODE_SEAL_FILES_INVALID")
+        actual_hash, actual_size = _regular_hash(root / rel)
+        if expected != {"sha256": actual_hash, "size": actual_size}:
+            raise ValueError("EPISODE_FILE_HASH_MISMATCH")
+    # a seal names the raw audit and the scope it was collected under
+    sha256(document["audit_manifest_sha256"])
+    sha256(document["scope_sha256"])
+    if audit_manifest is None or scope is None:
+        # a seal is only verified when both artifacts are resolved; a caller that cannot supply
+        # them must not be able to mistake this call for verified evidence
+        raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
+    audit_manifest, scope = Path(audit_manifest), Path(scope)
+    if (not audit_manifest.is_file() or not scope.is_file()):
+        raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+    if _hash(audit_manifest.read_bytes()) != document["audit_manifest_sha256"]:
+        raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+    if _hash(scope.read_bytes()) != document["scope_sha256"]:
+        raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+    # and the audit must still verify end to end, not merely hash to the sealed digest
+    verify_audit_manifest(audit_manifest)
+    # the episode's rig is the profile the audit's frozen inputs bind (v1 for one that binds none)
+    rig = rig_of_audit(audit_manifest.parent)
+    with (audit_manifest.parent / "episode.json").open("rb") as stream:
+        audit_identity = json.loads(stream.read())
+    if (audit_identity.get("session_id") != document["session_id"]
+            or audit_identity.get("attempt_id") != document["attempt_id"]
+            or audit_identity.get("reset_epoch") != document["reset_epoch"]):
+        # a checksum-consistent seal naming a valid but unrelated audit is still not evidence
+        raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+    audit_document = json.loads(audit_manifest.read_bytes())
+    if _hash(scope.read_bytes()) != audit_document["scope_sha256"]:
+        # the scope handed to verification must be the payload the audit was collected under
+        raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
+    bindings = [json.loads(line)
+                for line in (audit_manifest.parent / "row-bindings.jsonl")
+                .read_text().splitlines()]
+    recorded = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
+    references = {record["sequence"]: record
+                  for record in (json.loads(line) for line in
+                                 (audit_manifest.parent / "references.jsonl")
+                                 .read_text().splitlines())}
+    acquisitions = {record["acquisition_id"]: record
+                    for record in (json.loads(line) for line in
+                                   (audit_manifest.parent / "acquisitions.jsonl")
+                                   .read_text().splitlines())}
+    if document["record_count"] == 0:
+        # a labelled binding means a training row was written, so a zero-row episode may not
+        # name one; raw unlabelled acquisitions are a different thing and stay allowed
+        if bindings:
+            raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+    else:
+        # every recorded row must be bound to the acquisitions it consumed, at the same instant
+        # and to the reference its action actually claims
+        if len(bindings) != document["record_count"]:
+            raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+        cameras = [(f"{camera}_acquisition_id", rig.frame_key(camera)) for camera in rig.camera_names]
+        frame_paths = []
+        for row in recorded:
+            for _slot, png_key in cameras:
+                try:
+                    frame_paths.append(root / row["observation"][png_key])
+                except (KeyError, TypeError):
+                    frame_paths.append(None)        # the loop below meets the same row first and raises what it always raised
+        with ThreadPoolExecutor(max_workers=PIXEL_HASH_THREADS) as pool:
+            ahead = _pixel_hashes_ahead(pool, frame_paths)
+            try:
+                for index, (row, binding) in enumerate(zip(recorded, bindings, strict=True)):
+                    if binding["sim_time_s"] != row["observation"]["sim_time_s"]:
+                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                    named = references.get(binding["reference_sequence"])
+                    if named is None or list(row["action"]) != list(named["positions"]):
+                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                    for offset, (slot, png_key) in enumerate(cameras):
+                        acquisition = acquisitions.get(binding[slot])
+                        future = ahead[index * len(cameras) + offset]
+                        if acquisition is None or (
+                                _decoded_pixel_sha256(root / row["observation"][png_key]) if future is None else future.result()
+                        ) != acquisition["pixel_sha256"]:
+                            # the stored lossless frame must be the frame that acquisition identified
+                            raise ValueError("EPISODE_SEAL_PIXELS_MISMATCH")
+            finally:
+                for future in ahead:
+                    if future is not None:
+                        future.cancel()
+    rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
+    if len(rows) != document["record_count"]:
+        raise ValueError("EPISODE_RECORD_COUNT_MISMATCH")
+    checker = object.__new__(EpisodeRecorder)
+    checker.session_id = identifier(document["session_id"])
+    checker.attempt_id = identifier(document["attempt_id"])
+    checker.reset_epoch = integer(document["reset_epoch"])
+    checker.dt_s = 0.1
+    checker.max_source_age_s = 0.1
+    checker.rig = rig
+    checker._times = []
+    checker._release_epoch = None
+    checker._release_time_s = None
+    expected_files = {"records.jsonl"}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict) or set(row) != {"observation", "action", "audit"}:
+            raise ValueError("EPISODE_RECORD_SCHEMA")
+        obs = row["observation"]
+        if not isinstance(obs, dict) or set(obs) != {"sim_time_s", "state", *rig.frame_keys}:
+            raise ValueError("EPISODE_RECORD_SCHEMA")
+        t = finite(obs["sim_time_s"], nonnegative=True)
+        state = vector(obs["state"], rig.state_dim)
+        if rig.has_neck and not math.isclose(state[6] ** 2 + state[7] ** 2, 1., abs_tol=1e-6):
+            raise ValueError("EPISODE_RECORD_SCHEMA")
+        frames = {camera: f"frames/{index:06d}-{camera}.png" for camera in rig.camera_names}
+        if any(obs[rig.frame_key(camera)] != path for camera, path in frames.items()):
+            raise ValueError("EPISODE_SEAL_FILES_INVALID")
+        expected_files.update(frames.values())
+        if checker._times and not math.isclose(t - checker._times[-1], checker.dt_s,
+                                                rel_tol=0, abs_tol=1e-6):
+            raise ValueError("EPISODE_TIME_GAP")
+        label = validate_action(row["action"])
+        checker._audit({"sim_time_s": t}, label, row["audit"])
+        checker._times.append(t)
+        checker._release_epoch = row["audit"]["release_epoch"]
+        if row["audit"]["release_event"]:
+            checker._release_time_s = row["audit"]["release_time_s"]
+    if set(files) != expected_files:
+        raise ValueError("EPISODE_SEAL_FILES_INVALID")
+    if document["status"] == "PASSED":
+        require_grid([row["observation"]["sim_time_s"] for row in rows])
+    return document

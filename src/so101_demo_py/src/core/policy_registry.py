@@ -13,7 +13,7 @@ import yaml
 
 from .policy import TaskPolicy, load_task_policy
 
-_MANIFEST_KEYS = frozenset({"schema_version", "policy_id", "version", "variants"})
+_MANIFEST_KEYS = frozenset({"schema_version", "policy_id", "variants"})
 _VARIANT_KEYS = frozenset(
     {"backend", "filename", "policy_sha256", "qualification_status"}
 )
@@ -27,7 +27,6 @@ class PolicyValidationError(ValueError):
 @dataclass(frozen=True, slots=True)
 class LoadedPolicy:
     policy_id: str
-    version: str
     backend: str
     path: Path
     policy: TaskPolicy | None
@@ -90,7 +89,6 @@ def _load_real_stub(path: Path, policy_id: str) -> Mapping[str, object]:
 
 def load_policy_variant(
     policy_id: str,
-    version: str,
     backend: str,
     share_dir: Path,
 ) -> LoadedPolicy:
@@ -98,7 +96,7 @@ def load_policy_variant(
 
     if backend not in _BACKENDS:
         raise PolicyValidationError(f"unsupported backend: {backend}")
-    root = Path(share_dir) / "config" / "policies" / policy_id / version
+    root = Path(share_dir) / "config" / "policies" / policy_id
     manifest_path = root / "manifest.yaml"
     try:
         manifest = _mapping(yaml.safe_load(manifest_path.read_bytes()), "policy manifest")
@@ -107,7 +105,7 @@ def load_policy_variant(
     _exact_keys(manifest, _MANIFEST_KEYS, "policy manifest")
     if manifest["schema_version"] != 1:
         raise PolicyValidationError("policy manifest schema_version must be 1")
-    if manifest["policy_id"] != policy_id or manifest["version"] != version:
+    if manifest["policy_id"] != policy_id:
         raise PolicyValidationError("policy manifest identity mismatch")
     variants = _mapping(manifest["variants"], "policy variants")
     if frozenset(variants) != _BACKENDS:
@@ -118,7 +116,7 @@ def load_policy_variant(
         raise PolicyValidationError("variant backend mismatch")
     filename = _nonempty_string(entry["filename"], "variant filename")
     if Path(filename).name != filename:
-        raise PolicyValidationError("variant filename must not escape its version directory")
+        raise PolicyValidationError("variant filename must not escape its policy directory")
     path = root / filename
     try:
         raw = path.read_bytes()
@@ -141,7 +139,6 @@ def load_policy_variant(
         configuration = MappingProxyType({})
     return LoadedPolicy(
         policy_id=policy_id,
-        version=version,
         backend=backend,
         path=path,
         policy=policy,

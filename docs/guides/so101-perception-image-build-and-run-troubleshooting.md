@@ -156,7 +156,7 @@ docker run --rm --gpus all \
 
 ### 让它在测试里挡住
 
-新增 `src/so101_demo_py/test/test_image_build_context.py`，思路是从 `setup.py` 自己反推，而不是把 `/scripts/...` 写死在测试里：
+新增 `src/so101_demo_py/test/packaging/test_image_build_context.py`，思路是从 `setup.py` 自己反推，而不是把 `/scripts/...` 写死在测试里：
 
 1. 用 `ast` 解析 `setup.py`，收集所有以 `../` 开头的字符串常量；
 2. 找到 Dockerfile 里复制包的那条 `COPY`，把它的目标目录和这些相对路径拼起来，得到镜像内必需路径；
@@ -362,7 +362,7 @@ ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py \
   sam_mask_quality_threshold:=0.50 sam_min_mask_pixels:=64 sam_max_mask_area_ratio:=0.50
 ```
 
-YOLO 那条把 `perception_backend` 换成 `yolo_seg`，权重参数换成 `perception_weights` 加 `perception_weights_sha256`，场景换成 `v5_multi_object_scene.xml`，`perception_runtime:=auto` 在 Linux 会自动选 docker 并把设备收敛成 `cuda`。
+YOLO 那条把 `perception_backend` 换成 `yolo_seg`，权重参数换成 `perception_weights` 加 `perception_weights_sha256`，场景换成 `multi_object_scene.xml`，`perception_runtime:=auto` 在 Linux 会自动选 docker 并把设备收敛成 `cuda`。
 
 几个容易白跑一趟的细节：
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Protocol
 
-from .contracts import QualificationView
+from .contracts import LeaseIdentity, QualificationView, RequestAuthority
 
 
 class BudgetSource(Protocol):
@@ -49,9 +49,15 @@ class TeleopPort(Protocol):
 
     def telemetry_wait(self) -> Awaitable[None]: ...
 
-    def command(self, name: str, body: dict) -> Awaitable[Any]: ...
+    def command(
+        self, name: str, body: dict, *,
+        authority: RequestAuthority | None = None, lease: LeaseIdentity | None = None,
+    ) -> Awaitable[Any]: ...
 
-    def execute_plan(self, plan_id: str, body: dict) -> Awaitable[Any]: ...
+    def execute_plan(
+        self, plan_id: str, body: dict, *,
+        authority: RequestAuthority | None = None, lease: LeaseIdentity | None = None,
+    ) -> Awaitable[Any]: ...
 
 
 class TasksArtifactPort(Protocol):
@@ -147,6 +153,11 @@ class UnifiedServices:
     bridge: Any = None
     budget_source: BudgetSource = field(default_factory=UnknownBudgetSource)
     lifecycle: Any = None
+    act_workload: Any = None
+    act_error: str | None = None
+    #: the Teleop Head Camera domain, composed from the closed head-search connection or left None
+    head_camera: Any = None
+    head_camera_error: str | None = None
     #: True for the schema-only composition used by OpenAPI export and route tests.
     schema_only: bool = False
 

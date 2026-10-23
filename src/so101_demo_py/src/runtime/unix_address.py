@@ -1,17 +1,17 @@
 """The private-path Unix address strategy and its exact cleanup contract.
 
-Task 4 of the macOS MPS / private IPC plan. The production Linux transport addresses its sockets
+The production Linux transport addresses its sockets
 through ``/proc/self/fd/<dirfd>/<name>``, which pins the parent directory against replacement.
 Darwin has no ``bindat``/``connectat`` and ``/dev/fd/<dirfd>/<name>`` returns ``ENOENT`` (proved
-in the retained probe recorded as CP-UQ226), so the macOS transport instead uses a canonical
+in a retained probe), so the macOS transport instead uses a canonical
 private directory whose access control is the filesystem itself:
 
     <private-tmp>/so101-ipc-<uid>/         owned by the user, mode 0700, not a symlink
       b-<random-short-id>/                 fresh per campaign, mode 0700
         coordinator.sock                   mode 0600
         broker.sock
-        w1.sock
-        w2.sock
+        worker-0.sock
+        worker-1.sock
 
 ``<private-tmp>`` is the platform's shared sticky directory: ``/private/tmp`` on Darwin, where
 ``/tmp`` is a symlink to it, and ``/tmp`` on Linux. Both are root-owned and sticky, which is the
@@ -72,8 +72,8 @@ CAMPAIGN_ID_BYTES = 6
 ENDPOINT_NAMES: Mapping[str, str] = {
     "coordinator": "coordinator.sock",
     "broker": "broker.sock",
-    "worker-0": "w1.sock",
-    "worker-1": "w2.sock",
+    "worker-0": "worker-0.sock",
+    "worker-1": "worker-1.sock",
 }
 
 #: Directories must be private and owned; sockets must not be reachable by group or other.
@@ -483,7 +483,7 @@ class ProcFdUnixAddress:
         self._capacity = int(capacity_bytes)
 
     def create_campaign_root(self) -> CampaignIpcRoot:  # pragma: no cover - Linux only
-        from ..runtime.parallel_ipc import require_proc_fd_transport
+        from so101_demo.runtime.parallel_ipc.frames import require_proc_fd_transport
 
         require_proc_fd_transport()
         raise UnixAddressError(

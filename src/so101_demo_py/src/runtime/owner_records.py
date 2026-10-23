@@ -1,6 +1,6 @@
 """Durable owner-tree records: an intent before every real spawn, a readback after it.
 
-Task 6 of the macOS service campaign closure plan. The service's recovery path reclaims the
+The service's recovery path reclaims the
 process tree ``adapter -> campaign -> worker -> station`` leaf first, and it may only signal a
 process whose live kernel identity still matches a durable record. Two files per spawn make that
 possible, each written atomically and fsynced before the writer continues:

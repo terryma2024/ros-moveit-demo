@@ -70,12 +70,17 @@ def validate_cup_scene(
     sample: CupPoseSample,
     observation: CupSceneObservation,
     template: DynamicPickTemplate,
+    *,
+    perception_gate: bool = True,
 ) -> None:
-    validate_cup_against_simulator(sample, observation, template)
+    """The three-source consistency check. ``perception_gate=False`` (Teacher policy v3) drops every comparison that involves
+    the perceived pose against simulator truth (S05): only the MoveIt shadow is checked against the pose it was built from, and
+    the perception error is recorded as telemetry instead (`perception_error`)."""
+    validate_cup_against_simulator(sample, observation, template, perception_gate=perception_gate)
     topic = PoseEvidence(sample.pose_world.values[:3], sample.pose_world.values[3:])
     pairs = (
         ("topic_vs_moveit", topic, observation.moveit_pose_world),
-        ("simulator_vs_moveit", observation.simulator_pose_world, observation.moveit_pose_world),
+        *((("simulator_vs_moveit", observation.simulator_pose_world, observation.moveit_pose_world),) if perception_gate else ()),
     )
     for name, left, right in pairs:
         if (
@@ -91,13 +96,17 @@ def validate_cup_against_simulator(
     sample: CupPoseSample,
     observation: CupSceneObservation,
     template: DynamicPickTemplate,
+    *,
+    perception_gate: bool = True,
 ) -> None:
-    """Reject perception that cannot be confirmed by simulator truth."""
+    """Reject perception that cannot be confirmed by simulator truth (``perception_gate=False``: only the MoveIt state is checked)."""
 
     if observation.moveit_attached:
         raise CupPosePreflightError(
             "CUP_POSE_SCENE_DIVERGENCE", "plastic_cup must be a MoveIt world object"
         )
+    if not perception_gate:
+        return
     topic = PoseEvidence(sample.pose_world.values[:3], sample.pose_world.values[3:])
     if (
         _position_distance(topic, observation.simulator_pose_world)
@@ -109,3 +118,30 @@ def validate_cup_against_simulator(
             "CUP_POSE_SCENE_DIVERGENCE",
             "topic_vs_simulator exceeds configured tolerance",
         )
+
+
+def _cup_axis(quaternion_xyzw) -> tuple[float, float, float]:
+    x, y, z, w = quaternion_xyzw
+    norm = math.sqrt(x * x + y * y + z * z + w * w)
+    x, y, z, w = x / norm, y / norm, z / norm, w / norm
+    return (2.0 * (x * z + w * y), 2.0 * (y * z - w * x), 1.0 - 2.0 * (x * x + y * y))
+
+
+def perception_error(sample: CupPoseSample, observation: CupSceneObservation) -> dict[str, float]:
+    """The perceived cup pose (the broker's `/cup_pose`) against simulator truth at the start of the run: a telemetry record,
+    never a refusal (Teacher policy v3, design 2026-10-10 section 7). ``tilt_deg`` is the yaw-free angle between the two cup axes."""
+    truth = observation.simulator_pose_world
+    px, py, pz = sample.pose_world.values[:3]
+    tx, ty, tz = truth.position_m
+    axis_a, axis_b = _cup_axis(sample.pose_world.values[3:]), _cup_axis(truth.orientation_xyzw)
+    cosine = min(1.0, max(-1.0, sum(a * b for a, b in zip(axis_a, axis_b, strict=True))))
+    if not all(math.isfinite(item) for item in (px, py, pz, tx, ty, tz, *axis_a, *axis_b)):
+        # NaN would pass the clamp above (a NaN cosine reads as a 180 degree tilt): the runtime records PERCEPTION_ERROR_UNAVAILABLE
+        raise ValueError("PERCEPTION_ERROR_NON_FINITE")
+    return {
+        "xy_mm": math.hypot(px - tx, py - ty) * 1e3,
+        "z_mm": (pz - tz) * 1e3,
+        "tilt_deg": math.degrees(math.acos(cosine)),
+        "perceived_position_m": [px, py, pz],
+        "truth_position_m": [tx, ty, tz],
+    }

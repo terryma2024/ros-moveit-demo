@@ -10,22 +10,28 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import so101_demo.perception_benchmark.calibration as calibration_module
-from so101_demo.perception_benchmark.calibration import (
-    CalibrationError,
-    CalibrationResult,
-    GroundedSamBenchmarkThresholds,
-    PlatformCalibrationMetrics,
-    ThresholdLock,
-    YoloThresholds,
-    calibrate_joint_platform_val,
-    calibration_key,
-    enumerate_grounded_sam_grid,
-    enumerate_yolo_grid,
-    select_calibration_result,
+from so101_demo.perception_benchmark.calibration import contracts as calibration_module_contracts
+from so101_demo.perception_benchmark.calibration import evaluation as calibration_module_evaluation
+from so101_demo.perception_benchmark.calibration import thresholds as calibration_module_thresholds
+from so101_demo.perception_benchmark.calibration.contracts import CalibrationError
+from so101_demo.perception_benchmark.calibration.evaluation import calibrate_joint_platform_val
+from so101_demo.perception_benchmark.calibration.lock_io import (
     unlock_test_seal,
     verify_threshold_lock,
     write_threshold_lock,
+)
+from so101_demo.perception_benchmark.calibration.results import (
+    calibration_key,
+    CalibrationResult,
+    PlatformCalibrationMetrics,
+    select_calibration_result,
+    ThresholdLock,
+)
+from so101_demo.perception_benchmark.calibration.thresholds import (
+    enumerate_grounded_sam_grid,
+    enumerate_yolo_grid,
+    GroundedSamBenchmarkThresholds,
+    YoloThresholds,
 )
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
@@ -46,7 +52,7 @@ from so101_demo.perception_benchmark.contracts import (
     TruthInstance,
     TruthSample,
 )
-from so101_demo.perception_benchmark.dataset import TestSeal as DatasetTestSeal
+from so101_demo.perception_benchmark.dataset.contracts import TestSeal as DatasetTestSeal
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -723,14 +729,15 @@ def test_grounded_calibration_reuses_box_text_dedup_across_grid(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls = 0
-    original = calibration_module._deduplicate_boxes
+    original = calibration_module_contracts._deduplicate_boxes
 
     def counted(*args: object, **kwargs: object):
         nonlocal calls
         calls += 1
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(calibration_module, "_deduplicate_boxes", counted)
+    monkeypatch.setattr(calibration_module_evaluation, "_deduplicate_boxes", counted)
+    monkeypatch.setattr(calibration_module_thresholds, "_deduplicate_boxes", counted)
 
     _calibrate(tmp_path, "grounded_sam", workers=1)
 
@@ -790,7 +797,7 @@ def test_grounded_workers_parallelize_precompute_and_grid(
         def shutdown(self, *, wait: bool, cancel_futures: bool) -> None:
             return None
 
-    monkeypatch.setattr(calibration_module, "ProcessPoolExecutor", InlineExecutor)
+    monkeypatch.setattr(calibration_module_evaluation, "ProcessPoolExecutor", InlineExecutor)
 
     _calibrate(tmp_path, "grounded_sam", workers=2)
 
@@ -872,7 +879,7 @@ def test_calibration_rejects_error_records_without_skipping_denominators(
         )
 
 
-def test_calibration_rejects_wrong_model_and_non_task1_valid_candidate(
+def test_calibration_rejects_wrong_model_and_non_valid_candidate(
     tmp_path: Path,
 ) -> None:
     mac, linux, truths = _fixture(tmp_path, "yolo_seg")
@@ -892,7 +899,7 @@ def test_calibration_rejects_wrong_model_and_non_task1_valid_candidate(
 
     broken_candidate = mac[1].raw_candidates[0]
     object.__setattr__(broken_candidate, "class_confidence", None)
-    with pytest.raises(CalibrationError, match="TASK1_RECORD_CONTRACT_INVALID"):
+    with pytest.raises(CalibrationError, match="CALIBRATION_RECORD_CONTRACT_INVALID"):
         calibrate_joint_platform_val(
             "yolo_seg",
             mac,

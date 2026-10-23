@@ -1,0 +1,518 @@
+"""Derive pick-place calibration verdicts from sealed raw evidence, never from labels.
+
+A batch is only usable when it is sealed, its recorded file hashes still match, and every batch
+in the set shares one source provenance. Missing evidence is ``UNMEASURED``, out-of-contract
+evidence is ``FAIL``, a polluted batch is refused outright, and ``PICK_PLACE_CALIBRATION_READY`` is emitted only
+when fov/collision/search/synchronization/execution all PASS while release/retreat stay
+``UNMEASURED`` (the live qualification computes those from live journals).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+from pathlib import Path
+
+SCHEMA_VERSION = 1
+BATCH_KIND = "pick_place_calibration_batch"
+_SHA = re.compile(r"[0-9a-f]{64}\Z")
+_ANCHORS = ("default", "left", "forward")
+_CHECKS = ("fov", "collision", "search", "synchronization", "execution")
+
+
+def _digest(path: Path) -> str:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def _canonical(document: dict) -> bytes:
+    return (json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            + "\n").encode("utf-8")
+
+
+def _load_batch(root: Path) -> tuple[dict, dict]:
+    batch = json.loads((root / "batch.json").read_bytes())
+    if batch.get("kind") != BATCH_KIND:
+        raise ValueError("CALIBRATION_BATCH_INVALID")
+    if batch.get("status") == "INVALID":
+        raise ValueError("CALIBRATION_BATCH_INVALID")
+    if batch.get("status") != "CLOSED":
+        raise ValueError("CALIBRATION_BATCH_NOT_CLOSED")
+    recorded = batch.get("batch_sha256")
+    if (not isinstance(recorded, str)
+            or hashlib.sha256(_canonical({key: value for key, value in batch.items()
+                                          if key != "batch_sha256"})).hexdigest() != recorded):
+        raise ValueError("CALIBRATION_BATCH_TAMPERED")
+    for relative, digest in sorted(batch.get("files", {}).items()):
+        candidate = root / relative
+        if not candidate.is_file() or _digest(candidate) != digest:
+            raise ValueError("CALIBRATION_BATCH_TAMPERED")
+    return batch, batch["identity"]
+
+
+def _read(root: Path, relative: str):
+    path = root / relative
+    if not path.is_file():
+        return None
+    return json.loads(path.read_bytes())
+
+
+def _bare(entry):
+    """A sample records bare values; the published report records unit-bearing entries."""
+
+    return entry.get("value") if isinstance(entry, dict) else entry
+
+
+def _write(path: Path, document: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _canonical(document)
+    descriptor = os.open(str(path) + ".partial", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(str(path) + ".partial", path)
+    return path
+
+
+def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -> dict:
+    """Aggregate sealed batches into the qualification sample, report and receipt."""
+
+    # Boundary IV: one entry, and it begins with the strict closed-batch validation - a batch that is not closed,
+    # carries a mixed contract, hides a symlink or an unindexed file, or was contaminated by a failed cleanup is
+    # refused here, before a single canonical document exists
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch
+
+    indexes = [validate_closed_batch(Path(root)) for root in batch_roots]
+    # section 4.2's readback: the descriptor the measurement ran under is read from the sealed, indexed evidence - never
+    # from a context object and never by globbing - so the published sample can only carry what the seal vouches for
+    descriptor_blocks = []
+    for index in indexes:
+        # EVERY root must carry the sealed, indexed descriptor. Skipping a bare root silently published a
+        # sample resting on fewer roots than it claimed; a missing seal is now a refusal, not a shorter comparison
+        if "runtime-descriptor.json" not in index.files:
+            raise ValueError("CALIBRATION_DESCRIPTOR_MISSING")
+        descriptor_blocks.append(json.loads(index.path("runtime-descriptor.json").read_bytes()))
+    if len({json.dumps(block, sort_keys=True) for block in descriptor_blocks}) > 1:
+        raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+    sealed_descriptor = descriptor_blocks[0] if descriptor_blocks else None
+
+    output_root = Path(output_root)
+    roots = tuple(Path(root) for root in batch_roots)
+    if not roots:
+        raise ValueError("CALIBRATION_BATCH_INVALID")
+    batches = [_load_batch(root) for root in roots]
+    provenances = {batch["identity"]["source_provenance_sha256"] for batch, _ in batches}
+    if len(provenances) != 1:
+        raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+    source_provenance_sha256 = provenances.pop()
+    # the batch's contract identity is the identity this contract ADMITTED, not the bound document's
+    # self-digest. The self-digest is computed over the document that CONTAINS the identities, so no identity member
+    # could ever equal it - comparing against it made every batch the formal entry seals look foreign, and the only way
+    # to satisfy it was to rewrite the member in a fixture. One rule end to end: the seal carries the admitted
+    # ten-field identity, and `load_measurement_contract` already requires the document to carry the same one.
+    from so101_demo.act.pick_place_calibration_measurement_contract import (
+        IDENTITY_CONTRACT_MEMBER, admitted_identity, bound_document_digest,
+    )
+
+    admitted = admitted_identity(contract)
+    # the contract carries the ten-field identity, so the batch must carry the identity this contract admitted
+    contract_identity = admitted[IDENTITY_CONTRACT_MEMBER]
+    for batch, identity in batches:
+        if identity.get(IDENTITY_CONTRACT_MEMBER) != contract_identity:
+            raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+    # and every member must agree across roots, not only the provenance: two batches measured under different anchor
+    # sets or camera matrices are not the same generation, however equal their provenance happens to be
+    from so101_demo.act.pick_place_calibration_measurement_contract import MEASUREMENT_IDENTITIES
+
+    for name in MEASUREMENT_IDENTITIES:
+        values = {identity.get(name) for _, identity in batches}
+        if len(values) != 1 or None in values:
+            raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+    # the contract carries per-field comparators, so the five ready checks are folded from the per-field verdicts over the
+    # repository's own CHECK_MEASUREMENTS groups - and release/retreat stay UNMEASURED, because those five live-only fields
+    # belong to the later 33-field QUALIFIED report and a PICK_PLACE_CALIBRATION_READY report must not claim them
+        checks = dict(derived_checks(roots, contract))
+        checks["release"] = "UNMEASURED"
+        checks["retreat"] = "UNMEASURED"
+    readings = None
+    for root in roots:
+        document = _read(root, "measurements.json")
+        if document is not None:
+            readings = document
+            break
+    published = {**readings.get("camera_measurements", {}), **readings.get("measurements", {})} \
+        if readings is not None else {}
+    ready = all(checks[name] == "PASS" for name in _CHECKS)
+    sample = None
+    if readings is not None:
+        # the sample's shape is the binding's own vocabulary, taken from it rather than restated: the head-search
+        # fields, the camera fields, an integer lock-frame count (the binding refuses a mapping) and the commit and
+        # config the binding compares against the report
+        from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
+
+        def _lock_frames(value):
+            if isinstance(value, dict) and value:
+                return min(int(count) for count in value.values())
+            return 0
+
+        sample_document = {
+            "schema_version": SCHEMA_VERSION, "kind": "head_search_qualification",
+            "status": "PASS" if ready else "FAIL",
+            "measurements": {name: _bare(readings["measurements"][name]) for name in sorted(_MEASURED)
+                             if name in readings["measurements"]},
+            # the same precedence the report uses: the batch's own measurements win over the camera block, so the two
+            # documents cannot disagree about a camera field's value
+            "camera_measurements": {name: _bare(published[name]) for name in sorted(_CAMERA_MEASURED)
+                                    if name in published},
+            "observed_lock_frames": _lock_frames(readings.get("observed_lock_frames", {})),
+            "source_commit": next(iter(batches))[1]["source_commit"],
+            "config_sha256": next(iter(batches))[1]["config_sha256"],
+            "source_provenance_sha256": source_provenance_sha256,
+        }
+        # the runtime descriptor the measurement was taken under is passed through when the batch recorded it, and
+        # never invented here: the binding compares it against the runtime asking for the report, so a fabricated one
+        # would let a report claim a configuration nobody measured under
+        # the sealed descriptor wins; a batch that claims a different one in its payload is refused rather than published
+        if sealed_descriptor is not None:
+            # the payload records the INNER head-search block while the seal is the WHOLE
+            # {schema_version, head_search} document, so the two are compared at ONE layer - and every sealed
+            # descriptor is validated by the same complete production rule the binding uses.
+            from so101_demo.act.head_search_binding import validate_head_search_shape
+
+            validated = validate_head_search_shape(sealed_descriptor)
+            claimed = readings.get("head_search")
+            if isinstance(claimed, dict) and claimed != validated:
+                raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+            sample_document["head_search"] = validated
+        # the SEALED descriptor is the only authority. The former fallback let a
+        # measurements.json block stand in for a missing seal, which is the second authority the review refused
+        else:
+            raise ValueError("CALIBRATION_DESCRIPTOR_MISSING")
+        sample = _write(output_root / "head-search-qualification.json", sample_document)
+    # the support fields have their own approved closed sample, so they are published with their own citation rather
+    # than borrowing the head-search one
+    support_names = set(contract.get("support", {}))
+    support_sample = None
+    if sample is not None and support_names:
+        from so101_demo.act.pick_place_calibration_measurement_formulas import build_support_closed_sample
+
+        support_document = build_support_closed_sample(
+            support={name: _bare(readings["measurements"][name]) for name in sorted(support_names)
+                     if name in readings["measurements"]},
+            source_commit=next(iter(batches))[1]["source_commit"],
+            config_sha256=next(iter(batches))[1]["config_sha256"],
+            source_provenance_sha256=source_provenance_sha256)
+        support_sample = _write(output_root / "pick-place-calibration-ready-support.json", support_document)
+    report_measurements = {}
+    if sample is not None:
+        digest = _digest(sample)
+        # camera intrinsics are measurements too: publishing only the head-search seventeen left a report that could
+        # never be the contract's twenty-eight, so they are folded in - each cited to its own group's closed sample
+        # the batch's own measurements win over the camera block: the camera rows are a different shape (a camera
+        # measurement of head_intrinsics_px is not a published vector), and folding them in last overwrote the
+        # correctly shaped entries with camera-shaped ones
+        for name, entry in sorted({**readings["camera_measurements"], **readings["measurements"]}.items()):
+            cited = support_sample if (support_sample is not None and name in support_names) else sample
+            report_measurements[name] = dict(entry, sample_path=str(cited),
+                                             sample_sha256=(_digest(support_sample) if cited is support_sample
+                                                            else digest))
+    report = {
+        "schema_version": SCHEMA_VERSION,
+        "status": "PICK_PLACE_CALIBRATION_READY" if ready and sample is not None else "CALIBRATION_REQUIRED",
+        "source_commit": next(iter(batches))[1]["source_commit"],
+        "config_sha256": next(iter(batches))[1]["config_sha256"],
+        "source_provenance_sha256": source_provenance_sha256,
+        "measurements": report_measurements,
+        "checks": checks,
+    }
+    # the canonical name, taken from this module's own DOCUMENTS tuple: the file used to be written as
+    # calibration-report.json, which is a name no definition in the tree uses
+    report_path = _write(output_root / DOCUMENTS[2], report)
+    receipt = {
+        "schema_version": SCHEMA_VERSION, "kind": "pick_place_calibration_aggregation_receipt",
+        "batch_roots": [str(root) for root in roots],
+        # the receipt names the CONTRACT DOCUMENT it aggregated - its self-digest, `BOUND_DOCUMENT_DIGEST_KEY` - which
+        # is a different quantity from the ten-field identity's contract member the batches carry
+        "contract_sha256": bound_document_digest(contract),
+        "source_provenance_sha256": source_provenance_sha256,
+        "checks": checks,
+        "calibration_report_sha256": _digest(report_path),
+        "head_search_qualification_sha256": _digest(sample) if sample is not None else None,
+        # the receipt is the index of a publication, so every document it publishes is vouched for here
+        "pick_place_calibration_ready_support_sha256": _digest(support_sample) if support_sample is not None else None,
+    }
+    receipt_path = _write(output_root / DOCUMENTS[3], receipt)
+    outputs = {"calibration_report": report_path, "aggregation_receipt": receipt_path}
+    if sample is not None:
+        outputs["head_search_qualification"] = sample
+    if support_sample is not None:
+        # the fourth canonical document: written to disk but previously invisible to the caller
+        outputs["pick_place_calibration_ready_support"] = support_sample
+    return outputs
+
+
+# --- protocol v2 seam: derive verdicts from raw evidence, never from labels ---------------------------------
+# The approved protocol requires every field to be recomputed from raw evidence. These helpers consume the
+# closed, indexed batch and the formula module; they never read `target_in_view`, `qualified`, `contact_ok` or
+# any `*_ok` flag, and they iterate **every** supplied root rather than the first one.
+
+def derive_field_verdicts(roots, contract: dict) -> dict:
+    """Per-root, per-field verdicts recomputed from the sealed batch's raw records."""
+
+    from so101_demo.act.pick_place_calibration_measurement_formulas import compute_field, require_raw_inputs
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch
+
+    per_root = {}
+    for root in roots:
+        index = validate_closed_batch(Path(root))
+        raw = _load_raw_records(index)
+        require_raw_inputs(raw)
+        verdicts = {}
+        for section in ("measurements", "support"):
+            for field in contract.get(section, {}):
+                if field not in raw["measurements"]:
+                    # a field with no raw record is explicitly UNMEASURED - never a silent pass
+                    verdicts[field] = "UNMEASURED"
+                    continue
+                # `threshold_source` is free text, not a controlled vocabulary: the contract says `"config"`,
+                # `"bound calibration-search config"`, and for the camera `"模型 FOV + tolerance"`. A threshold that
+                # comes from a CONFIG document is the one that is pending approval; one sourced from the
+                # model is not, and must still be measured.
+                threshold_source = contract[section][field].get("threshold_source") or ""
+                if ("config" in threshold_source.lower()
+                        and field not in (raw.get("configured") or {})):
+                    # a field whose THRESHOLD is not approved is UNMEASURED
+                    # too. The search values in `pick-place-calibration-search-candidate.json` are
+                    # `{"requires_approved_value": true, "value": null}`, so there is nothing to compare against and
+                    # inventing a limit is exactly what this work must not do - same vocabulary, same refusal to
+                    # report a pass that was never measured.
+                    verdicts[field] = "UNMEASURED"
+                    continue
+                verdicts[field] = compute_field(field, raw, contract)["verdict"]
+        per_root[str(root)] = verdicts
+    return per_root
+
+
+def _load_raw_records(index) -> dict:
+    """Read the indexed raw files only - nothing outside `batch.json.files` is ever opened."""
+
+    measurements, configured = {}, {}
+    for relative in sorted(index.files):
+        path = index.path(relative)
+        document = json.loads(path.read_bytes())
+        if not isinstance(document, dict):
+            raise ValueError("RAW_EVIDENCE_REQUIRED: raw record must be a JSON object")
+        for key in (document.get("measurements") or {}):
+            if key in _LABELS or (isinstance(key, str) and key.endswith("_ok")):
+                raise ValueError(f"RAW_EVIDENCE_REQUIRED: {key} is a label, not raw evidence")
+        measurements.update(document.get("measurements") or {})
+        configured.update(document.get("configured") or {})
+    return {"measurements": measurements, "configured": configured}
+
+
+_LABELS = frozenset({"qualified", "target_in_view", "contact_ok", "stop_confirmed"})
+
+
+def derived_checks(roots, contract: dict) -> dict:
+    """Fold the per-field verdicts of every root into the five check verdicts.
+
+    A check passes only when every member field passes on every root; any FAIL/INVALID member fails the check,
+    and a member with no raw record makes the check UNMEASURED - so an absent measurement can never be read as a
+    pass. The member sets come from `calibration.CHECK_MEASUREMENTS`, the repository's own grouping, rather than
+    a private list.
+    """
+
+    from so101_demo.act.calibration import CHECK_MEASUREMENTS
+
+    per_root = derive_field_verdicts(roots, contract)
+    checks = {}
+    for name in _CHECKS:
+        members = CHECK_MEASUREMENTS.get(name)
+        if not members:
+            checks[name] = "UNMEASURED"
+            continue
+        verdicts = [verdicts.get(field, "UNMEASURED")
+                    for verdicts in per_root.values() for field in sorted(members)]
+        if any(verdict in ("FAIL", "INVALID") for verdict in verdicts):
+            checks[name] = "FAIL"
+        elif any(verdict == "UNMEASURED" for verdict in verdicts):
+            checks[name] = "UNMEASURED"
+        else:
+            checks[name] = "PASS"
+    return checks
+
+
+def derived_phase_camera_checks(replay_rows, live_frames, window_kind: str, matrix: dict) -> dict:
+    """Fold replay coverage and live continuity into the aggregator's vocabulary.
+
+    The two axes are evaluated by different functions and reported under different keys, so a replay result can
+    never be presented as live-continuity success.
+    """
+
+    from so101_demo.act.pick_place_phase_camera import evaluate_live_continuity, evaluate_replay_coverage
+
+    return {"replay_coverage": evaluate_replay_coverage(replay_rows, matrix),
+            "live_continuity": evaluate_live_continuity(live_frames, window_kind, matrix)}
+
+
+# --- deterministic rendering and publishing --------------------------------------------------------
+# One v2 sealed batch with exactly three anchors in canonical order renders four documents whose bytes depend only
+# on the batch, the contract and the caller's publication root. Only files registered in `batch.json.files` are ever
+# read; a label never influences a verdict, and a number change always changes the bytes.
+
+ANCHOR_ORDER = ("default", "left", "forward")
+DOCUMENTS = ("head-search-qualification.json", "pick-place-calibration-ready-support.json", "pick-place-calibration-ready-calibration.json",
+             "aggregation-receipt.json")
+# the sealed-batch identity must at least carry the commit and the config/provenance digests; the richer
+# ten-member identity is the contract's, not the batch's, so extra members are accepted but not required
+_BATCH_IDENTITY_KEYS = ("source_commit", "config_sha256", "source_provenance_sha256")
+
+
+def _canonical_bytes(document) -> bytes:
+    return json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _require_sealed_batch(root: Path) -> dict:
+    path = Path(root) / "batch.json"
+    if not path.is_file():
+        raise ValueError("CALIBRATION_BATCH_MISSING")
+    batch = json.loads(path.read_bytes())
+    if batch.get("kind") != BATCH_KIND or batch.get("status") != "CLOSED":
+        raise ValueError(f"CALIBRATION_BATCH_NOT_CLOSED: {batch.get('status')}")
+    identity = batch.get("identity")
+    if (type(identity) is not dict or any(key not in identity for key in _BATCH_IDENTITY_KEYS)
+            or len(str(identity["source_commit"])) != 40
+            or any(len(str(identity[key])) != 64 for key in _BATCH_IDENTITY_KEYS[1:])):
+        raise ValueError("CALIBRATION_IDENTITY_INVALID")
+    # an anchor entry may be the bare name or a record carrying it; both are accepted, order is what matters
+    anchors = [entry.get("anchor") if type(entry) is dict else entry for entry in batch.get("anchors", [])]
+    if tuple(anchors) != ANCHOR_ORDER:
+        raise ValueError(f"ANCHOR_ORDER: expected {list(ANCHOR_ORDER)}, found {anchors}")
+    files = batch.get("files")
+    if type(files) is not dict or not files:
+        raise ValueError("CALIBRATION_BATCH_INDEX_INVALID")
+    return batch
+
+
+def _read_indexed(root: Path, batch: dict) -> dict:
+    """Read exactly the indexed files, verifying every digest as it is read."""
+
+    records = {}
+    for relative, digest in sorted(batch["files"].items()):
+        if Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ValueError(f"BATCH_PATH_INVALID: {relative}")
+        payload = (Path(root) / relative).read_bytes()
+        if hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError(f"BATCH_DIGEST_MISMATCH: {relative}")
+        records[relative] = json.loads(payload)
+    return records
+
+
+def _field_verdicts(batch: dict, records: dict, contract: dict) -> dict:
+    """Combine per-anchor verdicts: a field passes only when every anchor that measured it passes."""
+
+    from so101_demo.act.pick_place_calibration_measurement_formulas import compute_field
+
+    per_field = {}
+    for relative, record in records.items():
+        raw = {"measurements": record.get("measurements") or {}, "configured": record.get("configured") or {}}
+        for section in ("measurements", "support"):
+            for field in contract.get(section, {}):
+                if field not in raw["measurements"]:
+                    continue
+                try:
+                    verdict = compute_field(field, raw, contract)["verdict"]
+                except ValueError as error:
+                    verdict = "INVALID" if "REQUIRED" not in str(error) else "UNMEASURED"
+                except (AttributeError, KeyError, TypeError, ZeroDivisionError) as error:
+                    # a raw record whose shape cannot be evaluated is invalid evidence - never a pass
+                    verdict = "INVALID"
+                per_field.setdefault(field, []).append(verdict)
+    resolved = {}
+    for field, verdicts in per_field.items():
+        if any(verdict in ("FAIL", "INVALID") for verdict in verdicts):
+            resolved[field] = "FAIL" if "FAIL" in verdicts else "INVALID"
+        else:
+            resolved[field] = "PASS"
+    return resolved
+
+
+def _split_fields(contract: dict, verdicts: dict) -> tuple:
+    head = {field: verdicts.get(field, "UNMEASURED") for field in sorted(contract.get("measurements", {}))}
+    support = {field: verdicts.get(field, "UNMEASURED") for field in sorted(contract.get("support", {}))}
+    return head, support
+
+
+def render_pick_place_calibration(batch_root, contract: dict, publication_root) -> dict:
+    """Render the four documents as canonical bytes; nothing is written here."""
+
+    root, publication = Path(batch_root), Path(publication_root)
+    batch = _require_sealed_batch(root)
+    records = _read_indexed(root, batch)
+    # a bound contract carries its own hash; an unbound template is identified by the digest of its exact bytes
+    contract_sha256 = contract.get("contract_sha256") or hashlib.sha256(_canonical_bytes(contract)).hexdigest()
+    verdicts = _field_verdicts(batch, records, contract)
+    head, support = _split_fields(contract, verdicts)
+    receipt_fields = {}
+    for field, verdict in sorted(verdicts.items()):
+        payload = _canonical_bytes({"field": field, "verdict": verdict})
+        receipt_fields[field] = {"verdict": verdict, "unit": _unit_for(contract, field),
+                                 "sample_path": str(publication / "fields" / f"{field}.json"),
+                                 "sample_sha256": hashlib.sha256(payload).hexdigest()}
+    documents = {
+        "head-search-qualification.json": {"schema_version": 2, "kind": "head_search_qualification",
+                                           "status": "PASS" if set(head.values()) == {"PASS"} else "FAIL",
+                                           "contract_sha256": contract_sha256,
+                                           "measurements": head},
+        "pick-place-calibration-ready-support.json": {"schema_version": 1, "kind": "pick_place_calibration_ready_support",
+                                     "status": "PASS" if set(support.values()) == {"PASS"} else "FAIL",
+                                     "support": support},
+        "pick-place-calibration-ready-calibration.json": {"schema_version": 1, "kind": "pick_place_calibration_ready_calibration",
+                                         "identity": dict(batch["identity"]),
+                                         "anchors": [entry for entry in batch["anchors"]]},   # names or records
+        "aggregation-receipt.json": {"schema_version": 1, "kind": "pick_place_validation_aggregation_receipt",
+                                     "publication_root": str(publication), "fields": receipt_fields},
+    }
+    return {name: _canonical_bytes(documents[name]) for name in DOCUMENTS}
+
+
+def _unit_for(contract: dict, field: str) -> str:
+    for section in ("measurements", "support"):
+        if field in contract.get(section, {}):
+            return contract[section][field]["unit"]
+    return ""
+
+
+def publish_pick_place_calibration(rendered, publication_root) -> dict:
+    """Write exactly those bytes, plus each receipt field's sample file, atomically."""
+
+    publication = Path(publication_root)
+    publication.mkdir(parents=True, exist_ok=True)
+    for name in DOCUMENTS:
+        if name not in rendered:
+            raise ValueError(f"RENDERED_DOCUMENT_MISSING: {name}")
+    receipt = json.loads(rendered["aggregation-receipt.json"])
+    for field, entry in sorted(receipt["fields"].items()):
+        path = Path(entry["sample_path"])
+        if not path.is_absolute():
+            raise ValueError(f"SAMPLE_PATH_NOT_ABSOLUTE: {field}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _canonical_bytes({"field": field, "verdict": entry["verdict"]})
+        if hashlib.sha256(payload).hexdigest() != entry["sample_sha256"]:
+            raise ValueError(f"SAMPLE_DIGEST_MISMATCH: {field}")
+        path.write_bytes(payload)
+    for name in DOCUMENTS:
+        payload = rendered[name]
+        partial = publication / f"{name}.partial"
+        descriptor = os.open(str(partial), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(partial), str(publication / name))
+    return {"published": [str(publication / name) for name in DOCUMENTS],
+            "fields": len(receipt["fields"])}

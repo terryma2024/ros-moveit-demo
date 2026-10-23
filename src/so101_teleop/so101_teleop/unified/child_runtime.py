@@ -30,11 +30,13 @@ from .contracts import (
     RevokeTarget,
 )
 from .ipc import (
+    ACT_OPERATIONS,
     DEFAULT_MAX_BYTES,
     IpcProtocolError,
     IpcReply,
     IpcRequest,
     SafetyPacket,
+    decode_container_task,
     decode_request,
     decode_safety_packet,
     encode,
@@ -43,6 +45,7 @@ from .ipc import (
 READY_FILE_NAME = "child-ready.json"
 NORMAL_SOCKET_NAME = "normal.sock"
 SAFETY_SOCKET_NAME = "safety.sock"
+TASK_OPERATIONS = ("assign_task", "get_status", "terminate")
 
 
 def peer_uid(sock) -> int | None:
@@ -105,12 +108,20 @@ class ChildRuntime:
         service_epoch: str,
         runtime_id: str,
         normal_queue_limit: int,
+        act_campaign_id: str | None = None,
+        act_worker_id: str | None = None,
+        act_generation: int | None = None,
     ) -> None:
         self.driver = driver
         self.owner = owner
         self.service_epoch = service_epoch
         self.runtime_id = runtime_id
         self.normal_queue_limit = normal_queue_limit
+        self.act_campaign_id = act_campaign_id
+        self.act_worker_id = act_worker_id
+        self.act_generation = act_generation
+        self.act_failed = False
+        self.act_lock = asyncio.Lock()
         self.pending: dict[PendingChildKey, PendingSubmission] = {}
         self.tombstones: dict[PendingChildKey, int] = {}
         self.transition_lock = asyncio.Lock()
@@ -119,6 +130,65 @@ class ChildRuntime:
         self.web_dead_latch = asyncio.Event()
 
     # -- normal channel ----------------------------------------------------------
+
+    async def dispatch_act(self, request: IpcRequest) -> dict:
+        """Route one closed ACT operation; no resource authority is rechecked here."""
+        if request.operation not in ACT_OPERATIONS:
+            raise MutationError("ACT_OPERATION_UNKNOWN")
+        if request.service_epoch != self.service_epoch or request.runtime_id != self.runtime_id:
+            raise MutationError("ACT_RUNTIME_MISMATCH")
+        if request.campaign_id != self.act_campaign_id or request.worker_id != self.act_worker_id:
+            raise MutationError("ACT_WORKER_MISMATCH")
+        if request.execution_generation != self.act_generation:
+            raise MutationError("ACT_GENERATION_STALE")
+        if request.deadline_ns <= time.monotonic_ns():
+            raise MutationError("ACT_DEADLINE_EXPIRED")
+        if request.operation == "cancel":
+            # Freeze new business operations before awaiting the stop driver.
+            # Repeated cancel remains available to prove eventual physical stop.
+            self.act_failed = True
+            if not callable(getattr(self.driver, "cancel_act", None)):
+                raise MutationError("ACT_DRIVER_NOT_PROVISIONED")
+            try:
+                result = await self.driver.cancel_act(request)
+            except Exception as error:
+                self.act_failed = True
+                raise MutationError("ACT_CANCEL_UNKNOWN") from error
+            if not isinstance(result, dict) or result.get("stopped_confirmed") is not True:
+                self.act_failed = True
+                raise MutationError("ACT_STOP_NOT_CONFIRMED")
+            return result
+        if self.web_dead or self.act_failed:
+            raise MutationError("ACT_CHILD_FENCED")
+        async with self.act_lock:
+            if self.web_dead or self.act_failed:
+                raise MutationError("ACT_CHILD_FENCED")
+            if request.deadline_ns <= time.monotonic_ns():
+                raise MutationError("ACT_DEADLINE_EXPIRED")
+            try:
+                if request.operation == "pick_place_validation_phase":
+                    method = self.driver.pick_place_phase
+                elif request.operation == "pick_place_validation_full":
+                    method = self.driver.pick_place_full
+                elif request.operation == "act_collection_start":
+                    method = self.driver.act_collection_start
+                elif request.operation == "act_collection_resume":
+                    method = self.driver.act_collection_resume
+                else:
+                    raise MutationError("ACT_OPERATION_UNKNOWN")
+                result = await method(request)
+            except MutationError:
+                self.act_failed = True
+                raise
+            except Exception as error:
+                self.act_failed = True
+                raise MutationError("ACT_CHILD_FAILED") from error
+            if self.web_dead or self.act_failed:
+                raise MutationError("ACT_CHILD_FENCED")
+            if not isinstance(result, dict):
+                self.act_failed = True
+                raise MutationError("ACT_RESULT_INVALID")
+            return result
 
     async def submit(self, token: DispatchToken) -> DispatchAck:
         if token.runtime_id != self.runtime_id:
@@ -206,6 +276,19 @@ class ChildRuntime:
             pending.cancel_requested = True
             with contextlib.suppress(Exception):
                 await self.driver.cancel(pending.goal_uuid)
+        if self.act_campaign_id is not None:
+            stop_act = getattr(self.driver, "stop_act", None)
+            if not callable(stop_act):
+                self.act_failed = True
+                raise MutationError("ACT_STOP_NOT_PROVISIONED")
+            try:
+                confirmed = await stop_act(reason)
+            except BaseException as error:
+                self.act_failed = True
+                raise MutationError("ACT_STOP_UNKNOWN") from error
+            if confirmed is not True:
+                self.act_failed = True
+                raise MutationError("ACT_STOP_NOT_CONFIRMED")
 
     async def stats(self) -> ChildStats:
         journal = getattr(self.driver, "journal", None)
@@ -265,6 +348,9 @@ class ChildIpcServer:
             "pid": os.getpid(),
             "service_epoch": self.service_epoch,
             "runtime_id": self.runtime.runtime_id,
+            "campaign_id": self.runtime.act_campaign_id,
+            "worker_id": self.runtime.act_worker_id,
+            "execution_generation": self.runtime.act_generation,
             "normal_socket": str(self.normal_socket),
             "safety_socket": str(self.safety_socket),
             "owner": {
@@ -317,6 +403,18 @@ class ChildIpcServer:
             return rejection
         if request.operation in ("observe", "plan_joints", "plan_tcp"):
             return IpcReply(accepted=True, code="OK", result=await self.runtime.observe())
+        if request.operation in ACT_OPERATIONS:
+            try:
+                result = await self.runtime.dispatch_act(request)
+            except MutationError as error:
+                return IpcReply(accepted=False, code=error.code)
+            return IpcReply(accepted=True, code="OK", result={
+                "operation_id": request.token.operation_id,
+                "campaign_id": request.campaign_id,
+                "worker_id": request.worker_id,
+                "execution_generation": request.execution_generation,
+                "body": result,
+            })
         assert request.token is not None
         token = DispatchToken(
             operation_id=request.token.operation_id,
@@ -422,3 +520,194 @@ def _target_from_packet(packet: SafetyPacket) -> RevokeTarget:
         ),
         revocation_revision=int(target.get("revocation_revision", 0)),
     )
+
+
+@dataclass(frozen=True)
+class ContainerChildIdentity:
+    """The identity fields the container control server publishes; it owns no goal runtime."""
+
+    runtime_id: str
+    act_campaign_id: str
+    act_worker_id: str
+    act_generation: int
+    normal_queue_limit: int
+
+
+class ContainerChildIpcServer(ChildIpcServer):
+    """Container control: inner process ready proof and the three Host task operations.
+
+    The normal socket decodes only `assign_task`, `get_status` and `terminate` and hands
+    them to an executor-shaped `task_port`. Every other request, including generic goal
+    RPCs, heartbeats and anything on the safety socket, is refused. Socket/ready
+    artifacts survive close for the Host's generation readback.
+    """
+
+    def __init__(self, identity, *, task_port, generation, close_timeout_s, process_owner, **kwargs):
+        from so101_demo.runtime.container_campaign.process_identity import ProcessOwnerKey
+
+        if (type(identity) is not ContainerChildIdentity or type(process_owner) is not ProcessOwnerKey
+                or any(not callable(getattr(task_port, name, None)) for name in (
+                    "assign_task", "get_status", "terminate"))
+                or type(generation) is not int or generation <= 0
+                or type(close_timeout_s) not in (int, float) or not close_timeout_s > 0):
+            raise ValueError("CONTAINER_CHILD_CONTROL_INVALID")
+        super().__init__(identity, **kwargs)
+        if (type(self.max_bytes) is not int or self.max_bytes <= 0
+                or type(identity.normal_queue_limit) is not int or identity.normal_queue_limit <= 0):
+            raise ValueError("CONTAINER_CHILD_CONTROL_INVALID")
+        self.task_port, self.generation, self.close_timeout_s = task_port, generation, close_timeout_s
+        self.process_owner = process_owner
+        self.socket_parent_fd = None
+        self._connections = set()
+        self._normal_connections = set()
+        self._handlers = set()
+        self._busy = 0
+
+    async def start(self):
+        from dataclasses import asdict
+        from so101_demo.runtime.container_campaign.process_identity import pid_namespace_inode, process_owner_matches
+        from so101_demo.runtime.inference.codec import open_socket_parent
+        from so101_demo.runtime.parallel_ipc.frames import transport_address
+
+        if self.socket_parent_fd is not None or not process_owner_matches(self.process_owner):
+            raise MutationError("CONTAINER_CHILD_PROCESS_IDENTITY_INVALID")
+        self.socket_root.mkdir(mode=0o700, exist_ok=True)
+        self.socket_parent_fd = open_socket_parent(self.normal_socket)
+        try:
+            for path in (self.normal_socket, self.safety_socket, self.socket_root / READY_FILE_NAME):
+                if path.exists() or path.is_symlink():
+                    raise MutationError("CONTAINER_CHILD_CONTROL_EXISTS")
+            for path, handler in ((self.normal_socket, self._handle_normal), (self.safety_socket, self._handle_safety)):
+                self._servers.append(await asyncio.start_unix_server(handler,
+                    path=transport_address(path, self.socket_parent_fd), limit=self.max_bytes+1))
+                os.chmod(path, 0o600)
+            ready = {"schema_version": 1, "kind": "container_child_ready",
+                "generation": self.generation,
+                "process_owner": asdict(self.process_owner), "pid_namespace_inode": pid_namespace_inode(),
+                "service_epoch": self.service_epoch, "runtime_id": self.runtime.runtime_id,
+                "campaign_id": self.runtime.act_campaign_id, "worker_id": self.runtime.act_worker_id,
+                "execution_generation": self.runtime.act_generation,
+                "normal_socket": str(self.normal_socket), "safety_socket": str(self.safety_socket)}
+            fd = os.open(READY_FILE_NAME, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=self.socket_parent_fd)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(json.dumps(ready, sort_keys=True, allow_nan=False).encode()+b"\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(self.socket_parent_fd)
+        except BaseException:
+            await self.close()
+            raise
+
+    async def close(self):
+        for server in self._servers:
+            server.close()
+        # A request already being answered (e.g. the terminate that ended the executor) finishes its reply first.
+        deadline = time.monotonic() + self.close_timeout_s
+        while self._busy and time.monotonic() < deadline:
+            await asyncio.sleep(0.005)
+        for writer in tuple(self._connections):
+            writer.close()
+        for server in self._servers:
+            await server.wait_closed()
+        current = asyncio.current_task()
+        handlers = tuple(task for task in self._handlers if task is not current)
+        if handlers:
+            done, pending = await asyncio.wait(handlers, timeout=self.close_timeout_s)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.exception() if not task.cancelled() else None
+        if self.socket_parent_fd is not None:
+            os.close(self.socket_parent_fd)
+            self.socket_parent_fd = None
+
+    async def _handle_normal(self, reader, writer):
+        task = asyncio.current_task()
+        if len(self._normal_connections) >= self.runtime.normal_queue_limit+1:
+            try:
+                writer.write(encode(IpcReply(accepted=False, code="IPC_QUEUE_FULL")))
+                await writer.drain()
+            finally:
+                writer.close()
+                with contextlib.suppress(Exception):
+                    await writer.wait_closed()
+            return
+        self._handlers.add(task)
+        self._connections.add(writer)
+        self._normal_connections.add(writer)
+        try:
+            while True:
+                try:
+                    line = await reader.readline()
+                except (ValueError, asyncio.LimitOverrunError):
+                    writer.write(encode(IpcReply(accepted=False, code="IPC_FRAME_TOO_LARGE")))
+                    await writer.drain()
+                    return
+                if not line:
+                    return
+                self._busy += 1
+                try:
+                    reply = await self._normal_reply(line, writer)
+                    writer.write(encode(reply))
+                    await writer.drain()
+                finally:
+                    self._busy -= 1
+        finally:
+            self._handlers.discard(task)
+            self._connections.discard(writer)
+            self._normal_connections.discard(writer)
+            writer.close()
+            with contextlib.suppress(Exception):
+                await writer.wait_closed()
+
+    async def _normal_reply(self, line, writer):
+        from so101_demo.runtime.container_campaign.task_contracts import InstanceStatus, TaskSpec, TaskStatus
+        from so101_demo.runtime.parallel_ipc.frames import _pairs
+
+        if len(line) > self.max_bytes:
+            return IpcReply(accepted=False, code="IPC_FRAME_TOO_LARGE")
+        uid = peer_uid(writer.get_extra_info("socket"))
+        if uid is None or uid != os.geteuid():
+            return IpcReply(accepted=False, code="IPC_PEER_REJECTED")
+        try:
+            document = json.loads(line, object_pairs_hook=_pairs,
+                parse_constant=lambda _value: (_ for _ in ()).throw(ValueError("nonfinite")))
+        except (ValueError, TypeError, UnicodeError):
+            document = None
+        if document is not None and (type(document) is not dict or document.get("operation") not in TASK_OPERATIONS
+                or not set(document) <= {"operation", "deadline_ns", "payload"}):
+            return IpcReply(accepted=False, code="CONTAINER_OPERATION_NOT_ALLOWED")
+        try:
+            packet = decode_container_task(line, max_bytes=self.max_bytes, now_ns=time.monotonic_ns())
+            if packet.operation == "assign_task":
+                result = await self.task_port.assign_task(TaskSpec.model_validate(packet.payload))
+                expected = TaskStatus
+            elif packet.operation == "get_status":
+                result = await self.task_port.get_status(packet.payload.get("task_id"))
+                expected = InstanceStatus
+            else:
+                result = await self.task_port.terminate(packet.payload["reason"])
+                expected = InstanceStatus
+            if type(result) is not expected:
+                raise ValueError("CONTAINER_TASK_RESULT_INVALID")
+        except (ValueError, IpcProtocolError) as error:
+            return IpcReply(accepted=False, code=str(error))
+        return IpcReply(accepted=True, code="OK", result=result.model_dump())
+
+    async def _handle_safety(self, reader, writer):
+        task = asyncio.current_task()
+        self._handlers.add(task)
+        self._connections.add(writer)
+        try:
+            while await reader.readline():
+                writer.write(encode(IpcReply(accepted=False, code="CONTAINER_OPERATION_NOT_ALLOWED")))
+                await writer.drain()
+        finally:
+            self._handlers.discard(task)
+            self._connections.discard(writer)
+            writer.close()
+            with contextlib.suppress(Exception):
+                await writer.wait_closed()

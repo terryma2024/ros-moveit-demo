@@ -4,6 +4,212 @@
  */
 
 export interface paths {
+    "/act/command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Act Command */
+        post: operations["act_command_act_command_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/act/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Act Status */
+        get: operations["act_status_act_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Config */
+        get: operations["config_api_archives_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Packages */
+        get: operations["packages_api_archives_packages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Package */
+        get: operations["package_api_archives_packages__package_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}/episodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Episodes */
+        get: operations["episodes_api_archives_packages__package_id__episodes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}/episodes/{scene_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail */
+        get: operations["detail_api_archives_packages__package_id__episodes__scene_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}/episodes/{scene_id}/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** File */
+        get: operations["file_api_archives_packages__package_id__episodes__scene_id__files__file_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}/episodes/{scene_id}/files/{file_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download */
+        get: operations["download_api_archives_packages__package_id__episodes__scene_id__files__file_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}/episodes/{scene_id}/frames/{row}/{camera}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Frame */
+        get: operations["frame_api_archives_packages__package_id__episodes__scene_id__frames__row___camera__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}/episodes/{scene_id}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Series */
+        get: operations["series_api_archives_packages__package_id__episodes__scene_id__series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archives/packages/{package_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verify */
+        get: operations["verify_api_archives_packages__package_id__verify_get"];
+        put?: never;
+        /** Start Verify */
+        post: operations["start_verify_api_archives_packages__package_id__verify_post"];
+        /** Cancel Verify */
+        delete: operations["cancel_verify_api_archives_packages__package_id__verify_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/attachment/{operation}": {
         parameters: {
             query?: never;
@@ -158,6 +364,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/expert-validation/campaigns/candidate-first-pass": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Candidate First Pass */
+        post: operations["candidate_first_pass_expert_validation_campaigns_candidate_first_pass_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/expert-validation/campaigns/preflight": {
         parameters: {
             query?: never;
@@ -220,6 +443,23 @@ export interface paths {
         put?: never;
         /** Retry Campaign */
         post: operations["retry_campaign_expert_validation_campaigns__campaign_id__full_restart_retries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/expert-validation/candidate-contexts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue Candidate Context */
+        post: operations["issue_candidate_context_expert_validation_candidate_contexts_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -755,6 +995,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/teleop/head-camera/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture */
+        post: operations["capture_teleop_head_camera_capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teleop/head-camera/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_teleop_head_camera_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teleop/head-camera/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop */
+        post: operations["stop_teleop_head_camera_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teleop/head-camera/target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Target */
+        post: operations["target_teleop_head_camera_target_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflow/{operation}": {
         parameters: {
             query?: never;
@@ -776,6 +1084,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArchiveConfigView */
+        ArchiveConfigView: {
+            /** Enabled */
+            enabled: boolean;
+            /** Roots */
+            roots: components["schemas"]["RootView"][];
+        };
+        /** ArchiveFile */
+        ArchiveFile: {
+            /** Bytes */
+            bytes: number;
+            /** File Id */
+            file_id: string;
+            /** Name */
+            name: string;
+            /** Sha256 */
+            sha256: string;
+        };
         /** ArtifactProjectionResponse */
         ArtifactProjectionResponse: {
             /** Artifact Id */
@@ -823,6 +1149,26 @@ export interface components {
             worker_generation?: number | null;
             /** Worker Id */
             worker_id?: string | null;
+        };
+        /** AttemptView */
+        AttemptView: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "recording" | "processing";
+            /** Outcome */
+            outcome?: string | null;
+            /** Proc Attempt */
+            proc_attempt?: number | null;
+            /** Reason */
+            reason?: string | null;
+            /** Round */
+            round?: number | null;
+            /** Shard */
+            shard?: string | null;
+            /** Wave */
+            wave?: number | null;
         };
         /** BackendCapabilitiesResponse */
         BackendCapabilitiesResponse: {
@@ -896,6 +1242,8 @@ export interface components {
         };
         /** CampaignConfiguration */
         CampaignConfiguration: {
+            /** Batch Kind */
+            batch_kind?: ("FIRST_PASS" | "FULL_RESTART_RETRY") | null;
             /**
              * Contract Version
              * @constant
@@ -903,9 +1251,11 @@ export interface components {
             contract_version: 3;
             /**
              * Execution Mode
-             * @enum {string}
+             * @constant
              */
-            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            execution_mode: "SEQUENTIAL";
+            /** Execution Profile */
+            execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
             fallback_worker_counts?: number[] | null;
             /** Initial Points Per Worker */
@@ -1021,10 +1371,17 @@ export interface components {
             resource_observations: {
                 [key: string]: unknown;
             };
+            /**
+             * Retry History
+             * @default []
+             */
+            retry_history: components["schemas"]["RetryHistoryResponse"][];
             /** Sequence */
             sequence: number;
             /** Status */
             status?: string | null;
+            /** Terminal Reason */
+            terminal_reason?: string | null;
             /**
              * Valid Failed
              * @default 0
@@ -1043,6 +1400,8 @@ export interface components {
         };
         /** CampaignStartRequest */
         CampaignStartRequest: {
+            /** Batch Kind */
+            batch_kind?: ("FIRST_PASS" | "FULL_RESTART_RETRY") | null;
             /** Command Id */
             command_id: string;
             /**
@@ -1052,9 +1411,11 @@ export interface components {
             contract_version: 3;
             /**
              * Execution Mode
-             * @enum {string}
+             * @constant
              */
-            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            execution_mode: "SEQUENTIAL";
+            /** Execution Profile */
+            execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
             fallback_worker_counts?: number[] | null;
             /** Initial Points Per Worker */
@@ -1081,6 +1442,158 @@ export interface components {
             yolo_executor_count?: (1 | 2 | 4) | null;
         };
         /**
+         * CandidateContextIssueRequest
+         * @description The coordinates of one bounded candidate run (design section 10).
+         *
+         *     Every parameter the design names is required, including the worker count and batch kind: the
+         *     installed matrix row, not a caller's inference, decides whether the combination may be issued.
+         *     There is deliberately no budget, qualification or promotion field.
+         */
+        CandidateContextIssueRequest: {
+            /** Batch Id */
+            batch_id: string;
+            /** Batch Kind */
+            batch_kind: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Command Id */
+            command_id: string;
+            /** Config Document */
+            config_document: string;
+            /**
+             * Context Kind
+             * @default CANDIDATE
+             */
+            context_kind: string;
+            /** Dispatch Id */
+            dispatch_id: string;
+            /** Evidence Root */
+            evidence_root: string;
+            /** Execution Profile */
+            execution_profile: string;
+            /** Expires In S */
+            expires_in_s: number;
+            /** Manifest Id */
+            manifest_id: string;
+            /** Max Runs */
+            max_runs: number;
+            /** Owner Generation */
+            owner_generation: number;
+            /** Task Id */
+            task_id: string;
+            /** Worker Count */
+            worker_count: number;
+        };
+        /**
+         * CandidateExecutionContextResponse
+         * @description One issued candidate context, exactly as the design binds it.
+         */
+        CandidateExecutionContextResponse: {
+            /** Batch Id */
+            batch_id: string;
+            /**
+             * Batch Kind
+             * @enum {string}
+             */
+            batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY";
+            /** Campaign Id */
+            campaign_id: string;
+            /** Command Id */
+            command_id: string;
+            /** Config Document */
+            config_document?: string | null;
+            /** Config Sha256 */
+            config_sha256: string;
+            /** Context Id */
+            context_id: string;
+            /** Context Sha256 */
+            context_sha256: string;
+            /** Dispatch Id */
+            dispatch_id: string;
+            /** Evidence Root */
+            evidence_root: string;
+            /** Execution Profile */
+            execution_profile: string;
+            /** Expires At Monotonic Ns */
+            expires_at_monotonic_ns: number;
+            /** Install Binding Sha256 */
+            install_binding_sha256?: string | null;
+            /** Install Prefix */
+            install_prefix?: string | null;
+            /** Issued At Monotonic Ns */
+            issued_at_monotonic_ns: number;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "CANDIDATE";
+            /** Manifest Id */
+            manifest_id: string;
+            /** Max Runs */
+            max_runs: number;
+            /** Owner Generation */
+            owner_generation: number;
+            /** Runtime Closure Sha256 */
+            runtime_closure_sha256: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Task Id */
+            task_id: string;
+            /** Worker Count */
+            worker_count: number;
+        };
+        /**
+         * CandidateFirstPassRequest
+         * @description One candidate first pass, presented under the context that authorizes it.
+         */
+        CandidateFirstPassRequest: {
+            /** Command Id */
+            command_id?: string | null;
+            /** Confirmation */
+            confirmation: string;
+            /** Context Id */
+            context_id?: string | null;
+            /**
+             * Context Kind
+             * @default CANDIDATE
+             */
+            context_kind: string;
+        };
+        /**
+         * CandidateFirstPassResponse
+         * @description The admitted candidate first pass, before any projection is read back.
+         */
+        CandidateFirstPassResponse: {
+            /** Batch Id */
+            batch_id: string;
+            /** Binding Sha256 */
+            binding_sha256: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Command Id */
+            command_id: string;
+            /** Context Id */
+            context_id: string;
+            /**
+             * Context Kind
+             * @constant
+             */
+            context_kind: "CANDIDATE";
+            /** Execution Profile */
+            execution_profile: string;
+            /** Manifest Id */
+            manifest_id: string;
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Status
+             * @constant
+             */
+            status: "STARTED";
+            /** Worker Count */
+            worker_count: number;
+        };
+        /**
          * CapabilitiesResponse
          * @description Capability payload: the original read-only fields plus worker qualification.
          *
@@ -1091,13 +1604,7 @@ export interface components {
         CapabilitiesResponse: {
             /**
              * Adaptive Default Ladder
-             * @default [
-             *       8,
-             *       6,
-             *       4,
-             *       2,
-             *       1
-             *     ]
+             * @default []
              */
             adaptive_default_ladder: number[];
             /** Available */
@@ -1108,22 +1615,21 @@ export interface components {
              * @enum {string}
              */
             default_execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /** Execution Config Sha256 */
+            execution_config_sha256?: string | null;
             /**
              * Execution Modes
              * @default []
              */
             execution_modes: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE")[];
+            /** Execution Profile */
+            execution_profile?: string | null;
+            /** Execution Schema Version */
+            execution_schema_version?: number | null;
             /**
              * Fixed Worker Counts
              * @default [
-             *       1,
-             *       2,
-             *       3,
-             *       4,
-             *       5,
-             *       6,
-             *       7,
-             *       8
+             *       1
              *     ]
              */
             fixed_worker_counts: number[];
@@ -1147,8 +1653,17 @@ export interface components {
              * @default 4
              */
             minimum_points: number;
+            /** Platform */
+            platform?: string | null;
             start_guard?: components["schemas"]["StartGuardStatus"] | null;
+            /** Start Guard Note */
+            start_guard_note?: string | null;
             start_guard_policy?: components["schemas"]["StartGuardPolicyResponse"] | null;
+            /**
+             * Support Matrix
+             * @default []
+             */
+            support_matrix: components["schemas"]["ExecutionProfileResponse"][];
             /** Worker Count Availability */
             worker_count_availability?: components["schemas"]["WorkerCountAvailability"][];
             /** Worker Qualifications */
@@ -1195,10 +1710,172 @@ export interface components {
             /** Waypoint Index */
             waypoint_index?: number | null;
         };
+        /** EpisodeDetail */
+        EpisodeDetail: {
+            /** Attempts */
+            attempts: components["schemas"]["AttemptView"][];
+            /** Collection Committed */
+            collection_committed: boolean;
+            /** Files */
+            files: components["schemas"]["ArchiveFile"][];
+            /** Frame Count */
+            frame_count: number;
+            /** Processed Result */
+            processed_result: {
+                [key: string]: unknown;
+            };
+            /** Qc Summary */
+            qc_summary: {
+                [key: string]: unknown;
+            };
+            /** Scene */
+            scene: {
+                [key: string]: unknown;
+            };
+            /** Scene Id */
+            scene_id: string;
+            /** Seal */
+            seal: {
+                [key: string]: unknown;
+            };
+            /** Warnings */
+            warnings: string[];
+        };
+        /** EpisodePage */
+        EpisodePage: {
+            /** Episodes */
+            episodes: components["schemas"]["EpisodeRow"][];
+            /** Total */
+            total: number;
+        };
+        /** EpisodeRow */
+        EpisodeRow: {
+            /** Bytes */
+            bytes?: number | null;
+            /** Collection Committed */
+            collection_committed: boolean;
+            /** Duration S */
+            duration_s?: number | null;
+            /** Final Recording Round */
+            final_recording_round: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "VALID" | "INVALID" | "FAULT" | "MISSING";
+            /** Qc Status */
+            qc_status?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Record Count */
+            record_count?: number | null;
+            /** Recording Attempt Count */
+            recording_attempt_count: number;
+            /** Scene Id */
+            scene_id: string;
+            /** Split */
+            split?: string | null;
+            /** Teacher Result */
+            teacher_result?: string | null;
+        };
+        /** EpisodeSeries */
+        EpisodeSeries: {
+            /** Points */
+            points: components["schemas"]["SignalPoint"][];
+            /** Row Times S */
+            row_times_s: number[];
+            /** Stride */
+            stride: number;
+        };
+        /**
+         * ExecutionProfileResponse
+         * @description One row of the platform-bound support matrix, as the server would execute it.
+         *
+         *     The row names the exact routing key a request must claim and carries no budget profile and
+         *     no qualification hash: macOS supports W1 and W2, and that is the whole statement.
+         */
+        ExecutionProfileResponse: {
+            /**
+             * Accelerator
+             * @default mps
+             */
+            accelerator: string;
+            /**
+             * Batch Kind
+             * @enum {string}
+             */
+            batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY";
+            /**
+             * Execution Mode
+             * @enum {string}
+             */
+            execution_mode: "SEQUENTIAL" | "PARALLEL";
+            /**
+             * Platform
+             * @default macos
+             */
+            platform: string;
+            /** Profile */
+            profile: string;
+            /** Profile Sha256 */
+            profile_sha256?: string | null;
+            /** Qualification Sha256 */
+            qualification_sha256?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Selectable
+             * @default true
+             */
+            selectable: boolean;
+            /**
+             * Selector
+             * @default MPS:default
+             */
+            selector: string;
+            /**
+             * Status
+             * @default SUPPORTED
+             */
+            status: string;
+            /** Worker Count */
+            worker_count: number;
+        };
+        /** FileView */
+        FileView: {
+            /** Content */
+            content?: unknown;
+            /**
+             * Eof
+             * @default true
+             */
+            eof: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "json" | "jsonl";
+            /** Lines */
+            lines?: string[];
+            /** Next Offset */
+            next_offset?: number | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IdentityValue */
+        IdentityValue: {
+            /** Source */
+            source?: string | null;
+            /** Value */
+            value?: string | number | boolean | null;
         };
         /**
          * InstanceProofResponse
@@ -1465,6 +2142,91 @@ export interface components {
             /** Width Px */
             width_px: number;
         };
+        /** Metric */
+        Metric: {
+            /** Median */
+            median?: number | null;
+            /** Total */
+            total: number;
+        };
+        /** PackageInfo */
+        PackageInfo: {
+            /**
+             * Bytes
+             * @default 0
+             */
+            bytes: number;
+            /**
+             * Files
+             * @default 0
+             */
+            files: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "collection" | "supporting";
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /** Name */
+            name: string;
+            /** Package Id */
+            package_id: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Registered
+             * @default false
+             */
+            registered: boolean;
+            /** Sealed At */
+            sealed_at?: string | null;
+        };
+        /** PackageList */
+        PackageList: {
+            /** Packages */
+            packages: components["schemas"]["PackageInfo"][];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** PackageStatistics */
+        PackageStatistics: {
+            /** Committed */
+            committed: number;
+            /** Committed By Split */
+            committed_by_split: {
+                [key: string]: number;
+            };
+            duration_rows: components["schemas"]["Metric"];
+            duration_seconds: components["schemas"]["Metric"];
+            episode_bytes: components["schemas"]["Metric"];
+            /** Non Committed By Outcome */
+            non_committed_by_outcome: {
+                [key: string]: number;
+            };
+            /** Planned */
+            planned: number;
+            /** Recovered */
+            recovered: number;
+            /** Recovered By Round */
+            recovered_by_round: {
+                [key: string]: number;
+            };
+            /** Retry Rounds Run */
+            retry_rounds_run: number;
+        };
+        /** PackageView */
+        PackageView: {
+            /** Identity */
+            identity: {
+                [key: string]: components["schemas"]["IdentityValue"];
+            };
+            package: components["schemas"]["PackageInfo"];
+            seal: components["schemas"]["SealView"];
+            statistics?: components["schemas"]["PackageStatistics"] | null;
+            /** Warnings */
+            warnings?: string[];
+        };
         /** PhysicalOutcomeEvidence */
         PhysicalOutcomeEvidence: {
             /**
@@ -1557,6 +2319,8 @@ export interface components {
         PreflightResponse: {
             /** Admitted */
             admitted: boolean;
+            /** Execution Batch Kind */
+            execution_batch_kind?: string | null;
             /**
              * Execution Config
              * @default {}
@@ -1566,6 +2330,10 @@ export interface components {
             };
             /** Execution Mode */
             execution_mode?: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE") | null;
+            /** Execution Profile */
+            execution_profile?: string | null;
+            /** Execution Schema Version */
+            execution_schema_version?: number | null;
             /** Expires At Monotonic Ns */
             expires_at_monotonic_ns?: number | null;
             /** Manifest Id */
@@ -1667,12 +2435,43 @@ export interface components {
                 number
             ];
         };
+        /**
+         * RetryHistoryResponse
+         * @description One admitted retry, as history. The first-pass counters above never change because of it.
+         */
+        RetryHistoryResponse: {
+            /** Batch Id */
+            batch_id: string;
+            /** Binding Sha256 */
+            binding_sha256: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Cleanup Receipt Sha256 */
+            cleanup_receipt_sha256?: string | null;
+            /** Command Id */
+            command_id: string;
+            /** Original Batch Id */
+            original_batch_id: string;
+            /** Original Result Sha256 */
+            original_result_sha256: string;
+            /** Point Id */
+            point_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ADMITTED" | "CLEANED";
+        };
         /** RetryRequest */
         RetryRequest: {
             /** Command Id */
             command_id: string;
             /** Confirmation */
             confirmation: string;
+            /** Context Id */
+            context_id?: string | null;
+            /** Context Kind */
+            context_kind?: ("CANDIDATE" | "PRODUCTION") | null;
             /** Lease Generation */
             lease_generation: number;
             /** Lease Id */
@@ -1682,11 +2481,50 @@ export interface components {
             /** Service Session Id */
             service_session_id: string;
         };
+        /** RootView */
+        RootView: {
+            /** Label */
+            label: string;
+            /** Root Id */
+            root_id: string;
+        };
+        /** SealView */
+        SealView: {
+            /**
+             * Bytes
+             * @default 0
+             */
+            bytes: number;
+            /**
+             * Files
+             * @default 0
+             */
+            files: number;
+            /** Kind */
+            kind: string;
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Sealed At */
+            sealed_at?: string | null;
+        };
         /**
          * ServerMode
          * @enum {string}
          */
         ServerMode: "STARTING" | "READ_ONLY" | "READY" | "BUSY" | "DEGRADED";
+        /** SignalPoint */
+        SignalPoint: {
+            /** Action */
+            action: number[];
+            /** Row */
+            row: number;
+            /** State */
+            state: number[];
+            /** T */
+            t: number;
+        };
         /**
          * StartGuardCheck
          * @description One check of the shared startup guard, in the units the decision used.
@@ -1947,6 +2785,51 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VerifyIssue */
+        VerifyIssue: {
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Name */
+            name: string;
+        };
+        /** VerifyProgress */
+        VerifyProgress: {
+            /**
+             * Checked
+             * @default 0
+             */
+            checked: number;
+            /** Issues */
+            issues?: components["schemas"]["VerifyIssue"][];
+            /**
+             * Mismatch Count
+             * @default 0
+             */
+            mismatch_count: number;
+            /**
+             * Missing Count
+             * @default 0
+             */
+            missing_count: number;
+            /**
+             * State
+             * @default idle
+             * @enum {string}
+             */
+            state: "idle" | "running" | "cancelling" | "cancelled" | "complete" | "failed";
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
         /** WorkerCountAvailability */
         WorkerCountAvailability: {
             /** Profile Sha256 */
@@ -1998,6 +2881,461 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    act_command_act_command_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    act_status_act_status_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    config_api_archives_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveConfigView"];
+                };
+            };
+        };
+    };
+    packages_api_archives_packages_get: {
+        parameters: {
+            query: {
+                root_id: string;
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    package_api_archives_packages__package_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    episodes_api_archives_packages__package_id__episodes_get: {
+        parameters: {
+            query?: {
+                split?: ("train" | "validation" | "offline_test") | null;
+                outcome?: ("VALID" | "INVALID" | "FAULT" | "MISSING") | null;
+                q?: string;
+                sort?: string;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detail_api_archives_packages__package_id__episodes__scene_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+                scene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    file_api_archives_packages__package_id__episodes__scene_id__files__file_id__get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                package_id: string;
+                scene_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_api_archives_packages__package_id__episodes__scene_id__files__file_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+                scene_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    frame_api_archives_packages__package_id__episodes__scene_id__frames__row___camera__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+                scene_id: string;
+                camera: "head" | "wrist";
+                row: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    series_api_archives_packages__package_id__episodes__scene_id__series_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+                scene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeSeries"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_api_archives_packages__package_id__verify_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyProgress"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_verify_api_archives_packages__package_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyProgress"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_verify_api_archives_packages__package_id__verify_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyProgress"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     attachment_attachment__operation__post: {
         parameters: {
             query?: never;
@@ -2339,6 +3677,44 @@ export interface operations {
             };
         };
     };
+    candidate_first_pass_expert_validation_campaigns_candidate_first_pass_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateFirstPassRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateFirstPassResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     preflight_expert_validation_campaigns_preflight_post: {
         parameters: {
             query?: never;
@@ -2475,6 +3851,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CampaignProjectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_candidate_context_expert_validation_candidate_contexts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateContextIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateExecutionContextResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3604,6 +5018,124 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_teleop_head_camera_capture_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    status_teleop_head_camera_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    stop_teleop_head_camera_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                } | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    target_teleop_head_camera_target_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

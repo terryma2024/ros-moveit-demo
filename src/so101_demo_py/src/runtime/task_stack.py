@@ -17,15 +17,17 @@ from .owner_records import (
     owner_context_from_environment,
     spawner_token_from_environment,
 )
-from .runtime_closure import (
-    RuntimeAttestation,
-    RuntimeClosureError,
-    RuntimeClosureIdentity,
-    RunBinding,
+from so101_demo.runtime.runtime_closure.build import (
     build_runtime_attestation,
     default_loaded_image_probe,
     read_process_birth_identity,
     verify_runtime_closure,
+)
+from so101_demo.runtime.runtime_closure.identities import (
+    RunBinding,
+    RuntimeAttestation,
+    RuntimeClosureError,
+    RuntimeClosureIdentity,
 )
 
 
@@ -176,14 +178,20 @@ class OwnedProcessGroup:
         *,
         environment: Mapping[str, str] | None = None,
         birth_identity_probe: Callable[[int], int] | None = None,
+        pass_fds: tuple[int, ...] = (),
     ) -> OwnedProcessIdentity:
+        if (type(pass_fds) is not tuple or any(type(fd) is not int or fd < 0 for fd in pass_fds)
+                or len(set(pass_fds)) != len(pass_fds)):
+            raise ValueError("owned process inherited descriptors are invalid")
+        for fd in pass_fds:
+            os.fstat(fd)
         if any(identity.role == spec.role for identity, _child in self._children):
             raise RuntimeError(f"owned process role already exists: {spec.role}")
         merged_environment = dict(os.environ)
         if environment is not None:
             merged_environment.update(environment)
         # The STATION intent is written here, by the boundary that calls Popen, and only here:
-        # `macos_w2_worker` owns the station but writes no record of its own, so one station spawn
+        # `macos_two_worker_process` owns the station but writes no record of its own, so one station spawn
         # produces exactly one intent.
         recorder = self._owner_recorder(spec)
         if recorder is not None:
@@ -193,6 +201,7 @@ class OwnedProcessGroup:
                 list(spec.argv),
                 start_new_session=True,
                 env=merged_environment,
+                **({"pass_fds": pass_fds, "close_fds": True} if pass_fds else {}),
             )
         except BaseException as error:
             self._abandon_owner_record(recorder, error)

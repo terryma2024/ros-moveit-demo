@@ -8,8 +8,11 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <atomic>
 #include <limits>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -31,11 +34,14 @@ using so101_mujoco_support::EvidenceBuilder;
 using so101_mujoco_support::EvidenceState;
 using so101_mujoco_support::PhysicsStepEvidenceBuffer;
 using so101_mujoco_support::SimulationEvidencePlugin;
+using so101_mujoco_support::StampingChunkPublisher;
 using so101_mujoco_support::make_physics_step_evidence;
 using so101_mujoco_support::make_cancellation_ack;
 using so101_mujoco_support::msg::ContactSample;
 using so101_mujoco_support::msg::PhysicsStepEvidence;
 using so101_mujoco_support::msg::PhysicsStepEvidenceChunk;
+using so101_mujoco_support::msg::PhysicsStepFenceAck;
+using so101_mujoco_support::msg::PhysicsStepFenceRequest;
 using so101_mujoco_support::msg::SimulationEvidence;
 
 struct ModelDeleter
@@ -65,6 +71,7 @@ protected:
       <body name="cup" pos="0 0 .08"><freejoint name="cup_joint"/><geom name="cup_geom" type="sphere" size=".05" mass=".1"/></body>
       <body name="left"><freejoint name="left_joint"/><geom name="left_tip" type="sphere" size=".02" mass=".1"/></body>
       <body name="right"><freejoint name="right_joint"/><geom name="right_tip" type="sphere" size=".02" mass=".1"/></body>
+      <body name="mast" pos=".7 .2 .2"><freejoint name="mast_joint"/><geom name="mast_geom" type="sphere" size=".02" mass=".1"/></body>
       </worldbody></mujoco>)";
     char error[1024]{};
     model_.reset(mj_loadXML(xml_path.c_str(), nullptr, error, sizeof(error)));
@@ -113,6 +120,127 @@ TEST_F(AtomicEvidenceTest, ZeroContactSnapshotIsAtomicAndFinite)
   EXPECT_GE(message.object_body_id, 0);
   EXPECT_EQ(message.header.frame_id, "world");
   EXPECT_TRUE(std::isfinite(message.object_pose_world.position.z));
+}
+
+TEST_F(AtomicEvidenceTest, PhysicsStepPoseMatchesPostIntegrationFreeJointState)
+{
+  place_free_body("cup_joint", 0, 0, .2);
+  place_free_body("left_joint", -.3, 0, .2);
+  place_free_body("right_joint", .3, 0, .2);
+  mj_forward(model_.get(), data_.get());
+  const int cup_joint = mj_name2id(model_.get(), mjOBJ_JOINT, "cup_joint");
+  const int cup_body = mj_name2id(model_.get(), mjOBJ_BODY, "cup");
+  const int address = model_->jnt_qposadr[cup_joint];
+  mj_step(model_.get(), data_.get());
+  ASSERT_GT(std::abs(data_->qpos[address + 2] - data_->xpos[3 * cup_body + 2]), 1e-8)
+    << "this test must exercise MuJoCo's post-step derived-state lag";
+
+  const auto step = builder_.build_step(model_.get(), data_.get(), false, state_, 0, 1.0, 10.0);
+  ASSERT_EQ(step.model_qpos.size(), static_cast<std::size_t>(model_->nq));
+  EXPECT_DOUBLE_EQ(step.object_pose_world.position.x, step.model_qpos[address]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.position.y, step.model_qpos[address + 1]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.position.z, step.model_qpos[address + 2]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.w, step.model_qpos[address + 3]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.x, step.model_qpos[address + 4]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.y, step.model_qpos[address + 5]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.z, step.model_qpos[address + 6]);
+}
+
+TEST_F(AtomicEvidenceTest, WorldPoseAndRawStepMatchTheSamePostIntegrationConfiguration)
+{
+  place_free_body("cup_joint", 0, 0, .2);
+  place_free_body("left_joint", -.3, 0, .2);
+  place_free_body("right_joint", .3, 0, .2);
+  const int joint = mj_name2id(model_.get(), mjOBJ_JOINT, "cup_joint");
+  const int body = mj_name2id(model_.get(), mjOBJ_BODY, "cup");
+  const int address = model_->jnt_qposadr[joint];
+  const int velocity_address = model_->jnt_dofadr[joint];
+  data_->qvel[velocity_address] = .2;
+  data_->qvel[velocity_address + 4] = .3;
+  mj_forward(model_.get(), data_.get());
+  mj_step(model_.get(), data_.get());
+  ASSERT_GT(std::abs(data_->qpos[address] - data_->xpos[3 * body]), 1e-8);
+  ASSERT_GT(std::abs(data_->qpos[address + 5] - data_->xquat[4 * body + 2]), 1e-8);
+  const std::vector<mjtNum> original_qpos(data_->qpos, data_->qpos + model_->nq);
+  const std::vector<mjtNum> original_qvel(data_->qvel, data_->qvel + model_->nv);
+  const std::vector<mjtNum> original_xpos(data_->xpos, data_->xpos + 3 * model_->nbody);
+  const std::vector<mjtNum> original_xquat(data_->xquat, data_->xquat + 4 * model_->nbody);
+  const auto world = builder_.build(model_.get(), data_.get(), false, state_);
+  const auto raw = builder_.build_step(model_.get(), data_.get(), false, state_, 0, 1.0, 10.0);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.position.x, original_qpos[address]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.position.y, original_qpos[address + 1]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.position.z, original_qpos[address + 2]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.w, original_qpos[address + 3]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.x, original_qpos[address + 4]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.y, original_qpos[address + 5]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.z, original_qpos[address + 6]);
+  EXPECT_EQ(world.object_pose_world, raw.object_pose_world);
+  EXPECT_EQ(original_qpos, std::vector<mjtNum>(data_->qpos, data_->qpos + model_->nq));
+  EXPECT_EQ(original_qvel, std::vector<mjtNum>(data_->qvel, data_->qvel + model_->nv));
+  EXPECT_EQ(original_xpos, std::vector<mjtNum>(data_->xpos, data_->xpos + 3 * model_->nbody));
+  EXPECT_EQ(original_xquat, std::vector<mjtNum>(data_->xquat, data_->xquat + 4 * model_->nbody));
+}
+
+TEST_F(AtomicEvidenceTest, WorldTwistMatchesForwardedPostIntegrationStateWithoutMutatingLiveData)
+{
+  const auto xml_path = std::filesystem::temp_directory_path() / "so101_atomic_evidence.xml";
+  std::ifstream source(xml_path);
+  std::string xml((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  const auto geom_offset = xml.find("name=\"cup_geom\"");
+  ASSERT_NE(geom_offset, std::string::npos);
+  xml.insert(geom_offset, "pos=\".015 0 0\" ");
+  const auto offset_path = std::filesystem::temp_directory_path() / "so101_offset_evidence.xml";
+  std::ofstream(offset_path) << xml;
+  char error[1024]{};
+  model_.reset(mj_loadXML(offset_path.c_str(), nullptr, error, sizeof(error)));
+  ASSERT_NE(model_, nullptr) << error;
+  data_.reset(mj_makeData(model_.get()));
+  ASSERT_NE(data_, nullptr);
+  ASSERT_TRUE(builder_.configure(model_.get(), "cup", "left_tip", "right_tip", {"table"}, 32));
+  place_free_body("cup_joint", 0, 0, .2);
+  place_free_body("left_joint", -.3, 0, .2);
+  place_free_body("right_joint", .3, 0, .2);
+  const int joint = mj_name2id(model_.get(), mjOBJ_JOINT, "cup_joint");
+  const int body = mj_name2id(model_.get(), mjOBJ_BODY, "cup");
+  const int address = model_->jnt_qposadr[joint];
+  const int velocity_address = model_->jnt_dofadr[joint];
+  // A rotated body with a nonzero inertial offset exercises world angular
+  // conversion and the original mjOBJ_BODY centre-of-mass velocity semantics.
+  ASSERT_NEAR(model_->body_ipos[3 * body], .015, 1e-12);
+  data_->qpos[address + 3] = std::sqrt(.5);
+  data_->qpos[address + 6] = std::sqrt(.5);
+  data_->qvel[velocity_address] = .2;
+  data_->qvel[velocity_address + 4] = .3;
+  mj_forward(model_.get(), data_.get());
+  mj_step(model_.get(), data_.get());
+  std::unique_ptr<mjData, DataDeleter> independent(mj_makeData(model_.get()));
+  ASSERT_NE(independent, nullptr);
+  mj_copyData(independent.get(), model_.get(), data_.get());
+  mj_forward(model_.get(), independent.get());
+  mjtNum expected[6]{};
+  mj_objectVelocity(model_.get(), independent.get(), mjOBJ_BODY, body, expected, 0);
+  mjtNum body_origin[6]{};
+  mj_objectVelocity(model_.get(), independent.get(), mjOBJ_XBODY, body, body_origin, 0);
+  ASSERT_GT(std::abs(expected[5] - body_origin[5]), .001)
+    << "the fixture must exercise the nonzero COM rotational velocity correction";
+  mjtNum cached[6]{};
+  mj_objectVelocity(model_.get(), data_.get(), mjOBJ_BODY, body, cached, 0);
+  ASSERT_GT(std::abs(expected[5] - cached[5]), 1e-8);
+  const std::vector<mjtNum> original_qpos(data_->qpos, data_->qpos + model_->nq);
+  const std::vector<mjtNum> original_qvel(data_->qvel, data_->qvel + model_->nv);
+  const std::vector<mjtNum> original_cvel(data_->cvel, data_->cvel + 6 * model_->nbody);
+  const auto world = builder_.build(model_.get(), data_.get(), false, state_);
+  const auto raw = builder_.build_step(model_.get(), data_.get(), false, state_, 0, 1.0, 10.0);
+  EXPECT_NEAR(world.object_twist_world.angular.x, expected[0], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.angular.y, expected[1], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.angular.z, expected[2], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.linear.x, expected[3], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.linear.y, expected[4], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.linear.z, expected[5], 1e-12);
+  EXPECT_EQ(world.object_twist_world, raw.object_twist_world);
+  EXPECT_EQ(original_qpos, std::vector<mjtNum>(data_->qpos, data_->qpos + model_->nq));
+  EXPECT_EQ(original_qvel, std::vector<mjtNum>(data_->qvel, data_->qvel + model_->nv));
+  EXPECT_EQ(original_cvel, std::vector<mjtNum>(data_->cvel, data_->cvel + 6 * model_->nbody));
 }
 
 TEST_F(AtomicEvidenceTest, ResetGenerationIsTheOnlyEpochAuthority)
@@ -614,6 +742,7 @@ PhysicsStepEvidence physics_step_sample(uint64_t step, double force_n)
   sample.simulation_time_s = static_cast<double>(step) * 0.002;
   sample.maximum_normal_force_n = force_n;
   sample.global_max_single_contact_force_n = force_n;
+  sample.total_normal_force_n = force_n;
   return sample;
 }
 
@@ -653,6 +782,28 @@ TEST(PhysicsStepEvidenceBufferTest, FailedPublishAttemptRetainsContinuousRangeAn
   }
 }
 
+TEST(PhysicsStepEvidenceBufferTest, CumulativePublishDeferralsAreCarriedByEveryChunkAndResetWithTheBuffer)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  for (uint64_t step = 1; step <= 5; ++step) {
+    ASSERT_TRUE(buffer.append(physics_step_sample(step, static_cast<double>(step))));
+  }
+  buffer.mark_publish_failed();
+  buffer.mark_publish_failed();
+  const auto deferred = buffer.prepare_chunk();
+  EXPECT_EQ(deferred.failed_publish_attempts, 2U);
+  EXPECT_EQ(deferred.publish_deferrals_total, 2U);
+  buffer.mark_published();
+  for (uint64_t step = 6; step <= 10; ++step) {
+    ASSERT_TRUE(buffer.append(physics_step_sample(step, static_cast<double>(step))));
+  }
+  const auto next = buffer.prepare_chunk();
+  EXPECT_EQ(next.failed_publish_attempts, 0U);       // per chunk: reset by the publish
+  EXPECT_EQ(next.publish_deferrals_total, 2U);       // cumulative: survives it
+  buffer.reset();
+  EXPECT_EQ(buffer.prepare_chunk().publish_deferrals_total, 0U);
+}
+
 TEST(PhysicsStepEvidenceBufferTest, EmptyLossSentinelRetainsTheLastObservedIdentity)
 {
   PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
@@ -688,6 +839,18 @@ TEST(PhysicsStepEvidenceBufferTest, EqualityBreachesAndFirstHazardLatchCannotBeO
   EXPECT_EQ(hazard->reset_epoch, 3U);
 }
 
+TEST(PhysicsStepEvidenceBufferTest, SummedContactsLatchBeforeAnySingleContactReachesLimit)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  auto sample = physics_step_sample(1, 6.0);
+  sample.total_normal_force_n = 12.0;
+  ASSERT_TRUE(buffer.append(sample));
+  const auto hazard = buffer.hazard_latch();
+  ASSERT_TRUE(hazard.has_value());
+  EXPECT_EQ(hazard->physics_step, 1U);
+  EXPECT_DOUBLE_EQ(hazard->force_n, 12.0);
+}
+
 TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFingertipOnly)
 {
   SimulationEvidence snapshot;
@@ -720,6 +883,7 @@ TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFi
 
   EXPECT_DOUBLE_EQ(sample.maximum_normal_force_n, 5.0);
   EXPECT_DOUBLE_EQ(sample.global_max_single_contact_force_n, 5.0);
+  EXPECT_DOUBLE_EQ(sample.total_normal_force_n, 14.0);
   EXPECT_DOUBLE_EQ(sample.left_fingertip_total_normal_force_n, 5.0);
   EXPECT_DOUBLE_EQ(sample.right_fingertip_total_normal_force_n, 4.0);
   EXPECT_DOUBLE_EQ(sample.fingertip_max_single_contact_force_n, 4.0);
@@ -729,7 +893,7 @@ TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFi
   EXPECT_DOUBLE_EQ(sample.net_contact_force_world_n.y, 4.0);
   EXPECT_DOUBLE_EQ(sample.net_contact_force_world_n.z, 5.0);
   EXPECT_TRUE(sample.static_shadow_crossed);
-  EXPECT_FALSE(sample.diagnostic_hazard_breached);
+  EXPECT_TRUE(sample.diagnostic_hazard_breached);
 }
 
 TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCadence)
@@ -758,6 +922,7 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   (void)subscription;
   SimulationEvidencePlugin plugin;
   ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+  EXPECT_GE(plugin.publisher_->get_actual_qos().get_rmw_qos_profile().depth, 256U);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   executor.add_node(observer);
@@ -777,12 +942,290 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   }
   ASSERT_EQ(chunks.size(), 1U);
   ASSERT_EQ(chunks.front().samples.size(), 5U);
+  int64_t previous_clock_end_ns = 0;
+  for (const auto & sample : chunks.front().samples) {
+    EXPECT_GT(sample.clock_interval_begin_monotonic_ns, previous_clock_end_ns);
+    EXPECT_GE(sample.clock_interval_end_monotonic_ns,
+      sample.clock_interval_begin_monotonic_ns);
+    previous_clock_end_ns = sample.clock_interval_end_monotonic_ns;
+    EXPECT_EQ(sample.model_qpos.size(), static_cast<std::size_t>(model_->nq));
+    EXPECT_EQ(sample.model_qvel.size(), static_cast<std::size_t>(model_->nv));
+    for (int i = 0; i < model_->nq; ++i) {
+      EXPECT_DOUBLE_EQ(sample.model_qpos[i], data_->qpos[i]);
+    }
+    for (int i = 0; i < model_->nv; ++i) {
+      EXPECT_DOUBLE_EQ(sample.model_qvel[i], data_->qvel[i]);
+    }
+  }
   EXPECT_EQ(chunks.front().first_physics_step, 1U);
   EXPECT_EQ(chunks.front().last_physics_step, 5U);
   EXPECT_EQ(chunks.front().simulation_session_id, "physics-step-test");
+  // The publish path stamps itself. handoff = the physics thread posted the chunk; publish = the publishing thread
+  // was about to call publish(); both on the clock of the samples' clock intervals.
+  const auto & stamped = chunks.front();
+  EXPECT_GT(stamped.handoff_monotonic_ns, 0U);
+  EXPECT_GE(stamped.handoff_monotonic_ns,
+    static_cast<uint64_t>(stamped.samples.back().clock_interval_end_monotonic_ns));
+  EXPECT_GE(stamped.publish_monotonic_ns, stamped.handoff_monotonic_ns);
+  EXPECT_EQ(stamped.publish_deferrals_total, 0U);
   plugin.cleanup();
   executor.remove_node(observer);
   executor.remove_node(node);
+  rclcpp::shutdown();
+}
+
+TEST_F(AtomicEvidenceTest, PhysicsFenceAckCarriesClockBoundsFromTheActualStepHook)
+{
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+  }
+  model_->opt.timestep = .002;
+  const auto ack_topic = "/test/so101/physics_clock_ack";
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "clock-test"),
+      rclcpp::Parameter("physics_step_fence_ack_topic", ack_topic),
+  });
+  auto node = std::make_shared<rclcpp::Node>("physics_clock_plugin", options);
+  auto observer = std::make_shared<rclcpp::Node>("physics_clock_observer");
+  std::vector<PhysicsStepFenceAck> acknowledgements;
+  const auto subscription = observer->create_subscription<PhysicsStepFenceAck>(
+    ack_topic, rclcpp::QoS(rclcpp::KeepLast(5)).reliable(),
+    [&acknowledgements](const PhysicsStepFenceAck & ack) {acknowledgements.push_back(ack);});
+  (void)subscription;
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  executor.add_node(observer);
+  const auto discovery_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (plugin.step_fence_ack_publisher_->get_subscription_count() == 0 &&
+    std::chrono::steady_clock::now() < discovery_deadline)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_GT(plugin.step_fence_ack_publisher_->get_subscription_count(), 0U);
+
+  plugin.on_reset();
+  plugin.on_pause(true);
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  plugin.on_pause(false);
+  PhysicsStepFenceRequest request;
+  request.simulation_session_id = "clock-test";
+  request.reset_epoch = 1;
+  request.request_sequence = 1;
+  ASSERT_TRUE(plugin.step_fence_.request(request));
+  data_->time = .002;
+  const auto steady_ns = [] {
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    };
+  const auto outer_begin_ns = steady_ns();
+  plugin.on_physics_step(model_.get(), data_.get());
+  const auto outer_end_ns = steady_ns();
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (acknowledgements.empty() && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_EQ(acknowledgements.size(), 1U);
+  const auto & ack = acknowledgements.front();
+  EXPECT_EQ(ack.reset_epoch, 1U);
+  EXPECT_EQ(ack.marked_physics_step, 1U);
+  EXPECT_DOUBLE_EQ(ack.marked_simulation_time_s, .002);
+  EXPECT_EQ(ack.marked_sample.simulation_session_id, ack.simulation_session_id);
+  EXPECT_EQ(ack.marked_sample.reset_epoch, ack.reset_epoch);
+  EXPECT_EQ(ack.marked_sample.physics_step, ack.marked_physics_step);
+  EXPECT_DOUBLE_EQ(ack.marked_sample.simulation_time_s, ack.marked_simulation_time_s);
+  EXPECT_EQ(ack.marked_sample.model_qpos,
+    std::vector<double>(data_->qpos, data_->qpos + model_->nq));
+  EXPECT_EQ(ack.marked_sample.model_qvel,
+    std::vector<double>(data_->qvel, data_->qvel + model_->nv));
+  EXPECT_LE(outer_begin_ns, ack.clock_interval_begin_monotonic_ns);
+  EXPECT_LE(ack.clock_interval_begin_monotonic_ns, ack.clock_interval_end_monotonic_ns);
+  EXPECT_LE(ack.clock_interval_end_monotonic_ns, outer_end_ns);
+  EXPECT_EQ(ack.marked_sample.clock_interval_begin_monotonic_ns,
+    ack.clock_interval_begin_monotonic_ns);
+  EXPECT_LE(ack.marked_sample.clock_interval_begin_monotonic_ns,
+    ack.marked_sample.clock_interval_end_monotonic_ns);
+  EXPECT_LE(ack.marked_sample.clock_interval_end_monotonic_ns,
+    ack.clock_interval_end_monotonic_ns);
+  plugin.cleanup();
+  executor.remove_node(observer);
+  executor.remove_node(node);
+  rclcpp::shutdown();
+}
+
+// ---- the publish gate is an integer-nanosecond grid ----------------------------------------------------------------------
+
+namespace
+{
+// The simulation time as MuJoCo accumulates it: one 2 ms addition per step, rounded in the binade the sum is in.
+std::vector<int> publish_gaps_in_steps(double start_time, int steps, bool old_rule)
+{
+  const double period = 1.0 / 100.0;
+  double time = start_time;
+  double last_time = start_time;
+  int64_t last_grid = so101_mujoco_support::publish_grid_index(start_time, 10000000);
+  int last_step = 0;
+  std::vector<int> gaps;
+  for (int step = 1; step <= steps; ++step) {
+    time += 0.002;
+    const bool publish = old_rule ? (time - last_time >= period) :
+      (so101_mujoco_support::publish_grid_index(time, 10000000) != last_grid);
+    if (publish) {
+      gaps.push_back(step - last_step);
+      last_step = step;
+      last_time = time;
+      last_grid = so101_mujoco_support::publish_grid_index(time, 10000000);
+    }
+  }
+  return gaps;
+}
+}  // namespace
+
+TEST(PublishGridTest, EveryBinadePublishesEveryFiveStepsWhileTheOldGateDid_5_Or_6)
+{
+  // [4,8) [8,16) [16,32) [32,64) [64,128) s, each from an offset that is not a multiple of the period (a reset restores the time)
+  for (const double start : {4.002, 9.0, 16.0, 17.3, 31.0, 33.0, 64.0, 70.7, 100.0, 127.0 - 0.004}) {
+    for (const int steps : {5000, 20000}) {
+      const auto gaps = publish_gaps_in_steps(start, steps, false);
+      ASSERT_GT(gaps.size(), 100U);
+      for (std::size_t i = 1; i < gaps.size(); ++i) {
+        EXPECT_EQ(gaps[i], 5) << "start " << start << " message " << i;      // the first gap depends on the phase of the start
+      }
+      EXPECT_LE(gaps.front(), 5);
+    }
+  }
+  // the defect the integer grid replaces: in the [16,32) and [64,128) binades the accumulated double falls just under 10 ms
+  // after five steps, so the old gate waited for a sixth (12 ms, 83 Hz)
+  int sixes = 0;
+  for (const double start : {16.0, 64.0}) {
+    for (const int gap : publish_gaps_in_steps(start, 20000, true)) {sixes += gap == 6;}
+  }
+  EXPECT_GT(sixes, 100);
+}
+
+TEST(PublishGridTest, GridIndexIsAFloorAndExactAtTheBoundaries)
+{
+  using so101_mujoco_support::publish_grid_index;
+  EXPECT_EQ(publish_grid_index(0.0, 10000000), 0);
+  EXPECT_EQ(publish_grid_index(0.0099999, 10000000), 0);
+  EXPECT_EQ(publish_grid_index(0.01, 10000000), 1);
+  EXPECT_EQ(publish_grid_index(16.0, 10000000), 1600);
+  EXPECT_EQ(publish_grid_index(16.0 - 1e-12, 10000000), 1600) << "below the boundary by less than a nanosecond rounds onto it";
+  EXPECT_EQ(publish_grid_index(127.99, 10000000), 12799);
+  EXPECT_EQ(publish_grid_index(-0.001, 10000000), -1) << "floor, not truncation";
+}
+
+TEST(PublishGridTest, ThePeriodMustBeAWholeNumberOfPhysicsSteps)
+{
+  using so101_mujoco_support::publish_grid_valid;
+  EXPECT_TRUE(publish_grid_valid(10000000, 2000000));
+  EXPECT_TRUE(publish_grid_valid(10000000, 1000000));
+  EXPECT_FALSE(publish_grid_valid(10000000, 3000000));
+  EXPECT_FALSE(publish_grid_valid(3333333, 2000000));
+  EXPECT_FALSE(publish_grid_valid(0, 2000000));
+  EXPECT_FALSE(publish_grid_valid(10000000, 0));
+}
+
+TEST_F(AtomicEvidenceTest, PluginRefusesAPublishRateThatIsNotAWholeNumberOfStepsAndKeepsTheGridAcrossBinadesAndReset)
+{
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+  }
+  model_->opt.timestep = 0.002;
+  const auto make_options = [](double rate, const std::string & topic) {
+      return rclcpp::NodeOptions().parameter_overrides({
+          rclcpp::Parameter("object_body", "cup"),
+          rclcpp::Parameter("left_fingertip_geoms", std::vector<std::string>{"left_tip"}),
+          rclcpp::Parameter("right_fingertip_geoms", std::vector<std::string>{"right_tip"}),
+          rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+          rclcpp::Parameter("simulation_session_id", "grid-test"),
+          rclcpp::Parameter("publish_rate", rate),
+          rclcpp::Parameter("topic", topic),
+      });
+    };
+  {
+    // 300 Hz is a 3.333 ms period: not a whole number of 2 ms steps
+    auto node = std::make_shared<rclcpp::Node>("grid_refused_plugin", make_options(300.0, "/test/so101/grid_refused"));
+    SimulationEvidencePlugin refused;
+    EXPECT_FALSE(refused.init(node, model_.get(), data_.get()));
+  }
+  auto node = std::make_shared<rclcpp::Node>("grid_plugin", make_options(100.0, "/test/so101/grid"));
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+  EXPECT_EQ(plugin.publish_period_ns_, 10000000);
+
+  // The plugin never blocks: a step that finds the publisher busy publishes nothing and the grid message comes one step late.
+  // The test therefore waits until the publisher thread has taken the previous message (a condition, with a long backstop: under
+  // load that thread can be starved for seconds) and says so when it did not, instead of failing later on a spacing of six.
+  const auto free_publisher = [&plugin]() {
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+      while (std::chrono::steady_clock::now() < deadline) {
+        if (plugin.realtime_publisher_->trylock()) {
+          plugin.realtime_publisher_->unlock();
+          return true;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+      }
+      ADD_FAILURE() << "the publisher thread did not release the publisher within 30 s";
+      return false;
+    };
+  // run 600 steps of 2 ms from `start`; returns the steps (from the start) at which a message was published
+  const auto run = [&](double start, int steps) {
+      data_->time = start;
+      std::vector<int> published_at;
+      int64_t seen = plugin.last_publish_grid_;
+      for (int step = 1; step <= steps; ++step) {
+        data_->time += 0.002;
+        free_publisher();
+        plugin.update(model_.get(), data_.get());
+        // The publisher thread polls its mutex, so even a publisher that was free a moment ago can be locked by it when update()
+        // tries: the plugin then publishes nothing for that step by design (it never blocks) and the grid message comes with the
+        // next one. This test is about the cadence of the messages, so a step that should have published and did not is offered again
+        // at the same time; a plugin that kept missing the grid would still fail below.
+        for (int again = 0; again < 200 &&
+          plugin.last_publish_grid_ != so101_mujoco_support::publish_grid_index(data_->time, plugin.publish_period_ns_) &&
+          plugin.last_publish_grid_ == seen; ++again)
+        {
+          free_publisher();
+          plugin.update(model_.get(), data_.get());
+        }
+        if (plugin.last_publish_grid_ != seen) {
+          seen = plugin.last_publish_grid_;
+          published_at.push_back(step);
+        }
+      }
+      return published_at;
+    };
+  const auto expect_every_five = [](const std::vector<int> & at, const char * what) {
+      ASSERT_GT(at.size(), 50U) << what;
+      for (std::size_t i = 2; i < at.size(); ++i) {       // the first message after a jump of the time is off the grid phase
+        EXPECT_EQ(at[i] - at[i - 1], 5) << what << " message " << i;
+      }
+    };
+  plugin.update(model_.get(), data_.get());                               // the first message (time 0)
+  expect_every_five(run(16.0, 600), "16-32 s binade");
+  expect_every_five(run(64.0, 600), "64-128 s binade");
+  expect_every_five(run(32.0, 600), "32-64 s binade");
+
+  // reset and the restored time: the pending reset is consumed by the paused snapshot (which publishes, bypassing the gate), the
+  // time restored lower than before; the grid resumes at once and stays every five steps
+  plugin.on_pause(true);
+  plugin.on_reset();
+  data_->time = 3.5;
+  free_publisher();
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  plugin.on_pause(false);
+  const auto after_reset = run(3.5, 600);
+  expect_every_five(after_reset, "after the reset");
+  EXPECT_LE(after_reset.front(), 5) << "the first message after a time restore comes within one period";
+  plugin.cleanup();
   rclcpp::shutdown();
 }
 
@@ -816,3 +1259,392 @@ TEST_F(AtomicEvidenceTest, ControllerUpdatesDoNotInventPhysicsStepEvidence)
   rclcpp::shutdown();
 }
 }  // namespace
+
+TEST(ScalarJointEvidenceTest, NamedHingeSnapshotUsesActualAddressesAndResetScope)
+{
+  const auto path = std::filesystem::temp_directory_path() / "so101_scalar_evidence.xml";
+  std::ofstream(path) << R"(<mujoco><worldbody><body name="robot">
+    <joint name="neck_yaw_joint" type="hinge"/><geom type="sphere" size=".02"/>
+    <body name="arm"><joint name="1" type="hinge"/><geom type="sphere" size=".02"/></body>
+    </body><body name="cup"><freejoint/><geom type="sphere" size=".02"/></body>
+    </worldbody></mujoco>)";
+  char error[1024]{};
+  std::unique_ptr<mjModel, ModelDeleter> model(mj_loadXML(path.c_str(), nullptr, error, sizeof(error)));
+  ASSERT_NE(model, nullptr) << error;
+  std::unique_ptr<mjData, DataDeleter> data(mj_makeData(model.get()));
+  data->qpos[0] = -.4; data->qpos[1] = .2; data->qvel[0] = .01;
+  data->time = 3.5;
+  const auto message = so101_mujoco_support::make_scalar_joint_evidence(
+    model.get(), data.get(), {"1", "neck_yaw_joint"}, "session-a", 4, 0, true);
+  EXPECT_EQ(message.simulation_session_id, "session-a");
+  EXPECT_EQ(message.reset_epoch, 4U); EXPECT_EQ(message.simulation_step, 0U);
+  EXPECT_TRUE(message.paused); EXPECT_EQ(message.joint_names, (std::vector<std::string>{"1", "neck_yaw_joint"}));
+  EXPECT_EQ(message.positions_rad, (std::vector<double>{.2, -.4}));
+  EXPECT_EQ(message.velocities_rad_s, (std::vector<double>{0., .01}));
+  EXPECT_EQ(message.header.stamp.sec, 3); EXPECT_EQ(message.header.stamp.nanosec, 500000000U);
+  EXPECT_THROW(so101_mujoco_support::make_scalar_joint_evidence(
+    model.get(), data.get(), {"missing"}, "s", 0, 0, true), std::invalid_argument);
+}
+
+TEST_F(AtomicEvidenceTest, WholeRobotBuilderKeepsNonCupContactAndLegacyFilter)
+{
+  so101_mujoco_support::RobotContactBuilder robot;
+  ASSERT_TRUE(robot.configure(model_.get(), {"left", "right"}, 128));
+  place_free_body("cup_joint", .5, 0, .2);
+  place_free_body("left_joint", 0, 0, .01);
+  place_free_body("right_joint", 0, 0, .03);
+  mj_forward(model_.get(), data_.get());
+  const auto output = robot.build(model_.get(), data_.get(), "session-a", 1, 1);
+  EXPECT_FALSE(output.truncated);
+  EXPECT_GE(output.geom_a.size(), 2u);
+  EXPECT_EQ(output.geom_a.size(), output.geom_b.size());
+  const auto legacy = builder_.build(model_.get(), data_.get(), false, state_);
+  EXPECT_FALSE(legacy.has_contact);
+}
+
+TEST(RobotContactBufferTest, OverflowAndTransientContactPersistUntilExplicitEpochReset)
+{
+  so101_mujoco_support::RobotContactBuffer buffer(2);
+  so101_mujoco_support::msg::RobotContactEvidence sample;
+  sample.simulation_session_id = "s";
+  sample.reset_epoch = 1;
+  sample.physics_step = 1;
+  sample.simulation_time_s = .002;
+  sample.geom_a = {"arm"}; sample.geom_b = {"table"};
+  sample.signed_distance_m = {-.001}; sample.normal_force_n = {2.};
+  ASSERT_TRUE(buffer.append(sample));
+  sample.physics_step = 2;sample.simulation_time_s = .004;
+  sample.geom_a.clear();sample.geom_b.clear();sample.signed_distance_m.clear();sample.normal_force_n.clear();
+  ASSERT_TRUE(buffer.append(sample));
+  sample.physics_step = 3;sample.simulation_time_s = .006;
+  EXPECT_FALSE(buffer.append(sample));
+  EXPECT_TRUE(buffer.front().evidence_loss);
+  EXPECT_EQ(buffer.front().geom_a.front(), "arm");
+  buffer.pop_published();
+  EXPECT_TRUE(buffer.front().evidence_loss);
+  buffer.reset(2);
+  sample.reset_epoch = 2;sample.physics_step = 1;sample.simulation_time_s = .008;
+  ASSERT_TRUE(buffer.append(sample));
+  EXPECT_FALSE(buffer.front().evidence_loss);
+}
+
+// ---- plan A21: RobotContactEvidence has its own non-real-time publishing thread ----
+
+namespace
+{
+using so101_mujoco_support::RobotContactPublisher;
+using so101_mujoco_support::msg::RobotContactEvidence;
+
+RobotContactEvidence contact_step(uint64_t epoch, uint64_t step)
+{
+  RobotContactEvidence sample;
+  sample.simulation_session_id = "s";
+  sample.reset_epoch = epoch;
+  sample.physics_step = step;
+  sample.simulation_time_s = static_cast<double>(step) * .002;
+  return sample;
+}
+
+struct Delivered
+{
+  std::mutex mutex;
+  std::vector<RobotContactEvidence> rows;
+  void add(const RobotContactEvidence & row)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    rows.push_back(row);
+  }
+  std::size_t count()
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    return rows.size();
+  }
+};
+
+template<typename Predicate>
+bool wait_until(Predicate predicate, std::chrono::milliseconds limit = std::chrono::milliseconds(5000))
+{
+  const auto end = std::chrono::steady_clock::now() + limit;
+  while (std::chrono::steady_clock::now() < end) {
+    if (predicate()) {return true;}
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return predicate();
+}
+}  // namespace
+
+TEST(RobotContactPublisherTest, PacedPushAtTheStepRateIsDeliveredCompletelyInOrderAtTheSameRate)
+{
+  Delivered delivered;
+  RobotContactPublisher publisher(5000, [&delivered](const RobotContactEvidence & row) {delivered.add(row);});
+  const int count = 600;
+  const auto begin = std::chrono::steady_clock::now();
+  for (int step = 1; step <= count; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));  // faster than the 2 ms physics step
+  }
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == static_cast<std::size_t>(count);}));
+  const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
+  EXPECT_GE(static_cast<double>(count) / seconds, 400.0);  // delivered at (about) the push rate, no backlog growth
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  for (int index = 0; index < count; ++index) {
+    ASSERT_EQ(delivered.rows[index].physics_step, static_cast<uint64_t>(index + 1));  // in order, none missing
+    EXPECT_FALSE(delivered.rows[index].evidence_loss);
+  }
+  const auto stats = publisher.stats();
+  EXPECT_EQ(stats.pushed, static_cast<uint64_t>(count));
+  EXPECT_EQ(stats.published, static_cast<uint64_t>(count));
+  EXPECT_EQ(stats.dropped, 0u);
+}
+
+TEST(RobotContactPublisherTest, ABurstFasterThanOneMessagePerPublishCycleIsDrainedInBatchesInOrder)
+{
+  Delivered delivered;
+  RobotContactPublisher publisher(5000, [&delivered](const RobotContactEvidence & row) {
+      std::this_thread::sleep_for(std::chrono::microseconds(30));  // a sink slower than the push loop
+      delivered.add(row);
+    });
+  const int count = 3000;
+  for (int step = 1; step <= count; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));  // never blocks on the sink
+  }
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == static_cast<std::size_t>(count);}));
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  for (int index = 0; index < count; ++index) {
+    ASSERT_EQ(delivered.rows[index].physics_step, static_cast<uint64_t>(index + 1));
+  }
+  const auto stats = publisher.stats();
+  EXPECT_GT(stats.high_water, 100u);  // the backlog really queued up behind the slow sink and was fully drained
+  EXPECT_EQ(stats.published, static_cast<uint64_t>(count));
+  EXPECT_EQ(stats.dropped, 0u);
+}
+
+TEST(RobotContactPublisherTest, ThePhysicsThreadNeverBlocksOnASinkThatIsStuck)
+{
+  std::mutex gate;
+  std::unique_lock<std::mutex> hold(gate);
+  std::atomic<int> entered{0};
+  RobotContactPublisher publisher(5000, [&](const RobotContactEvidence &) {
+      ++entered;
+      std::lock_guard<std::mutex> wait(gate);  // stuck until released
+    });
+  const auto begin = std::chrono::steady_clock::now();
+  for (int step = 1; step <= 1000; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));
+  }
+  EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::milliseconds(500));
+  hold.unlock();
+  ASSERT_TRUE(wait_until([&]() {return publisher.stats().published == 1000u;}));
+}
+
+TEST(RobotContactPublisherTest, OverflowKeepsTheLossSignallingOnEveryLaterMessageUntilReset)
+{
+  std::mutex gate;
+  std::unique_lock<std::mutex> hold(gate);
+  std::atomic<int> entered{0};
+  Delivered delivered;
+  RobotContactPublisher publisher(8, [&](const RobotContactEvidence & row) {
+      ++entered;
+      std::lock_guard<std::mutex> wait(gate);
+      delivered.add(row);
+    });
+  ASSERT_TRUE(publisher.push(contact_step(1, 1)));
+  ASSERT_TRUE(wait_until([&]() {return entered.load() == 1;}));  // step 1 is in flight, the queue is empty
+  for (int step = 2; step <= 9; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));  // fills the 8-slot queue
+  }
+  EXPECT_FALSE(publisher.push(contact_step(1, 10)));  // overflow: refused, exactly like RobotContactBuffer::append
+  EXPECT_EQ(publisher.stats().dropped, 1u);
+  hold.unlock();
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == 9u;}));
+  {
+    std::lock_guard<std::mutex> lock(delivered.mutex);
+    EXPECT_FALSE(delivered.rows[0].evidence_loss);  // left before the overflow
+    for (int index = 1; index < 9; ++index) {
+      EXPECT_EQ(delivered.rows[index].physics_step, static_cast<uint64_t>(index + 1));
+      EXPECT_TRUE(delivered.rows[index].evidence_loss);  // the latch is applied to every later message
+    }
+  }
+  ASSERT_TRUE(publisher.push(contact_step(1, 11)));
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == 10u;}));
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  EXPECT_TRUE(delivered.rows[9].evidence_loss);  // persists until an explicit epoch reset
+}
+
+TEST(RobotContactPublisherTest, ResetClearsTheQueueDropsTheRestOfABatchAndKeepsEpochSemantics)
+{
+  std::mutex gate;
+  std::unique_lock<std::mutex> hold(gate);
+  std::atomic<int> entered{0};
+  Delivered delivered;
+  RobotContactPublisher publisher(5000, [&](const RobotContactEvidence & row) {
+      ++entered;
+      std::lock_guard<std::mutex> wait(gate);
+      delivered.add(row);
+    });
+  for (int step = 1; step <= 6; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));
+  }
+  ASSERT_TRUE(wait_until([&]() {return entered.load() == 1;}));
+  std::thread resetter([&]() {publisher.reset(2);});  // waits (bounded) for the one in-flight message
+  std::this_thread::sleep_for(std::chrono::milliseconds(80));
+  hold.unlock();
+  resetter.join();
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() >= 1u;}));
+  ASSERT_TRUE(publisher.push(contact_step(2, 1)));  // the new epoch restarts at step 1, no loss carried over
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() >= 2u;}));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  ASSERT_EQ(delivered.rows.size(), 2u);  // steps 2..6 of epoch 1 never follow the new epoch
+  EXPECT_EQ(delivered.rows[0].reset_epoch, 1u);
+  EXPECT_EQ(delivered.rows[1].reset_epoch, 2u);
+  EXPECT_EQ(delivered.rows[1].physics_step, 1u);
+  EXPECT_FALSE(delivered.rows[1].evidence_loss);
+}
+
+TEST(RobotContactPublisherTest, ASinkFailureIsLostEvidenceAndStopJoinsTheThread)
+{
+  std::atomic<int> calls{0};
+  Delivered delivered;
+  auto publisher = std::make_unique<RobotContactPublisher>(100, [&](const RobotContactEvidence & row) {
+      if (++calls == 1) {throw std::runtime_error("publish failed");}
+      delivered.add(row);
+    });
+  ASSERT_TRUE(publisher->push(contact_step(1, 1)));
+  ASSERT_TRUE(wait_until([&]() {return publisher->stats().sink_errors == 1u;}));
+  ASSERT_TRUE(publisher->push(contact_step(1, 2)));
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == 1u;}));
+  EXPECT_TRUE(delivered.rows[0].evidence_loss);  // the message that never left is signalled as lost evidence
+  publisher->stop();
+  publisher->stop();  // idempotent
+  const auto after_stop = calls.load();
+  publisher->push(contact_step(1, 3));
+  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  EXPECT_EQ(calls.load(), after_stop);  // the joined thread delivers nothing more
+  publisher.reset();  // destructor after stop is clean
+}
+
+TEST(RobotContactPublisherTest, DestructionWithQueuedMessagesJoinsWithoutHanging)
+{
+  std::atomic<int> calls{0};
+  {
+    RobotContactPublisher publisher(5000, [&](const RobotContactEvidence &) {
+        ++calls;
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+      });
+    for (int step = 1; step <= 2000; ++step) {publisher.push(contact_step(1, step));}
+  }  // joins here; queued messages are discarded
+  const auto at_exit = calls.load();
+  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  EXPECT_EQ(calls.load(), at_exit);
+}
+
+TEST_F(AtomicEvidenceTest, WholeRobotRetainsArmTableArmArmAndArmMastPairs)
+{
+  so101_mujoco_support::RobotContactBuilder robot;
+  ASSERT_TRUE(robot.configure(model_.get(), {"left", "right", "mast"}, 128));
+  place_free_body("cup_joint", .5, 0, .2);
+  place_free_body("left_joint", 0, 0, .01);
+  place_free_body("right_joint", 0, 0, .03);
+  place_free_body("mast_joint", 0, 0, .06);
+  mj_forward(model_.get(), data_.get());
+  const auto output = robot.build(model_.get(), data_.get(), "session-a", 1, 1);
+  const auto has_pair = [&output](const std::string & first, const std::string & second) {
+      for (std::size_t i = 0; i < output.geom_a.size(); ++i) {
+        if ((output.geom_a[i] == first && output.geom_b[i] == second) ||
+          (output.geom_a[i] == second && output.geom_b[i] == first)) {return true;}
+      }
+      return false;
+    };
+  EXPECT_TRUE(has_pair("left_tip", "table"));
+  EXPECT_TRUE(has_pair("left_tip", "right_tip"));
+  EXPECT_TRUE(has_pair("right_tip", "mast_geom"));
+  EXPECT_FALSE(output.evidence_loss);
+  EXPECT_FALSE(builder_.build(model_.get(), data_.get(), false, state_).has_contact);
+  ASSERT_TRUE(robot.configure(model_.get(), {"left", "right", "mast"}, 1));
+  EXPECT_TRUE(robot.build(model_.get(), data_.get(), "session-a", 1, 1).truncated);
+}
+
+TEST_F(AtomicEvidenceTest, FullSceneStateTracksEveryDynamicBodyAndBindsCompiledModel)
+{
+  so101_mujoco_support::SceneStateBuilder scene;
+  ASSERT_TRUE(scene.configure(model_.get()));
+  const auto fingerprint = scene.model_sha256();
+  ASSERT_EQ(fingerprint.size(), 64U);
+  place_free_body("mast_joint", .8, .3, .4);
+  data_->time = .25;
+  const auto before = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  const auto sample = scene.build(model_.get(), data_.get(), "session-a", 3, 17, false, before);
+  const auto after = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  EXPECT_EQ(sample.clock_interval_begin_monotonic_ns, before);
+  EXPECT_LE(before, sample.clock_interval_end_monotonic_ns);
+  EXPECT_LE(sample.clock_interval_end_monotonic_ns, after);
+  EXPECT_EQ(sample.model_sha256, fingerprint);
+  EXPECT_EQ(sample.qpos.size(), static_cast<std::size_t>(model_->nq));
+  EXPECT_EQ(sample.simulation_session_id, "session-a");
+  EXPECT_EQ(sample.reset_epoch, 3U);
+  EXPECT_EQ(sample.simulation_step, 17U);
+  EXPECT_FALSE(sample.paused);
+  for (int i=0; i<model_->nq; ++i) {EXPECT_DOUBLE_EQ(sample.qpos[i], data_->qpos[i]);}
+  const auto paused = scene.build(model_.get(), data_.get(), "session-a", 4, 0, true, before);
+  EXPECT_TRUE(paused.paused);
+  EXPECT_EQ(paused.reset_epoch, 4U);
+  EXPECT_EQ(paused.simulation_step, 0U);
+  EXPECT_EQ(paused.qpos, sample.qpos);
+  model_->geom_size[0] += .001;
+  so101_mujoco_support::SceneStateBuilder changed;
+  ASSERT_TRUE(changed.configure(model_.get()));
+  EXPECT_NE(changed.model_sha256(), fingerprint);
+}
+
+
+TEST(StampingChunkPublisherTest, StampsThePublishTimeInItsOwnThreadAndNeverBlocksThePostingThread)
+{
+  rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("stamping_publisher_test");
+  const auto topic = "/test/so101/stamping_chunks";
+  std::vector<PhysicsStepEvidenceChunk> received;
+  const auto subscription = node->create_subscription<PhysicsStepEvidenceChunk>(
+    topic, rclcpp::QoS(rclcpp::KeepLast(100)).reliable(),
+    [&received](const PhysicsStepEvidenceChunk & message) {received.push_back(message);});
+  (void)subscription;
+  auto publisher = node->create_publisher<PhysicsStepEvidenceChunk>(
+    topic, rclcpp::QoS(rclcpp::KeepLast(100)).reliable());
+  StampingChunkPublisher stamping(publisher);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+
+  std::size_t accepted = 0;
+  std::chrono::nanoseconds slowest{0};
+  for (uint64_t sequence = 1; sequence <= 50; ++sequence) {
+    PhysicsStepEvidenceChunk chunk;
+    chunk.chunk_sequence = sequence;
+    chunk.handoff_monotonic_ns = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+    const auto before = std::chrono::steady_clock::now();
+    const bool posted = stamping.try_post(chunk);
+    slowest = std::max(slowest, std::chrono::steady_clock::now() - before);
+    accepted += posted ? 1U : 0U;
+    executor.spin_some();
+  }
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (received.size() < accepted && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  EXPECT_GT(accepted, 0U);
+  EXPECT_EQ(received.size(), accepted);                   // everything accepted is published, in order
+  EXPECT_LT(slowest, std::chrono::milliseconds(5));       // the physics thread is never blocked
+  uint64_t previous_sequence = 0;
+  for (const auto & chunk : received) {
+    EXPECT_GT(chunk.chunk_sequence, previous_sequence);
+    previous_sequence = chunk.chunk_sequence;
+    EXPECT_GE(chunk.publish_monotonic_ns, chunk.handoff_monotonic_ns);
+    EXPECT_GT(chunk.publish_monotonic_ns, 0U);
+  }
+  executor.remove_node(node);
+  rclcpp::shutdown();
+}

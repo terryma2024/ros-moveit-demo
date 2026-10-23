@@ -2,11 +2,16 @@ string simulation_session_id
 uint64 reset_epoch
 uint64 physics_step
 float64 simulation_time_s
+int64 clock_interval_begin_monotonic_ns
+int64 clock_interval_end_monotonic_ns
+float64[] model_qpos
+float64[] model_qvel
 geometry_msgs/Pose object_pose_world
 geometry_msgs/Twist object_twist_world
 bool has_contact
 bool truncated
 float64 maximum_normal_force_n
+float64 total_normal_force_n
 float64 left_fingertip_total_normal_force_n
 float64 right_fingertip_total_normal_force_n
 float64 fingertip_max_single_contact_force_n

@@ -4,7 +4,7 @@ One batch root can carry two different journal layouts:
 
 * ``<batch_root>/coordinator`` - the Linux fixed coordinator (``mujoco_parallel_batch``) and the
   canonical layout the service was written against;
-* ``<batch_root>/journal`` - the macOS campaign compositions (``macos_w2_campaign`` and the W1/N1
+* ``<batch_root>/journal`` - the macOS campaign compositions (``macos_two_worker_campaign`` and the single-worker
   entry points), which reuse the same ``CoordinatorJournal`` under the campaign name.
 
 The service used to read ``<batch_root>/coordinator`` and treat a missing epoch document as "no

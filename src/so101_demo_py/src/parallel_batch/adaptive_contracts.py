@@ -7,15 +7,15 @@ from enum import StrEnum
 from pathlib import Path
 import yaml
 
-from .contracts import (
-    ContractError,
-    PointStatus,
-    RunMode,
+from so101_demo.parallel_batch.contracts.common import (
     _require_absolute_path,
     _require_enum,
     _require_finite,
     _require_id,
     _require_positive_int,
+    ContractError,
+    PointStatus,
+    RunMode,
 )
 
 

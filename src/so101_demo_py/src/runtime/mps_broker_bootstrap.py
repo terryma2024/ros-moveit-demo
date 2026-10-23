@@ -1,6 +1,6 @@
 """The MPS Broker bootstrap: import-order safety, shared models, and one execution lane.
 
-Task 8 of the macOS MPS / private IPC plan. The approved design (section 6.2) fixes three things
+The approved macOS MPS / private IPC design (section 6.2) fixes three things
 that are easy to get subtly wrong:
 
 1. **Import order.** `PYTORCH_ENABLE_MPS_FALLBACK` is read and pinned *before* PyTorch is

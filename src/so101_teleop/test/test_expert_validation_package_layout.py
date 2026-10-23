@@ -1,10 +1,10 @@
-from pathlib import Path
 import re
 import subprocess
 import sys
+from teleop_paths import REPOSITORY
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = REPOSITORY
 TELEOP = ROOT / "src" / "so101_teleop"
 DEMO = ROOT / "src" / "so101_demo_py"
 
@@ -41,7 +41,7 @@ def test_generated_cmake_registry_includes_backend_result_gate(tmp_path):
         r'^add_test\(.*? "-m" "pytest" "([^"]+)"', generated, re.MULTILINE,
     ))
 
-    assert str(TELEOP / "test/teleop/test_backend_result.py") in pytest_paths
+    assert str(TELEOP / "test/api/test_backend_result.py") in pytest_paths
 
 
 def test_teleop_install_contract_contains_validation_server_fixture_and_spa():
@@ -51,7 +51,7 @@ def test_teleop_install_contract_contains_validation_server_fixture_and_spa():
     assert "config docs launch" in cmake
     assert "web/dist/" in cmake
     assert (
-        TELEOP / "config" / "expert_validation" / "top_view_projection_v1.json"
+        TELEOP / "config" / "expert_validation" / "top_view_projection.json"
     ).is_file()
     assert (
         TELEOP / "so101_teleop" / "expert_validation" / "catalog.py"
@@ -70,9 +70,9 @@ def test_upstream_adaptive_runtime_and_catalog_are_installable():
         "src/parallel_batch/adaptive_runner.py",
         "src/parallel_batch/adaptive_pool.py",
         "src/cli/parallel_batch_cleanup.py",
-        "config/mujoco/parallel_adaptive_workers_v1.yaml",
-        "config/mujoco/parallel_batch_v1.yaml",
-        "config/mujoco/moveit_expert_validation_points_v1.yaml",
+        "config/mujoco/adaptive_worker_pool.yaml",
+        "config/mujoco/parallel_batch_linux_cuda.yaml",
+        "config/mujoco/moveit_expert_validation_points.yaml",
     ):
         assert (DEMO / relative).is_file(), relative
 

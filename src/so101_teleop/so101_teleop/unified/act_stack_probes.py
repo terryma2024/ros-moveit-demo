@@ -1,0 +1,137 @@
+"""Exact bounded probes for one admitted pick-place validation ACT stack lifecycle."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import re
+import subprocess
+import time
+from typing import Mapping
+
+from .act_stack import ActStackLaunch, ActStackProcessOwner
+from .bridge import ActChildLaunch
+from .pick_place_startup_issuer import InstalledActStackReadinessProbe
+
+
+class RepeatableActStackStopProbe:
+    """Reobserve physical stop whenever an owner retry still has a live stack."""
+
+    def __init__(self, launch: ActStackLaunch, executable: Path, *,
+                 run=subprocess.run, clock_ns=time.monotonic_ns) -> None:
+        self.launch, self.executable = launch, Path(executable)
+        self.run, self.clock_ns = run, clock_ns
+        self.timeout_s = 7.0
+        self.process_timeout_s = 10.0
+        self._new_probe()
+
+    def _new_probe(self) -> InstalledActStackReadinessProbe:
+        return InstalledActStackReadinessProbe(
+            self.launch, self.executable, run=self.run, clock_ns=self.clock_ns,
+            timeout_s=self.timeout_s, process_timeout_s=self.process_timeout_s,
+        )
+
+    def __call__(self) -> bool:
+        return self._new_probe()()
+
+
+class RepeatableActStackReadyProbe:
+    """Observe a borrowed, already-started stack's readiness as often as a caller asks.
+
+    `InstalledActStackReadinessProbe` is single use by design: the stack owner's start consumes one and keeps its
+    `readiness_bytes` as startup evidence. Every call here builds a fresh single-use probe from the same launch and
+    observer, so the start probe is never touched and each call is a new no-motion observation."""
+
+    def __init__(self, launch: ActStackLaunch, executable: Path, *,
+                 run=subprocess.run, clock_ns=time.monotonic_ns,
+                 timeout_s: float = 60.0, process_timeout_s: float | None = None) -> None:
+        self.launch, self.executable = launch, Path(executable)
+        self.run, self.clock_ns = run, clock_ns
+        self.timeout_s, self.process_timeout_s = timeout_s, process_timeout_s
+        self._new_probe()   # a bad launch, observer or budget is refused when the shard is composed, not mid-task
+
+    def _new_probe(self) -> InstalledActStackReadinessProbe:
+        return InstalledActStackReadinessProbe(
+            self.launch, self.executable, run=self.run, clock_ns=self.clock_ns,
+            timeout_s=self.timeout_s, process_timeout_s=self.process_timeout_s,
+        )
+
+    def __call__(self) -> bool:
+        return self._new_probe()()
+
+
+class RosGraphClearProbe:
+    """Require no ROS nodes in this stack's exact domain after group retirement.
+
+    `spin_time_s` is how long the probe's own participant discovers before it lists. With localhost-only discovery the
+    default (`ros2 node list --no-daemon` without the option) misses a live node on repeated short calls, so a caller that
+    needs a clear graph to mean no node (the Host's proof for a native instance) passes it explicitly."""
+
+    def __init__(self, launch: ActStackLaunch, *, run=subprocess.run,
+                 timeout_s: float = 8.0, spin_time_s: float | None = None) -> None:
+        if (not isinstance(launch, ActStackLaunch) or not callable(run)
+                or not 0 < timeout_s <= 10
+                or spin_time_s is not None and not 0 < spin_time_s < timeout_s):
+            raise ValueError("ACT_STACK_GRAPH_PROBE_CONFIG_INVALID")
+        self.launch, self.run, self.timeout_s, self.spin_time_s = launch, run, timeout_s, spin_time_s
+
+    def __call__(self) -> bool:
+        argv = [str(self.launch.ros2_executable), "node", "list", "--no-daemon"]
+        if self.spin_time_s is not None:
+            argv += ["--spin-time", f"{self.spin_time_s:g}"]
+        try:
+            result = self.run(
+                argv, env=self.launch.process_environment(), shell=False,
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, timeout=self.timeout_s, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return (result.returncode == 0 and isinstance(result.stdout, bytes)
+                and not result.stdout.strip())
+
+
+def make_pick_place_act_stack(context, child: ActChildLaunch, *,
+                         ros2_executable: Path, readiness_executable: Path,
+                         base_environment: Mapping[str, str]) -> ActStackProcessOwner:
+    """Create the only stack scope allowed for one admitted full pick-place validation case."""
+    try:
+        campaign = context.campaign_id
+        campaign_root = Path(context.evidence_root)
+        observer = Path(readiness_executable)
+        if (not isinstance(child, ActChildLaunch)
+                or context.workload_kind != "pick_place_validation_full" or context.worker_count != 1
+                or context.execution_generation != child.execution_generation
+                or campaign != child.campaign_id
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", campaign) is None
+                or not campaign_root.is_absolute() or ".." in campaign_root.parts
+                or not campaign_root.is_dir() or campaign_root.is_symlink()
+                or not isinstance(base_environment, Mapping)
+                or not observer.is_absolute() or ".." in observer.parts
+                or observer.is_symlink() or not observer.is_file()
+                or not os.access(observer, os.X_OK)):
+            raise ValueError("scope")
+        stack_root = campaign_root / "pick-place-live" / campaign / "stack"
+        if (stack_root.parent.parent.is_symlink() or stack_root.parent.is_symlink()
+                or stack_root.exists() or stack_root.is_symlink()):
+            raise ValueError("existing or linked scope")
+        stack_root.parent.mkdir(parents=True, exist_ok=True)
+        if stack_root.parent.parent.is_symlink() or stack_root.parent.is_symlink():
+            raise ValueError("linked scope")
+        stack_root.mkdir(mode=0o700)
+        environment = dict(base_environment)
+        environment["GZ_PARTITION"] = f"act-pick-place-{child.ros_domain_id}-{campaign}"
+        launch = ActStackLaunch(
+            ros2_executable=Path(ros2_executable), session_id=child.mujoco_session_id,
+            evidence_root=stack_root, ros_domain_id=child.ros_domain_id,
+            environment=environment,
+        )
+        ready = InstalledActStackReadinessProbe(launch, observer)
+        stopped = RepeatableActStackStopProbe(launch, observer)
+        graph = RosGraphClearProbe(launch)
+        return ActStackProcessOwner(
+            launch, ready_probe=ready, stop_probe=stopped,
+            graph_clear_probe=graph,
+        )
+    except (AttributeError, OSError, TypeError, ValueError) as error:
+        raise ValueError("ACT_STACK_FACTORY_SCOPE_INVALID") from error

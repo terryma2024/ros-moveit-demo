@@ -28,7 +28,7 @@ POINT_RADIUS_PX = 10.0
 SCENE_PATH = Path("src/so101_demo_py/assets/mujoco/scene.xml")
 ANCHOR_PATH = Path("src/so101_demo_py/config/mujoco/rgbd_task_points.yaml")
 TARGET_POLICY_PATH = Path(
-    "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+    "src/so101_demo_py/config/policies/light_cup_wall_pick/mujoco.yaml"
 )
 
 QUOTAS = (
@@ -760,8 +760,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument(
         "--catalog-profile",
-        choices=("ai_station_baseline_v1", "geometry_v2"),
-        default="ai_station_baseline_v1",
+        choices=("ai_station_baseline", "geometry_v2"),
+        default="ai_station_baseline",
     )
     parser.add_argument("--total-points", type=int, default=CANDIDATE_COUNT)
     parser.add_argument(
@@ -793,7 +793,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             required_minimum_separation_m=0.0,
         )
         manifest_note = f"冻结清单：{args.points_yaml.name}"
-    elif args.catalog_profile == "ai_station_baseline_v1":
+    elif args.catalog_profile == "ai_station_baseline":
         from so101_teleop.expert_validation.catalog import (
             CATALOG_RELATIVE_PATH,
             CATALOG_SHA256,

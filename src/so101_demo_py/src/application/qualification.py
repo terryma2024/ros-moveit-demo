@@ -251,7 +251,7 @@ class ProductionQualificationRunner:
         from ament_index_python.packages import get_package_share_directory
 
         share = Path(get_package_share_directory("so101_demo_py"))
-        policy_path = share / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+        policy_path = share / "config/policies/light_cup_wall_pick/mujoco.yaml"
         self.provenance = {
             "backend": "mujoco",
             "source_commit": inputs["source_commit"],

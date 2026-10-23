@@ -135,11 +135,11 @@ def validate_dependency_lock(repository: Path) -> None:
 
 
 def validate_policy(repository: Path) -> None:
-    policy_root = repository / IMPLEMENTATION / "config/policies/light_cup_wall_pick/v1"
+    policy_root = repository / IMPLEMENTATION / "config/policies/light_cup_wall_pick"
     mujoco = policy_root / "mujoco.yaml"
     gazebo = policy_root / "gazebo.yaml"
     require(sha256(mujoco) == POLICY_SHA256, "qualified MuJoCo policy bytes changed")
-    require(mujoco.read_bytes() == gazebo.read_bytes(), "simulator v1 policy variants differ")
+    require(mujoco.read_bytes() == gazebo.read_bytes(), "simulator policy variants differ")
     provenance = json.loads(
         (repository / IMPLEMENTATION / "docs/provenance.json").read_text(encoding="utf-8")
     )

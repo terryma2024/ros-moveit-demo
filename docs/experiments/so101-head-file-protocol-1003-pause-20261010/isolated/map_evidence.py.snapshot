@@ -1,0 +1,53 @@
+"""Task-owned exact owner/node DSO evidence; original failed runs stay failed."""
+from pathlib import Path
+import hashlib,os,time
+from process_provenance import process,scoped_child
+
+def file_ref(path):
+    path=Path(path).resolve(strict=True);st=path.stat()
+    return dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                inode=st.st_ino,device_major=os.major(st.st_dev),device_minor=os.minor(st.st_dev))
+
+def snapshot(pid,identity,executable,session,libraries):
+    before=process(pid)
+    keys=('pid','start_ticks','uid')
+    if any(before[k]!=identity[k]for k in keys):raise ValueError('MAP_IDENTITY_CHANGED')
+    if before['state']=='Z':return None
+    row=scoped_child(pid,None,session)
+    if row is None:return None
+    expected_exe=str(Path(executable).resolve(strict=True))
+    actual_exe=os.readlink('/proc/'+str(pid)+'/exe')
+    if actual_exe!=expected_exe:return None
+    names=[Path(r['path']).name for r in libraries]
+    lines=[s for s in Path('/proc',str(pid),'maps').read_text().splitlines()
+           if any(name in s for name in names)]
+    after=process(pid)
+    if any(after[k]!=identity[k]for k in keys):raise ValueError('MAP_IDENTITY_CHANGED')
+    if after['state']=='Z':return None
+    if os.readlink('/proc/'+str(pid)+'/exe')!=actual_exe:raise ValueError('MAP_EXECUTABLE_CHANGED')
+    return dict(identity={k:after[k]for k in keys},executable=actual_exe,
+                scope_session=session,maps=lines,observed_mono_ns=time.monotonic_ns())
+
+def role_valid(proof,expected):
+    try:
+        if (proof['observed_mono_ns']<=0 or proof['scope_session']!=expected['session']
+            or proof['executable']!=expected['executable']
+            or any(proof['identity'][k]!=expected['identity'][k]for k in ('pid','start_ticks','uid'))):return False
+        if not proof['maps']:return False
+        required={r['path']:r for r in expected['libraries']}
+        if not required:return False
+        for p,r in required.items():
+            if Path(p).is_symlink()or file_ref(p)!=r:return False
+        seen=set()
+        for line in proof['maps']:
+            parts=line.split(maxsplit=5)
+            if len(parts)!=6 or parts[5]not in required:return False
+            r=required[parts[5]];major,minor=parts[3].split(':')
+            if int(parts[4])!=r['inode'] or int(major,16)!=r['device_major']or int(minor,16)!=r['device_minor']:return False
+            seen.add(parts[5])
+        return seen==set(required)
+    except (KeyError,TypeError,ValueError,OSError):return False
+
+def validate(proofs,expected):
+    return (set(proofs)==set(expected)=={'owner','node'}
+            and all(role_valid(proofs[role],expected[role])for role in expected))

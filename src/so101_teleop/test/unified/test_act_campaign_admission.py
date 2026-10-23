@@ -1,0 +1,852 @@
+"""ACT admission freezes identity before any child can start."""
+
+from __future__ import annotations
+
+from dataclasses import FrozenInstanceError, replace
+import asyncio
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+import pytest
+
+from so101_teleop.unified.contracts import AdmittedCampaignContext
+import so101_teleop.unified.bridge as bridge_module
+from so101_teleop.unified.bridge import ActChildLaunch, ActChildRegistry
+from so101_teleop.unified.admission import UnifiedWorkloadService
+from so101_teleop.unified.arbiter import GlobalMutationArbiter
+from so101_teleop.unified.contracts import Domain, OperationSpec
+from so101_teleop.unified.gpu_workload import ActGpuWorkloadArbiter
+from so101_teleop.unified.intent_store import IntentStore
+from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
+from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest
+from teleop_paths import DEMO_TEST_IMPORT_PATH
+
+
+def _canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def _write_policy(tmp_path):
+    payload = {
+        "schema_version": 1,
+        "policy_id": "synthetic-admission-test",
+        "thresholds": {
+            "minimum_bilateral_force_n": 0.1,
+            "maximum_compression_distance_m": 0.001,
+            "maximum_safe_force_n": 2.0,
+            "maximum_hold_linear_speed_m_s": 0.01,
+            "minimum_stable_hold_duration_s": 0.1,
+        },
+        "evaluation": {"maximum_observation_age_s": 0.2, "minimum_consecutive_samples": 2},
+        "allowed_other_contact_bodies": [],
+        "mujoco_version": "3.12.0",
+        "model_sha256": "1" * 64,
+        "scene_sha256": "2" * 64,
+        "motion_policy_sha256": "3" * 64,
+        "source_evidence_sha256": "4" * 64,
+        "collector_sha256": "5" * 64,
+        "live_collector_sha256": "6" * 64,
+        "analyzer_sha256": "7" * 64,
+        "config_sha256": "8" * 64,
+    }
+    fingerprint = hashlib.sha256(_canonical(payload)).hexdigest()
+    regimes = ("no_contact", "bilateral_touch", "over_compression", "micro_lift_slip", "stable_hold")
+    proposal = {
+        "status": "DISABLED", "payload": payload, "policy_fingerprint": fingerprint,
+        "source_evidence_sha256": payload["source_evidence_sha256"],
+        "counts": {name: {"offline": 20, "live": 5} for name in regimes},
+        "negative_controls": {"table_only": ["no_contact"], "post_release": ["no_contact"],
+                              "left_only": ["left_only"], "right_only": ["right_only"]},
+        "confusion_matrix": {name: {name: 5} for name in regimes},
+        "false_positive_rate": 0, "false_negative_rate": 0,
+    }
+    proposal["proposal_sha256"] = hashlib.sha256(_canonical(proposal)).hexdigest()
+    receipt = {
+        "policy_fingerprint": fingerprint,
+        "source_evidence_sha256": payload["source_evidence_sha256"],
+        "approved_by": "synthetic-test", "approval_reference": "test-only",
+        "approved_at": "2026-09-25T00:00:00+00:00", "evidence_root": str(tmp_path),
+    }
+    proposal_path = tmp_path / "proposal.json"
+    receipt_path = tmp_path / "activation.json"
+    proposal_path.write_text(json.dumps(proposal))
+    return fingerprint, proposal_path, receipt_path, receipt
+
+
+def _prepared_receipt(tmp_path):
+    """A real prepared bundle, so a collection payload can name its receipt.
+
+    Admission re-verifies the receipt and the bundle before it acquires anything, so the fixture
+    prepares a genuine bundle through the real producer rather than synthesising a path and digest.
+    """
+
+    import sys
+
+    for directory in DEMO_TEST_IMPORT_PATH:
+        if str(directory) not in sys.path:
+            sys.path.insert(0, str(directory))
+    from test_act_pick_place_validation_artifact_bundle import _inputs
+    from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
+
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle")
+    return receipt, hashlib.sha256(receipt.read_bytes()).hexdigest()
+
+
+def _calibration(tmp_path, *, status, head_search):
+    sample = tmp_path / "calibration-sample.json"
+    measured_values = {
+        "horizontal_fov_rad": 1.0, "coarse_step_rad": 0.2, "search_timeout_s": 15.0,
+        "max_fine_corrections": 3, "max_fine_total_rad": 0.5,
+        "min_confidence": 0.5, "tracking_iou": 0.5, "min_bbox_aspect": 0.2,
+        "center_deadband_px": 15.0, "vertical_bounds_px": [100.0, 380.0],
+        "min_area_px2": 100.0, "max_age_s": 0.5, "max_skew_s": 0.1,
+        "lock_valid_neck_rad": [-3.14, 3.14], "submit_lead_s": 0.05,
+        "stop_velocity_rad_s": 0.01, "stop_latency_s": 0.5,
+    }
+    camera_values = {
+        "head_intrinsics_px": [400.0, 400.0, 320.0, 240.0],
+        "head_translation_m": [0.0, 0.0, 0.1],
+        "head_rpy_rad": [0.0, 0.0, 0.0],
+        "yaw_zero_bearing_rad": 0.0,
+    }
+    if not sample.exists():
+        sample.write_text(json.dumps({
+            "schema_version": 1, "kind": "head_search_qualification", "status": "PASS",
+            "head_search": head_search, "observed_lock_frames": 3,
+            "measurements": measured_values,
+            "camera_measurements": camera_values,
+            "source_commit": "a" * 40, "config_sha256": "b" * 64,
+            "source_provenance_sha256": "c" * 64,
+        }))
+    sample_sha = hashlib.sha256(sample.read_bytes()).hexdigest()
+    measurements = {name: {
+        "value": (measured_values | camera_values).get(name,
+                 [1.0] * size if size > 1 else 1.0),
+        "unit": unit, "sample_path": str(sample), "sample_sha256": sample_sha,
+    } for name, (unit, size) in REQUIRED_MEASUREMENTS.items()}
+    checks = {name: "PASS" for name in (
+        "fov", "collision", "search", "synchronization", "execution", "release", "retreat")}
+    if status == "PICK_PLACE_CALIBRATION_READY":
+        checks["release"] = checks["retreat"] = "UNMEASURED"
+    report = {"schema_version": 1, "status": status, "source_commit": "a" * 40,
+              "config_sha256": "b" * 64, "source_provenance_sha256": "c" * 64,
+              "measurements": measurements, "checks": checks}
+    if status == "QUALIFIED":
+        # a QUALIFIED report must trace to the live campaign that produced it (8P4)
+        report["live_campaign"] = {
+            "case_root": str(tmp_path / "pick-place-live"),
+            "campaign_result_sha256": "d" * 64,
+            "preparation_receipt_sha256": "e" * 64,
+            "journal_sha256": ["f" * 64] * 14,
+        }
+    path = tmp_path / f"calibration-{status}.json"
+    path.write_text(json.dumps(report))
+    return str(path), hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco",
+                calibration_status="PICK_PLACE_CALIBRATION_READY", valid_head_search=True):
+    weights = tmp_path / "head-best.pt"
+    if not weights.exists():
+        weights.write_bytes(b"synthetic-local-head-weights")
+    head_search = {
+        "schema_version": 1,
+        "detector": {"backend": "yolo_seg", "weights_path": str(weights),
+                     "weights_sha256": hashlib.sha256(weights.read_bytes()).hexdigest(),
+                     "model_id": "plastic-cup-test", "image_size_px": 640,
+                     "requested_device": "cuda", "allow_cpu_fallback": False,
+                     "torch_threads": 4, "torch_interop_threads": 2,
+                     "torch_version": "2.0-test", "ultralytics_version": "8.0-test"},
+        "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                   "width_px": 640, "height_px": 480},
+        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
+                   "neck_goal_duration_s": 0.5},
+    }
+    artifacts = {}
+    for name in ("source", "runtime_config", "collection_config"):
+        path = tmp_path / f"{name}.json"
+        if not path.exists():
+            value = ({"schema_version": 1, "head_search": head_search}
+                     if name == "runtime_config" and valid_head_search else
+                     {"artifact": name, "campaign_id": "campaign-1"})
+            path.write_bytes(_canonical(value))
+        artifacts[f"{name}_path"] = str(path)
+        artifacts[f"{name}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path = tmp_path / "manifest.json"
+    if not manifest_path.exists():
+        manifest = build_pick_place_validation_manifest(
+            {
+                "default": {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.1},
+                "left": {"cup_start_m": [-0.08, -0.28, 0.165], "neck_start_rad": 0.0},
+                "forward": {"cup_start_m": [0.02, -0.36, 0.165], "neck_start_rad": 0.0},
+            },
+            source_sha256=artifacts["source_sha256"],
+            runtime_config_sha256=artifacts["runtime_config_sha256"],
+            collection_config_sha256=artifacts["collection_config_sha256"],
+            contact_policy_fingerprint=fingerprint,
+            calibration_report_path="calibration-report.json",
+            calibration_report_sha256="e" * 64,
+        )
+        manifest_path.write_bytes(_canonical(manifest))
+    artifacts["manifest_path"] = str(manifest_path)
+    artifacts["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    calibration_path, calibration_sha = _calibration(tmp_path, status=calibration_status,
+                                                    head_search=head_search)
+    receipt_path_prepared, receipt_sha_prepared = _prepared_receipt(tmp_path)
+    return OperationSpec(
+        command_id="start-1", domain=Domain.VALIDATION, kind="pick_place_validation_phase",
+        payload={
+            "campaign_id": "campaign-1", "backend": backend, "worker_count": 1,
+            **artifacts,
+            "contact_policy_fingerprint": fingerprint, "proposal_path": str(proposal_path),
+            "activation_receipt_path": str(receipt_path), "evidence_root": str(tmp_path),
+            "service_epoch": "epoch-1", "resource_binding_id": "binding-1",
+            "qualification_mode": False,
+            "qualification_receipt_path": None,
+            "calibration_report_path": calibration_path,
+            "calibration_report_sha256": calibration_sha,
+            "preparation_receipt_path": str(receipt_path_prepared),
+            "preparation_receipt_sha256": receipt_sha_prepared,
+            "children": [launch("w00", 40, "session-0").__dict__],
+        },
+        runtime_id="runtime-1", execution_generation=3, deadline_ns=time.monotonic_ns() + 10**12,
+    )
+
+
+def _service(store):
+    clock = time.monotonic_ns
+    return UnifiedWorkloadService(
+        arbiter=GlobalMutationArbiter(store, clock_ns=clock),
+        gpu_arbiter=ActGpuWorkloadArbiter(store, clock_ns=clock),
+        child_registry=ActChildRegistry(),
+        service_epoch="epoch-1", runtime_id="runtime-1",
+        stable_host_id="ai-station-1", gpu_selector="INDEX:0",
+        visible_physical_uuids=("GPU-physical-a",), resource_binding_id="binding-1",
+        owner_pid=os.getpid(), owner_started_ticks=1,
+        owner_identity_valid=lambda pid, start: pid == os.getpid() and start == 1,
+        calibration_identity_probe=lambda: ("a" * 40, "b" * 64),
+        clock_ns=clock,
+    )
+
+
+def test_pick_place_validation_admission_rejects_runtime_without_qualified_head_search(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,
+                       valid_head_search=False)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        with pytest.raises(ValueError, match="HEAD_SEARCH_CONFIG_INVALID"):
+            _service(store).start(spec)
+    finally:
+        store.close()
+
+
+def test_child_artifact_binding_refuses_config_replaced_after_admission(tmp_path):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        context = service.start(spec)
+        binding = ActArtifactBinding.from_admission(spec.payload, context)
+        environment = binding.environment()
+        assert ActArtifactBinding.verify_environment(environment) == binding
+        Path(spec.payload["runtime_config_path"]).write_text("replaced after admission")
+        with pytest.raises(ValueError, match="ACT_ARTIFACT_HASH_MISMATCH"):
+            ActArtifactBinding.verify_environment(environment)
+        service.finish(context, cleanup_confirmed=True)
+    finally:
+        store.close()
+
+
+def test_act_ros_child_refuses_replaced_artifact_before_ros_node(tmp_path, monkeypatch):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+    from so101_teleop.unified.ros_child import RclpyActionDriver
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        context = _service(store).start(spec)
+        binding = ActArtifactBinding.from_admission(spec.payload, context)
+        for name, value in binding.environment().items():
+            monkeypatch.setenv(name, value)
+        monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", context.campaign_id)
+        monkeypatch.setenv("SO101_ACT_WORKER_ID", "w00")
+        monkeypatch.setenv("SO101_ACT_MANIFEST_SHA256", context.manifest_sha256)
+        monkeypatch.setenv("SO101_ACT_RUNTIME_CONFIG_SHA256", context.runtime_config_sha256)
+        monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
+        Path(spec.payload["runtime_config_path"]).write_text("replaced after admission")
+        with pytest.raises(ValueError, match="ACT_ARTIFACT_HASH_MISMATCH"):
+            RclpyActionDriver()
+    finally:
+        store.close()
+
+
+def context() -> AdmittedCampaignContext:
+    return AdmittedCampaignContext(
+        campaign_id="campaign-1",
+        operation_id="operation-1",
+        workload_kind="pick_place_validation_phase",
+        service_epoch="epoch-1",
+        execution_generation=3,
+        stable_host_id="ai-station-1",
+        physical_gpu_uuid="GPU-physical-a",
+        worker_count=8,
+        source_sha256="f" * 64,
+        manifest_sha256="a" * 64,
+        runtime_config_sha256="b" * 64,
+        collection_config_sha256="c" * 64,
+        contact_policy_fingerprint="d" * 64,
+        domain_session_map_sha256="e" * 64,
+        resource_binding_id="binding-1",
+        evidence_root="/data/work/so101-evidence/act-data/task",
+        admitted_at_monotonic_s=12.5,
+        deadline_monotonic_s=30.0,
+    )
+
+
+def test_admitted_context_round_trips_without_identity_loss():
+    original = context()
+    assert AdmittedCampaignContext.from_dict(original.to_dict()) == original
+    with pytest.raises(FrozenInstanceError):
+        original.worker_count = 1
+    with pytest.raises(ValueError, match="CAMPAIGN_CONTEXT_SCHEMA"):
+        AdmittedCampaignContext.from_dict({**original.to_dict(), "unreviewed": True})
+
+
+def launch(worker_id: str, domain_id: int, session_id: str) -> ActChildLaunch:
+    return ActChildLaunch(
+        campaign_id="campaign-1",
+        worker_id=worker_id,
+        execution_generation=3,
+        ros_domain_id=domain_id,
+        namespace=f"/act/{worker_id}",
+        controller_name=f"{worker_id}_controller",
+        mujoco_session_id=session_id,
+        socket_root=f"/tmp/act-child/{worker_id}",
+    )
+
+
+def test_one_child_per_campaign_worker_generation_and_isolated_resources():
+    registry = ActChildRegistry()
+    for index in range(8):
+        registry.register(launch(f"w{index:02d}", 40 + index, f"session-{index}"))
+    assert len(registry.launches()) == 8
+    with pytest.raises(ValueError, match="DUPLICATE_CHILD"):
+        registry.register(launch("w00", 60, "new-session"))
+    with pytest.raises(ValueError, match="ROS_DOMAIN_SHARED"):
+        registry.register(launch("w08", 40, "session-8"))
+    with pytest.raises(ValueError, match="MUJOCO_SESSION_SHARED"):
+        registry.register(launch("w08", 48, "session-0"))
+
+
+def test_start_without_activation_receipt_creates_no_owner_resources(tmp_path):
+    fingerprint, proposal_path, receipt_path, _ = _write_policy(tmp_path)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="POLICY_NOT_ACTIVATED"):
+            service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_pick_place_calibration_start_without_measured_calibration_reserves_nothing(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        payload = {key: value for key, value in spec.payload.items()
+                   if key not in {"calibration_report_path", "calibration_report_sha256"}}
+        with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+            service.start(replace(spec, payload=payload))
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("mutation", ("tamper", "unmeasured"))
+def test_pick_place_calibration_start_rejects_unverified_calibration_before_resources(tmp_path, mutation):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    calibration_path = tmp_path / "calibration-PICK_PLACE_CALIBRATION_READY.json"
+    report = json.loads(calibration_path.read_text())
+    if mutation == "tamper":
+        report["checks"]["fov"] = "FAIL"
+        calibration_path.write_text(json.dumps(report))
+    else:
+        report["status"] = "CALIBRATION_REQUIRED"
+        report["checks"] = {key: "UNMEASURED" for key in report["checks"]}
+        calibration_path.write_text(json.dumps(report))
+        spec = replace(spec, payload={**spec.payload,
+            "calibration_report_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest()})
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("field,other", (("source_commit", "c" * 40),
+                                          ("config_sha256", "d" * 64)))
+def test_pick_place_calibration_start_records_a_calibration_identity_that_is_not_current(tmp_path, field, other):
+    """The report's recorded identity is provenance, not a comparison.
+
+    The report must still be structurally valid - the same report with a malformed identity or an
+    unmeasured check is refused by the gates that remain.
+    """
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    calibration_path = tmp_path / "calibration-PICK_PLACE_CALIBRATION_READY.json"
+    report = json.loads(calibration_path.read_text())
+    # the report and the sample it measures are one evidence pair: move both, so the binding
+    # between them still holds and only the identity compared with the installed profile changed
+    sample_paths = {entry["sample_path"] for entry in report["measurements"].values()}
+    assert len(sample_paths) == 1
+    sample_path = Path(sample_paths.pop())
+    sample = json.loads(sample_path.read_text())
+    sample[field] = other
+    sample_path.write_text(json.dumps(sample))
+    digest = hashlib.sha256(sample_path.read_bytes()).hexdigest()
+    for entry in report["measurements"].values():
+        entry["sample_sha256"] = digest
+    report[field] = other
+    calibration_path.write_text(json.dumps(report))
+    spec = replace(spec, payload={**spec.payload,
+        "calibration_report_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest()})
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        context = service.start(spec)
+        assert context.workload_kind == "pick_place_validation_phase"
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+    finally:
+        store.close()
+
+
+def test_start_refuses_gazebo_before_reserving_resources(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="MUJOCO_ONLY"):
+            service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path, backend="gazebo"))
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+    finally:
+        store.close()
+
+
+def test_start_persists_exact_context_and_reserves_gpu_and_validation(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        admitted = service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        assert admitted.contact_policy_fingerprint == fingerprint
+        assert admitted.worker_count == 1
+        assert admitted.physical_gpu_uuid == "GPU-physical-a"
+        assert len(service.child_registry.launches()) == 1
+        assert not service.arbiter.is_idle()
+        assert json.loads(store._query_one("SELECT context_json FROM act_campaign_contexts")[0]) == admitted.to_dict()
+    finally:
+        store.close()
+
+
+def test_start_refuses_visible_gpu_mapping_drift_before_any_resource(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        service.gpu_inventory_probe = lambda: ("GPU-other",)
+        with pytest.raises(ValueError, match="GPU_MAPPING_DRIFT"):
+            service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("name", ("source", "manifest", "runtime_config", "collection_config"))
+def test_start_rejects_changed_artifact_bytes_before_any_resource(tmp_path, name):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    (tmp_path / f"{name}.json").write_text("tampered")
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="CAMPAIGN_ARTIFACT_HASH_MISMATCH"):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("mutation", ("missing_prefix", "stale_source"))
+def test_pick_place_validation_start_rejects_semantically_invalid_manifest_before_resources(tmp_path, mutation):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if mutation == "missing_prefix":
+        manifest["prefix_cases"].pop()
+        expected = "PICK_PLACE_VALIDATION_MANIFEST_INVALID"
+    else:
+        manifest["source_sha256"] = "f" * 64
+        expected = "PICK_PLACE_VALIDATION_MANIFEST_BINDING_MISMATCH"
+    # v2 names the document digest manifest_document_sha256 (manifest_sha256 is the FILE digest,
+    # computed below), so a mutated document must recompute the v2 key or it is simply invalid
+    manifest["manifest_document_sha256"] = hashlib.sha256(_canonical({
+        key: value for key, value in manifest.items() if key != "manifest_document_sha256"
+    })).hexdigest()
+    manifest_path.write_bytes(_canonical(manifest))
+    spec = replace(spec, payload={**spec.payload,
+        "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest()})
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match=expected):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_start_registry_race_does_not_commit_parent_or_gpu_lease(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        original_validate = service._validate_start
+        foreign = launch("w00", 40, "session-0")
+
+        def competing_registration(spec):
+            result = original_validate(spec)
+            service.child_registry.register(foreign)
+            return result
+
+        service._validate_start = competing_registration
+        with pytest.raises(ValueError, match="DUPLICATE_CHILD"):
+            service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        assert service.child_registry.launches() == (foreign,)
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert store._query_one("SELECT * FROM act_campaign_contexts") is None
+    finally:
+        store.close()
+
+
+def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_path):
+    from test_container_collection_admission import fixture
+    from dataclasses import asdict
+    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
+    try:
+        slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}')) for index in range(8)]
+        formal = replace(base,payload=dict(base.payload,worker_count=8,worker_slots=slots,qualification_mode=False))
+        with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_REQUIRED"):
+            service.start(formal)
+        assert service.child_registry.launches() == ()
+        assert service.slot_registry.slots() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def _formal_with_receipt(base, first_slot, path):
+    from dataclasses import asdict
+    slots = [asdict(replace(first_slot,worker_id=f'w{index:02d}')) for index in range(8)]
+    return replace(base,payload=dict(base.payload, worker_count=8, qualification_mode=False,
+                   qualification_receipt_path=str(path),
+                   qualification_receipt_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest(), worker_slots=slots))
+
+
+def _legacy_receipt(base, path):
+    path.write_text(json.dumps({
+        "status": "PASSED", "worker_count": 8,
+        "source_sha256": base.payload["source_sha256"],
+        "runtime_config_sha256": base.payload["runtime_config_sha256"],
+        "collection_config_sha256": base.payload["collection_config_sha256"],
+        "contact_policy_fingerprint": base.payload['contact_policy_fingerprint'],
+    }))
+
+
+def test_formal_eight_worker_refuses_a_legacy_passed_receipt_from_another_run(tmp_path):
+    """Before: a PASSED document under the current run root reached the old verifier and failed there as invalid evidence.
+    After: the same document in a sibling run of the registered root reaches the collection verifier and is refused there."""
+    from test_container_collection_admission import fixture
+    from so101_demo.runtime.container_campaign.paths import make_campaign_paths
+    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
+    legacy = make_campaign_paths(tmp_path, 'sibling')['host'] / "qualification-report.json"
+    _legacy_receipt(base, legacy)
+    formal = _formal_with_receipt(base, first_slot, legacy)
+    try:
+        with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"):
+            service.start(formal)
+        assert service.child_registry.launches() == ()
+        assert service.slot_registry.slots() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert store.execution_generation(Domain.VALIDATION) == 0
+    finally:
+        store.close()
+
+
+def test_formal_eight_worker_refuses_any_receipt_under_the_current_run_root(tmp_path):
+    """The same legacy document where the old admission accepted it to read: under the current run root it is refused before it is read."""
+    from test_container_collection_admission import fixture
+    paths, first_slot, base, store, service, inspect = fixture(tmp_path)
+    fake_path = paths['run'] / "qualification.json"
+    _legacy_receipt(base, fake_path)
+    formal = _formal_with_receipt(base, first_slot, fake_path)
+    try:
+        with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_MISMATCH"):
+            service.start(formal)
+        assert service.child_registry.launches() == ()
+        assert service.slot_registry.slots() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert store.execution_generation(Domain.VALIDATION) == 0
+    finally:
+        store.close()
+
+
+def test_finish_requires_cleanup_proof_and_releases_exact_owned_resources(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        context = service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        with pytest.raises(ValueError, match="ACT_CHILD_CLEANUP_NOT_CONFIRMED"):
+            service.finish(context, cleanup_confirmed=False)
+        assert service.child_registry.launches()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        assert not service.arbiter.is_idle()
+
+        with pytest.raises(ValueError, match="CAMPAIGN_CONTEXT_MISMATCH"):
+            service.finish(replace(context, physical_gpu_uuid="GPU-foreign"), cleanup_confirmed=True)
+        assert service.child_registry.launches()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        assert not service.arbiter.is_idle()
+
+        projection = service.finish(context, cleanup_confirmed=True)
+        assert projection.operation_id == context.operation_id
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM act_campaign_contexts") is not None
+        assert service.finish(context, cleanup_confirmed=True) == projection
+    finally:
+        store.close()
+
+
+def test_registry_release_many_never_drops_foreign_child_on_mismatch():
+    registry = ActChildRegistry()
+    first = launch("w00", 40, "session-0")
+    second = launch("w01", 41, "session-1")
+    registry.register(first)
+    registry.register(second)
+    with pytest.raises(ValueError, match="CHILD_RELEASE_MISMATCH"):
+        registry.release_many((first, replace(second, mujoco_session_id="foreign")))
+    assert registry.launches() == (first, second)
+    registry.release_many((first, second))
+    assert registry.launches() == ()
+
+
+def test_finish_keeps_gpu_and_children_when_action_terminal_is_unknown(tmp_path):
+    from so101_teleop.unified.contracts import MutationError
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        context = service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        service.arbiter.prepare_child(context.operation_id, "w00")
+        with pytest.raises(MutationError, match="UNCONVERGED_CHILD"):
+            service.finish(context, cleanup_confirmed=True)
+        assert service.child_registry.launches()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        assert service.arbiter.is_blocked()
+    finally:
+        store.close()
+
+
+def test_campaign_lifecycle_starts_only_after_admission_and_settles_after_cleanup(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        seen = []
+
+        class ChildOwner:
+            async def start(self, context, launches, *, artifacts):
+                assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+                assert not service.arbiter.is_idle()
+                artifacts.verify()
+                seen.append((context, launches))
+                return ("worker-port",)
+
+            async def stop_owned(self):
+                seen.append("stopped")
+
+        lifecycle = bridge_module.ActCampaignLifecycle(service, ChildOwner())
+        spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        context, ports = asyncio.run(lifecycle.start(spec))
+        assert ports == ("worker-port",)
+        assert seen[0][1] == (launch("w00", 40, "session-0"),)
+        assert lifecycle.context == context
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        projection = asyncio.run(lifecycle.finish(context))
+        assert projection.operation_id == context.operation_id
+        assert seen[-1] == "stopped"
+        assert lifecycle.context is None
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        with pytest.raises(ValueError, match="CAMPAIGN_ALREADY_ADMITTED"):
+            asyncio.run(lifecycle.start(spec))
+        assert seen[-1] == "stopped"
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("cleanup_fails", (False, True))
+def test_campaign_lifecycle_start_failure_settles_only_after_owned_cleanup(tmp_path, cleanup_fails):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        seen = []
+
+        class FailingChildOwner:
+            async def start(self, context, launches, *, artifacts):
+                seen.append("start")
+                raise RuntimeError("child startup failed")
+
+            async def stop_owned(self):
+                seen.append("cleanup")
+                if cleanup_fails:
+                    raise RuntimeError("owned process still live")
+
+        lifecycle = bridge_module.ActCampaignLifecycle(service, FailingChildOwner())
+        spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        expected = "ACT_CHILD_CLEANUP_NOT_CONFIRMED" if cleanup_fails else "child startup failed"
+        with pytest.raises((RuntimeError, ValueError), match=expected):
+            asyncio.run(lifecycle.start(spec))
+        assert seen == ["start", "cleanup"]
+        assert bool(service.child_registry.launches()) is cleanup_fails
+        assert (store._query_one("SELECT * FROM gpu_workload_leases") is not None) is cleanup_fails
+        assert (not service.arbiter.is_idle()) is cleanup_fails
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("count", [2, 8])
+def test_a_second_native_child_is_refused_for_the_pick_place_kinds(tmp_path, count):
+    """Native pick-place runs one child; more than one is refused before any resource is taken."""
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        children = [launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
+                    for index in range(count)]
+        spec = replace(base, kind="pick_place_validation_full", payload={**base.payload,
+            "worker_count": count, "children": children})
+        with pytest.raises(ValueError, match="NATIVE_MULTI_WORKER_UNSUPPORTED"):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_a_single_native_child_is_still_composed_and_stopped(tmp_path):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        children = [launch("w00", 40, "session-0").__dict__]
+        spec = replace(base, kind="pick_place_validation_full", payload={**base.payload,
+            "worker_count": 1, "children": children})
+        started, stopped = [], []
+
+        class FakeOwner:
+            def __init__(self, child_launch, arbiter, safety):
+                self.launch = child_launch
+
+            async def start(self):
+                started.append(self.launch)
+                return object()
+
+            def socket_paths(self):
+                root = self.launch.socket_root
+                return root / "normal.sock", root / "safety.sock"
+
+            async def stop_owned(self):
+                stopped.append(self.launch.runtime_id)
+
+        base_launch = bridge_module.BridgeLaunch(Path(sys.executable), tmp_path,
+            "runtime", {}, tmp_path / "base")
+        child_owner = bridge_module.ActCampaignChildOwner(base_launch, service.arbiter,
+            object(), owner_factory=FakeOwner)
+        lifecycle = bridge_module.ActCampaignLifecycle(service, child_owner)
+        context, ports = asyncio.run(lifecycle.start(spec))
+        assert len(ports) == len(started) == 1
+        assert {port.launch.ros_domain_id for port in ports} == {40}
+        assert {item.environment["SO101_ACT_OPERATION_ID"] for item in started} == {
+            context.operation_id}
+        assert all(ActArtifactBinding.verify_environment(item.environment).policy_fingerprint
+                   == fingerprint for item in started)
+        asyncio.run(lifecycle.finish(context))
+        assert stopped == [item.runtime_id for item in reversed(started)]
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()

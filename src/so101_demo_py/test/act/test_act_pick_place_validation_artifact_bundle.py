@@ -1,0 +1,337 @@
+"""a self-contained bundle is admitted only through its committed receipt.
+
+Receipt shape (the producer contract pinned here):
+  {"schema_version", "kind": "pick_place_validation_preparation_receipt", "bundle_root",
+   "manifest_path", "artifacts": {name: {"relative_path", "sha256", "source_sha256"}},
+   "identities": {...}, "receipt_sha256"}
+The seven business artifacts are source_provenance, runtime_config, collection_config,
+calibration_report, head_search_qualification, measurement_contract, anchors; the policy
+proposal and activation receipt travel with them.
+"""
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+from paths import PACKAGE_ROOT
+
+PACKAGE = PACKAGE_ROOT
+ARTIFACTS = ("source_provenance", "runtime_config", "collection_config", "calibration_report",
+             "head_search_qualification", "measurement_contract", "anchors", "proposal",
+             "activation_receipt")
+
+
+def _sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write(path: Path, payload) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload) if not isinstance(payload, str) else payload)
+    return path
+
+
+class ValidInputs:
+    """A closed set of business artifacts in a source evidence directory."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        root.mkdir(parents=True, exist_ok=True)
+        self.identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                           "anchors_sha256": "c" * 64, "contact_policy_fingerprint": "d" * 64,
+                           "act_profile_sha256": "e" * 64}
+        self.paths = {}
+        for name in ARTIFACTS:
+            document = {"schema_version": 1, "kind": name, "payload": name}
+            if name == "runtime_config":
+                # section 4.2: the runtime config is parsed, so the fixture carries a descriptor-shaped document
+                # whose CUDA policy is the one pick-place validation requires
+                document = {"schema_version": 1, "head_search": {
+                    "schema_version": 1,
+                    "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt",
+                                 "weights_sha256": "a" * 64, "model_id": "plastic-cup", "image_size_px": 640,
+                                 "requested_device": "cuda", "allow_cpu_fallback": False,
+                                 "torch_threads": 4, "torch_interop_threads": 2,
+                                 "torch_version": "2.0", "ultralytics_version": "8.0"},
+                    "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                               "width_px": 640, "height_px": 480},
+                    "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
+                               "neck_goal_duration_s": 0.5}}}
+            self.paths[name] = _write(root / f"{name}.json", document)
+        # the manifest is produced from the preparation inputs and bound into the bundle
+        self.manifest = _write(root / "manifest.json", {
+            "schema_version": 2, "kind": "ACT_PICK_PLACE_VALIDATION", "manifest_sha256": "f" * 64})
+
+
+def _inputs(tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import PickPlaceValidationArtifactInputs
+
+    source = ValidInputs(tmp_path / "evidence")
+    return PickPlaceValidationArtifactInputs(
+        source_root=tmp_path / "repo", install_overlay=tmp_path / "install",
+        source_provenance=source.paths["source_provenance"],
+        runtime_config=source.paths["runtime_config"],
+        collection_config=source.paths["collection_config"],
+        calibration_report=source.paths["calibration_report"],
+        head_search_qualification=source.paths["head_search_qualification"],
+        measurement_contract=source.paths["measurement_contract"],
+        anchors=source.paths["anchors"], proposal=source.paths["proposal"],
+        activation_receipt=source.paths["activation_receipt"], manifest=source.manifest,
+        identities=source.identities)
+
+
+@pytest.fixture
+def valid_inputs(tmp_path):
+    return _inputs(tmp_path)
+
+
+def test_committed_bundle_survives_source_evidence_becoming_unavailable(valid_inputs, tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
+    )
+
+    receipt = prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-001")
+    assert Path(receipt).name == "preparation-receipt.json"
+    original = valid_inputs.calibration_report.parent
+    original.rename(tmp_path / "old-evidence-unavailable")
+    verified = verify_prepared_pick_place_validation_bundle(receipt)
+    assert Path(verified.calibration_report).parent == Path(receipt).parent
+    assert Path(verified.calibration_report).is_file()
+
+
+def test_bundle_without_receipt_is_never_admitted(valid_inputs, tmp_path, monkeypatch):
+    import so101_demo.act.pick_place_validation_artifact_bundle as bundle_module
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
+    )
+
+    def fail_publish(*_args, **_kwargs):
+        raise OSError("injected receipt publish failure")
+
+    monkeypatch.setattr(bundle_module, "_publish_receipt", fail_publish)
+    root = tmp_path / "bundle-002"
+    with pytest.raises(OSError):
+        prepare_pick_place_validation_bundle(valid_inputs, root)
+    assert not (root / "preparation-receipt.json").exists()
+    monkeypatch.undo()
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
+        verify_prepared_pick_place_validation_bundle(root / "preparation-receipt.json")
+
+
+def test_receipt_records_every_artifact_hash_and_identity(valid_inputs, tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
+    )
+
+    receipt = Path(prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-003"))
+    document = json.loads(receipt.read_text())
+    assert document["kind"] == "pick_place_validation_preparation_receipt"
+    assert set(document["artifacts"]) == set(ARTIFACTS)
+    for name, entry in document["artifacts"].items():
+        bundled = receipt.parent / entry["relative_path"]
+        assert bundled.is_file() and _sha(bundled) == entry["sha256"]
+        # each artifact is its own PickPlaceValidationArtifactInputs field, not a dict entry
+        assert entry["source_sha256"] == _sha(Path(getattr(valid_inputs, name)))
+    assert document["identities"] == valid_inputs.identities
+    assert verify_prepared_pick_place_validation_bundle(receipt)
+
+
+def test_tampered_bundle_artifact_is_refused(valid_inputs, tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
+    )
+
+    receipt = Path(prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-004"))
+    document = json.loads(receipt.read_text())
+    target = receipt.parent / document["artifacts"]["calibration_report"]["relative_path"]
+    target.write_bytes(target.read_bytes() + b" ")
+    with pytest.raises(ValueError):
+        verify_prepared_pick_place_validation_bundle(receipt)
+
+
+def test_startup_validation_is_pure_and_acquires_nothing(valid_inputs, tmp_path, monkeypatch):
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, validate_pick_place_validation_startup_artifacts,
+    )
+
+    receipt = prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-005")
+    calls = []
+
+    class Spy:
+        def __init__(self, *args, **kwargs):
+            calls.append("constructed")
+
+        def start(self, *args, **kwargs):
+            calls.append("start")
+            raise AssertionError("the validator must not start a workload service")
+
+    monkeypatch.setattr("so101_teleop.unified.bridge.UnifiedWorkloadService", Spy,
+                        raising=False)
+    monkeypatch.setattr("so101_teleop.unified.compose.compose_services",
+                        lambda *a, **k: calls.append("compose"), raising=False)
+    payload = {"preparation_receipt_path": str(receipt),
+               "preparation_receipt_sha256": _sha(Path(receipt))}
+    verified = validate_pick_place_validation_startup_artifacts(payload)
+    assert Path(verified.calibration_report).is_file()
+    assert calls == []
+
+
+def test_validate_cli_reports_the_bundle_and_refuses_a_bare_directory(tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
+    from so101_demo.cli import act_validate_pick_place_validation_artifacts as validate_cli
+
+    inputs = _inputs(tmp_path)
+    receipt = prepare_pick_place_validation_bundle(inputs, tmp_path / "bundle-cli")
+    assert validate_cli.main(["--preparation-receipt", str(receipt)]) == 0
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
+        validate_cli.main(["--preparation-receipt", str(tmp_path / "bundle-cli" / "missing.json")])
+
+
+def test_bundle_payload_carries_the_verified_receipt_and_its_raw_digest(tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, pick_place_validation_bundle_payload,
+    )
+
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle-payload")
+    payload = pick_place_validation_bundle_payload(receipt)
+    assert set(payload) == {"preparation_receipt_path", "preparation_receipt_sha256"}
+    assert payload["preparation_receipt_path"] == str(receipt)
+    assert payload["preparation_receipt_sha256"] == hashlib.sha256(receipt.read_bytes()).hexdigest()
+    # an uncommitted or tampered bundle can never produce a payload
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
+        pick_place_validation_bundle_payload(tmp_path / "bundle-payload" / "missing.json")
+    broken = tmp_path / "bundle-broken"
+    broken.mkdir()
+    (broken / "preparation-receipt.json").write_text("{}")
+    with pytest.raises(ValueError):
+        pick_place_validation_bundle_payload(broken / "preparation-receipt.json")
+
+
+def test_pick_place_validation_payload_names_its_receipt_and_never_mixes_shapes(tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import require_pick_place_validation_payload
+
+    payload = {"preparation_receipt_path": "/run/bundle/preparation-receipt.json",
+               "preparation_receipt_sha256": "a" * 64}
+    assert require_pick_place_validation_payload(payload) == payload
+    for broken in ({}, {"preparation_receipt_path": "/x"}, dict(payload, preparation_receipt_sha256="nope"),
+                   dict(payload, preparation_receipt_path="relative/path")):
+        with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PAYLOAD_INVALID"):
+            require_pick_place_validation_payload(broken)
+    # a collection-only field in a pick-place validation payload is refused, whichever side supplies the key list
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PAYLOAD_SHAPE_CONFLICT"):
+        require_pick_place_validation_payload(dict(payload, collection_profile="formal"),
+                              collection_only_keys=("collection_profile", "collection_output_root"))
+
+
+def test_startup_receipt_must_match_its_payload_digest(tmp_path):
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_pick_place_validation_startup_receipt,
+    )
+
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle-startup")
+    payload = {"preparation_receipt_path": str(receipt),
+               "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()}
+    bundle = verify_pick_place_validation_startup_receipt(payload)
+    assert Path(bundle.receipt) == receipt
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_MISMATCH"):
+        verify_pick_place_validation_startup_receipt(dict(payload, preparation_receipt_sha256="0" * 64))
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
+        verify_pick_place_validation_startup_receipt(dict(payload,
+                                          preparation_receipt_path=str(tmp_path / "absent.json")))
+
+
+def test_live_cli_refuses_a_bad_bundle_before_composing_services(tmp_path, monkeypatch):
+    """The pre-flight runs before any service composition, so nothing can be acquired."""
+
+    from so101_demo.cli import act_run_pick_place_validation as live_cli
+
+    composed = []
+    monkeypatch.setattr(live_cli, "load_spec_file",
+                        lambda path: type("S", (), {"payload": {}})())
+    monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
+    monkeypatch.setattr(live_cli, "PickPlaceValidationCampaign", type(
+        "C", (), {"require_full_restart_lifecycle": staticmethod(lambda: None)}))
+    import sys as _sys
+    import types as _types
+    stub = _types.ModuleType("so101_teleop.unified.compose")
+
+    def _compose():
+        composed.append(True)
+        raise AssertionError("services must not be composed for an invalid bundle")
+
+    stub.compose_services = _compose
+    monkeypatch.setitem(_sys.modules, "so101_teleop.unified.compose", stub)
+
+    missing = tmp_path / "absent.json"
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
+        live_cli.main(["--spec", str(tmp_path / "spec.json"),
+                       "--journal", str(tmp_path / "journal.json"),
+                       "--artifact-bundle", str(missing)])
+    assert composed == []                       # zero side effects: no services were built
+
+
+def test_live_cli_plans_all_fourteen_journals_or_nothing(tmp_path, monkeypatch):
+    """A conflicting journal anywhere in the run root stops the run before composition."""
+
+    import dataclasses
+    import json as _json
+
+    from so101_demo.cli import act_run_pick_place_validation as live_cli
+    from so101_demo.act.pick_place_validation_manifest import (
+        ANCHOR_NAMES, build_pick_place_validation_manifest,
+    )
+    from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
+
+    inputs = _inputs(tmp_path)
+    identities = dict(inputs.identities)
+    anchors = {name: {"cup_start_m": [0.25, 0.0, 0.15], "neck_start_rad": 0.0}
+               for name in ANCHOR_NAMES}
+    # the bundle needs a REAL v2 manifest for the journal plan: the stub has no case lists
+    manifest_path = tmp_path / "real-manifest.json"
+    manifest_path.write_text(_json.dumps(build_pick_place_validation_manifest(
+        anchors, source_sha256=identities["source_provenance_sha256"],
+        runtime_config_sha256=identities["runtime_config_sha256"],
+        collection_config_sha256=identities["act_profile_sha256"],
+        contact_policy_fingerprint=identities["contact_policy_fingerprint"],
+        calibration_report_path="calibration-report.json", calibration_report_sha256="e" * 64)))
+    receipt = prepare_pick_place_validation_bundle(dataclasses.replace(inputs, manifest=manifest_path),
+                                   tmp_path / "bundle-cli-plan")
+    run_root = tmp_path / "run"
+    (run_root / "pick-place-live" / "cases").mkdir(parents=True)
+    (run_root / "pick-place-live" / "cases" / "full-01.json").write_text("{}")   # a taken case
+    monkeypatch.setattr(live_cli, "load_spec_file",
+                        lambda path: type("S", (), {"payload": {}})())
+    monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_EXISTS"):
+        live_cli.main(["--spec", str(tmp_path / "spec.json"),
+                       "--journal", str(tmp_path / "journal.json"),
+                       "--artifact-bundle", str(receipt),
+                       "--journal-run-root", str(run_root)])
+
+
+def test_journal_run_root_reaches_the_composition_as_its_journal_parent(tmp_path, monkeypatch):
+    """The planned run root, not the requested journal's directory, owns the case journals."""
+
+    import asyncio
+
+    from so101_demo.cli import act_run_pick_place_validation as live_cli
+
+    seen = {}
+
+    async def fake_composition(manifest_path, parent, make_case):
+        seen["parent"] = Path(parent)
+        return {"status": "PASSED"}
+
+    monkeypatch.setattr(live_cli, "trusted_full_restart_composition",
+                        lambda: fake_composition)
+    monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
+    monkeypatch.setattr(live_cli, "_case_owner_factory", lambda lifecycle, spec: object())
+
+    class _Spec:
+        payload = {"manifest_path": str(tmp_path / "manifest.json")}
+
+    run_root = tmp_path / "run"
+    asyncio.run(live_cli.run_admitted_campaign(_Spec(), object(), tmp_path / "elsewhere.json",
+                                              journal_parent=run_root / "pick-place-live" / "cases"))
+    assert seen["parent"] == run_root / "pick-place-live" / "cases"

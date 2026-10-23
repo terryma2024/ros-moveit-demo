@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "name",
+    "episode_rule",
+    "population",
+    "pass"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "const": "ACT_COLLECTION_QUALITY_RULE"
+    },
+    "name": {
+      "enum": [
+        "recorder_lossless",
+        "frame_continuity",
+        "qc_valid_rate",
+        "teacher_physical_success_rate"
+      ]
+    },
+    "episode_rule": {
+      "enum": [
+        "topic_loss",
+        "act_data_qc",
+        "teacher_endpoint"
+      ]
+    },
+    "population": {
+      "enum": [
+        "ALL_FROZEN_SCENES",
+        "QC_VALID_EPISODES"
+      ]
+    },
+    "pass": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "EVERY"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "numerator",
+            "denominator"
+          ],
+          "properties": {
+            "kind": {
+              "const": "AT_LEAST"
+            },
+            "numerator": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "const": "recorder_lossless"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "episode_rule": {
+            "const": "topic_loss"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "enum": [
+              "frame_continuity",
+              "qc_valid_rate"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "episode_rule": {
+            "const": "act_data_qc"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "const": "teacher_physical_success_rate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "episode_rule": {
+            "const": "teacher_endpoint"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "enum": [
+              "qc_valid_rate",
+              "teacher_physical_success_rate"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "population": {
+            "const": "ALL_FROZEN_SCENES"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "population": {
+            "const": "QC_VALID_EPISODES"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "pass": {
+            "properties": {
+              "kind": {
+                "const": "EVERY"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

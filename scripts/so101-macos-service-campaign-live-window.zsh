@@ -2,7 +2,7 @@
 # One closed macOS live service window: one service, one console case, one receipt.
 #
 #   scripts/so101-macos-service-campaign-live-window.zsh \
-#     --case w2|w1|retry --task-root <registered root> \
+#     --case two-worker|single-worker|retry --task-root <registered root> \
 #     --selection-manifest <frozen 20-point selection> \
 #     --install-prefix /opt/data/so101/workspace/install [--skip-run]
 #
@@ -43,7 +43,7 @@ done
 
 fail() { print -ru2 -- "LIVE_WINDOW_REFUSED $1: ${2:-}"; exit 2 }
 
-[[ "$case_name" == (w2|w1|retry) ]] || fail "CASE_REQUIRED" "w2|w1|retry"
+[[ "$case_name" == (two-worker|single-worker|retry) ]] || fail "CASE_REQUIRED" "two-worker|single-worker|retry"
 [[ "$task_root" == "$REGISTERED_TASK_ROOT" ]] || fail "TASK_ROOT_NOT_REGISTERED" "$task_root"
 [[ -n "$selection_manifest" && -f "$selection_manifest" ]] || fail "SELECTION_MANIFEST_REQUIRED"
 [[ -d "$task_root" ]] || fail "TASK_ROOT_MISSING" "$task_root"
@@ -61,15 +61,15 @@ mkdir -p "$window_root"
 # The console case each window owns. W2 is the parallel v4 route, W1 the sequential v6 route, and
 # the retry window runs the same frozen twenty points as its own first pass before retrying.
 case "$case_name" in
-  w2) case_id="macos-w2-20"; mode="PARALLEL"; workers=2; points=20; project="fixed-n-execution"
+  two-worker) case_id="macos-two-worker-20"; mode="PARALLEL"; workers=2; points=20; project="fixed-n-execution"
       target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 "
-      profile_document="parallel_batch_v4_macos_mps_w2.yaml" ;;
-  w1) case_id="macos-w1-20"; mode="SEQUENTIAL"; workers=1; points=20; project="fixed-n-execution"
+      profile_document="parallel_batch_macos_mps_two_worker.yaml" ;;
+  single-worker) case_id="macos-single-worker-20"; mode="SEQUENTIAL"; workers=1; points=20; project="fixed-n-execution"
       target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 "
-      profile_document="parallel_batch_v6_macos_mps_w1_first_pass.yaml" ;;
-  retry) case_id="macos-w1-20-retry"; mode="SEQUENTIAL"; workers=1; points=20; project="retry-full-restart"
+      profile_document="parallel_batch_macos_mps_single_worker_first_pass.yaml" ;;
+  retry) case_id="macos-single-worker-20-retry"; mode="SEQUENTIAL"; workers=1; points=20; project="retry-full-restart"
       target_spec="expert-validation/live-sim/07-retry-full-restart.spec.ts"; target_marker="R07 "
-      profile_document="parallel_batch_v5_macos_mps_w1_retry.yaml" ;;
+      profile_document="parallel_batch_macos_mps_single_worker_retry.yaml" ;;
 esac
 
 functional_manifest="$window_root/functional-manifest.json"
@@ -163,7 +163,7 @@ document = {
         / "so101_macos_service_campaign"),
     "validation_points": str(
         Path(identity["install_prefix"]) / "so101_demo_py/share/so101_demo_py/config/mujoco"
-        / "moveit_expert_validation_points_v1.yaml"),
+        / "moveit_expert_validation_points.yaml"),
     **identity,
 }
 json.dump(document, open(launch_path, "w", encoding="utf-8"), indent=2, sort_keys=True)

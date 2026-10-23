@@ -1,51 +1,37 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 
 /**
- * The worker-count control has to be addressed deterministically.
+ * A native campaign is one worker, so the console has neither an `Execution mode` selector nor a
+ * `Worker count` control nor an `Unavailable worker counts` list. The page object keeps
+ * `configureSequential()` for existing call sites, and it must assert that absence rather than
+ * try to select anything.
  *
- * The macOS console renders the `Worker count` select *and* an `Unavailable worker counts` list, so
- * `getByLabel("Worker count")` resolves to two elements and Playwright's strict mode refuses the
- * call - which is exactly how the fixed-n sweep failed at `configureParallel(2)`, before it ever
- * reached a campaign.  The page object addresses the select by its exact label; this test renders
- * the console's own two controls and exercises the real accessor, so the ambiguity cannot come back
- * unnoticed.  Nothing about what the specs assert changes.
+ * The page below is the console's own markup for the setup section; no server is needed to prove
+ * what the page object does with it.
  */
+const SINGLE_WORKER_SETUP = `
+  <section aria-label="Campaign setup">
+    <label>Final point count <input aria-label="Final point count" type="number" value="4"></label>
+    <p aria-label="Execution">One worker, one point at a time (SEQUENTIAL)</p>
+  </section>`;
 
-/** The campaign-setup markup the console renders on a platform-bound host. */
-const CAMPAIGN_SETUP = `
-  <div aria-label="Campaign setup">
-    <label>Execution mode
-      <select aria-label="Execution mode">
-        <option value="SEQUENTIAL">SEQUENTIAL</option>
-        <option value="PARALLEL">PARALLEL</option>
-      </select>
-    </label>
-    <label>Worker count
-      <select aria-label="Worker count">
-        <option value="1">1</option>
-        <option value="2">2</option>
-      </select>
-    </label>
-    <ul aria-label="Unavailable worker counts">
-      <li>N4 unavailable · UNSUPPORTED_ON_MACOS</li>
-    </ul>
-  </div>
-`;
-
-test("configureParallel addresses the worker-count select deterministically", async ({ page }) => {
-  await page.setContent(CAMPAIGN_SETUP);
+test("configureSequential asserts the single-worker statement and selects nothing", async ({ page }) => {
+  await page.setContent(SINGLE_WORKER_SETUP);
   const app = new ExpertValidationPage(page);
 
-  // The defect this pins: a non-exact label query matches the select *and* the unavailable list.
-  await expect(page.getByLabel("Worker count")).toHaveCount(2);
+  await app.configureSequential();
 
-  // configureParallel has to address one control; before the fix this is a strict-mode violation.
-  await app.configureParallel(2);
+  await expect(page.getByLabel("Execution mode")).toHaveCount(0);
+  await expect(page.getByLabel("Worker count")).toHaveCount(0);
+  await expect(page.getByLabel("Unavailable worker counts")).toHaveCount(0);
+});
 
-  // The accessor the page object uses resolves that one control and selected from it.
-  await expect(app.workerCountSelect()).toHaveCount(1);
-  expect(await app.workerCountSelect().inputValue()).toBe("2");
-  expect(await page.getByLabel("Execution mode").inputValue()).toBe("PARALLEL");
+test("configureSequential fails when a mode selector comes back", async ({ page }) => {
+  await page.setContent(`${SINGLE_WORKER_SETUP}
+    <label>Execution mode <select aria-label="Execution mode"><option>SEQUENTIAL</option></select></label>`);
+  const app = new ExpertValidationPage(page);
+
+  await expect(app.configureSequential()).rejects.toThrow();
 });

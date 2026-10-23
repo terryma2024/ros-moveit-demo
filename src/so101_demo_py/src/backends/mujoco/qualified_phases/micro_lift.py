@@ -78,7 +78,8 @@ def main() -> int:
     maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     micro_lift_policy = task_policy.carry.micro_lift
     result = {
-        "schema": "so101-live-noslip-micro-lift-v1",
+        "schema": "so101-live-noslip-micro-lift",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "lift_target_arm_rad": list(LIFT_TARGET),
         "physics_pause_calls": 0,
@@ -325,7 +326,7 @@ def main() -> int:
         result["status"] = "PHYSICAL_MICRO_LIFT_PROVED"
         write_result(result)
         print(
-            f"EXP102_OK lift_m={cup_lift_m:.9f} lateral_m={lateral:.9f} "
+            f"MICRO_LIFT_OK lift_m={cup_lift_m:.9f} lateral_m={lateral:.9f} "
             f"left={len(after.left_fingertip_contacts)} right={len(after.right_fingertip_contacts)}",
             flush=True,
         )
@@ -334,7 +335,7 @@ def main() -> int:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
         write_result(result)
-        print(f"EXP102_FAILED {type(error).__name__}: {error}", flush=True)
+        print(f"MICRO_LIFT_FAILED {type(error).__name__}: {error}", flush=True)
         return 1
     finally:
         del subscription

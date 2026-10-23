@@ -27,16 +27,19 @@ from so101_demo.adapters.perception.errors import (
 from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate, DetectionFrame, DetectionQuery
 from so101_demo.parallel_batch.broker import BrokerSubmission, ModelResult, PerceptionBroker
-from so101_demo.parallel_batch.contracts import (
-    InferenceRequest, ModelOutcome, NormalizedInferenceResponseIdentity,
-    ParallelRuntimeConfig,
+from so101_demo.parallel_batch.contracts.common import ModelOutcome
+from so101_demo.parallel_batch.contracts.identity import (
+    InferenceRequest,
+    NormalizedInferenceResponseIdentity,
 )
+from so101_demo.parallel_batch.frozen_models import (
+    FROZEN_GROUNDED_SAM_MANIFEST_SHA256, FROZEN_YOLO_WEIGHTS_SHA256)
 
 YOLO_ID = 'plastic-cup-yolo11n-seg-v1'
 GROUNDED_ID = 'grounded-sam'
 IMAGE_TAG = 'so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1'
-YOLO_SHA = ParallelRuntimeConfig.FROZEN_YOLO_WEIGHTS_SHA256
-GROUNDED_SHA = ParallelRuntimeConfig.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
+YOLO_SHA = FROZEN_YOLO_WEIGHTS_SHA256
+GROUNDED_SHA = FROZEN_GROUNDED_SAM_MANIFEST_SHA256
 PINS = ('torch==2.13.0+cu130', 'torchvision==0.28.0+cu130', 'ultralytics==8.4.115',
         'transformers==4.56.2', 'scipy==1.17.1', 'huggingface-hub==0.34.4',
         'safetensors==0.6.2', 'tokenizers==0.22.0', 'numpy==1.26.4',
@@ -122,6 +125,13 @@ def write_receipt(path, document):
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def query_class_for(detector, default):
+    """The class a detector is asked for: the one its own prompt profile declares (`target_class_id`, as Grounded DINO + SAM does:
+    `cup`), else the snapshot's task class (`plastic_cup`, which the YOLO model was trained on). Asking Grounded for `plastic_cup`
+    raised UNSUPPORTED_DETECTION_QUERY, an infrastructure error, the first time the policy fell back to it."""
+    return getattr(detector, 'target_class_id', None) or default
 
 
 def normalize_batch(batch, frame):
@@ -329,9 +339,10 @@ class ParallelPerceptionRuntime:
             if executor_index >= len(instances):
                 raise ModelRuntimeInfrastructureError('EXECUTOR_INDEX')
             frame = self._frame(request, snapshot)
-            query = DetectionQuery(snapshot.query_class_id)
+            detector = instances[executor_index].detector
+            query = DetectionQuery(query_class_for(detector, snapshot.query_class_id))
             try:
-                batch = instances[executor_index].detector.detect(frame, query)
+                batch = detector.detect(frame, query)
                 candidate = normalize_batch(batch, frame)
                 result = (ModelResult(ModelOutcome.QUALIFIED, candidate=candidate)
                           if candidate['candidates'] else ModelResult(ModelOutcome.NORMAL_REJECTION))
@@ -359,7 +370,7 @@ class ParallelPerceptionRuntime:
 class PerceptionService:
     """Bind immutable snapshots to the one canonical bounded Broker.
 
-    Task 11 transport calls submit/run_next/poll_response; an independent timer
+    The parallel transport calls submit/run_next/poll_response; an independent timer
     must poll deadlines while run_next blocks on CUDA. The supervisor provides
     generation; an in-process restart never reloads or reuses unhealthy models.
     """

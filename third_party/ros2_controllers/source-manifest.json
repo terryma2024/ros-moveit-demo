@@ -1,0 +1,239 @@
+{
+  "schema": "ROS2_CONTROLLERS_PINNED_SOURCE_001",
+  "upstream_repository": "https://github.com/ros-controls/ros2_controllers",
+  "upstream_commit": "aacd842600a09d556b983ac3d53a0983e9ebcbb1",
+  "upstream_version": "4.42.1",
+  "upstream_archive_sha256": "f860234e1be0f3a862943ba234b288ed323d3fe0bce9852343b335fb92f05562",
+  "license": "Apache-2.0; see LICENSE",
+  "purpose": "Overlay of the apt joint_trajectory_controller and joint_state_broadcaster 4.42.1 whose only change is a lossless queued state hand-off; built with --allow-overriding so it replaces the apt packages.",
+  "original_files": [
+    {
+      "relative": "joint_trajectory_controller/CHANGELOG.rst",
+      "sha256": "ed7f53a1774245680fcce212cb4a591dac096cbeb7241551ff4a7831ee2cb10a",
+      "bytes": 46376
+    },
+    {
+      "relative": "joint_trajectory_controller/README.md",
+      "sha256": "caf6b79f99105200a5264818a3a800f4c1008ce038f893f4747d991635b2c197",
+      "bytes": 221
+    },
+    {
+      "relative": "joint_trajectory_controller/include/joint_trajectory_controller/interpolation_methods.hpp",
+      "sha256": "d2447bbf4c2fa1ca2c9d15b5e11ebd3ce48e567a9d34788ec1eb7884d816f964",
+      "bytes": 2148
+    },
+    {
+      "relative": "joint_trajectory_controller/include/joint_trajectory_controller/tolerances.hpp",
+      "sha256": "afcf03801d86b8a0a9736b2abc539834323aa600a3e48cae0eeb856bfc4ffb07",
+      "bytes": 13185
+    },
+    {
+      "relative": "joint_trajectory_controller/include/joint_trajectory_controller/trajectory.hpp",
+      "sha256": "dea80245b8c831d47932e2b4e78be938f23d0c54bab1c8fc86f39859d8defe50",
+      "bytes": 9003
+    },
+    {
+      "relative": "joint_trajectory_controller/include/joint_trajectory_controller/validate_jtc_parameters.hpp",
+      "sha256": "b8ac479f73e3c4da2e354eaed6432b15027524ae72357f3949bcb0b2c258cab4",
+      "bytes": 3488
+    },
+    {
+      "relative": "joint_trajectory_controller/joint_trajectory_plugin.xml",
+      "sha256": "29a73d5a5644ea46223a2ff14567f2ce70c3b173e51a1831317319184311e895",
+      "bytes": 382
+    },
+    {
+      "relative": "joint_trajectory_controller/src/joint_trajectory_controller_parameters.yaml",
+      "sha256": "45ceeb2ad917692a4ad69727867940eff5e8d407bb6d29623734674ff6e4d438",
+      "bytes": 9212
+    },
+    {
+      "relative": "joint_trajectory_controller/src/trajectory.cpp",
+      "sha256": "a979c1bca2527a912571f5e1ed29e5887d7bf92aa226f6918a125a462821537d",
+      "bytes": 16693
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_assets.hpp",
+      "sha256": "375a1ba931c0d2ff0e2587ad092b52d18da52dec63ae483cf16c998bd90ae04a",
+      "bytes": 9680
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_joint_trajectory_controller_params.yaml",
+      "sha256": "61ec0fea0d71ab216aa2850fbb605af3fb0eca452abf6d8d8835fe691c0c2bd6",
+      "bytes": 178
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_load_joint_trajectory_controller.cpp",
+      "sha256": "2934884b2127d62ffeb08fd1d2e1b6476e83b77cfde71f88e1e69ff2102f0b37",
+      "bytes": 1774
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_tolerances.cpp",
+      "sha256": "420deb8e5271539d63dc76e8a2587ba367085feab31dbf4ace1b3fd0d4eb812e",
+      "bytes": 17616
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_trajectory.cpp",
+      "sha256": "28cec7f586d9fae9c0b8b3c7b2a3e4bbd97f731e76745538d6100c17346485ce",
+      "bytes": 45829
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_trajectory_actions.cpp",
+      "sha256": "917992e89ffd5ddce659e3d43b4fdeed320c839802a9cda379481297869adfe1",
+      "bytes": 52873
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_trajectory_controller.cpp",
+      "sha256": "9de837347bb2739f96c27a41c143e383de50f3a22bd699f2fb2270ffde6349de",
+      "bytes": 138197
+    },
+    {
+      "relative": "joint_trajectory_controller/test/test_trajectory_controller_utils.hpp",
+      "sha256": "95aff66f88ece30e30e547f02575747e6210d6d9d4c5d257cea5b8a7b109b0f6",
+      "bytes": 38148
+    },
+    {
+      "relative": "joint_state_broadcaster/CHANGELOG.rst",
+      "sha256": "727e9fb63703d1aa80b5ec27c6829bdfe7fbc0785de97dc57753df00ad5dd6fb",
+      "bytes": 20483
+    },
+    {
+      "relative": "joint_state_broadcaster/joint_state_plugin.xml",
+      "sha256": "640f17a563037677c4c315f256ae81cf0398d232685da2b6478fb7d696c8e567",
+      "bytes": 360
+    },
+    {
+      "relative": "joint_state_broadcaster/src/joint_state_broadcaster_parameters.yaml",
+      "sha256": "eed459221ce3d6ce73ef8e840681ebccd99493b9c04b66a40c39c5f81b87210f",
+      "bytes": 2746
+    },
+    {
+      "relative": "joint_state_broadcaster/test/test_joint_state_broadcaster.cpp",
+      "sha256": "e1d7511f99fc91422a896568e721cf2c3e1eb3173116cdd422d9ea9fbf510584",
+      "bytes": 69206
+    },
+    {
+      "relative": "joint_state_broadcaster/test/test_joint_state_broadcaster.hpp",
+      "sha256": "faa0dc7f1e247f2e65fb5e77e9eab8e7a0a8a5a6a329f24cc7c0d11835647811",
+      "bytes": 5639
+    },
+    {
+      "relative": "joint_state_broadcaster/test/test_load_joint_state_broadcaster.cpp",
+      "sha256": "52a529f7126022b962ef2ed8a016e35e4ceb8493a40daf0451c9f1ef0523cddf",
+      "bytes": 1418
+    }
+  ],
+  "local_changes": [
+    {
+      "relative": "joint_trajectory_controller/CMakeLists.txt",
+      "original_sha256": "303f4921fd6206f25b504dbbd9692152e41f90446bc3baf3baaf1e1c536c5c03",
+      "patched_sha256": "e5e7eee61602d3b5bd79a88b8f6dbe3a73bf0c6bfdccf13a15c9d5c79cdf22e5",
+      "reason": "Depend on so101_queued_state_publisher; register the local test test_state_queue_publication."
+    },
+    {
+      "relative": "joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp",
+      "original_sha256": "aa14c27e3477ae5b37bf09a2c7b8cd5b9ac00e3928e7d1dc67b9984d3b87d28e",
+      "patched_sha256": "74eff810b28675333c249fb9ebd0d33d57e0471bddfb3b5ccfd16420557b67d2",
+      "reason": "State publisher type becomes so101_queued_state_publisher::QueuedStatePublisher; adds state_publisher_stats()."
+    },
+    {
+      "relative": "joint_trajectory_controller/package.xml",
+      "original_sha256": "d66291042ff98632d62f8cd1efb4be5ab6b7d15cf49b59344490880ce15cf34a",
+      "patched_sha256": "d892927d3dcc91bb5b9625fb006af79f6ab228081bb7a8c8eb7ab2a81d80f7ef",
+      "reason": "Depend on so101_queued_state_publisher."
+    },
+    {
+      "relative": "joint_trajectory_controller/src/joint_trajectory_controller.cpp",
+      "original_sha256": "cdea0f4aac17857e5b83a04d6aab62d67654729a8ac7f4e9f992c87d7b0f3c1c",
+      "patched_sha256": "8526e703b867d7671eea1bf93dc082718bb27195de1ba077c06ad20ab3717195",
+      "reason": "controller_state leaves through a bounded lossless queue and a dedicated thread instead of the single-slot RealtimePublisher::try_publish(); content, topic, QoS and rate unchanged."
+    },
+    {
+      "relative": "joint_state_broadcaster/CMakeLists.txt",
+      "original_sha256": "d20ab7eb2a722fa537b1710bfea31cfec9017e5e0ecd118b4f12111fa6e23758",
+      "patched_sha256": "346bb7a12a10835ccbc9f835eb7397a1d3cc6a11e4f2187f7753b4e739023145",
+      "reason": "Depend on so101_queued_state_publisher; add the local test source to test_joint_state_broadcaster."
+    },
+    {
+      "relative": "joint_state_broadcaster/include/joint_state_broadcaster/joint_state_broadcaster.hpp",
+      "original_sha256": "5f294bbc71d7a6c30a142d73716e6d4b0769f442aee19077cb754ff095a76738",
+      "patched_sha256": "ff93482ddc04882d575a49a1f5149be15ec1796e9c5102a0785842ec768d7703",
+      "reason": "Publisher members become so101_queued_state_publisher::QueuedStatePublisher."
+    },
+    {
+      "relative": "joint_state_broadcaster/package.xml",
+      "original_sha256": "aa4824831d979ff3aa659c089766c925c62bb176affc5b2761bd07284be5a594",
+      "patched_sha256": "bedae0188a9687ea7773b670cb1e3c74744bdd261d8e95dd0a75895260cf7653",
+      "reason": "Depend on so101_queued_state_publisher."
+    },
+    {
+      "relative": "joint_state_broadcaster/src/joint_state_broadcaster.cpp",
+      "original_sha256": "f0326808b19a0c89835e068b2974c92ff77c99610735c0c97d9056ef62fa26b4",
+      "patched_sha256": "0bc4f1825e9fd1a403fb2bdb9d62e94d9f658c096c3cae4c33d46932f0325812",
+      "reason": "joint_states and dynamic_joint_states leave through a bounded lossless queue and a dedicated thread instead of the single-slot RealtimePublisher::try_publish(); created on activate, joined on deactivate."
+    }
+  ],
+  "local_test_files": [
+    {
+      "relative": "joint_trajectory_controller/test/test_state_queue_publication.cpp",
+      "sha256": "b7024b1d15617d9e1ba3c179cac19b0e5ae56a6e826faf9e46a19f89e7be75d1",
+      "bytes": 5076,
+      "reason": "SO-101 local test (not upstream)."
+    },
+    {
+      "relative": "joint_state_broadcaster/test/test_state_queue_publication.cpp",
+      "sha256": "31769397da799645a266fc4d615313b5789c6bd0b3d9e3cf2e215ab60abdbc6d",
+      "bytes": 3259,
+      "reason": "SO-101 local test (not upstream)."
+    }
+  ],
+  "omitted_upstream_files": [
+    "joint_trajectory_controller/doc/decelerate_hold_position.png",
+    "joint_trajectory_controller/doc/decelerate_on_cancel.rst",
+    "joint_trajectory_controller/doc/decelerate_to_stop.png",
+    "joint_trajectory_controller/doc/new_trajectory.png",
+    "joint_trajectory_controller/doc/parameters.rst",
+    "joint_trajectory_controller/doc/parameters_context.yaml",
+    "joint_trajectory_controller/doc/speed_scaling.rst",
+    "joint_trajectory_controller/doc/spline_acceleration.png",
+    "joint_trajectory_controller/doc/spline_position.png",
+    "joint_trajectory_controller/doc/spline_position_velocity.png",
+    "joint_trajectory_controller/doc/spline_position_velocity_acceleration.png",
+    "joint_trajectory_controller/doc/spline_position_velocity_acceleration_initialpoint.png",
+    "joint_trajectory_controller/doc/spline_position_velocity_acceleration_initialpoint_notime.png",
+    "joint_trajectory_controller/doc/spline_velocity.png",
+    "joint_trajectory_controller/doc/spline_wrong_points.png",
+    "joint_trajectory_controller/doc/traj_with_speed_scaling.png",
+    "joint_trajectory_controller/doc/traj_without_speed_scaling.png",
+    "joint_trajectory_controller/doc/trajectory.rst",
+    "joint_trajectory_controller/doc/userdoc.rst",
+    "joint_state_broadcaster/doc/joint_state_broadcaster_parameter_context.yml",
+    "joint_state_broadcaster/doc/userdoc.rst"
+  ],
+  "local_package": {
+    "name": "so101_queued_state_publisher",
+    "files": [
+      {
+        "relative": "so101_queued_state_publisher/CMakeLists.txt",
+        "sha256": "5f4fd015a6b3bc3267d4580b8862a58c79eb87ace2de1736ce0ae9823149b72c",
+        "bytes": 1142
+      },
+      {
+        "relative": "so101_queued_state_publisher/include/so101_queued_state_publisher/queued_state_publisher.hpp",
+        "sha256": "bad24034b15706b1998cef542c5f8b133458c29e102b4f5ae6cb42e14b73a8c4",
+        "bytes": 9813
+      },
+      {
+        "relative": "so101_queued_state_publisher/package.xml",
+        "sha256": "01afc42148c31f25137266a3bfa7715a90629474c1f27f2e2761b734a5eff006",
+        "bytes": 564
+      },
+      {
+        "relative": "so101_queued_state_publisher/test/test_queued_state_publisher.cpp",
+        "sha256": "de704c5ab6ed7f94fc07ceccdb1c25d731db1570811c31a6fa32613d03d756c5",
+        "bytes": 11335
+      }
+    ],
+    "scope": "Header-only lossless realtime-to-publisher hand-off; not from upstream."
+  }
+}

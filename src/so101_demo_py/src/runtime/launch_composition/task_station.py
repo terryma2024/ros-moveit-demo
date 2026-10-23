@@ -1,0 +1,225 @@
+"""The task station and ACT execution stack launches."""
+
+from __future__ import annotations
+
+from functools import partial
+from pathlib import Path
+import platform
+import uuid
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    RegisterEventHandler,
+    SetEnvironmentVariable,
+    Shutdown,
+)
+from launch.event_handlers import OnProcessExit, OnProcessStart
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+
+from so101_demo.runtime.camera_tf import camera_static_transform_nodes
+from so101_demo.runtime.launch_composition.common import _SESSION_ID_PATTERN, MUJOCO_CUP_KEYFRAMES
+from so101_demo.act.rig_profile import DEFAULT_RIG, KNOWN_RIGS
+from so101_demo.runtime.launch_composition.mujoco_actions import (
+    _mujoco_stack_actions, launch_rig, rig_scene_argument,
+)
+
+
+def _configured_task_station_actions(context):
+    session_id = LaunchConfiguration("session_id").perform(context)
+    if not _SESSION_ID_PATTERN.fullmatch(session_id):
+        raise RuntimeError("task station session_id is invalid")
+    headless = LaunchConfiguration("headless").perform(context)
+    if headless not in {"true", "false"}:
+        raise RuntimeError("headless must be true or false")
+    sensor_rendering = LaunchConfiguration("sensor_rendering").perform(context)
+    if sensor_rendering != "true":
+        raise RuntimeError("task station requires sensor_rendering=true")
+    evidence_root = Path(
+        LaunchConfiguration("task_evidence_root").perform(context)
+    )
+    if not evidence_root.is_absolute():
+        raise RuntimeError("task_evidence_root must be absolute")
+    include_teleop = LaunchConfiguration("include_teleop").perform(context)
+    if include_teleop not in {"true", "false"}:
+        raise RuntimeError("include_teleop must be true or false")
+    platform_name = platform.system()
+    if headless == "true":
+        if platform_name == "Darwin":
+            raise RuntimeError("macOS task station requires headless=false")
+        if platform_name != "Linux":
+            raise RuntimeError("headless task station requires Linux")
+        if include_teleop == "true":
+            raise RuntimeError("headless task station requires include_teleop=false")
+    act_profile = context.launch_configurations.get("act_profile", "false") == "true"
+    environment_actions = []
+    if act_profile:
+        # The ACT profile: there is no command broker and no reservation, the Teacher drives plain JointTrajectoryControllers.
+        environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
+                               SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id)]
+    share = Path(get_package_share_directory("so101_demo_py"))
+    stack = _mujoco_stack_actions(
+        context, share, session_id,
+        sim_speed_factor=1.0 if act_profile else -1.0,
+        plugin_config_filename="mujoco_plugins.yaml",
+    )
+    teleop_actions = []
+    if include_teleop == "true":
+        teleop_share = Path(get_package_share_directory("so101_teleop"))
+        teleop_actions.append(
+            RegisterEventHandler(
+                OnProcessStart(
+                    target_action=stack.simulator,
+                    on_start=partial(
+                        _task_station_teleop_actions,
+                        teleop_share=teleop_share,
+                        session_id=session_id,
+                    ),
+                )
+            )
+        )
+    actions = [
+        SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
+        *environment_actions,
+        *teleop_actions,
+        *camera_static_transform_nodes(),
+        *stack.actions,
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=stack.simulator,
+                on_exit=[Shutdown(reason="MuJoCo task station runtime exited")],
+            )
+        ),
+    ]
+    return actions
+
+
+def _task_station_teleop_actions(
+    event,
+    context,
+    *,
+    teleop_share: Path,
+    session_id: str,
+):
+    del context
+    mujoco_pid = int(event.pid)
+    if mujoco_pid <= 0:
+        raise RuntimeError("task station MuJoCo PID must be positive")
+    return (
+        SetEnvironmentVariable(
+            "SO101_TASK_STATION_MUJOCO_PID",
+            str(mujoco_pid),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                str(teleop_share / "launch/so101_teleop.launch.py")
+            ),
+            launch_arguments={
+                "backend": "mujoco_py",
+                "bind_address": "127.0.0.1",
+                "port": LaunchConfiguration("teleop_port"),
+                "simulation_session_id": session_id,
+                "build_web_if_needed": "false",
+            }.items(),
+        ),
+    )
+
+
+def build_task_station_launch_description(*, act_profile: bool = False) -> LaunchDescription:
+    """Build one visible persistent MuJoCo/MoveIt/camera-TF task station."""
+
+    share = Path(get_package_share_directory("so101_demo_py"))
+    unique = uuid.uuid4().hex
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "headless", default_value="false", choices=("true", "false")
+            ),
+            DeclareLaunchArgument(
+                "sensor_rendering", default_value="true", choices=("true",)
+            ),
+            DeclareLaunchArgument("session_id", default_value=unique),
+            DeclareLaunchArgument(
+                "task_evidence_root",
+                default_value=f"/tmp/so101-task-station-{unique}",
+            ),
+            DeclareLaunchArgument(
+                "include_teleop",
+                default_value="false" if act_profile else "true",
+                choices=("true", "false"),
+            ),
+            DeclareLaunchArgument("teleop_port", default_value="8080"),
+            DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
+            DeclareLaunchArgument(
+                "mujoco_scene",
+                # the ACT profile's empty scene is the scene of the rig
+                default_value="" if act_profile else str(share / "assets/mujoco/scene.xml"),
+            ),
+            DeclareLaunchArgument(
+                "mujoco_initial_keyframe",
+                default_value="task_start",
+                choices=MUJOCO_CUP_KEYFRAMES[:4] if act_profile else MUJOCO_CUP_KEYFRAMES,
+            ),
+            *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
+               DeclareLaunchArgument("rig", default_value=DEFAULT_RIG.rig, choices=tuple(KNOWN_RIGS))]
+              if act_profile else []),
+            OpaqueFunction(function=_configured_task_station_actions),
+        ]
+    )
+
+
+def _configured_act_execution_stack_actions(context):
+    """ACT simulation only; the admitted unified child owns command authority."""
+    if platform.system() != "Linux" or LaunchConfiguration("headless").perform(context) != "true":
+        raise RuntimeError("ACT_STACK_HEADLESS_REQUIRED")
+    if LaunchConfiguration("sensor_rendering").perform(context) != "true":
+        raise RuntimeError("ACT_STACK_RGB_REQUIRED")
+    if LaunchConfiguration("act_profile").perform(context) != "true":
+        raise RuntimeError("ACT_STACK_PROFILE_REQUIRED")
+    session_id = LaunchConfiguration("session_id").perform(context)
+    if not _SESSION_ID_PATTERN.fullmatch(session_id):
+        raise RuntimeError("ACT_STACK_SESSION_INVALID")
+    evidence_root = Path(LaunchConfiguration("task_evidence_root").perform(context))
+    if not evidence_root.is_absolute() or ".." in evidence_root.parts:
+        raise RuntimeError("ACT_STACK_ROOT_INVALID")
+    share = Path(get_package_share_directory("so101_demo_py"))
+    scene = Path(rig_scene_argument(context, share, launch_rig(context, act_profile=True)))
+    if not scene.is_absolute() or not scene.is_file():
+        raise RuntimeError("ACT_STACK_SCENE_INVALID")
+    stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
+    return [
+        SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
+        SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
+        SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id),
+        *camera_static_transform_nodes(),
+        *stack.actions,
+        RegisterEventHandler(OnProcessExit(
+            target_action=stack.simulator,
+            on_exit=[Shutdown(reason="ACT execution simulator exited")],
+        )),
+    ]
+
+
+def build_act_execution_stack_launch_description() -> LaunchDescription:
+    """Create one headless ACT simulator stack with no command broker or UI."""
+    share = Path(get_package_share_directory("so101_demo_py"))
+    return LaunchDescription([
+        DeclareLaunchArgument("headless", default_value="true", choices=("true",)),
+        DeclareLaunchArgument("sensor_rendering", default_value="true", choices=("true",)),
+        DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
+        DeclareLaunchArgument("session_id"),
+        DeclareLaunchArgument("task_evidence_root"),
+        DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
+        # the camera rig of the stack: it selects the scene, URDF, camera plugin and controller files (empty scene = the rig's)
+        DeclareLaunchArgument("rig", default_value=DEFAULT_RIG.rig, choices=tuple(KNOWN_RIGS)),
+        DeclareLaunchArgument("mujoco_scene", default_value=""),
+        DeclareLaunchArgument(
+            "mujoco_initial_keyframe", default_value="task_start",
+            choices=MUJOCO_CUP_KEYFRAMES[:4],
+        ),
+        OpaqueFunction(function=_configured_act_execution_stack_actions),
+    ])

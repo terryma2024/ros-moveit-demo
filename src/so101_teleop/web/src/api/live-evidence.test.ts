@@ -332,7 +332,7 @@ function writeW2BatchRoot(batchId: string): string {
 describe("W2 campaign batch evidence", () => {
   const expectation: CampaignBatchExpectation = {
     batchKind: "FIRST_PASS",
-    executionProfile: "MPS_W2_FIRST_PASS",
+    executionProfile: "MPS_TWO_WORKER_FIRST_PASS",
     schemaVersion: 4,
     workerCount: 2,
     selectedPointIds: ["p1", "p2", "p3", "p4"],

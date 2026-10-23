@@ -21,15 +21,36 @@
   `/data/work/so101-debug-*` or `/opt/data/work/so101-debug-*` path. Register the root in the task
   ledger, and at completion report retained runs, archived runs, and deletion candidates. Do not
   delete evidence without explicit user authorization.
+- Keep only evidence under the evidence root. Use the same layout on both platforms, under the
+  platform work root `W`: `W=/data/work` on `ai-station` and `W=/opt/data/work` on macOS.
+  - `W/so101-evidence/`: evidence only. This covers collection run roots, sealed roots,
+    calibration, diagnostics, run logs, gate results, deletion records, `archived/`, and the
+    per-test scratch that the TMPDIR rule requires.
+  - `W/venvs/<name>/`: Python environments for tests, training, and perception.
+  - `W/models/<name>/`: pretrained weights and other downloaded models.
+  - `W/so101-datasets/<name>/`: exported or packaged datasets, such as LeRobot exports.
+  - `W/so101-policies/<train-run>/`: trained policy bundles and checkpoints.
+  - `W/so101-build/`: gate build and install trees (`gates/<id>/`), image build scratch, and
+    ccache.
+  - `W/so101-tools/`: only one-off or temporary helpers that are not tracked in git. The gate,
+    evidence and image tools live in the repository under `scripts/`.
+- Host gates run `scripts/gate/<entry>` from the worktree under test. A gate result is valid only if
+  `scripts/gate` is clean at that commit.
+- Things stored outside the evidence root are recorded in it by path and sha256. Exports, policies,
+  and builds also need the manifest or command that reproduces them. Do not place a symlink inside
+  the evidence root that points outside it. Sealed roots stay where they are and are never moved
+  out.
 - On `ai-station` only, any pytest or benchmark run that creates fsync-heavy temporary fixtures must
   use a unique, previously nonexistent scratch directory on the `/data` NVMe filesystem under the
   task's registered durable evidence root, for example
   `/data/work/so101-evidence/<task-family>/<run-id>/scratch/<test-run-id>/tmp`. Before starting
   `pytest` or `colcon test`, set `TMPDIR`, `TMP`, and `TEMP` to that directory and use the exact test
   Python executable to verify that `tempfile.gettempdir()` resolves inside it; fail closed if it
-  does not. Record the scratch path and elapsed time with the test evidence, classify the scratch
-  tree as a deletion candidate after readback, and do not delete it without explicit user
-  authorization. Do not apply this `/data` path rule on macOS or other hosts, and do not disable
+  does not. The pytest configs set `tmp_path_retention_policy = "failed"` (human-approved
+  2026-10-20), so pytest keeps only the `tmp_path` directories of failed tests. Record the scratch
+  path and elapsed time with the test evidence, classify the remaining scratch tree as a deletion
+  candidate after readback, and do not delete it without explicit user authorization. Do not apply
+  this `/data` path rule on macOS or other hosts, and do not disable
   `fsync`, filesystem journaling, or integrity checks or substitute `tmpfs` to make the test faster.
 - The default interactive shell in this workspace is `zsh`. Do not assign to zsh special or
   read-only parameters such as `status`; store an exit code in a task-specific name such as `rc` or
@@ -44,6 +65,11 @@
 - Before starting a long-running service or test, resolve and verify the exact executable and
   environment paths with read-only checks such as `test -x`. Do not rely on a summarized or older
   virtual-environment path when the filesystem can provide the current path.
+- Linux only. Before a training run or a data-collection campaign on a host that runs NoteBook
+  FanControl (`nbfc_service`), set every fan to full speed with `nbfc set -s 100` and confirm it
+  with `nbfc status`. On such hosts the EC limits CPU power with PROCHOT, and the limit depends on
+  fan speed: at low fan speed the CPU can be held at about 0.8 GHz and about 21 W. When the last
+  run finishes, restore automatic control with `nbfc set -a`. This rule does not apply on macOS.
 - A fresh colcon `--build-base` or `--install-base` must have a complete dependency closure. Before
   treating a failed build as a source regression, distinguish missing package setup files,
   incomplete underlays, package-selection errors, and override errors from compiler or test

@@ -21,7 +21,7 @@ from typing import Mapping, Sequence
 
 import yaml
 
-from .resource_identity import canonical_sha256
+from .canonical_json import canonical_sha256
 
 #: The four fixed anchors the upstream catalog starts with. They identify the frozen start pose
 #: and its three immediate neighbours, so every first-pass selection has to contain them.

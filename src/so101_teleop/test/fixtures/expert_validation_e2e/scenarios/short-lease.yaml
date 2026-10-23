@@ -5,6 +5,6 @@ lease_duration_s: 4
 lease_renewal_margin_s: 2
 capabilities:
   available: true
-  execution_modes: [SEQUENTIAL, PARALLEL, ADAPTIVE]
+  execution_modes: [SEQUENTIAL]
   default_execution_mode: SEQUENTIAL
 terminal_campaign: null

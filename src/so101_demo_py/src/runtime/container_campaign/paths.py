@@ -1,0 +1,284 @@
+"""Derive private new-run directories and explicit least-privilege mounts."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import os
+from pathlib import Path
+import re
+import stat
+
+from so101_demo.runtime.inference.config import _open_regular
+
+
+#: Where a shard container sees its own directories, installed code and interpreter (the fixed mounts of `build_role_mounts`).
+#: Only the container launcher and the container shell use them; the instance program takes every path from its layout.
+TASK_OUTPUT_MOUNT = Path('/act/output')
+CONTAINER_CONTROL_ROOT = Path('/act/control')
+CONTAINER_IPC_ROOT = Path('/act/ipc')
+CONTAINER_TEACHER_SOCKET = CONTAINER_IPC_ROOT/'teacher'/'inference.sock'
+#: the host's ACT policy service, as a rollout shard reaches it; a rollout shard mounts this directory instead of the Teacher's
+CONTAINER_POLICY_SOCKET = CONTAINER_IPC_ROOT/'policy'/'policy.sock'
+CONTAINER_INSTALL_PREFIX = Path('/act/install')
+CONTAINER_ROS2 = CONTAINER_INSTALL_PREFIX/'bin'/'ros2'
+CONTAINER_INTERPRETER = Path('/act/venv/bin/python')
+
+
+@dataclass(frozen=True)
+class RoleMount:
+    source: Path
+    target: Path
+    read_only: bool
+    purpose: str
+
+
+def _path(value, *, directory=False):
+    path = Path(value)
+    if (not path.is_absolute() or ".." in path.parts or path.resolve(strict=True) != path
+            or (directory and not path.is_dir()) or (not directory and not (path.is_file() or path.is_dir()))):
+        raise ValueError("canonical existing path required")
+    return path
+
+
+def task_output_identity(mount, owned_output):
+    """Whether `mount` is `owned_output`: both canonical real directories (no symlink anywhere) with one device and inode.
+
+    A bind mount is the same directory reached through two paths, which only the kernel's `(st_dev, st_ino)` can tell. A
+    symlink, a missing or non-canonical path, a foreign instance's output or a tmpfs mounted there is not it. Pure: it reads
+    nothing but `lstat` and returns the readback that goes into the recorder's evidence."""
+    result = {}
+    for label, value in (('mount', mount), ('owned_output', owned_output)):
+        path = Path(value)
+        entry = {'path': str(path), 'directory': False, 'st_dev': None, 'st_ino': None}
+        try:
+            info = path.lstat()
+            entry.update(directory=stat.S_ISDIR(info.st_mode) and path.is_absolute() and path.resolve() == path
+                         and '..' not in path.parts, st_dev=info.st_dev, st_ino=info.st_ino)
+        except (OSError, RuntimeError):
+            pass
+        result[label] = entry
+    result['same'] = (result['mount']['directory'] and result['owned_output']['directory']
+                      and result['mount']['st_dev'] == result['owned_output']['st_dev']
+                      and result['mount']['st_ino'] == result['owned_output']['st_ino'])
+    return result
+
+
+def validate_registered_evidence_root(config_root, payload_root, *, registration):
+    """The unified entry calls this once with its trusted root registration."""
+    try:
+        if type(registration) is not dict or set(registration) != {"path", "uid", "gid"}:
+            raise ValueError("registration shape")
+        if type(config_root) is not str or config_root != payload_root or config_root != registration["path"]:
+            raise ValueError("root mismatch")
+        root = _path(config_root, directory=True)
+        metadata = root.stat()
+        if (type(registration["uid"]) is not int or type(registration["gid"]) is not int
+                or (metadata.st_uid, metadata.st_gid) != (registration["uid"], registration["gid"])):
+            raise ValueError("root owner")
+    except (OSError, ValueError, TypeError) as error:
+        raise ValueError("REGISTERED_EVIDENCE_ROOT_INVALID") from error
+    return root
+
+
+def make_campaign_paths(root, run_id):
+    root = _path(root, directory=True)
+    if type(run_id) is not str or re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", run_id) is None:
+        raise ValueError("CAMPAIGN_RUN_ID_INVALID")
+    run = root / run_id
+    try:
+        run.mkdir(mode=0o700)
+    except FileExistsError as error:
+        raise ValueError("CAMPAIGN_RUN_EXISTS") from error
+    paths = {"run": run, "host": run / "host", "measurement": run / "measurement",
+             "live": run / "live", "services": {role: run / "services" / role for role in ("head", "teacher")},
+             "socket_roots": {role: run / "ipc" / role for role in ("head", "teacher")}}
+    for parent in (run / "services", run / "ipc", paths["host"], paths["measurement"], paths["live"]):
+        parent.mkdir(mode=0o700)
+    for group in (paths["services"], paths["socket_roots"]):
+        for path in group.values():
+            path.mkdir(mode=0o700)
+    document = {"root": str(root), "run_id": run_id, "uid": os.getuid(), "gid": os.getgid()}
+    fd = os.open(run / ".campaign-layout.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as stream:
+        json.dump(document, stream, sort_keys=True)
+        stream.flush()
+        os.fsync(stream.fileno())
+    directory = os.open(run, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return paths
+
+
+def existing_campaign_paths(root, run_id):
+    """The paths of a run that already exists (a later stage of a run collected stage by stage): the layout marker must be this
+    root's and this user's, and every directory `make_campaign_paths` made must still be there. Nothing is created."""
+    root = _path(root, directory=True)
+    if type(run_id) is not str or re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", run_id) is None:
+        raise ValueError("CAMPAIGN_RUN_ID_INVALID")
+    run = root / run_id
+    try:
+        if run.is_symlink() or _layout(run / "services" / "teacher") != run:
+            raise ValueError("layout")
+        paths = {"run": run, "host": run / "host", "measurement": run / "measurement",
+                 "live": run / "live", "services": {role: run / "services" / role for role in ("head", "teacher")},
+                 "socket_roots": {role: run / "ipc" / role for role in ("head", "teacher")}}
+        for path in (paths["host"], paths["measurement"], paths["live"], *paths["services"].values(),
+                     *paths["socket_roots"].values()):
+            _path(path, directory=True)
+    except (OSError, ValueError, KeyError) as error:
+        raise ValueError("CAMPAIGN_RUN_MISSING") from error
+    return paths
+
+
+def _layout(owned_root):
+    for run in owned_root.parents:
+        marker = run / ".campaign-layout.json"
+        if marker.exists():
+            with _open_regular(marker) as stream:
+                document = json.load(stream)
+            if (set(document) != {"root", "run_id", "uid", "gid"}
+                    or run != Path(document["root"]) / document["run_id"]
+                    or (document["uid"], document["gid"]) != (os.getuid(), os.getgid())):
+                raise ValueError("layout identity")
+            return run
+    raise ValueError("unknown owned directory")
+
+
+#: A phase-1 attempt directory a processor may read: the sealed result of one attempt of one shard task of this run.
+PHASE1_ATTEMPT_PARTS = (r"wave-[0-9]+", r"w[0-9]{2}", r"g[1-9][0-9]*", r"output", r"tasks", r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}",
+                        r"attempts", r"[a-zA-Z0-9][a-zA-Z0-9_-]*", r"[a-zA-Z0-9][a-zA-Z0-9_-]*", r"sealed")
+
+
+def _phase1_attempt(source, run):
+    """The one shape of directory a processor mounts read-only: `<run>/wave-N/wNN/gK/output/tasks/<task>/attempts/<scene>/<attempt>/sealed`."""
+    path = _path(source, directory=True)
+    parts = path.relative_to(run).parts if path.is_relative_to(run) else ()
+    if len(parts) != len(PHASE1_ATTEMPT_PARTS) or any(
+            re.fullmatch(pattern, part) is None for pattern, part in zip(PHASE1_ATTEMPT_PARTS, parts)):
+        raise ValueError("phase-1 attempt")
+    return path
+
+
+def _owned_role(role, owned, run):
+    if role in ("head", "teacher"):
+        if owned != run / "services" / role:
+            raise ValueError("service private directory")
+        return
+    if role == "processor":
+        parts = owned.relative_to(run).parts
+        if (len(parts) != 3 or parts[0] != "processing" or re.fullmatch(r"p[0-9]{2}", parts[1]) is None
+                or re.fullmatch(r"g[1-9][0-9]*", parts[2]) is None):
+            raise ValueError("processor private directory")
+        return
+    if role != "shard":
+        raise ValueError("unknown role")
+    parts = owned.relative_to(run).parts
+    if (len(parts) not in (3, 4) or re.fullmatch(r"g[1-9][0-9]*", parts[-1]) is None
+            or re.fullmatch(r"w[0-9]{2}", parts[-2]) is None):
+        raise ValueError("shard private directory")
+    if len(parts) == 3:
+        if re.fullmatch(r"wave-[0-9]+", parts[0]) is None and parts[0] != "measurement":
+            raise ValueError("wave or measurement path")
+    elif parts[0] != "live" or re.fullmatch(r"case-[a-zA-Z0-9_-]+", parts[1]) is None:
+        raise ValueError("live case path")
+
+
+def build_role_mounts(role, *, owned_root, approved_inputs, socket_roots, config_paths,
+                      task_output_root=None, phase1_attempts=None, processing_root=None):
+    """Produce launch mounts; artifact contents/path contracts remain unchanged.
+
+    This checks local mount provenance only. Campaign resource authorization
+    remains at the unified entry and is never repeated in inference services.
+
+    A processor (phase 2) is the one role that reads phase-1 attempts: `phase1_attempts` names the sealed directories of this run
+    it is assigned, each mounted read-only, and `processing_root` (`<run>/processing`) is its one writable output tree. It has
+    no service socket. Nothing else under `wave-*` or `host` is mountable by any role.
+    """
+    try:
+        owned = _path(owned_root, directory=True)
+        run = _layout(owned)
+        _owned_role(role, owned, run)
+        processor = role == "processor"
+        if type(approved_inputs) is not tuple or type(config_paths) is not tuple:
+            raise ValueError("input list")
+        if processor != (processing_root is not None) or processor != (phase1_attempts is not None):
+            raise ValueError("processor mounts")
+        mounts = [RoleMount(owned, owned, False, "evidence" if role in ("shard", "processor") else "service_logs")]
+        if task_output_root is not None:
+            output = _path(task_output_root, directory=True)
+            if role != 'shard' or output != owned/'output':
+                raise ValueError('task output owner')
+            mounts.append(RoleMount(output, TASK_OUTPUT_MOUNT, False, 'task_output'))
+        if processor:
+            output = _path(processing_root, directory=True)
+            if output != run / "processing" or type(phase1_attempts) is not tuple:
+                raise ValueError("processing output owner")
+            mounts.append(RoleMount(output, output, False, "processing_output"))
+            for source in phase1_attempts:
+                attempt = _phase1_attempt(source, run)
+                mounts.append(RoleMount(attempt, attempt, True, "phase1_attempt"))
+        for source in (*approved_inputs, *config_paths):
+            source = _path(source)
+            # Do not expose the root, another shard, or any Host journal to a role.
+            private = False
+            if source.is_relative_to(run) and source != run:
+                first = source.relative_to(run).parts[0]
+                private = first in {"host", "services", "ipc", "measurement", "live", "processing", ".campaign-layout.json"}
+                private = private or re.fullmatch(r"wave-[0-9]+", first) is not None
+            if (source == run or private or run.is_relative_to(source)
+                    or source.is_relative_to("/act/source") or source.is_relative_to("/act/install")):
+                raise ValueError("broad, Host-owned, or source override input")
+            mounts.append(RoleMount(source, source, True, "input"))
+        # a rollout shard is given the policy service's socket directory and neither the Head's nor the Teacher's: it has no use
+        # for them. It is recognised by the `policy` entry of its socket roots.
+        shard_services = ("policy",) if "policy" in socket_roots else ("head", "teacher")
+        for service_role in (() if processor else shard_services if role == "shard" else (role,)):
+            source = _path(socket_roots[service_role], directory=True)
+            if source != run / "ipc" / service_role:
+                raise ValueError("service socket owner")
+            target = CONTAINER_IPC_ROOT / service_role if role == "shard" else CONTAINER_IPC_ROOT
+            mounts.append(RoleMount(source, target, role == "shard", "ipc"))
+        if role in ("shard", "processor"):
+            control = _path(socket_roots["control"], directory=True)
+            if control != owned / "control":
+                raise ValueError("control socket owner")
+            mounts.append(RoleMount(control, CONTAINER_CONTROL_ROOT, False, "control"))
+        targets = [mount.target for mount in mounts]
+        if len(targets) != len(set(targets)):
+            raise ValueError("duplicate mount target")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ValueError("ROLE_MOUNT_INVALID") from error
+    return tuple(mounts)
+
+
+def campaign_run_root(owned_root):
+    """The run directory (the one holding `.campaign-layout.json`) of an instance's owned root."""
+    return _layout(Path(owned_root))
+
+
+def host_teacher_socket(run):
+    """The Teacher service socket as the Host sees it: the directory `build_role_mounts` mounts at `/act/ipc/teacher`."""
+    return Path(run)/'ipc'/'teacher'/'inference.sock'
+
+
+def task_output_path(output_root, task_id):
+    """Locate one task without accepting a path from the task request."""
+    from .task_contracts import TASK_ID_PATTERN
+
+    try:
+        root = _path(output_root, directory=True)
+        if type(task_id) is not str or re.fullmatch(TASK_ID_PATTERN, task_id) is None:
+            raise ValueError('task id')
+        path = root/'tasks'/task_id
+        if path.resolve() != path or path.is_symlink():
+            raise ValueError('task path')
+        return path
+    except (OSError, TypeError, ValueError) as error:
+        raise ValueError('TASK_OUTPUT_PATH_INVALID') from error
+
+
+def host_task_output(owner_root, task_id):
+    return task_output_path(_path(owner_root, directory=True)/'output', task_id)

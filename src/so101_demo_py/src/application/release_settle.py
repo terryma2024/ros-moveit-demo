@@ -45,7 +45,7 @@ def sample_from_simulation_evidence(
     corroboration: OutcomeCorroboration,
     observed_monotonic_s: float,
 ) -> FinalPlacementSample:
-    """Convert Task 5 atomic evidence without importing a simulator-specific message."""
+    """Convert atomic release evidence without importing a simulator-specific message."""
     support_contact = any(
         _matches_collision(contact, policy.intended_support_collision)
         and contact.signed_distance_m <= policy.minimum_support_signed_distance_m

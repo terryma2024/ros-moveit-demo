@@ -29,27 +29,9 @@ export function CampaignProgress({ campaign, selectedPointId, onSelect, onCancel
         <span>Indeterminate {campaign.indeterminate ?? 0}</span>
         <span>Unrun {campaign.not_executed ?? 0}</span>
       </div>
-      {campaign.execution_mode === "ADAPTIVE" ? (
-        <>
-          <p>Infra attempts {campaign.infra_attempts ?? 0}</p>
-          <p className="text-muted-foreground">
-            Resource observations only: {Object.entries(campaign.resource_observations ?? {})
-              .map(([key, value]) => `${key}=${String(value)}`)
-              .join(", ") || "none"}
-          </p>
-        </>
-      ) : null}
       {campaign.broker && !campaign.broker.available ? (
         <p className="text-warning">Broker degraded: {campaign.broker.reason ?? "UNKNOWN"}</p>
       ) : <p>Broker healthy</p>}
-      {(campaign.levels_used?.length ?? 0) > 0 ? (
-        <p>Levels used {campaign.levels_used?.map((level) => `W${level}`).join(" -> ")}</p>
-      ) : null}
-      {campaign.fallback_history?.map((transition, index) => (
-        <p key={index}>
-          W{String(transition.from_count)} -&gt; W{String(transition.to_count)}: {String(transition.reason)}
-        </p>
-      ))}
       <h3 className="font-semibold">Point execution results</h3>
       <div role="group" aria-label="Point execution results" className="validation-point-results gap-2">
         {campaign.points?.map((point) => (

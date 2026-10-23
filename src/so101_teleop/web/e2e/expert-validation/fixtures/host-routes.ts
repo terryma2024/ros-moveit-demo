@@ -177,7 +177,7 @@ export function hostUnderlayPrefixPath(
 /**
  * The installed execution document this host runs, as a basename under the config directory.
  *
- * `require_v3_execution` refuses new execution for any contract version but 3, and the v2 document
+ * `require_linux_cuda_execution` refuses new execution for any contract version but 3, and the v2 document
  * declares 2 - pointing the legacy host at it refused every preflight with
  * `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`, which then surfaced as a start refusal rather than as
  * the version problem it was. macOS resolves its profiles beside a macOS document, so the
@@ -185,8 +185,8 @@ export function hostUnderlayPrefixPath(
  */
 export function hostExecutionDocument(platform: NodeJS.Platform = process.platform): string {
   return platform === "darwin"
-    ? "parallel_batch_v6_macos_mps_w1_first_pass.yaml"
-    : "parallel_batch_v3.yaml";
+    ? "parallel_batch_macos_mps_single_worker_first_pass.yaml"
+    : "parallel_batch_linux_cuda.yaml";
 }
 
 /**

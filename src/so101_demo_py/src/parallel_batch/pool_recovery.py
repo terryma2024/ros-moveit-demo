@@ -1,6 +1,6 @@
 """Whole-pool rebuild after a Broker failure.
 
-Task 9 of the macOS MPS / private IPC plan. The v4 design (section 6.3) refuses to let a surviving
+The macOS MPS / private IPC design (section 6.3) refuses to let a surviving
 Worker discover or validate a new endpoint, so a Broker failure is recovered by rebuilding the
 entire W2 pool in a fixed order:
 
@@ -131,7 +131,7 @@ class BrokerPoolRecovery:
     #: Ask the Coordinator whether the point may be requeued.
     coordinator_decision: Callable[[Mapping[str, object]], bool]
     #: The Workers this campaign owns, by name.
-    worker_names: tuple[str, ...] = ("w1", "w2")
+    worker_names: tuple[str, ...] = ("worker-01", "worker-02")
     _trace: list[str] = field(default_factory=list)
 
     # -- internal helpers ----------------------------------------------------------------

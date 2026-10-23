@@ -29,9 +29,9 @@ from so101_demo.core.detection import (
     DetectionQuery,
     RuntimeDevice,
 )
-from so101_demo.perception_benchmark.calibration import (
+from so101_demo.perception_benchmark.calibration.results import ThresholdLock
+from so101_demo.perception_benchmark.calibration.thresholds import (
     GroundedSamBenchmarkThresholds,
-    ThresholdLock,
     YoloThresholds,
 )
 from so101_demo.perception_benchmark.codec import (

@@ -1,0 +1,18 @@
+# SO-101 ACT camera rig profile, version 1: the rig of the sealed EXP-620/622 data (head camera + wrist camera, neck kept).
+# Everything that used to be hard-coded as "head"/"wrist", an 8-wide state or a neck is read from this document
+# (src/act/rig_profile.py). The topic names follow the plugin config convention config/mujoco/act/*_camera_plugins.yaml:
+# camera `<name>` publishes /<name>_camera/color and /<name>_camera/camera_info.
+kind: act_rig_profile
+schema_version: 1
+rig: head-wrist
+# Camera order is the order of images in an observation, of the bundle's observation.cameras and of the policy's image keys.
+cameras:
+  - {name: head, image_topic: /head_camera/color, info_topic: /head_camera/camera_info, frame_key: head_png}
+  - {name: wrist, image_topic: /wrist_camera/color, info_topic: /wrist_camera/camera_info, frame_key: wrist_png}
+has_head: true
+has_neck: true
+# state = the six arm joints, then neck_sin and neck_cos when the neck exists: 6 + 2 = 8
+state:
+  arm_joints: ["1", "2", "3", "4", "5", "6"]
+  neck_features: [neck_sin, neck_cos]
+  state_dim: 8

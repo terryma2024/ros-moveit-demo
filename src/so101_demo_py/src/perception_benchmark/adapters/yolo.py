@@ -34,7 +34,7 @@ from so101_demo.perception_benchmark.adapters.base import (
     _MaskArtifactStore,
     _validate_accelerated_component,
 )
-from so101_demo.perception_benchmark.calibration import YoloThresholds
+from so101_demo.perception_benchmark.calibration.thresholds import YoloThresholds
 from so101_demo.perception_benchmark.contracts import YOLO_MODEL_ID, RawCandidate
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
@@ -297,7 +297,8 @@ class YoloRawAdapter:
             raise ValueError("YOLO collection mode is unsupported")
         collection = self._artifact_store.begin_collection()
         with PhaseTimer(self._synchronizer, monotonic_ns=self._monotonic_ns) as timer:
-            source = np.array(frame.rgb8, copy=True)
+            # Ultralytics reads a numpy array as BGR; the frame is RGB, so hand it over reversed (as the production detector does)
+            source = np.ascontiguousarray(frame.rgb8[:, :, ::-1])
             timer.mark("preprocess")
             try:
                 results = self._model.predict(
@@ -378,7 +379,7 @@ class YoloCalibratedDetector:
         self._synchronizer.synchronize()
         try:
             results = self._model.predict(
-                source=source,
+                source=np.ascontiguousarray(source[:, :, ::-1]),     # RGB in, BGR for Ultralytics (production does the same)
                 imgsz=640,
                 device=self.runtime_device,
                 conf=float(self._thresholds.conf),

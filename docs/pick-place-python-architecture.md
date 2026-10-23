@@ -426,7 +426,7 @@ services; the launch inherits their configuration but does not own their
 lifecycle.
 
 `runtime/provenance.py` records source and install identity.
-`runtime/result_manifest.py` uses atomic rename for `so101-run-result-v1`, which
+`runtime/result_manifest.py` uses atomic rename for `so101-run-result`, which
 includes backend, session, reset epoch, source commit, installed prefix, policy
 and bundle hashes, first failed phase, failure category, and evidence references.
 

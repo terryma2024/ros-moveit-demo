@@ -214,18 +214,16 @@ def load_dynamic_policy_variant(
     *,
     backend: str = "gazebo",
     policy_id: str = "dynamic_cup_pick",
-    version: str = "v1",
 ) -> LoadedDynamicPolicy:
     if backend not in {"gazebo", "mujoco"}:
         raise DynamicPolicyError("DYNAMIC_BACKEND_UNSUPPORTED")
-    root = Path(share_dir) / "config" / "policies" / policy_id / version
+    root = Path(share_dir) / "config" / "policies" / policy_id
     manifest = _mapping(yaml.safe_load((root / "manifest.yaml").read_bytes()), "manifest")
     _exact(
         manifest,
         {
             "schema_version",
             "policy_id",
-            "version",
             "supported_backends",
             "execution_allowed_backends",
             "variants",
@@ -235,7 +233,6 @@ def load_dynamic_policy_variant(
     if (
         manifest["schema_version"] != 2
         or manifest["policy_id"] != policy_id
-        or manifest["version"] != version
         or manifest["supported_backends"] != ["gazebo", "mujoco"]
         or manifest["execution_allowed_backends"] != ["mujoco"]
     ):

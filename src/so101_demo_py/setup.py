@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import Extension, find_packages, setup
 from setuptools.command.install import install as _install
 
 
@@ -39,6 +39,21 @@ package_name = "so101_demo_py"
 python_package = "so101_demo"
 package_root = Path(__file__).resolve().parent
 subpackages = find_packages(where="src")
+ik_requirements = [
+    line.strip()
+    for line in (package_root / "config/ik/requirements.lock").read_text(
+        encoding="utf-8").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
+
+extensions = [Extension(
+    f"{python_package}.control.moveit._ik_numeric",
+    ["src/control/moveit/_ik_numeric.c"],
+    extra_compile_args=[
+        "-O3", "-fno-fast-math", "-ffp-contract=off",
+        "-fno-builtin-sin", "-fno-builtin-cos",
+    ],
+)]
 
 
 def installed_resources() -> list[tuple[str, list[str]]]:
@@ -62,6 +77,8 @@ setup(
     packages=[python_package]
     + [f"{python_package}.{subpackage}" for subpackage in subpackages],
     package_dir={python_package: "src"},
+    ext_modules=extensions,
+    package_data={f"{python_package}.control.moveit": ["_ik_numeric.pyx"]},
     data_files=[
         (
             "share/ament_index/resource_index/packages",
@@ -75,8 +92,8 @@ setup(
     ]
     + installed_resources(),
     cmdclass={"install": DebugProvenanceInstall},
-    install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"],
-    zip_safe=True,
+    install_requires=["so101-quik==0.1.0", "PyYAML==6.0.2", "setuptools", "typing_extensions"] + ik_requirements,
+    zip_safe=False,
     maintainer="SO-101 maintainers",
     maintainer_email="zjumty@gmail.com",
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",
@@ -91,6 +108,47 @@ setup(
     },
     entry_points={
         "console_scripts": [
+            "act_diagnostic_episode = so101_demo.cli.act_diagnostic_episode:main",
+            "act_offline_episode = so101_demo.cli.act_offline_episode:main",
+            "act_preflight = so101_demo.cli.act_preflight:main",
+            "act_resolve_training_requirements = so101_demo.cli.act_resolve_training_requirements:main",
+            "act_capture_synchronized_rgb = so101_demo.cli.act_capture_synchronized_rgb:main",
+            "act_analyze_contact_calibration = so101_demo.cli.act_analyze_contact_calibration:main",
+            "act_collect_contact_calibration = so101_demo.cli.act_collect_contact_calibration:main",
+            "act_activate_contact_policy = so101_demo.cli.act_activate_contact_policy:main",
+            "act_prepare_pick_place_validation = so101_demo.cli.act_prepare_pick_place_validation:main",
+            "act_run_pick_place_validation = so101_demo.cli.act_run_pick_place_validation:main",
+            "act_build_pick_place_validation_source_provenance = "
+            "so101_demo.cli.act_build_pick_place_validation_source_provenance:main",
+            "act_measure_pick_place_calibration = "
+            "so101_demo.cli.act_measure_pick_place_calibration:main",
+            "act_build_pick_place_calibration_report = "
+            "so101_demo.cli.act_build_pick_place_calibration_report:main",
+            "act_validate_pick_place_validation_artifacts = "
+            "so101_demo.cli.act_validate_pick_place_validation_artifacts:main",
+            "act_build_pick_place_validation_qualified_report = "
+            "so101_demo.cli.act_build_pick_place_validation_qualified_report:main",
+            "act_sample = so101_demo.cli.act_sample:main",
+            "act_boundary_prefilter = so101_demo.cli.act_boundary_prefilter:main",
+            "act_boundary_round = so101_demo.cli.act_boundary_round:main",
+            "act_boundary_update = so101_demo.cli.act_boundary_update:main",
+            "act_scene_sample = so101_demo.cli.act_scene_sample:main",
+            "act_collect_parallel = so101_demo.cli.act_collect_parallel:main",
+            "act_process_parallel = so101_demo.cli.act_process_parallel:main",
+            "act_merge_collections = so101_demo.cli.act_merge_collections:main",
+            "act_contact_spot_check = so101_demo.cli.act_contact_spot_check:main",
+            "act_build_parallel_qualification_report = "
+            "so101_demo.cli.act_build_parallel_qualification_report:main",
+            "act_verify_parallel_qualification = so101_demo.cli.act_verify_parallel_qualification:main",
+            "act_offline_evaluate = so101_demo.cli.act_offline_evaluate:main",
+            "act_train = so101_demo.cli.act_train:main",
+            "act_inference_worker = so101_demo.cli.act_inference_worker:main",
+            "act_session = so101_demo.cli.act_session:main",
+            "act_evaluate = so101_demo.cli.act_evaluate:main",
+            "act_rollout_scenes = so101_demo.cli.act_rollout_scenes:main",
+            "act_rollout_native = so101_demo.cli.act_rollout_native:main",
+            "act_policy_service = so101_demo.cli.act_policy_service:main",
+            "act_rollout_parallel = so101_demo.cli.act_rollout_parallel:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
             # launches on this platform, because so101_parallel_batch refuses it outright.
@@ -98,11 +156,15 @@ setup(
             "so101_demo.cli.macos_service_campaign:main",
             # The two public W1 entry points. Each names exactly one approved profile, so the
             # support matrix is a choice of program rather than a flag a caller can get wrong.
-            "so101_macos_n1_retry = so101_demo.cli.macos_n1_retry:main",
-            "so101_macos_n1_first_pass = so101_demo.cli.macos_n1_first_pass:main",
+            "so101_macos_single_worker_retry = so101_demo.cli.macos_mps_single_worker_retry:main",
+            "so101_macos_single_worker_first_pass = so101_demo.cli.macos_mps_single_worker_first_pass:main",
             "so101_parallel_batch_cleanup = "
             "so101_demo.cli.parallel_batch_cleanup:main",
             "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",
+            "campaign_inference = so101_demo.cli.campaign_inference:main",
+            "campaign_shard = so101_demo.cli.campaign_shard:main",
+            "campaign_processor = so101_demo.cli.campaign_processor:main",
+            "act_instance_native = so101_demo.cli.act_instance_native:main",
             "so101_measure_parallel_resources = so101_demo.cli.measure_parallel_resources:main",
             "so101_debug_provenance = so101_demo.cli.debug_provenance:main",
             "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",
@@ -111,6 +173,7 @@ setup(
             "scene_setup = so101_demo.cli.scene_setup:main",
             "gazebo_execute = so101_demo.backends.gazebo.execute:main",
             "motion_stack_ready = so101_demo.cli.motion_stack_ready:main",
+            "act_stack_ready = so101_demo.cli.act_stack_ready:main",
             "so101_diagnose_macos_station = "
             "so101_demo.cli.diagnose_macos_station:main",
             "cup_pose_subscriber = so101_demo.cli.cup_pose_subscriber:main",
@@ -135,6 +198,16 @@ setup(
             "grounded_sam_val_calibration = "
             "so101_demo.cli.grounded_sam_val_calibration:main",
             "train_yolo_seg = so101_demo.cli.train_yolo_seg:main",
+            "validate_head_camera_geometry = "
+            "so101_demo.cli.validate_head_camera_geometry:main",
+            "verify_head_search_dataset = "
+            "so101_demo.cli.verify_head_search_dataset:main",
+            "so101_head_search_smoke = so101_demo.cli.head_search_smoke:main",
+            "so101_head_search_calibration = so101_demo.cli.head_search_calibration:main",
+            "so101_head_search_functional_campaign = so101_demo.cli.head_search_functional_campaign:main",
+            "so101_head_search_audit = so101_demo.cli.head_search_audit:main",
+            "evaluate_head_search_yolo_candidates = "
+            "so101_demo.cli.evaluate_head_search_yolo_candidates:main",
             "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main",
             "so101_mujoco_perception_pick_place = "
             "so101_demo.cli.perception_pick_place_launch:main",

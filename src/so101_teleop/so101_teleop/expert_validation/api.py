@@ -29,7 +29,10 @@ from .process_owner import CoordinatorOwnershipError
 from .reducer import ReducerError
 from .service import ServiceConflict
 from .statistics import StatisticsProjectionError
-from .store import CommandOutcomeUnknown, StoreConflict
+from so101_teleop.expert_validation.supervisor_store.schema import (
+    CommandOutcomeUnknown,
+    StoreConflict,
+)
 from so101_teleop.api import validate_bind_address
 from so101_teleop.task_artifacts import ArtifactAccessError
 
@@ -70,7 +73,9 @@ class CampaignConfiguration(ClosedModel):
     lease_id: str = Field(min_length=1)
     lease_generation: int = Field(ge=1)
     manifest_id: str = Field(min_length=1)
-    execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]
+    #: A native campaign is one worker: PARALLEL and ADAPTIVE are no longer accepted (multi-worker collection
+    #: exists only as container shards). Stored campaigns of those modes are still readable in responses.
+    execution_mode: Literal["SEQUENTIAL"]
     worker_count: int | None = Field(default=None, ge=1, le=FIXED_WORKER_COUNTS[-1])
     preferred_worker_count: int | None = Field(default=None, ge=1, le=16)
     fallback_worker_counts: tuple[int, ...] | None = None
@@ -81,7 +86,7 @@ class CampaignConfiguration(ClosedModel):
     #: The macOS routing key. A request that names a profile must name the exact combination its
     #: installed document declares; one that names nothing is never completed by inference.
     execution_profile: Literal[
-        "MPS_W2_FIRST_PASS", "MPS_W1_FULL_RESTART_RETRY", "MPS_W1_FIRST_PASS"
+        "MPS_TWO_WORKER_FIRST_PASS", "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"
     ] | None = None
     batch_kind: Literal["FIRST_PASS", "FULL_RESTART_RETRY"] | None = None
 
@@ -98,23 +103,10 @@ class CampaignConfiguration(ClosedModel):
             self.max_infra_attempts_per_point,
             self.yolo_executor_count,
         )
-        if self.execution_mode in {"SEQUENTIAL", "PARALLEL"}:
-            if any(value is None for value in fixed) or any(value is not None for value in adaptive):
-                raise ValueError("FIXED_EXECUTION_CONFIG")
-            if self.execution_mode == "SEQUENTIAL" and self.worker_count != 1:
-                raise ValueError("SEQUENTIAL_WORKER_COUNT")
-            if self.execution_mode == "PARALLEL" and self.worker_count not in FIXED_WORKER_COUNTS[1:]:
-                raise ValueError("PARALLEL_WORKER_COUNT")
-        else:
-            if any(value is not None for value in fixed):
-                raise ValueError("ADAPTIVE_FIXED_FIELD")
-            if any(value is None for value in adaptive):
-                raise ValueError("ADAPTIVE_EXECUTION_CONFIG")
-            levels = (self.preferred_worker_count, *self.fallback_worker_counts)
-            if any(next_level >= level for level, next_level in zip(levels, levels[1:])):
-                raise ValueError("ADAPTIVE_FALLBACK_TIERS")
-            if self.yolo_executor_count != 2:
-                raise ValueError("ADAPTIVE_YOLO_EXECUTOR_COUNT")
+        if any(value is None for value in fixed) or any(value is not None for value in adaptive):
+            raise ValueError("FIXED_EXECUTION_CONFIG")
+        if self.worker_count != 1:
+            raise ValueError("SEQUENTIAL_WORKER_COUNT")
         return self
 
     def _validate_profile_claim(self) -> None:
@@ -334,7 +326,7 @@ class CapabilitiesResponse(ClosedModel):
     fixed_worker_counts: tuple[int, ...] = FIXED_WORKER_COUNTS
     worker_count_availability: tuple[WorkerCountAvailability, ...] = Field(
         default_factory=default_worker_count_availability)
-    adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
+    adaptive_default_ladder: tuple[int, ...] = ()
     start_guard_policy: StartGuardPolicyResponse | None = None
     start_guard: StartGuardStatus | None = None
     lease_duration_s: float = 30.0
@@ -569,6 +561,8 @@ class CampaignProjectionResponse(ClosedModel):
     current_generation: int | None = None
     infra_attempts: int = 0
     resource_observations: dict[str, object] = {}
+    #: Present only when the batch ended without a terminal event of its own (the owned process exited).
+    terminal_reason: str | None = None
     #: Retries appended after the first pass. Read-only history: it never rewrites the point
     #: statuses or the counters that describe what the first pass actually did.
     retry_history: tuple[RetryHistoryResponse, ...] = ()

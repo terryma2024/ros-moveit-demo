@@ -106,7 +106,7 @@ Text Agent launch 由 [`build_text_pick_agent_launch_description()`](../../src/s
 
 包装函数也遵守同一规则。例如 [`profile_planner()`](../../src/so101_demo_py/src/profiling/wrappers.py) 收到 `profiler=None` 时原样返回 planner，不增加代理对象。这是“关闭后不影响主逻辑性能”的关键边界。
 
-仓库还提供 [`benchmark_profiling_off.py`](../../src/so101_demo_py/test/benchmark_profiling_off.py)，用来比较直接调用与 disabled wrapper 路径。它检查的不是业务吞吐，而是 `off` 模式有没有偷偷留下额外工作。
+仓库还提供 [`benchmark_profiling_off.py`](../../src/so101_demo_py/test/support/benchmark_profiling_off.py)，用来比较直接调用与 disabled wrapper 路径。它检查的不是业务吞吐，而是 `off` 模式有没有偷偷留下额外工作。
 
 ### 4.2 `summary` 适合日常测量
 

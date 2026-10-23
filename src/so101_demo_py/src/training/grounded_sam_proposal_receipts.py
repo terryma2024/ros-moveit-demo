@@ -14,11 +14,8 @@ import numpy as np
 from PIL import Image
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import CollectionMode
-from so101_demo.training.grounded_sam_val_calibration import (
-    ValDataset,
-    _read_canonical,
-    _write_exclusive_json,
-)
+from so101_demo.training.grounded_sam_val_calibration.datasets import _read_canonical, ValDataset
+from so101_demo.training.grounded_sam_val_calibration.evidence import _write_exclusive_json
 
 _MODEL_ID = "grounding-dino-tiny+sam2.1-hiera-tiny"
 _SCHEMA = "so101-grounded-sam-proposal-receipts/v1"

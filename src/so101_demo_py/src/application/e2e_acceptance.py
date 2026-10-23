@@ -1,4 +1,12 @@
-"""ROS-free validation of correlated SO-101 MuJoCo E2E evidence."""
+"""ROS-free validation of correlated SO-101 MuJoCo E2E evidence.
+
+Acceptance of a run (dynamic manifest) is decided by the Teacher's own ``teacher_task_result`` (the
+``teacher_endpoint`` judgement: cup start/end pose and final upright) plus the genuine protections: the run finished
+normally with no failure, and the evidence is correlated to this workflow, request, session, reset epoch, perception
+input and frozen policy. Process-quality facts (the exact state trace, carry contact, micro-lift, release support,
+final-readback stillness, support contact and heights, Planning Scene shadow agreement) are still computed and reported as
+``process_diagnostics`` but never fail a Teacher pass.
+"""
 
 from __future__ import annotations
 
@@ -46,6 +54,20 @@ FINAL_SUPPORT_HEIGHT_RANGE_M = (0.155, 0.175)
 FINAL_MAX_UPRIGHT_TILT_RAD = 0.15
 FINAL_MAX_LINEAR_SPEED_M_S = 0.001
 FINAL_MAX_ANGULAR_SPEED_RAD_S = 0.05
+#: the dynamic manifest of the general runtime (with its recovery chain)
+SCHEMA_GENERAL = "so101-dynamic-execute"
+#: the dynamic manifest of a Teacher run (minimal runtime gates): the same success trace, a `teacher_process_summary` beside the result
+SCHEMA_TEACHER = "so101-teacher-execute"
+MANIFEST_SCHEMA_VERSION = 1
+
+
+def is_manifest_of(document: object, *schemas: str) -> bool:
+    """True when ``document`` is a dynamic manifest of one of ``schemas`` at the current ``schema_version``."""
+    return (type(document) is dict and document.get("schema") in schemas
+            and type(document.get("schema_version")) is int and document["schema_version"] == MANIFEST_SCHEMA_VERSION)
+
+
+_TEACHER_RESULTS = frozenset({"PASS", "FAIL", "UNCONFIRMED"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +76,9 @@ class AcceptanceReport:
     failures: tuple[str, ...]
     physical_outcome: dict[str, object]
     planning_scene_outcome: dict[str, object]
+    manifest_schema: str | None = None
+    teacher_task_result: str | None = None
+    process_diagnostics: tuple[str, ...] = ()
 
     def to_document(self) -> dict[str, object]:
         return {
@@ -61,6 +86,9 @@ class AcceptanceReport:
             "failures": list(self.failures),
             "physical_outcome": self.physical_outcome,
             "planning_scene_outcome": self.planning_scene_outcome,
+            "manifest_schema": self.manifest_schema,
+            "teacher_task_result": self.teacher_task_result,
+            "process_diagnostics": list(self.process_diagnostics),
         }
 
 
@@ -115,6 +143,11 @@ def _upright_tilt(pose: tuple[float, ...]) -> float:
 def _append(failures: list[str], code: str) -> None:
     if code not in failures:
         failures.append(code)
+
+
+def _diagnostic_code(code: str) -> str:
+    """A process finding's audit-only name: `E2E_X_INVALID` becomes `E2E_PROCESS_X_INVALID`."""
+    return "E2E_PROCESS_" + code.removeprefix("E2E_")
 
 
 def _policy_values(
@@ -237,24 +270,22 @@ def _validate_motion_event(event: dict[str, Any], policy: dict[str, object]) -> 
     return True
 
 
-def _validate_dynamic(
+def _validate_dynamic_contract(
     dynamic: dict[str, Any] | None,
     perception: dict[str, Any] | None,
-    policy: dict[str, object] | None,
     failures: list[str],
-) -> None:
-    if dynamic is None or perception is None or policy is None:
+) -> bool:
+    """Genuine protections and evidence correlation: the run finished normally and is bound to its inputs."""
+    if dynamic is None or perception is None:
         _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
-        return
-    trace = dynamic.get("state_trace")
+        return False
     events = dynamic.get("state_events")
     release_marker = _integer(dynamic.get("release_marker_sequence"))
     if (
-        dynamic.get("schema") != "so101-dynamic-mujoco-execute-v1"
+        not is_manifest_of(dynamic, SCHEMA_GENERAL, SCHEMA_TEACHER)
         or dynamic.get("status") != "DONE"
         or dynamic.get("current_state") != "DONE"
         or dynamic.get("failure") is not None
-        or trace != list(SUCCESS_STATE_TRACE)
         or type(events) is not list
         or release_marker is None
         or dynamic.get("input_source_stamp_ns") != perception.get("source_stamp_ns")
@@ -265,6 +296,46 @@ def _validate_dynamic(
         or perception.get("failure") is not None
         or perception.get("published_cup_pose") is not True
     ):
+        _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
+        return False
+    return True
+
+
+def _process_summary_valid(value: object) -> bool:
+    from ..core.process_summary import validate_summary
+
+    try:
+        validate_summary(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _validate_teacher_result(dynamic: dict[str, Any], failures: list[str]) -> str | None:
+    """The Teacher endpoint: acceptance of a run is `teacher_task_result` PASS from a COMPLETED execution."""
+    task = _mapping(dynamic.get("teacher_task_result"))
+    result = None if task is None else task.get("result")
+    if result not in _TEACHER_RESULTS:
+        _append(failures, "E2E_TEACHER_RESULT_MISSING")
+        return None
+    if result != "PASS" or dynamic.get("teacher_execution_status") != "COMPLETED":
+        _append(failures, "E2E_TEACHER_TASK_NOT_PASSED")
+    return result
+
+
+def _validate_dynamic_process(
+    dynamic: dict[str, Any],
+    policy: dict[str, object] | None,
+    failures: list[str],
+) -> None:
+    """Process-quality facts of the state machine run. Failures here are diagnostics beside the Teacher's result."""
+    if policy is None:
+        _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
+        return
+    trace = dynamic.get("state_trace")
+    events = dynamic.get("state_events")
+    release_marker = _integer(dynamic.get("release_marker_sequence"))
+    if trace != list(SUCCESS_STATE_TRACE) or type(events) is not list or release_marker is None:
         _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
         return
     records = [_mapping(event) for event in events]
@@ -508,16 +579,32 @@ def validate_e2e_evidence(document: dict[str, object]) -> AcceptanceReport:
     raw_policy = _mapping(root.get("policy"))
     policy = _policy_values(raw_policy, dynamic, failures)
     _validate_identity(expected, dynamic, perception, mujoco, scene, failures)
-    _validate_dynamic(dynamic, perception, policy, failures)
+    contract_ok = _validate_dynamic_contract(dynamic, perception, failures)
+    manifest_schema = None if dynamic is None else dynamic.get("schema")
+    teacher_result = None
+    if contract_ok:
+        teacher_result = _validate_teacher_result(dynamic, failures)
+        if manifest_schema == SCHEMA_TEACHER and not _process_summary_valid(dynamic.get("teacher_process_summary")):
+            _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
+    # process-quality facts are computed for every manifest, but they are audit-only diagnostics beside the Teacher's result
+    process: list[str] = []
+    if dynamic is not None and perception is not None and contract_ok:
+        _validate_dynamic_process(dynamic, policy, process)
+    elif dynamic is not None and perception is not None:
+        _append(process, "E2E_DYNAMIC_EVIDENCE_INVALID")
     physical_outcome, mujoco_pose = _validate_mujoco(
-        mujoco, dynamic, policy, failures
+        mujoco, dynamic, policy, process
     )
     planning_scene_outcome = _validate_scene(
-        scene, mujoco, mujoco_pose, policy, failures
+        scene, mujoco, mujoco_pose, policy, process
     )
+    diagnostics = tuple(dict.fromkeys(_diagnostic_code(code) for code in process))
     return AcceptanceReport(
         accepted=not failures,
         failures=tuple(failures),
         physical_outcome=physical_outcome,
         planning_scene_outcome=planning_scene_outcome,
+        manifest_schema=manifest_schema if type(manifest_schema) is str else None,
+        teacher_task_result=teacher_result,
+        process_diagnostics=diagnostics,
     )

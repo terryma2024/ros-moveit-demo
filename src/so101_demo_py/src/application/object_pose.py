@@ -49,6 +49,13 @@ class TargetSelector:
         return matches[0]
 
 
+#: World points below this height are not used for the cup's circle fit. The red landing ring lies on the table at z about 0.1201
+#: (table top 0.12 m), flat, and the segmentation mask of a cup near it bleeds onto the ring, which pulled the fitted centre by up to
+#: 4.8 mm. The cup's wall starts at the table top, so the only part cut is its lowest 15 mm (a cup is 0.09 m tall, 0.075 m remain).
+#: The result does not depend on the exact value between 0.125 and 0.145 m (perception-risks findings, R-b).
+CUP_FIT_MINIMUM_Z_M = 0.135
+
+
 class LocalizationError(ValueError):
     def __init__(self, code: str, detail: str) -> None:
         super().__init__(f"{code}: {detail}")
@@ -183,7 +190,10 @@ class RgbdLocalizer:
         workspace_max_xyz: tuple[float, float, float] = (0.2, -0.1, 0.3),
         point_cloud_builder: Callable[..., np.ndarray] = _default_point_cloud_builder,
         outlier_cleaner: Callable[..., np.ndarray] = _default_outlier_cleaner,
+        fit_minimum_z_m: float = CUP_FIT_MINIMUM_Z_M,
     ) -> None:
+        if not math.isfinite(fit_minimum_z_m):
+            raise ValueError("fit_minimum_z_m must be finite")
         positive_floats = {
             "depth_trunc_m": depth_trunc_m,
             "cluster_eps_m": cluster_eps_m,
@@ -216,6 +226,7 @@ class RgbdLocalizer:
         self._workspace_max = np.asarray(workspace_max_xyz, dtype=np.float64)
         self._point_cloud_builder = point_cloud_builder
         self._outlier_cleaner = outlier_cleaner
+        self._fit_minimum_z_m = fit_minimum_z_m
         self._warm_up_latency_ms: float | None = None
 
     def warm_up(
@@ -322,6 +333,15 @@ class RgbdLocalizer:
             points_world = transform_points(clean_points, transform)
         except ValueError as error:
             raise LocalizationError("TF_UNAVAILABLE", str(error)) from error
+        # nothing of the landing ring (z about 0.1201) or of the table enters the fit: see CUP_FIT_MINIMUM_Z_M
+        points_world = points_world[points_world[:, 2] >= self._fit_minimum_z_m]
+        points_world.flags.writeable = False
+        if len(points_world) < self._minimum_cup_points:
+            raise LocalizationError(
+                "GEOMETRY_REJECTED",
+                f"{len(points_world)} points at or above z {self._fit_minimum_z_m} m remain after the clip; "
+                f"required {self._minimum_cup_points}",
+            )
         try:
             center, fitted_radius = estimate_upright_cup_pose(
                 points_world,

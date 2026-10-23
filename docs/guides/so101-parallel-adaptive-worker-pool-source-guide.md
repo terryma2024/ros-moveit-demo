@@ -118,7 +118,7 @@ Worker 共享 GPU 感知服务，但不把顶层调度状态交给 Broker。仿�
 | 资源与进程 | `src/so101_demo_py/src/parallel_batch/resources.py`、`src/so101_demo_py/src/runtime/parallel_processes.py` | Domain claim、目录、进程身份、资源读回和精确清理 |
 | 用户入口 | `src/so101_demo_py/src/cli/mujoco_parallel_batch.py` | 参数解析、provenance、composition、RPC server 和最终报告 |
 | 清理入口 | `src/so101_demo_py/src/cli/parallel_batch_cleanup.py` | Runner 异常后的登记对象清理 |
-| 配置 | `src/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml` | 默认 W8、fallback、Domain 215–230、C2 |
+| 配置 | `src/so101_demo_py/config/mujoco/adaptive_worker_pool.yaml` | 默认 W8、fallback、Domain 215–230、C2 |
 | 监督脚本 | `scripts/run_so101_adaptive_batch.zsh` | 启动 Runner、转发信号、最后执行精确 cleanup |
 | 扩容实验脚本 | `scripts/run_so101_adaptive_worker_scaling.zsh` | W1–W16 显式档位样本和性能摘要 |
 
@@ -440,9 +440,9 @@ ros2 run so101_demo_py so101_parallel_batch --help
 ```bash
 scripts/run_so101_adaptive_batch.zsh \
   --adaptive-workers \
-  --points /absolute/path/to/moveit_expert_validation_points_v1.yaml \
-  --config /absolute/path/to/parallel_batch_v1.yaml \
-  --adaptive-config /absolute/path/to/parallel_adaptive_workers_v1.yaml \
+  --points /absolute/path/to/moveit_expert_validation_points.yaml \
+  --config /absolute/path/to/parallel_batch_linux_cuda.yaml \
+  --adaptive-config /absolute/path/to/adaptive_worker_pool.yaml \
   --batch-id a81 \
   --worker-count 8 \
   --fallback-worker-counts 6,4,2,1 \
@@ -743,7 +743,7 @@ W8 现场合格至少要求：20 个不同点位、首 attempt、完整物理与
 
 1. [`2026-09-14-so101-adaptive-worker-pool-design.md`](../superpowers/specs/2026-09-14-so101-adaptive-worker-pool-design.md)：先理解 Worker pool 的目标和非目标；
 2. [`2026-09-15-so101-stateless-perception-broker-design.md`](../superpowers/specs/2026-09-15-so101-stateless-perception-broker-design.md)：划清 Broker 与调度控制面的边界；
-3. `parallel_adaptive_workers_v1.yaml`：看默认 W8、fallback、Domain 和 C2；
+3. `adaptive_worker_pool.yaml`：看默认 W8、fallback、Domain 和 C2；
 4. `adaptive_contracts.py` 与 `adaptive_queue.py`：看启动约束、preferred、global 和 stealing；
 5. `adaptive_runner.py` 与 `adaptive_pool.py`：看跨代终态、fallback、READY barrier 和 production composition；
 6. `coordinator.py`：看本代 lease、ACK、heartbeat、动作权限与最终结果接纳；

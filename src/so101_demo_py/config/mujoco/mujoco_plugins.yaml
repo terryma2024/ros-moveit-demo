@@ -12,6 +12,8 @@
           depth_topic: /task_camera/depth
       simulation_evidence:
         type: so101_mujoco_support/SimulationEvidencePlugin
+    robot_contact_roots: [base]
+    robot_contact_buffer_capacity: 5000
     object_body: plastic_cup
     left_fingertip_geoms:
       - fixed_finger_contact_convex_000

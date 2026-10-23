@@ -17,10 +17,16 @@ from numbers import Real
 import threading
 
 from .artifacts import AttemptWorkspace, ValidationWorkspace
-from .contracts import (
-    _require_finite, _require_id, _require_positive_int, _require_sha256,
-    AttemptStatus, ExecutionKind, InferenceRequest, ModelOutcome,
+from so101_demo.parallel_batch.contracts.common import (
+    _require_finite,
+    _require_id,
+    _require_positive_int,
+    _require_sha256,
+    AttemptStatus,
+    ExecutionKind,
+    ModelOutcome,
 )
+from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 
 
 class PerceptionError(ValueError):
@@ -69,6 +75,8 @@ class AdmissionContext:
 class LocalizedPose:
     """Localized candidate with the complete echoed request and RGB-D/TF provenance."""
 
+    _request_type = InferenceRequest
+
     request: InferenceRequest
     broker_generation: int
     session_id: str
@@ -81,7 +89,7 @@ class LocalizedPose:
     orientation_xyzw: tuple
 
     def __post_init__(self):
-        if type(self.request) is not InferenceRequest:
+        if type(self.request) is not self._request_type:
             raise PerceptionError('REQUEST_IDENTITY_REQUIRED')
         _require_positive_int('broker_generation', self.broker_generation)
         _require_id('session_id', self.session_id)
@@ -110,6 +118,9 @@ class PerceptionDecision:
 class PoseAdmissionLatch:
     """Only a successful local evidence write can open this latch."""
 
+    _request_type = InferenceRequest
+    _localized_type = LocalizedPose
+
     def __init__(self, workspace, context, *, broker_generation, clock,
                  authorize, geometry_gate, quality_gate):
         """Bind an unopened latch to the current Worker execution workspace."""
@@ -129,6 +140,7 @@ class PoseAdmissionLatch:
         self._cancelled = set()
         self._fenced = False
         self.rejection_reason = None
+        self.stale_detail = None
         if (workspace.path / 'pose_accepted.json').exists():
             raise PerceptionError('POSE_ACCEPTED_REQUIRES_ADJUDICATION')
 
@@ -152,7 +164,7 @@ class PoseAdmissionLatch:
     def check_result(self, request, broker_generation):
         """Check all echoed fields before interpreting even a MODEL_ERROR."""
         with self._lock:
-            if type(request) is not InferenceRequest or request != self._expected:
+            if type(request) is not self._request_type or request != self._expected:
                 raise PerceptionError('REQUEST_IDENTITY_MISMATCH')
             current = self._current(request)
             # Authorization can block or observe a new Broker/request epoch.
@@ -169,7 +181,7 @@ class PoseAdmissionLatch:
     def expect(self, request, *, depth_timestamp_s, depth_sha256):
         """Register locally captured input identity before sending its model request."""
         with self._lock:
-            if type(request) is not InferenceRequest:
+            if type(request) is not self._request_type:
                 raise PerceptionError('REQUEST_IDENTITY_REQUIRED')
             identity = asdict(self.workspace.identity)
             kind = (ExecutionKind.ATTEMPT if type(self.workspace) is AttemptWorkspace
@@ -178,34 +190,56 @@ class PoseAdmissionLatch:
                     or any(getattr(request, key) != value for key, value in identity.items())
                     or request.reset_epoch != self.workspace._metadata['reset_epoch']):
                 raise PerceptionError('WORKSPACE_IDENTITY_MISMATCH')
-            suffix = self.workspace.path.parts[-4:]
-            expected_path = '/'.join((request.worker_id, *suffix, 'perception/input/rgb.npy'))
-            if request.input_relative_path != expected_path:
-                raise PerceptionError('INPUT_PATH_IDENTITY_MISMATCH')
+            self._validate_input_identity(request)
             if self.accepted or not self._current(request):
                 raise PerceptionError('REQUEST_NOT_AUTHORIZED')
             _require_finite('depth_timestamp_s', depth_timestamp_s)
             _require_sha256('depth_sha256', depth_sha256)
             if not self._fresh(request.image_timestamp_s, depth_timestamp_s):
-                raise PerceptionError('STALE_RGBD')
+                raise PerceptionError(f'STALE_RGBD: {self.stale_detail}')
             self._expected = request
             self._depth_timestamp_s, self._depth_sha256 = depth_timestamp_s, depth_sha256
 
+    def _validate_input_identity(self, request):
+        """The generic file Broker has its own current input identity contract."""
+        suffix = self.workspace.path.parts[-4:]
+        expected_path = '/'.join((request.worker_id, *suffix, 'perception/input/rgb.npy'))
+        if request.input_relative_path != expected_path:
+            raise PerceptionError('INPUT_PATH_IDENTITY_MISMATCH')
+
     def _fresh(self, rgb_stamp, depth_stamp, tf_stamp=None):
+        """The freshness policy (unchanged); on a failure `stale_detail` names the first failed condition from the closed set
+        CLOCK_REGRESSION, RESET_WATERMARK, FUTURE_STAMP, AGE, SKEW, TF, with now, the stamps and the limits."""
         context = self.context
         now = _require_finite('source_clock', self._clock())
+        values = (f'now={now!r} rgb={rgb_stamp!r} depth={depth_stamp!r}'
+                  + ('' if tf_stamp is None else f' tf={tf_stamp!r}')
+                  + f' reset={context.reset_completed_timestamp_s!r} max_age={context.max_frame_age_s!r}'
+                  + f' max_skew={context.max_rgbd_skew_s!r}'
+                  + ('' if tf_stamp is None else f' max_tf_skew={context.max_tf_skew_s!r}'))
         if self._last_source_clock is not None and now < self._last_source_clock:
             self._fenced = True
+            self.stale_detail = f'CLOCK_REGRESSION previous={self._last_source_clock!r} {values}'
             return False
         self._last_source_clock = now
         stamps = (rgb_stamp, depth_stamp)
-        if (any(stamp <= context.reset_completed_timestamp_s or stamp > now
-                or now - stamp > context.max_frame_age_s for stamp in stamps)
-                or abs(rgb_stamp - depth_stamp) > context.max_rgbd_skew_s):
-            return False
-        return (tf_stamp is None or (
-            context.reset_completed_timestamp_s < tf_stamp <= now
-            and all(abs(tf_stamp - stamp) <= context.max_tf_skew_s for stamp in stamps)))
+        if any(stamp <= context.reset_completed_timestamp_s for stamp in stamps):
+            reason = 'RESET_WATERMARK'
+        elif any(stamp > now for stamp in stamps):
+            reason = 'FUTURE_STAMP'
+        elif any(now - stamp > context.max_frame_age_s for stamp in stamps):
+            reason = 'AGE'
+        elif abs(rgb_stamp - depth_stamp) > context.max_rgbd_skew_s:
+            reason = 'SKEW'
+        elif not (tf_stamp is None or (
+                context.reset_completed_timestamp_s < tf_stamp <= now
+                and all(abs(tf_stamp - stamp) <= context.max_tf_skew_s for stamp in stamps))):
+            reason = 'TF'
+        else:
+            self.stale_detail = None
+            return True
+        self.stale_detail = f'{reason} {values}'
+        return False
 
     def _candidate_current(self, request, value, context):
         if not self.check_result(request, value.broker_generation):
@@ -229,7 +263,7 @@ class PoseAdmissionLatch:
                 or value.source_frame != context.source_frame
                 or value.target_frame != context.target_frame):
             return self._reject('SOURCE_OR_TF_IDENTITY_MISMATCH')
-        return fresh or self._reject('STALE_RGBD_OR_TF')
+        return fresh or self._reject(f'STALE_RGBD_OR_TF: {self.stale_detail}')
 
     def _require_adjudication(self):
         self._adjudication_required = True
@@ -252,8 +286,8 @@ class PoseAdmissionLatch:
             if self.requires_adjudication:
                 raise self._require_adjudication()
             self.rejection_reason = None
-            if (type(localized_pose) is not LocalizedPose
-                    or type(request) is not InferenceRequest
+            if (type(localized_pose) is not self._localized_type
+                    or type(request) is not self._request_type
                     or request != self._expected or localized_pose.request != request):
                 return self._reject('POSE_REQUEST_IDENTITY_MISMATCH')
             if not self.check_result(request, localized_pose.broker_generation):

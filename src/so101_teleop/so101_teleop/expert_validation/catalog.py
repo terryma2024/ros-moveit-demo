@@ -13,13 +13,14 @@ from typing import Mapping, Sequence
 from ament_index_python.packages import get_package_share_directory
 import yaml
 
-from so101_demo.cli.mujoco_parallel_batch import CliError, _catalog
+from so101_demo.cli.mujoco_batch.common import CliError
+from so101_demo.cli.mujoco_batch.provenance import _catalog
 
 
-CATALOG_ID = "ai_station_baseline_v1"
+CATALOG_ID = "ai_station_baseline"
 CATALOG_SEED = 20260911
 CATALOG_SHA256 = "c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5"
-CATALOG_RELATIVE_PATH = Path("config/mujoco/moveit_expert_validation_points_v1.yaml")
+CATALOG_RELATIVE_PATH = Path("config/mujoco/moveit_expert_validation_points.yaml")
 ANCHOR_IDS = (
     "task_start",
     "cup_test_forward_5cm",
