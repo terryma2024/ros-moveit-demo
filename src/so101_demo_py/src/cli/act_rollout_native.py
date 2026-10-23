@@ -332,7 +332,12 @@ class NativeComposition:
         self.session_id = session_id_for(options.run_id)
         policy = build_policy_from_bundle(inputs.bundle_dir, "cuda", bundle=inputs.bundle)
         self.warm_up_s = warm_up_policy(policy, inputs.observation)
-        self.transport = ThreadInferenceTransport(policy.infer)
+        from so101_demo.act.stall_diagnostics import StallMonitor
+
+        self.stall_monitor = StallMonitor()
+        policy.span_sink = self.stall_monitor.record_span
+        self.transport = ThreadInferenceTransport(policy.infer, span_sink=self.stall_monitor.record_span)
+        self.stall_monitor.start()
         self.inference = ActInferenceProcess(config=inputs.runtime_config, transport=self.transport, clock=time.monotonic)
         self.runner = make_policy_runner(inputs, policy)
         # the rig the policy was trained on (its bundle's observation declaration) is the rig of the stack that runs it
@@ -393,7 +398,8 @@ class NativeComposition:
         return NativeEpisodePorts(runtime=self.runtime, lease=lease, scene=scene, directory=directory, inputs=self.inputs,
                                   environment=self.environment, binding=self.binding, runner=self.runner,
                                   inference=self.inference, transport=self.transport, pilot_factory=pilot,
-                                  recording_dir=self.layout.output_root / "recordings" / attempt_id)
+                                  recording_dir=self.layout.output_root / "recordings" / attempt_id,
+                                  stall_monitor=self.stall_monitor)
 
     def stop(self) -> dict:
         import asyncio
@@ -441,7 +447,7 @@ class NativeComposition:
             return
         self._closed = True
         failures = []
-        for step in (self.inference.close, self.runtime.close_runtime, self.binding.shutdown):
+        for step in (self.inference.close, self.runtime.close_runtime, self.binding.shutdown, self.stall_monitor.stop):
             try:
                 step()
             except Exception as error:      # noqa: BLE001 - every step runs; the first failure is raised after

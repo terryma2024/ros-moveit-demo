@@ -470,6 +470,11 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
                 summary = getattr(session, "goal_response_summary", None)
                 if summary is not None:
                     result["goal_response"] = summary()
+                monitor = getattr(ports, "stall_monitor", None)
+                if monitor is not None and summary is not None:
+                    result["stall_attribution"] = monitor.summary(
+                        since_s=wall_start, until_s=ports.monotonic(), pairs=session.goal_pairs(),
+                        accept_timeout_s=result["goal_response"].get("accept_timeout_s", 0.02))
             except Exception as error:      # noqa: BLE001 - diagnostics never change the verdict
                 result["goal_response"] = {"error": _text(error)}
             try:

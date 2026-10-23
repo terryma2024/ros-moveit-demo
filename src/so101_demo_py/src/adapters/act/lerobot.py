@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from pathlib import Path
 
 from so101_demo.act.rig_profile import DEFAULT_RIG, rig_from_frame_keys, rig_from_observation
@@ -181,14 +182,19 @@ class LerobotPolicy:
         self._device = device
         self._normalization = normalization
         self._cameras = None if cameras is None else tuple(cameras)       # None = the shipped head and wrist
+        self.span_sink = None           # diagnostics only: span_sink(kind, start, end) for "pre", "forward" and "post"
 
     def infer(self, observation: dict) -> tuple:
         import numpy as np
 
+        sink = self.span_sink
+        t0 = time.monotonic()
         batch = _as_batch(observation, self._device, self._normalization, self._cameras)
+        t1 = time.monotonic()
         chunk = self._policy.predict_action_chunk(batch)
         if hasattr(chunk, "detach"):
             chunk = chunk.detach().cpu().numpy()
+        t2 = time.monotonic()
         actions = np.asarray(chunk, dtype=np.float64)
         if actions.ndim == 3 and actions.shape[0] == 1:
             actions = actions[0]
@@ -201,7 +207,15 @@ class LerobotPolicy:
             actions = actions * np.asarray(self._normalization["action_std"], dtype=np.float64) + mean
         if not np.isfinite(actions).all():
             raise ValueError("POLICY_ACTION_INVALID")
-        return tuple(tuple(float(value) for value in row) for row in actions)
+        result = tuple(tuple(float(value) for value in row) for row in actions)
+        if sink is not None:
+            try:
+                sink("pre", t0, t1)
+                sink("forward", t1, t2)
+                sink("post", t2, time.monotonic())
+            except Exception:       # noqa: BLE001 - diagnostics never change a reply
+                pass
+        return result
 
     def reset(self) -> None:
         self._policy.reset()

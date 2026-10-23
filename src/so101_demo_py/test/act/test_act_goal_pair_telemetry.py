@@ -173,6 +173,7 @@ def test_an_acceptance_after_the_common_start_is_recorded_and_still_raises():
     with pytest.raises(RuntimeError, match="acceptance after common start"):
         submit(adapter)
     assert adapter.last_pair["outcome"] == "after_common_start"
+    assert adapter.last_pair["check_wall_s"] is not None and adapter.last_pair["check_wall_s"] >= adapter.last_pair["sent_done_wall_s"]
 
 
 def test_a_port_without_telemetry_gives_none_not_an_error_and_the_old_result():

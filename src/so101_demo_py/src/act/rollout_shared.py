@@ -291,7 +291,8 @@ class NativeEpisodePorts:
     """The ports `run_episode` drives, over the shard runtime's reset and gate (`ActRosRuntimePorts`) and the rollout session."""
 
     def __init__(self, *, runtime, lease, scene, directory, inputs, environment, binding, runner, inference, transport,
-                 pilot_factory, recording_dir=None, monotonic=time.monotonic) -> None:
+                 pilot_factory, recording_dir=None, monotonic=time.monotonic, stall_monitor=None) -> None:
+        self.stall_monitor = stall_monitor          # diagnostics only (act/stall_diagnostics.py)
         self.recording_dir = None if recording_dir is None else Path(recording_dir)
         self.runtime, self.lease, self.scene, self.directory = runtime, lease, scene, Path(directory)
         self.inputs, self.environment, self.binding = inputs, environment, binding

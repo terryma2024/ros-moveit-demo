@@ -252,10 +252,11 @@ class ThreadInferenceTransport:
     never be applied to a later observation. A failing model call becomes a reply without actions, which the boundary refuses.
     """
 
-    def __init__(self, infer, *, monotonic=time.monotonic) -> None:
+    def __init__(self, infer, *, monotonic=time.monotonic, span_sink=None) -> None:
         if not callable(infer):
             raise ValueError("INFERENCE_TRANSPORT_INVALID")
         self._infer, self.monotonic = infer, monotonic
+        self._span_sink = span_sink                 # diagnostics only: span_sink("call", start, end) per model call
         self._requests = queue.Queue()
         self._lock = threading.Lock()
         self._latest = None
@@ -274,10 +275,16 @@ class ThreadInferenceTransport:
                 if request["sequence"] != self._latest:
                     continue                    # superseded before it started
                 self._busy = True
+            call_start = self.monotonic()
             try:
                 reply = {"sequence": request["sequence"], "actions": self._infer(request["observation"])}
             except Exception as error:          # noqa: BLE001 - reported as an invalid reply, never raised in the worker
                 reply = {"sequence": request["sequence"], "error": (str(error) or type(error).__name__)[:300]}
+            if self._span_sink is not None:
+                try:
+                    self._span_sink("call", call_start, self.monotonic())
+                except Exception:               # noqa: BLE001 - diagnostics never change a reply
+                    pass
             with self._lock:
                 self._busy = False
                 if request["sequence"] == self._latest:
@@ -397,6 +404,11 @@ class RolloutSession:
         """Diagnostics only: acceptance latency statistics of this attempt's goal pairs."""
 
         return self.adapter.goal_response_summary()
+
+    def goal_pairs(self):
+        """Diagnostics only: the goal pairs of this attempt (call after `goal_response_summary`, which refreshes them)."""
+
+        return list(getattr(self.adapter, "pair_log", ()))
 
     def drain_goals(self) -> bool:
         """Wait (bounded, wall time) until every goal already sent has its outcome; True when none is left unfinished.

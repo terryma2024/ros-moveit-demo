@@ -277,10 +277,10 @@ class ActExecutionAdapter:
                 if proof is not None:
                     self._proof_time_check(proof,proof_readback,start)
                 elif (sim_now:=self.sim_clock())>=start:
-                    self._safely(self._close_pair,pair,'after_common_start',responses,None,sim_now)
+                    self._safely(self._close_pair,pair,'after_common_start',responses,self.monotonic(),sim_now)
                     raise RuntimeError('acceptance after common start')
                 if any(result is False for result in responses):
-                    self._safely(self._close_pair,pair,'rejected',responses,None,sim_now)
+                    self._safely(self._close_pair,pair,'rejected',responses,self.monotonic(),sim_now)
                     raise RuntimeError('goal rejected')
                 if all(result is True for result in responses): break
                 check_wall=self.monotonic()
