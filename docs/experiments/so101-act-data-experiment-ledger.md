@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3777
+latest_checkpoint: CP-3778
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: END_OBSERVATION_UNAVAILABLE in parallel runs (about 7 %), the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3778 — EXP-620 and EXP-622 sealed roots unsealed; bulk deleted, audit metadata kept (human decision 2026-10-23)
+
+- Human decision, verbatim: "删除 EXP-620 和 EXP-622 的封存", option "解封并删大件，保留审计元数据". Executed on ai-station under `R=/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, with `ionice -c3`, no sudo.
+- **Scope.** The 15 `SEALED-ROOTS.json` entries whose reason names EXP-620 or EXP-622 (the list matched the request exactly): `act-w8f-`, `act-w8f-inputs-`, `act-w8-`, `act-w8-inputs-` for `20261017T021838Z` / `20261017T003906Z` (EXP-620) and `20261017T084146Z` / `20261017T072837Z` (EXP-622), `act-w8-scenes-20261017T053147Z`, gates `8f8123dcba86` and `a1d3b7b0bbb5`, and the four `image-build-*` roots.
+- **Dependency check.** No hit for any root basename in `so101-datasets/*/export-manifest.json`, in `so101-policies`, in the manifests of the 17 remaining sealed entries, or in `act-rollout-*/scripts`. The only textual references are in `act-templates/README.md` (prose about the sealed gates, and the kept `formal-34.scenes.json`) and in provenance files (`collection-index.json`, `freeze-paths.json`, train-run contexts, run logs); every file they name by path is a kept small file, or a directory path whose frames or bags were decided deleted. No symlink outside the roots points into them (2984 symlinks scanned).
+- **Unseal record.** `SEALED-ROOTS.json` now has 17 entries (was 32), same shape and key order; every remaining entry is unchanged in content (backup `SEALED-ROOTS.json.bak-20261023`). New `R/UNSEALED-ROOTS.json` holds the 15 records (root, original reason, removed_utc, human quote, original files, bytes and manifest sha). Directories were made owner-writable to delete.
+- **Kept in place:** every file under 1 MiB outside the bulk trees, every `*.json`, `*.jsonl` (except the 189 over 50 MiB), `*.md`, seal manifests, QC reports, gate verdict, console and log files (about 7.6 GB of `*.json*`, 0.58 GB of large logs).
+- **Deleted:** 456258 entries, 152357867704 bytes: `*.mcap` and PNG/JPEG (9029, 56.5 GB), `processing/**/frames/` (337450, 22.2 GB), gate `build/` and `install/` trees (21865), image-build `context/` (82220), 189 jsonl over 50 MiB (56.7 GB, sha256 recorded before deletion), and 5505 other files over 1 MiB (8.8 GB `.stl` and the like). Four lodepng build objects whose path embeds the registry path were first listed with a mangled path; they were deleted by a second pass and the manifest rows corrected before the manifest hash below.
+- **Audit trail:** `R/deletions-20261023-exp620-622.manifest.tsv` (path, bytes, sha256, nlink, category; sha256 `9445ece5fa99d89c25ec26ff564409c24afc168e481bb628515c7a82914e00df`) and `R/deletions-20261023-exp620-622.log` (path, bytes, UTC time, quote; sha256 `b7fc370dd57b8705714cddc31267887928d1a86ba676d722e05e245981e3ab78`). `SEALED-ROOTS.json` sha256 `d966b02cc8e7b6c0ebc4eec796fa97b40f37f7433cfec66321729695ae98a145`; `UNSEALED-ROOTS.json` sha256 `c77005360c948828c59c8bcd9da349527d5cd276a8cc6129db83f76439a9991c`.
+- **Read-back.** All 15 roots still exist with their kept metadata; the three big collection roots went from about 55.6, 29.5 and 29.7 GB (and 26.2 GB for `act-w8f-20261017T084146Z`) to 1.3 to 2.7 GB each, the gates from 13.7 GB to 5.2 GB, the image-build roots from 613 MB to 5 MB. 430 socket files were left (not regular files). Scratch and tooling: `/tmp/so101-debug-unseal620/`.
+- Consequence: the episode bags and frames of these runs are gone; the exported datasets in `so101-datasets` and the kept records remain.
 
 ## CP-3777 — Goal-acceptance fix (T0a/T0b), parallel rollout on ai-station (N=1..12, N=8 chosen), TRAIN-007A final on standard, validation, test and extrapolation
 
