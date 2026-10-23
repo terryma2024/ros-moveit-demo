@@ -312,6 +312,13 @@ class FakeBinding:
         self.nodes, self.clients, self.spinning, self.stopped, self.destroyed = [], [], [], [], []
         self.message_types = {"Image": "Image", "JointState": "JointState", "FollowJointTrajectory": "Follow"}
         self.image_qos, self.sensor_qos = "image-qos", "sensor-qos"
+        self.ready, self.probe_error, self.probed = True, None, []
+
+    def probe_action_services(self, client, *, timeout_s):
+        self.probed.append(client.action)
+        if self.probe_error is not None:
+            raise self.probe_error
+        return {"cancel_rtt_s": 0.001, "result_rtt_s": 0.002}
 
     def create_node(self, name):
         node = FakeNode()
@@ -320,7 +327,7 @@ class FakeBinding:
         return node
 
     def action_client(self, node, action_type, name):
-        client = SimpleNamespace(action=name)
+        client = SimpleNamespace(action=name, server_is_ready=lambda: self.ready)
         self.clients.append(name)
         return client
 
@@ -513,3 +520,55 @@ def test_the_controller_port_counts_goals_without_an_outcome():
     port._goals = {"a": {"accepted": None, "result": None}, "b": {"accepted": True, "result": None},
                    "c": {"accepted": True, "result": SimpleNamespace(status=4)}, "d": {"accepted": False, "result": None}}
     assert port.unfinished_goals() == 2
+
+
+def test_the_session_waits_for_the_controller_servers_and_proves_their_services_before_the_first_goal():
+    binding = FakeBinding()
+    session = _build(binding, ("side", "wrist"), 6)
+    assert binding.probed == [CONFIG["controller_actions"]["arm"], CONFIG["controller_actions"]["gripper"]]
+    readiness = session.controller_readiness()
+    assert set(readiness["server_ready_wait_s"]) == {"arm", "gripper"} and set(readiness["probes"]) == {"arm", "gripper"}
+    assert readiness["probes"]["arm"] == {"cancel_rtt_s": 0.001, "result_rtt_s": 0.002} and readiness["timeout_s"] == 10.0
+
+
+def test_a_server_that_becomes_ready_during_the_bound_is_waited_for():
+    clock = {"t": 0.0}
+    polls = {"n": 0}
+
+    def ready():
+        polls["n"] += 1
+        return polls["n"] > 6
+
+    clients = {"arm": SimpleNamespace(server_is_ready=ready), "gripper": SimpleNamespace(server_is_ready=lambda: True)}
+
+    def sleep(seconds):
+        clock["t"] += seconds
+
+    result = rr.await_controllers_ready(SimpleNamespace(), clients, timeout_s=1.0, monotonic=lambda: clock["t"], sleep=sleep)
+    assert result["server_ready_wait_s"]["arm"] > 0.0 and result["server_ready_wait_s"]["gripper"] == 0.0 and result["probes"] == {}
+
+
+def test_a_server_that_is_not_ready_in_the_bound_is_an_infrastructure_fault_and_the_nodes_are_released():
+    binding = FakeBinding()
+    binding.ready = False
+    timing = dict(TIMING, controller_ready_timeout_s=0.05)
+    with pytest.raises(RuntimeError, match="CONTROLLER_ACTION_SERVER_NOT_READY: arm,gripper"):
+        rr.build_ros_session(
+            binding=binding, config=CONFIG, cameras=("side", "wrist"), state_dim=6, image_shape=SHAPE, session_id="sim-1",
+            source_floor_s=0.0, timing=timing, rgb_sync={"max_age_s": 0.1, "max_skew_s": 0.1},
+            world_observer_factory=lambda node, session_id: SimpleNamespace(snapshot_with_receipt=lambda: None))
+    assert binding.stopped == binding.spinning and binding.destroyed_clients == [
+        CONFIG["controller_actions"]["arm"], CONFIG["controller_actions"]["gripper"]] and binding.probed == []
+
+
+def test_a_service_probe_that_fails_is_an_infrastructure_fault():
+    binding = FakeBinding()
+    binding.probe_error = TimeoutError("cancel service did not answer")
+    with pytest.raises(RuntimeError, match="CONTROLLER_ACTION_SERVICES_NOT_READY: arm: TimeoutError"):
+        _build(binding, ("side", "wrist"), 6)
+    assert binding.stopped == binding.spinning
+
+
+def test_a_binding_without_a_probe_still_needs_the_servers():
+    clients = {"arm": SimpleNamespace(server_is_ready=lambda: True)}
+    assert rr.await_controllers_ready(SimpleNamespace(), clients, timeout_s=1.0)["probes"] == {}

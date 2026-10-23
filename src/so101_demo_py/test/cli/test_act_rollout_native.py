@@ -449,3 +449,16 @@ def test_the_import_preflight_refuses_when_a_module_is_missing_or_cuda_is_absent
     modules["torch"] = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False))
     with pytest.raises(RuntimeError, match="ROLLOUT_IMPORT_PREFLIGHT_FAILED: torch.cuda"):
         native.import_preflight(importer=importer)
+
+
+def test_the_gc_freeze_runtime_setting_is_recorded_in_run_json(tmp_path):
+    for flag, expected in ((None, True), (False, False)):
+        base = tmp_path / str(flag)
+        base.mkdir()
+        options = _options(base) if flag is None else _options(base, gc_freeze=False)
+        native.run_rollout(options=options, inputs=_inputs(), probes=_passing_probes(),
+                           composition_factory=lambda **kwargs: FakeComposition(base),
+                           episode_runner=_runner({}, []), environ={})
+        run = json.loads((options.evidence_root / "rollout_validation" / "run.json").read_text())
+        assert run["runtime_settings"]["gc_freeze"] is expected
+        assert bool(run["runtime_settings"]["gc_freeze_points"]) is expected

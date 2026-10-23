@@ -291,7 +291,8 @@ class NativeEpisodePorts:
     """The ports `run_episode` drives, over the shard runtime's reset and gate (`ActRosRuntimePorts`) and the rollout session."""
 
     def __init__(self, *, runtime, lease, scene, directory, inputs, environment, binding, runner, inference, transport,
-                 pilot_factory, recording_dir=None, monotonic=time.monotonic, stall_monitor=None) -> None:
+                 pilot_factory, recording_dir=None, monotonic=time.monotonic, stall_monitor=None, freeze_heap=None) -> None:
+        self._freeze_heap, self.memory_record = freeze_heap, []      # runtime setting: gc.collect() + gc.freeze() at the reset
         self.stall_monitor = stall_monitor          # diagnostics only (act/stall_diagnostics.py)
         self.recording_dir = None if recording_dir is None else Path(recording_dir)
         self.runtime, self.lease, self.scene, self.directory = runtime, lease, scene, Path(directory)
@@ -313,6 +314,10 @@ class NativeEpisodePorts:
         return dict(vars(self.runtime.initial_gate(self.lease, self._receipt)))
 
     def resume_physics(self, receipt):
+        if self._freeze_heap is not None:
+            # a runtime setting (memory timing only, no control logic): the heap the episode starts with is moved out of the
+            # collector's sight so that a generation-2 collection in the loop does not walk it (measured: 70-120 ms pauses)
+            self.memory_record.append(self._freeze_heap())
         return self.runtime.resume_physics(self.lease, self._receipt) is True
 
     def start_recorder(self, scene):

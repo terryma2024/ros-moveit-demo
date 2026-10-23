@@ -13,6 +13,8 @@ the window [send, accept].
 
 import collections
 import gc
+import os
+import sys
 import threading
 import time
 
@@ -25,6 +27,96 @@ INFERENCE_KINDS = ("call", "pre", "forward", "post")
 _MAX_LISTED = 200
 _MAX_SPANS_LISTED = 5000
 _LATE_ACCEPT_S = 0.020
+CPU_STALL_S = 0.008             # a stall this long gets the per-thread CPU and scheduling account
+SAMPLE_PERIOD_S = 0.010         # how often the heartbeat refreshes its CPU baseline
+STACK_PERIOD_S = 1.0            # at most one stored stack summary per second
+_FRAMES_PER_THREAD = 3
+_MAX_DETAILS = 200
+
+
+class ThreadSampler:
+    """Per-thread on-CPU and runnable-waiting time from `/proc/self/task/<tid>/schedstat`, thread names, and stack summaries.
+
+    `schedstat` is `run_ns wait_ns timeslices`: the nanoseconds the thread ran, and the nanoseconds it was runnable but not on a CPU
+    (utime+stime of `stat` tick at 10 ms, too coarse for an 8 ms stall). A thread blocked on the GIL is asleep, not runnable, so it adds
+    no wait time; a thread that is runnable and waiting for a CPU does."""
+
+    def __init__(self, *, proc_root="/proc/self/task", current_frames=sys._current_frames, threads=threading.enumerate):
+        self.proc_root, self._frames, self._threads = proc_root, current_frames, threads
+
+    def cpu(self):
+        """{tid: (run_ns, wait_ns)}"""
+        out = {}
+        try:
+            tids = os.listdir(self.proc_root)
+        except OSError:
+            return out
+        for tid in tids:
+            try:
+                with open(f"{self.proc_root}/{tid}/schedstat") as handle:
+                    fields = handle.read().split()
+                out[int(tid)] = (int(fields[0]), int(fields[1]))
+            except (OSError, ValueError, IndexError):
+                continue             # the thread ended between the listing and the read
+        return out
+
+    def names(self):
+        """{tid: (name, is_python_thread)}; native threads are named by their `comm`."""
+        python = {thread.native_id: thread.name for thread in self._threads() if thread.native_id is not None}
+        out = {}
+        try:
+            tids = os.listdir(self.proc_root)
+        except OSError:
+            return out
+        for tid in tids:
+            try:
+                number = int(tid)
+            except ValueError:
+                continue
+            if number in python:
+                out[number] = (python[number], True)
+                continue
+            try:
+                with open(f"{self.proc_root}/{tid}/comm") as handle:
+                    out[number] = (handle.read().strip(), False)
+            except OSError:
+                out[number] = (f"tid{number}", False)
+        return out
+
+    def stacks(self, skip_ident=None):
+        """{thread name: ["file:line function", ...]}: the top frames of every Python thread but `skip_ident`."""
+        by_ident = {thread.ident: thread.name for thread in self._threads()}
+        out = {}
+        for ident, frame in self._frames().items():
+            if ident == skip_ident:
+                continue
+            rows = []
+            while frame is not None and len(rows) < _FRAMES_PER_THREAD:
+                code = frame.f_code
+                rows.append(f"{os.path.basename(code.co_filename)}:{frame.f_lineno} {code.co_name}")
+                frame = frame.f_back
+            out[by_ident.get(ident, f"ident{ident}")] = rows
+        return out
+
+
+def classify_stall(*, window_s, deltas, heartbeat_tid, names):
+    """Say why the heartbeat woke late from the CPU and scheduling deltas over `window_s` (see `ThreadSampler`).
+
+    `deltas` maps tid -> (run_s, wait_s). Returns (classification, holder): `unscheduled` (the heartbeat was runnable and waiting for a
+    CPU), `gil_holder` (a Python thread ran for most of the window), `native_cpu` (a thread without the GIL ran for most of it),
+    `nobody_ran` (no thread ran: the process slept through)."""
+
+    window_s = max(window_s, 1e-9)
+    if deltas.get(heartbeat_tid, (0.0, 0.0))[1] >= 0.5 * window_s:
+        return "unscheduled", None
+    others = [(run, tid) for tid, (run, _wait) in deltas.items() if tid != heartbeat_tid]
+    python = sorted(((run, tid) for run, tid in others if names.get(tid, ("", False))[1]), reverse=True)
+    native = sorted(((run, tid) for run, tid in others if not names.get(tid, ("", False))[1]), reverse=True)
+    if python and python[0][0] >= 0.5 * window_s:
+        return "gil_holder", names[python[0][1]][0]
+    if native and native[0][0] >= 0.5 * window_s:
+        return "native_cpu", names[native[0][1]][0]
+    return "nobody_ran", None
 
 
 def _overlaps(start, end, other_start, other_end):
@@ -38,13 +130,19 @@ def _stats(values):
 
 class StallMonitor:
     def __init__(self, *, monotonic=time.monotonic, sleep=time.sleep, stall_s=STALL_S, heartbeat_sleep_s=HEARTBEAT_SLEEP_S,
-                 capacity=2_000_000):
+                 capacity=2_000_000, sampler=None, cpu_stall_s=CPU_STALL_S, sample_period_s=SAMPLE_PERIOD_S,
+                 stack_period_s=STACK_PERIOD_S):
         self.monotonic, self._sleep, self.stall_s, self.heartbeat_sleep_s = monotonic, sleep, stall_s, heartbeat_sleep_s
         self.collections = collections.deque(maxlen=capacity)        # (generation, start, end, collected, uncollectable)
         self.spans = collections.deque(maxlen=capacity)              # (kind, start, end)
         self.stalls = collections.deque(maxlen=capacity)             # (start, end)
         self.wakeups = 0
         self.max_gap_s = 0.0
+        self.sampler = sampler if sampler is not None else ThreadSampler()
+        self.cpu_stall_s, self.sample_period_s, self.stack_period_s = cpu_stall_s, sample_period_s, stack_period_s
+        self.details = {}                                            # stall start -> account of a stall over cpu_stall_s
+        self._baseline = None                                        # (time, {tid: (run_ns, wait_ns)}) of the last beat
+        self._last_stack_stored = None
         self._gc_started = None
         self._stop = threading.Event()
         self._thread = None
@@ -73,7 +171,39 @@ class StallMonitor:
             self.max_gap_s = gap
         if gap > self.stall_s:
             self.stalls.append((previous, now))
+        try:
+            self._account(previous, now, gap)
+        except Exception:               # noqa: BLE001 - diagnostics never stop the heartbeat
+            pass
         return now
+
+    def _account(self, previous, now, gap):
+        """Keep a CPU baseline fresh every `sample_period_s`; on a stall over `cpu_stall_s` say who ran and who was waiting."""
+        baseline = self._baseline
+        if gap > self.cpu_stall_s and baseline is not None:
+            after = self.sampler.cpu()
+            window = now - baseline[0]
+            names = self.sampler.names()
+            deltas = {tid: ((run - baseline[1].get(tid, (run, wait))[0]) / 1e9, (wait - baseline[1].get(tid, (run, wait))[1]) / 1e9)
+                      for tid, (run, wait) in after.items()}
+            heartbeat_tid = threading.get_native_id()
+            classification, holder = classify_stall(window_s=window, deltas=deltas, heartbeat_tid=heartbeat_tid, names=names)
+            top = sorted(((run, wait, tid) for tid, (run, wait) in deltas.items() if tid != heartbeat_tid and run > 0.0005),
+                         reverse=True)[:5]
+            detail = {"start": previous, "end": now, "duration_s": gap, "window_s": window, "classification": classification,
+                      "holder": holder,
+                      "process_cpu_s": sum(run for tid, (run, _wait) in deltas.items() if tid != heartbeat_tid),
+                      "heartbeat_runnable_wait_s": deltas.get(heartbeat_tid, (0.0, 0.0))[1],
+                      "threads": [{"name": names.get(tid, (f"tid{tid}", False))[0], "python": names.get(tid, ("", False))[1],
+                                   "cpu_s": run, "runnable_wait_s": wait} for run, wait, tid in top]}
+            if self._last_stack_stored is None or now - self._last_stack_stored >= self.stack_period_s:
+                self._last_stack_stored = now
+                detail["stacks_at_wakeup"] = self.sampler.stacks(skip_ident=threading.get_ident())
+            if len(self.details) < _MAX_DETAILS * 50:
+                self.details[previous] = detail
+            self._baseline = (now, after)
+        elif baseline is None or now - baseline[0] >= self.sample_period_s:
+            self._baseline = (now, self.sampler.cpu())
 
     def _run(self):
         previous = self.monotonic()
@@ -129,6 +259,11 @@ class StallMonitor:
                      "max_gap_s_total": self.max_gap_s, "stalls": len(stalls_in),
                      "stall_duration_s": _stats([row[1] - row[0] for row in stalls_in]),
                      "listed": [{"start": row[0], "end": row[1], "duration_s": row[1] - row[0]} for row in stalls_in][:_MAX_LISTED]}
+        detailed = [self.details[row[0]] for row in stalls_in if row[0] in self.details]
+        heartbeat["classified"] = {"stalls_over_cpu_threshold": len(detailed), "cpu_stall_threshold_s": self.cpu_stall_s,
+                                   "classification": dict(collections.Counter(row["classification"] for row in detailed)),
+                                   "gil_holders": dict(collections.Counter(row["holder"] for row in detailed if row["holder"]))}
+        heartbeat["details"] = detailed[:_MAX_DETAILS]
         coincidence = self._coincidence(stalls_in, collections_in, calls, by_kind["forward"])
         coincidence["duty"] = {
             "window_s": window,
@@ -184,6 +319,7 @@ class StallMonitor:
                 "gc": [self._gc_row(row) for row in collections_in if _overlaps(start, end, row[1], row[2])],
                 "inference": [{"kind": row[0], "start": row[1], "end": row[2]} for row in spans_in
                               if _overlaps(start, end, row[1], row[2])],
-                "heartbeat_stalls": [{"start": row[0], "end": row[1], "duration_s": row[1] - row[0]} for row in stalls_in
-                                     if _overlaps(start, end, row[0], row[1])]})
+                "heartbeat_stalls": [dict({"start": row[0], "end": row[1], "duration_s": row[1] - row[0]},
+                                          **({"account": self.details[row[0]]} if row[0] in self.details else {}))
+                                     for row in stalls_in if _overlaps(start, end, row[0], row[1])]})
         return rows

@@ -26,6 +26,7 @@ import math
 import queue
 import threading
 import time
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -354,6 +355,45 @@ class WorldCupObserver:
                 "linear_speed_m_s": math.sqrt(sum(item * item for item in state.linear_velocity_world))}
 
 
+CONTROLLER_READY_TIMEOUT_S = 10.0
+
+
+def await_controllers_ready(binding, clients, *, timeout_s=CONTROLLER_READY_TIMEOUT_S, monotonic=time.monotonic,
+                            sleep=time.sleep):
+    """Before the episode moves anything: wait (bounded) until every controller's action server is available to its client, then
+    prove the service endpoints with non-motion round trips.
+
+    `wait_for_server` is not enough for a client created this episode: it only says the server's services are visible. The first
+    `send_goal` of a new client paid for the request/response endpoint matching (measured: a first accept of 5-15 ms against 1-2 ms
+    for the later goals, and about one episode in seven timed out at its first goal). The probe sends no goal: a cancel request and
+    a result request for a goal id the server has never seen, which it answers `unknown`; the replies prove both directions of the
+    cancel and result services. A server or probe that is not ready in `timeout_s` is an infrastructure fault before the episode
+    (`CONTROLLER_ACTION_SERVER_NOT_READY` / `CONTROLLER_ACTION_SERVICES_NOT_READY`), never a motion."""
+
+    started = monotonic()
+    deadline = started + timeout_s
+    pending, waited = dict(clients), {}
+    while pending:
+        for name, client in list(pending.items()):
+            if client.server_is_ready():
+                waited[name] = monotonic() - started
+                del pending[name]
+        if not pending:
+            break
+        if monotonic() >= deadline:
+            raise RuntimeError("CONTROLLER_ACTION_SERVER_NOT_READY: " + ",".join(sorted(pending)))
+        sleep(0.005)
+    probes = {}
+    probe = getattr(binding, "probe_action_services", None)
+    if probe is not None:
+        for name, client in clients.items():
+            try:
+                probes[name] = probe(client, timeout_s=max(deadline - monotonic(), 0.05))
+            except Exception as error:      # noqa: BLE001 - reported as the fault below
+                raise RuntimeError(f"CONTROLLER_ACTION_SERVICES_NOT_READY: {name}: {type(error).__name__}: {error}"[:300]) from error
+    return {"server_ready_wait_s": waited, "probes": probes, "total_s": monotonic() - started, "timeout_s": timeout_s}
+
+
 class RolloutSession:
     """What the episode state machine drives: observe, command, stop, look at the world, close.
 
@@ -367,6 +407,10 @@ class RolloutSession:
         self._spin, self._close, self.submit_lead_s = spin, close, submit_lead_s
         self.drain_timeout_s, self.monotonic = drain_timeout_s, monotonic
         self.closed = False
+        self.readiness = None           # diagnostics: what `await_controllers_ready` measured for this session
+
+    def controller_readiness(self):
+        return self.readiness
 
     def begin(self, session_id: str, attempt_id: str) -> None:
         self.adapter.begin_attempt(session_id, attempt_id)
@@ -552,6 +596,8 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
                                                last_goals=lambda: _last_goals(adapter)))
         world = WorldCupObserver(world_observer_factory(node, session_id))
         stop_spinning = binding.start_spinning(node)
+        readiness = await_controllers_ready(binding, {"arm": arm_client, "gripper": gripper_client},
+                                            timeout_s=timing.get("controller_ready_timeout_s", CONTROLLER_READY_TIMEOUT_S))
 
         def close():
             failures = []
@@ -567,6 +613,7 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
         session = RolloutSession(assembler=assembler, adapter=adapter, permit=permit, world=world,
                                  spin=lambda: time.sleep(0.001), close=close, submit_lead_s=timing["submit_lead_s"],
                                  drain_timeout_s=timing["stop_timeout_s"])
+        session.readiness = readiness
         holder["session"] = session
         return session
     except BaseException:
@@ -622,6 +669,31 @@ class RclpyBinding:
             if thread.is_alive():
                 raise RuntimeError("ROLLOUT_SPIN_THREAD_STILL_RUNNING")
         return stop
+
+    def probe_action_services(self, client, *, timeout_s: float) -> dict:
+        """Round trips on the cancel and result services of `client` for a goal id nobody sent (no goal, no motion).
+
+        Returns the round-trip times; raises when a reply does not arrive within `timeout_s`. The futures are completed by the
+        node's executor thread."""
+        import os
+        import time as _time
+        from rclpy.action.client import ClientGoalHandle
+        from unique_identifier_msgs.msg import UUID
+
+        handle = ClientGoalHandle(client, UUID(uuid=list(os.urandom(16))), SimpleNamespace(stamp=None, accepted=False))
+        out = {}
+        for name, send in (("cancel", client._cancel_goal_async), ("result", client._get_result_async)):
+            started = _time.monotonic()
+            future = send(handle)
+            deadline = started + timeout_s
+            while not future.done():
+                if _time.monotonic() >= deadline:
+                    raise TimeoutError(f"{name} service did not answer in {timeout_s:.2f} s")
+                _time.sleep(0.0005)
+            if future.exception() is not None:
+                raise future.exception()
+            out[f"{name}_rtt_s"] = _time.monotonic() - started
+        return out
 
     def destroy_action_client(self, client) -> None:
         client.destroy()

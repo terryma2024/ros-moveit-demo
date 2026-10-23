@@ -470,6 +470,9 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
                 summary = getattr(session, "goal_response_summary", None)
                 if summary is not None:
                     result["goal_response"] = summary()
+                readiness = getattr(session, "controller_readiness", None)
+                if readiness is not None and readiness() is not None:
+                    result["controller_readiness"] = readiness()
                 monitor = getattr(ports, "stall_monitor", None)
                 if monitor is not None and summary is not None:
                     result["stall_attribution"] = monitor.summary(
@@ -487,6 +490,9 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
                 retire_errors.append("RETIRE_UNCONFIRMED")
         except Exception as error:
             retire_errors.append("RETIRE_UNCONFIRMED: " + _text(error))
+    memory = getattr(ports, "memory_record", None)
+    if memory:
+        result["runtime_memory"] = list(memory)
     result["counts"] = dict(loop.counts)
     if loop.service_samples:
         result["service"] = summarize_service(loop.service_samples)

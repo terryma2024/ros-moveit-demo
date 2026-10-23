@@ -247,7 +247,10 @@ def run_rollout(*, options, inputs, probes, composition_factory, episode_runner=
         "joint_limit_clamp_tolerance_rad": inputs.settings.joint_limit_clamp_tolerance_rad,
         "observation": {**inputs.observation, "cameras": list(inputs.observation["cameras"])},
         "calibration": inputs.substitution, "preconditions": preconditions,
-        "max_invalid_retries": options.max_invalid_retries})
+        "max_invalid_retries": options.max_invalid_retries,
+        "runtime_settings": {"gc_freeze": bool(getattr(options, "gc_freeze", True)),
+                             "gc_freeze_points": ["after policy warm-up", "each episode reset, before the physics resume"]
+                             if getattr(options, "gc_freeze", True) else []}})
     composition = composition_factory(layout=layout, environment=environment, inputs=inputs, options=options)
     summary = {"inference_warm_up_s": getattr(composition, "warm_up_s", None), "exit_code": EXIT_OK, "done": 0,
                "verdicts": {}, "invalid_attempts": 0, "invalid_exhausted": [], "clamped_steps": 0,
@@ -332,6 +335,12 @@ class NativeComposition:
         self.session_id = session_id_for(options.run_id)
         policy = build_policy_from_bundle(inputs.bundle_dir, "cuda", bundle=inputs.bundle)
         self.warm_up_s = warm_up_policy(policy, inputs.observation)
+        self.freeze_heap = None
+        if getattr(options, "gc_freeze", True):
+            from so101_demo.act.runtime_memory import freeze_heap
+
+            self.freeze_heap = freeze_heap
+            self.warm_up_heap = freeze_heap()           # after the warm-up: the loaded model and libraries are not collected again
         from so101_demo.act.stall_diagnostics import StallMonitor
 
         self.stall_monitor = StallMonitor()
@@ -399,7 +408,7 @@ class NativeComposition:
                                   environment=self.environment, binding=self.binding, runner=self.runner,
                                   inference=self.inference, transport=self.transport, pilot_factory=pilot,
                                   recording_dir=self.layout.output_root / "recordings" / attempt_id,
-                                  stall_monitor=self.stall_monitor)
+                                  stall_monitor=self.stall_monitor, freeze_heap=getattr(self, "freeze_heap", None))
 
     def stop(self) -> dict:
         import asyncio
@@ -487,6 +496,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="ACT temporal ensembling with weights exp(-M*i), i=0 the oldest prediction (default M 0.01); "
                              "exclusive with --execution-prefix")
     parser.add_argument("--max-invalid-retries", type=int, default=1)
+    parser.add_argument("--gc-freeze", action=argparse.BooleanOptionalAction, default=True,
+                        help="gc.collect() + gc.freeze() after the policy warm-up and at each episode reset (a runtime setting: "
+                             "memory timing only; recorded in run.json)")
     parser.add_argument("--stack-timeout-s", type=float, default=120.0)
     return parser
 
