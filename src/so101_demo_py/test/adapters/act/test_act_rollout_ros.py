@@ -89,6 +89,30 @@ def test_frames_at_or_below_the_reset_boundary_and_unknown_cameras_are_refused()
         assembler.rejected)
 
 
+def test_the_assembler_counts_the_sets_it_does_not_emit_by_reason_and_the_inputs_it_refuses():
+    skewed = _assembler()
+    skewed.push_joints(1.3, _joints())
+    skewed.push_image("head", 1.0, _frame(1))
+    skewed.push_image("wrist", 1.3, _frame(2))
+    assert skewed.poll() is None and skewed.poll_skips == {"rgb_skew": 1}
+    stale = _assembler()
+    stale.push_joints(1.0, _joints())
+    stale.push_image("head", 0.8, _frame(1))
+    stale.push_image("wrist", 0.8, _frame(2))
+    assert stale.poll() is None and stale.poll_skips == {"rgb_stale": 1}
+    fine = _assembler()
+    fine.push_joints(1.0, _joints())
+    fine.push_image("head", 1.0, _frame(1))
+    assert fine.poll() is None and fine.poll_skips == {}             # an incomplete set is waiting, not a reject
+    fine.push_image("wrist", 1.0, _frame(2))
+    assert fine.poll() is not None and fine.poll_skips == {}
+    assert fine.poll() is None and fine.poll_skips == {}             # the same set again is not a reject either
+    fine.note_rejected("INPUT_RGB_INVALID")
+    assert fine.rejected_count == 1
+    document = fine.reject_document()
+    assert document == {"input_rejects": 1, "recent_input_rejects": ["INPUT_RGB_INVALID"], "poll_skips": {}, "rgb_sync_rejects": 1}
+
+
 def test_a_set_that_is_skewed_or_stale_is_not_emitted():
     skewed = _assembler()
     skewed.push_joints(1.3, _joints())
@@ -520,6 +544,12 @@ def test_the_controller_port_counts_goals_without_an_outcome():
     port._goals = {"a": {"accepted": None, "result": None}, "b": {"accepted": True, "result": None},
                    "c": {"accepted": True, "result": SimpleNamespace(status=4)}, "d": {"accepted": False, "result": None}}
     assert port.unfinished_goals() == 2
+
+
+def test_the_session_reports_the_observation_rejects_of_its_assembler():
+    session, _closes = _session()
+    assert session.observation_rejects() == session.assembler.reject_document()
+    assert session.observation_rejects()["rgb_sync_rejects"] == 0
 
 
 def test_the_session_waits_for_the_controller_servers_and_proves_their_services_before_the_first_goal():

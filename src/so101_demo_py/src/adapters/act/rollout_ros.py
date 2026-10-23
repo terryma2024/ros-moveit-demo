@@ -76,6 +76,7 @@ class ObservationAssembler:
         self.session_id = None
         self.rejected = deque(maxlen=64)
         self.rejected_count = 0
+        self.poll_skips = {}            # diagnostics: complete image sets `poll` did not emit, by reason (rgb_skew, rgb_stale, joint_causal)
 
     @property
     def joint_names(self) -> tuple:
@@ -93,6 +94,16 @@ class ObservationAssembler:
         self.rejected.append(reason)
         self.rejected_count += 1
         return False
+
+    def _skip(self, reason: str) -> None:
+        self.poll_skips[reason] = self.poll_skips.get(reason, 0) + 1
+
+    def reject_document(self) -> dict:
+        """Diagnostics: the inputs the callbacks refused and the complete sets `poll` skipped; their sum is the rgb_sync reject count."""
+
+        with self._lock:
+            return {"input_rejects": self.rejected_count, "recent_input_rejects": list(self.rejected)[-8:],
+                    "poll_skips": dict(self.poll_skips), "rgb_sync_rejects": self.rejected_count + sum(self.poll_skips.values())}
 
     def note_rejected(self, reason: str) -> None:
         """Count a message the ROS callback itself refused (wrong encoding or shape, unreadable joint names)."""
@@ -164,14 +175,17 @@ class ObservationAssembler:
             now_ns = time_ns(self._joints[-1][0])
             ages = [now_ns - time_ns(stamp) for stamp in stamps.values()]
             if max(map(time_ns, stamps.values())) - min(map(time_ns, stamps.values())) > time_ns(self.max_skew_s):
+                self._skip("rgb_skew")
                 return None
             if not all(source_age_ok_ns(now_ns, time_ns(stamp), time_ns(self.max_age_s)) for stamp in stamps.values()):
+                self._skip("rgb_stale")
                 return None
             at_s = max(stamps.values())
             try:
                 joint_stamp, values, joint_received = causal_sample(
                     [(stamp, (stamp, vector, received)) for stamp, vector, received in self._joints], at_s, self.max_age_s)
             except ValueError:
+                self._skip("joint_causal")
                 return None
             state = list(values[:6])
             if self.state_dim == STATE_WITH_NECK:
@@ -448,6 +462,11 @@ class RolloutSession:
         """Diagnostics only: acceptance latency statistics of this attempt's goal pairs."""
 
         return self.adapter.goal_response_summary()
+
+    def observation_rejects(self):
+        """Diagnostics only: what the assembler refused or skipped in this session (the rgb_sync reject counter)."""
+
+        return self.assembler.reject_document()
 
     def goal_pairs(self):
         """Diagnostics only: the goal pairs of this attempt (call after `goal_response_summary`, which refreshes them)."""

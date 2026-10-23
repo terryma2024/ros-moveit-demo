@@ -470,6 +470,9 @@ def run_episode(*, scene, attempt_id, ports, settings, snapshot_targets, endpoin
                 summary = getattr(session, "goal_response_summary", None)
                 if summary is not None:
                     result["goal_response"] = summary()
+                rejects = getattr(session, "observation_rejects", None)
+                if rejects is not None:
+                    result["observation_rejects"] = rejects()
                 readiness = getattr(session, "controller_readiness", None)
                 if readiness is not None and readiness() is not None:
                     result["controller_readiness"] = readiness()
