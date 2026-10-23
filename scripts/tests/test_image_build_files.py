@@ -557,6 +557,15 @@ def test_the_mount_base_installs_the_apt_versions_of_the_build_host_from_a_sorte
     assert "COPY apt-packages.txt apt-pins.txt " in text
 
 
+def test_the_pin_list_carries_the_packages_whose_host_and_mirror_versions_drifted_and_no_esm_version():
+    """tzdata and zlib moved on the host (2026-10-23); an unpinned tzdata takes whatever the mirror offers and fails the must-match check,
+    and a pin the mirror cannot serve (an ESM build) fails the image build."""
+    pins = dict(line.split("=", 1) for line in (ROOT / "src/so101_demo_py/docker/mount-base/apt-pins.txt").read_text().splitlines() if line)
+    for name in ("tzdata", "zlib1g", "zlib1g-dev", "libminizip1t64", "ca-certificates"):
+        assert name in pins, name
+    assert not [name for name, version in pins.items() if re.search(r"[+~]esm\d", version)]
+
+
 def test_the_built_mount_base_is_pinned_by_id_under_the_tag_prepare_image_build_gives_it():
     assert re.fullmatch(r"sha256:[0-9a-f]{64}", PINS["mount-base"]["id"])
     assert PINS["mount-base"]["tag"] in (IMAGES / "prepare-image-build.py").read_text()
