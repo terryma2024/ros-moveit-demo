@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import sys
 import textwrap
@@ -19,7 +20,6 @@ from so101_teleop.unified.contracts import MutationError, QualificationView
 from so101_teleop.unified.intent_store import IntentStore
 from so101_teleop.unified.lifecycle import UnifiedLifecycle
 from so101_teleop.unified.ports import UnknownBudgetSource, UnifiedServices
-from retry_fixture import build_environment
 
 
 class FakeBridge:
@@ -43,19 +43,8 @@ class FakeTeleop:
         return {"ok": True}
 
 
-class FakeValidation:
-    def __init__(self, *, maintenance_error: str | None = None) -> None:
-        self.maintenance_error = maintenance_error
-        self.maintenance_started = False
-
-    def start_maintenance(self) -> None:
-        self.maintenance_started = True
-        if self.maintenance_error:
-            raise RuntimeError(self.maintenance_error)
-
-
 def services(**overrides) -> UnifiedServices:
-    base = dict(teleop=None, tasks=None, validation=None, arbiter=None, instances=None)
+    base = dict(teleop=None, tasks=None, arbiter=None, instances=None)
     base.update(overrides)
     return UnifiedServices(**base)
 
@@ -105,20 +94,6 @@ def test_startup_refuses_to_serve_over_a_blocked_arbiter(tmp_path):
     asyncio.run(run())
 
 
-def test_validation_maintenance_failure_is_recorded_without_hiding_history():
-    async def run():
-        validation = FakeValidation(maintenance_error="LEASE_STORE_UNREADABLE")
-        lifecycle = UnifiedLifecycle(services(validation=validation))
-        await lifecycle.startup()
-        assert validation.maintenance_started
-        assert lifecycle.validation_error and "LEASE_STORE_UNREADABLE" in lifecycle.validation_error
-        assert lifecycle.started is True, "a blocked domain must not stop the web process"
-        assert lifecycle.accepting_mutations is True
-        await lifecycle.shutdown()
-
-    asyncio.run(run())
-
-
 def test_shutdown_stops_accepting_mutations_before_closing_the_bridge():
     async def run():
         bridge = FakeBridge()
@@ -134,11 +109,11 @@ def test_shutdown_stops_accepting_mutations_before_closing_the_bridge():
 
 
 def test_composition_builds_a_readable_app_without_ros(tmp_path, monkeypatch):
-    """A valid validation domain remains available without a ROS worker."""
+    """The composed app stays readable without a ROS worker."""
 
     monkeypatch.delenv("SO101_UNIFIED_ROS_PYTHON", raising=False)
     monkeypatch.delenv("SO101_UNIFIED_INSTALL_PREFIX", raising=False)
-    environment = build_environment(tmp_path)
+    environment = dict(os.environ)
     environment["SO101_UNIFIED_RUNTIME_ID"] = "R-test"
     composition = compose_domain_services(
         environment=environment,
@@ -152,10 +127,6 @@ def test_composition_builds_a_readable_app_without_ros(tmp_path, monkeypatch):
         assert composition.safety is not None
         assert composition.teleop is None and composition.bridge is None
         assert isinstance(composition.budget_source, UnknownBudgetSource)
-        points = Path(environment["SO101_VALIDATION_POINTS"])
-        assert points.is_file() and not points.is_symlink()
-        assert composition.validation_error is None
-        assert composition.validation is not None
         app = create_unified_app(composition, bind_address="127.0.0.1")
         with TestClient(app) as client:
             live = client.get("/health/live")
@@ -163,24 +134,6 @@ def test_composition_builds_a_readable_app_without_ros(tmp_path, monkeypatch):
             assert client.get("/health/ready").status_code in (200, 503)
             assert client.get("/snapshot").json()["code"] == "TELEOP_UNAVAILABLE"
             assert client.get("/tasks/runs").json()["code"] == "TASKS_UNAVAILABLE"
-    finally:
-        composition.store.close()
-
-
-def test_composition_reports_missing_validation_points_without_hiding_the_app(tmp_path):
-    environment = build_environment(tmp_path)
-    environment["SO101_VALIDATION_POINTS"] = str(tmp_path / "missing-points.yaml")
-    composition = compose_domain_services(
-        environment=environment,
-        evidence_root=tmp_path / "evidence",
-        worker=None,
-        bridge_owner=None,
-    )
-    try:
-        assert "SO101_VALIDATION_POINTS_INVALID" in composition.validation_error
-        assert composition.validation is None
-        with TestClient(create_unified_app(composition, bind_address="127.0.0.1")) as client:
-            assert client.get("/health/live").status_code == 200
     finally:
         composition.store.close()
 

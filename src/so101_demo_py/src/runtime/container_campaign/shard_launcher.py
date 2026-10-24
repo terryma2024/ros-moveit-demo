@@ -6,7 +6,7 @@ import secrets
 
 from so101_demo.runtime.act_instance.program import instance_id_for
 from so101_demo.runtime.act_instance.spec import SPEC_SCHEMA_VERSION,load_spec
-from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.runtime.container_campaign.cpuset import cpus_for,cpuset_from_config
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs
 from so101_demo.runtime.container_campaign.mount_build import mount_from_config

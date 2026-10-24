@@ -73,7 +73,7 @@ def declare_perception_arguments(*, default_backend: str) -> list[DeclareLaunchA
         DeclareLaunchArgument(
             "perception_runtime",
             default_value="auto",
-            choices=("auto", "host", "docker", "docker_dev"),
+            choices=("auto", "host", "docker"),
         ),
         DeclareLaunchArgument(
             "perception_container_image",
@@ -150,8 +150,11 @@ def parse_perception_options(context) -> PerceptionLaunchOptions:
     if device not in {"auto", "cuda", "mps", "cpu"}:
         raise RuntimeError("perception_device must be auto, cuda, mps, or cpu")
     runtime = _value(context, "perception_runtime")
-    if runtime not in {"auto", "host", "docker", "docker_dev"}:
-        raise RuntimeError("perception_runtime must be auto, host, docker, or docker_dev")
+    if runtime not in {"auto", "host", "docker"}:
+        raise RuntimeError(
+            "perception_runtime must be auto, host, or docker "
+            "(docker_dev is retired: docker always mounts the source)"
+        )
 
     host_platform = platform.system()
     if runtime == "auto":
@@ -165,9 +168,9 @@ def parse_perception_options(context) -> PerceptionLaunchOptions:
             raise RuntimeError(
                 f"perception_runtime auto does not support platform {host_platform}"
             )
-    if runtime in {"docker", "docker_dev"} and host_platform != "Linux":
+    if runtime == "docker" and host_platform != "Linux":
         raise RuntimeError("YOLO inference Docker runtime is supported only on Linux")
-    if runtime in {"docker", "docker_dev"} and device not in {"auto", "cuda"}:
+    if runtime == "docker" and device not in {"auto", "cuda"}:
         raise RuntimeError("YOLO inference Docker runtime requires CUDA")
 
     container_image = _value(context, "perception_container_image")
@@ -176,15 +179,22 @@ def parse_perception_options(context) -> PerceptionLaunchOptions:
 
     source_root_value = _value(context, "perception_source_root")
     source_root: Path | None = None
-    if runtime == "docker_dev":
-        candidate = Path(source_root_value)
+    if runtime == "docker":
+        # The image holds the dependencies only; the Python source is bind-mounted
+        # read-only. Without an explicit root it is the so101_demo package that is
+        # running this launch, i.e. the mounted install tree of the build in use.
+        candidate = (
+            Path(source_root_value)
+            if source_root_value
+            else Path(__file__).resolve().parents[1]
+        )
         if (
             not candidate.is_absolute()
             or candidate.is_symlink()
             or not candidate.is_dir()
             or not (candidate / "__init__.py").is_file()
             or not (candidate / "runtime").is_dir()
-            or "," in source_root_value
+            or "," in str(candidate)
         ):
             raise RuntimeError(
                 "perception_source_root must be an absolute, non-symlink Python "
@@ -193,7 +203,7 @@ def parse_perception_options(context) -> PerceptionLaunchOptions:
         source_root = candidate.resolve(strict=True)
     elif source_root_value:
         raise RuntimeError(
-            "perception_source_root is accepted only with perception_runtime=docker_dev"
+            "perception_source_root is accepted only with perception_runtime=docker"
         )
 
     allow_cpu_fallback_value = _value(context, "perception_allow_cpu_fallback")
@@ -388,7 +398,7 @@ def build_perception_action(
     ]
     if options.allow_cpu_fallback:
         arguments.append("--allow-cpu-fallback")
-    if options.runtime not in {"docker", "docker_dev"}:
+    if options.runtime != "docker":
         return Node(
             package="so101_demo_py",
             executable="rgbd_object_pose",
@@ -446,19 +456,14 @@ def build_perception_action(
         "--env",
         "PYTHONUNBUFFERED=1",
     ]
-    if options.runtime == "docker_dev":
-        container_command.extend(
-            [
-                "--env",
-                "PYTHONPATH=/workspace/so101-source",
-                "--mount",
-                "type=bind,"
-                f"src={options.source_root},"
-                "dst=/workspace/so101-source/so101_demo,readonly",
-            ]
-        )
     container_command.extend(
         [
+            "--env",
+            "PYTHONPATH=/workspace/so101-source",
+            "--mount",
+            "type=bind,"
+            f"src={options.source_root},"
+            "dst=/workspace/so101-source/so101_demo,readonly",
             "--mount",
             f"type=bind,src={options.weights_path},dst=/models/best.pt,readonly",
             "--mount",

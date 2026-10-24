@@ -1,12 +1,14 @@
 # SO-101 单 Web 服务操作指南
 
+> 2026-10-24 注：感知 broker 与 Expert Validation 已退役（挂载树迁移 M5，提交 P3b）。Expert Validation 域、页面和 `/expert-validation/*` 路由已删除，`so101_expert_validation_server.py` 也不再存在；下文关于 Validation 的段落只作历史记录。Teleop、Tasks、Archives 不变。
+
 这份文档说明怎么启动和使用合并后的 Web 服务，以及哪些事情现在还不能做。它只描述已经实现并验证过的部分，未验证或需要单独授权的部分会明确标出来。
 
 ## 一个服务，一个端口
 
 统一入口是 `so101_unified_web_server.py`，默认监听 `127.0.0.1:8000`。旧的两个脚本 `so101_teleop_server.py` 和 `so101_expert_validation_server.py` 现在只打印弃用提示并转发到同一个入口，它们不再各自打开端口。所以不会出现两个 Web listener 抢同一个页面的事情。
 
-启动方式：
+启动方式（`scripts/so101-teleop-linux.sh` / `scripts/so101-teleop-macos.zsh` 是只启动这个服务的精简启动器，见 `.agents/skills/so101-dev/references/unified-teleop-service.md`）：
 
 ```
 python3 <install_prefix>/so101_teleop/lib/so101_teleop/so101_unified_web_server.py

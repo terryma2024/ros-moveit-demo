@@ -20,8 +20,6 @@ CONTAINER_IPC_ROOT = Path('/act/ipc')
 CONTAINER_TEACHER_SOCKET = CONTAINER_IPC_ROOT/'teacher'/'inference.sock'
 #: the host's ACT policy service, as a rollout shard reaches it; a rollout shard mounts this directory instead of the Teacher's
 CONTAINER_POLICY_SOCKET = CONTAINER_IPC_ROOT/'policy'/'policy.sock'
-CONTAINER_INSTALL_PREFIX = Path('/act/install')
-CONTAINER_ROS2 = CONTAINER_INSTALL_PREFIX/'bin'/'ros2'
 CONTAINER_INTERPRETER = Path('/act/venv/bin/python')
 
 

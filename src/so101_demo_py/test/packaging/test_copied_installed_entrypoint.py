@@ -90,9 +90,7 @@ def _current_runtime_files() -> tuple[str, ...]:
                 continue
             files.append(str(path.relative_to(WORKTREE)))
     # setup.py is build metadata: colcon installs its own generated copy, so it is not a
-    # byte-for-byte runtime artifact. The entry points, modules, launch/config/assets and the
-    # generated OpenAPI document are.
-    files.append("src/so101_teleop/so101_teleop/expert_validation_openapi.json")
+    # byte-for-byte runtime artifact. The entry points, modules, launch/config/assets are.
     return tuple(sorted(files))
 
 

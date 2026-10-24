@@ -24,7 +24,7 @@ import pytest
 from so101_demo.act.collection_scope import build_collection_scope, read_collection_scope
 from so101_demo.act.contact_policy import policy_fingerprint
 from so101_demo.act.diagnostic_episode_inputs import _canonical, verify_frozen_inputs
-from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.runtime.container_campaign import case_inputs
 from so101_demo.runtime.container_campaign.case_artifacts import CollectionCaseArtifacts
 from so101_demo.runtime.container_campaign.paths import build_role_mounts, make_campaign_paths

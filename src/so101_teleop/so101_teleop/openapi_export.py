@@ -1,7 +1,7 @@
 """Deterministically export the unified OpenAPI contract and its filtered views.
 
-There is exactly one route table: the unified app. The former Teleop and Validation
-documents are filtered projections of that same schema, so no second, hand-maintained copy
+There is exactly one route table: the unified app. The former Teleop document is a
+filtered projection of that same schema, so no second, hand-maintained copy
 of the routes can drift. Every view keeps the original component references intact.
 """
 
@@ -14,7 +14,6 @@ import sys
 from .unified.app import create_unified_app, schema_services
 
 TELEOP_TITLE = "SO-101 Teleop"
-VALIDATION_TITLE = "SO-101 Expert Validation"
 UNIFIED_TITLE = "SO-101 Unified"
 
 #: Paths that only exist because the two services are now one, and therefore are absent
@@ -29,8 +28,6 @@ UNIFIED_ONLY_PATHS = frozenset(
         "/control/instances/{instance_id}/channel",
     }
 )
-
-VALIDATION_PREFIXES = ("/expert-validation", "/tasks", "/health")
 
 
 def unified_schema() -> dict:
@@ -70,36 +67,22 @@ def export_openapi(output: str | Path) -> Path:
     def keep(path: str) -> bool:
         if path in UNIFIED_ONLY_PATHS:
             return False
-        if path.startswith(("/expert-validation", "/api/archives")):
+        if path.startswith("/api/archives"):
             return False
         return not path.startswith("/control/instances")
 
     return _write(output, _with_title(_filter_paths(unified_schema(), keep), TELEOP_TITLE))
 
 
-def export_validation_openapi(output: str | Path) -> Path:
-    """Compatibility Validation view: its own paths plus the shared Tasks contract."""
-
-    def keep(path: str) -> bool:
-        if path in UNIFIED_ONLY_PATHS:
-            return False
-        return path.startswith(VALIDATION_PREFIXES)
-
-    return _write(output, _with_title(_filter_paths(unified_schema(), keep), VALIDATION_TITLE))
-
-
 def main() -> None:
     if len(sys.argv) == 2:
         export_openapi(sys.argv[1])
-        return
-    if len(sys.argv) == 3 and sys.argv[1] == "--validation":
-        export_validation_openapi(sys.argv[2])
         return
     if len(sys.argv) == 3 and sys.argv[1] == "--unified":
         export_unified_openapi(sys.argv[2])
         return
     raise SystemExit(
-        "usage: python3 -m so101_teleop.openapi_export [--validation|--unified] OUTPUT"
+        "usage: python3 -m so101_teleop.openapi_export [--unified] OUTPUT"
     )
 
 

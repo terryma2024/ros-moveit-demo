@@ -123,7 +123,7 @@ def test_serial_lane_is_ordered_and_excluded_from_parallel_shards() -> None:
 
 def test_source_evidenced_load_and_shared_filesystem_modules_are_serial() -> None:
     assert "test_parallel_batch_worker_gate_watchdog.py" in SERIAL_MODULES
-    assert "test_inject_so101_parallel_fault.py" in SERIAL_MODULES
+    assert "test_parallel_batch_worker_coordinator.py" in SERIAL_MODULES
 
 
 def test_exact_node_union_accepts_each_expected_node_once() -> None:

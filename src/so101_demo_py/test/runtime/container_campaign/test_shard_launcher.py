@@ -29,9 +29,9 @@ NS_FIELD = "ros" + "_namespace"
 GPU = 'GPU-28221cec-9d21-7753-fd5a-da645740df19'
 
 
-def prepared(tmp_path, mount=None, cpuset=None):
+def prepared(tmp_path, mount=None, cpuset=None, mounted=True):
     paths = make_campaign_paths(tmp_path, 'campaign')
-    campaign = campaign_fixture(tmp_path)
+    campaign = campaign_fixture(tmp_path, mounted=mounted)
     campaign['gpu_uuid'] = GPU
     if mount is not None:
         campaign['shard_image'] = dict(campaign['teacher_service']['image'])
@@ -130,13 +130,9 @@ def test_a_mount_mode_config_makes_every_shard_owner_mounted(tmp_path):
         registry.close()
 
 
-def test_an_image_mode_config_leaves_the_shard_owner_unmounted(tmp_path):
-    launcher, registry, slot, paths = prepared(tmp_path)
-    try:
-        (owner,) = launcher(plan={'wave_index': 0}, endpoints={}, slots=(slot,))
-        assert owner.mount_build is None and not [value for value in owner.argv if 'SO101_MOUNT' in value]
-    finally:
-        registry.close()
+def test_an_image_mode_config_is_refused_before_any_shard_owner_exists(tmp_path):
+    with pytest.raises(ValueError, match='MOUNT_BUILD_REQUIRED'):
+        prepared(tmp_path, mounted=False)
 
 
 def test_a_launcher_without_the_cpuset_key_adds_no_cpu_option(tmp_path):

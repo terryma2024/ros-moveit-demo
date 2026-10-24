@@ -46,7 +46,7 @@ def instance_rig(spec):
 
 
 def load_spec(path):
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 
     try:
         with _open_regular(path) as stream:

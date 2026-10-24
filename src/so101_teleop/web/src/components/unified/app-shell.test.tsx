@@ -6,7 +6,7 @@ import { describe, expect, test, vi } from "vitest";
 import { AppShell } from "./app-shell";
 
 describe("AppShell", () => {
-  test("navigates between the two main entries without rebuilding the shell", async () => {
+  test("navigates between the entries without rebuilding the shell", async () => {
     const onNavigate = vi.fn();
     const { rerender } = render(
       <AppShell page="teleop" onNavigate={onNavigate}>
@@ -14,18 +14,16 @@ describe("AppShell", () => {
       </AppShell>,
     );
     expect(screen.getByRole("button", { name: "Teleop" }).getAttribute("aria-current")).toBe("page");
-    await userEvent.click(screen.getByRole("button", { name: "Expert Validation" }));
-    expect(onNavigate).toHaveBeenCalledWith("/expert-validation");
+    await userEvent.click(screen.getByRole("button", { name: "Archives" }));
+    expect(onNavigate).toHaveBeenCalledWith("/archives");
     rerender(
-      <AppShell page="validation" onNavigate={onNavigate}>
+      <AppShell page="archives" onNavigate={onNavigate}>
         <div data-testid="content">teleop</div>
       </AppShell>,
     );
     // The shell survives the switch: the same content node is still mounted.
     expect(screen.getByTestId("content")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Expert Validation" }).getAttribute("aria-current"),
-    ).toBe("page");
+    expect(screen.getByRole("button", { name: "Archives" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("button", { name: "Teleop" }).getAttribute("aria-current")).toBeNull();
   });
 
@@ -52,23 +50,22 @@ describe("AppShell", () => {
     // The wide-screen list is always in the tree, so its entries stay reachable.
     const navigation = screen.getByRole("navigation", { name: "Primary" });
     expect(navigation.textContent).toContain("Teleop");
-    expect(navigation.textContent).toContain("Expert Validation");
+    expect(navigation.textContent).toContain("Archives");
     await userEvent.click(trigger);
   });
 
   test("health and the global owner reason are shown separately from the pages", () => {
     render(
       <AppShell
-        page="validation"
+        page="teleop"
         onNavigate={() => undefined}
-        health={{ teleop: "unavailable", validation: "ready", blockedReason: "VALIDATION_ACTIVE" }}
+        health={{ teleop: "unavailable", blockedReason: "CAMPAIGN_ACTIVE" }}
       >
         <div />
       </AppShell>,
     );
     expect(screen.getByText("Teleop: unavailable")).toBeTruthy();
-    expect(screen.getByText("Validation: ready")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("VALIDATION_ACTIVE");
+    expect(screen.getByRole("status").textContent).toContain("CAMPAIGN_ACTIVE");
   });
 
   test("the theme defaults to light, flips on demand and survives missing storage", async () => {

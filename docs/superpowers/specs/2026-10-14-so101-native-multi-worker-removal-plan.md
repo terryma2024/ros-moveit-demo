@@ -1,5 +1,7 @@
 # SO-101 native multi-worker removal: inventory and implementation plan
 
+> Note, 2026-10-23: native collection (the single-worker native instance launcher) was retired as well (migration P3, M4); `act_rollout_native` remains as the single-stack rollout reference.
+
 Date: 2026-10-14. Follows `2026-10-13-so101-act-fixed-instance-identity-amendment.md` (item 3: non-container runs no longer support
 multiple workers).
 

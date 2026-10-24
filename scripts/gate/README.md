@@ -51,7 +51,7 @@ Every host-specific value is a `KEY=VALUE` line in `hosts/<host>.env`. No script
 | `DEMO_DIST` | xdist `--dist` mode of the demo stage; empty keeps the xdist default. |
 | `DEMO_MALLOC_ARENA_MAX`, `DEMO_MALLOC_TRIM_THRESHOLD`, `DEMO_MALLOC_MMAP_THRESHOLD` | glibc malloc settings of the demo stage only; empty means not set. |
 | `GATE_EXTRA_PYTHONPATH` | Extra `PYTHONPATH` entries for the demo stage. |
-| `NATIVE_BUILD_DEPS`, `BUN_BIN`, `BUN_CACHE` | Inputs of the image build (`scripts/images`). |
+| `BUN_BIN` | The bun of `run_web_tests.zsh`. |
 
 `MUJOCO_GL=egl` is exported by the build, demo and colcon stages on every host.
 
@@ -160,15 +160,14 @@ with `--full` after such a change. `--plan` prints both decisions.
 
 ## so101_teleop
 
-The 124 `so101_teleop` ctests are plain `python3 -m pytest <file>` commands, so parallelism comes only from `ctest -j`. The tests in
+The 91 `so101_teleop` ctests are plain `python3 -m pytest <file>` commands, so parallelism comes only from `ctest -j`. The tests in
 `SERIAL_TELEOP_TESTS` (top of `colcon_part.zsh`) run first with `-j1`; everything else runs with `-j N` (`--teleop-jobs`, default
 6). The script exits 98 if a listed name is not registered in `src/so101_teleop/CMakeLists.txt`.
 
-Teleop parallel self-kill (fixed 2026-10-14): `test_fixed_helper_full_protocol` ran `fixed_helper.py` with plain `subprocess.run`, so the
-helper sat in the gate's process group. The autouse fixture in `test/conftest.py` of a sibling pytest found it through the shared
-`SO101_IPC_SOCKET_BASE` marker and called `killpg` on that group, which was the gate's own. The test is now in `SERIAL_TELEOP_TESTS`, and
-every teleop `colcon test` call runs under `setsid -w`, so a stray group signal fails tests instead of killing the gate. The test
-defects themselves (no `start_new_session=True`; `terminate_group` signals a group that contains the caller) are not fixed.
+Teleop parallel self-kill (found 2026-10-14): `test_fixed_helper_full_protocol` ran `fixed_helper.py` with plain `subprocess.run`, so the
+helper sat in the gate's process group and a sibling pytest's `killpg` hit the gate itself. The test belonged to the Expert Validation e2e
+suite, which was deleted with that service on 2026-10-24 (migration M5). Every teleop `colcon test` call still runs under `setsid -w`, so a
+stray group signal fails tests instead of killing the gate.
 
 ## Known flakes and the one rerun
 

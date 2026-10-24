@@ -121,7 +121,6 @@ class Harness:
         self.services = UnifiedServices(
             teleop=self.service,
             tasks=None,
-            validation=None,
             arbiter=self.arbiter,
             instances=self.registry,
             safety=self.lane,

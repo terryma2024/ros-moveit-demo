@@ -60,7 +60,8 @@ def test_bad_spec_refused_before_runtime_factory(tmp_path, monkeypatch, problem)
     assert mod.main(["--spec", str(path)]) == 2
 
 
-def test_the_container_shell_builds_the_fixed_container_layout(tmp_path):
+def test_the_container_shell_builds_the_fixed_container_layout(tmp_path, monkeypatch):
+    monkeypatch.setenv('SO101_MOUNT_INSTALL', str(tmp_path / 'mounted-install'))
     mod = importlib.import_module("so101_demo.cli.campaign_shard")
     path, _document = fixture(tmp_path)
     spec, _runtime = mod.load_spec(path)
@@ -68,7 +69,7 @@ def test_the_container_shell_builds_the_fixed_container_layout(tmp_path):
     assert layout.owned_root == Path(spec['owned_root'])
     assert (layout.output_root, layout.control_root, layout.teacher_socket, layout.install_prefix,
             layout.ros2_executable) == (Path('/act/output'), Path('/act/control'), Path('/act/ipc/teacher/inference.sock'),
-            Path('/act/install'), Path('/act/install/bin/ros2'))
+            tmp_path / 'mounted-install' / 'so101_demo_py', Path('/opt/ros/jazzy/bin/ros2'))
 
 
 def test_shard_entry_cannot_start_host_ros(tmp_path):

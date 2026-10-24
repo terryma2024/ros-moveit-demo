@@ -24,7 +24,7 @@ _ID = r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}"
 
 def load_processor_spec(path):
     """Prove the document's shape, identities and hashes; returns `(spec, runtime_config)`."""
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 
     try:
         with _open_regular(path) as stream:

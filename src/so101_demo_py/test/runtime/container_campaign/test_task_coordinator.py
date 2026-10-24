@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.act.parallel_collection import reserve_qualification_scenes
-from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.runtime.container_campaign.coordinator import (
     COLLECTED, FAULTED, ConcurrentCollectionCoordinator, InstanceDispatch, WaveAssignment,
 )

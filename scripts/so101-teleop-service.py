@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Own one installed SO-101 Teleop/Expert Validation service on macOS or Linux."""
+"""Own one installed SO-101 unified teleop web service on macOS or Linux (no Expert Validation, no perception broker)."""
 
 from __future__ import annotations
 
@@ -20,12 +20,6 @@ import uuid
 
 
 REPO = Path(__file__).resolve().parent.parent
-TERMINAL_CAMPAIGNS = frozenset({
-    "COMPLETED", "COMPLETED_WITH_FAILURES", "INFRA_FAILED", "CANCELLED",
-})
-MAC_MODEL_ROOT = Path(
-    "/opt/data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71/models"
-)
 LINUX_PYTHON = Path(
     "/data/work/so101-evidence/full-ut-linux/20260923-5a0b87a8/venv/bin/python"
 )
@@ -46,10 +40,6 @@ def defaults(platform: str) -> dict[str, str]:
             "python": "/opt/ros/jazzy/.venv/bin/python",
             "install_prefix": "/opt/data/so101/workspace/install",
             "durable_base": "/opt/data/work/so101-evidence/teleop-service",
-            "yolo_weights": str(MAC_MODEL_ROOT / "yolo/best.pt"),
-            "grounded_root": str(MAC_MODEL_ROOT / "grounded"),
-            "config": "parallel_batch_macos_mps_two_worker.yaml",
-            "coordinator": "so101_macos_service_campaign",
             "domain_id": "225",
             "partition": "so101-teleop-tailscale-mac-225",
         }
@@ -57,10 +47,6 @@ def defaults(platform: str) -> dict[str, str]:
         "python": str(LINUX_PYTHON),
         "install_prefix": str(REPO / "install"),
         "durable_base": "/data/work/so101-evidence/teleop-service",
-        "yolo_weights": "/data/work/models/so101-perception/yolo11n-seg-plastic-cup/best.pt",
-        "grounded_root": "/data/work/models/so101-perception/grounded-sam-cup-pickplace/bundle",
-        "config": "parallel_batch_linux_cuda.yaml",
-        "coordinator": "so101_parallel_batch",
         "domain_id": "226",
         "partition": "so101-teleop-tailscale-ai-226",
     }
@@ -70,7 +56,7 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__,
         epilog="Run doctor, then start. Status and cleanup use the recorded PID; cleanup refuses "
-               "active campaigns and preserves all logs, models, and evidence. An existing service "
+               "a service whose arbiter is not IDLE and preserves all logs and evidence. An existing service "
                "started outside this script is never adopted or stopped. Optional paths can be "
                "overridden when the installed environment moves.",
     )
@@ -81,8 +67,6 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--python", type=Path, default=None)
     parser.add_argument("--install-prefix", type=Path, default=None)
     parser.add_argument("--evidence-root", type=Path, default=None)
-    parser.add_argument("--yolo-weights", type=Path, default=None)
-    parser.add_argument("--grounded-root", type=Path, default=None)
     parser.add_argument("--state-dir", type=Path, default=None)
     parser.add_argument("--domain-id", type=int, default=None)
     parser.add_argument("--partition", default=None)
@@ -91,7 +75,7 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
 
 def resolve_options(args: argparse.Namespace) -> dict[str, object]:
     cfg: dict[str, object] = defaults(args.platform)
-    for name in ("python", "install_prefix", "yolo_weights", "grounded_root"):
+    for name in ("python", "install_prefix"):
         supplied = getattr(args, name)
         if supplied is not None:
             cfg[name] = str(supplied)
@@ -120,17 +104,10 @@ def tailscale_ip() -> str:
 
 
 def layout(cfg: dict[str, object]) -> dict[str, Path]:
-    prefix = Path(str(cfg["install_prefix"]))
-    demo = prefix / "so101_demo_py"
-    teleop = prefix / "so101_teleop"
+    teleop = Path(str(cfg["install_prefix"])) / "so101_teleop"
     return {
         "entry": teleop / "lib/so101_teleop/so101_unified_web_server.py",
         "web": teleop / "share/so101_teleop/web/index.html",
-        "config": demo / "share/so101_demo_py/config/mujoco" / str(cfg["config"]),
-        "points": demo / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points.yaml",
-        "coordinator": demo / "lib/so101_demo_py" / str(cfg["coordinator"]),
-        "adaptive_config": demo / "share/so101_demo_py/config/mujoco/adaptive_worker_pool.yaml",
-        "adaptive_wrapper": demo / "lib/so101_demo_py/run_so101_adaptive_batch.zsh",
     }
 
 
@@ -149,7 +126,7 @@ def preflight(cfg: dict[str, object]) -> dict[str, Path]:
             f"PLATFORM_MISMATCH: expected {cfg['platform']}, found {sys.platform}")
     require(1 <= int(cfg["port"]) <= 65535, "PORT_INVALID")
     require(0 <= int(str(cfg["domain_id"])) <= 232, "ROS_DOMAIN_ID_INVALID")
-    for name in ("python", "install_prefix", "yolo_weights", "grounded_root", "state_dir"):
+    for name in ("python", "install_prefix", "state_dir"):
         require(Path(str(cfg[name])).is_absolute(), f"{name.upper()}_NOT_ABSOLUTE")
     python = Path(str(cfg["python"]))
     require(python.is_file() and os.access(python, os.X_OK), f"PYTHON_MISSING: {python}")
@@ -157,13 +134,7 @@ def preflight(cfg: dict[str, object]) -> dict[str, Path]:
         require(path.is_file(), f"ROS_SETUP_MISSING: {path}")
     paths = layout(cfg)
     for name, path in paths.items():
-        if name.startswith("adaptive_") and cfg["platform"] == "darwin":
-            continue
         require(path.is_file(), f"{name.upper()}_MISSING: {path}")
-    require(Path(str(cfg["yolo_weights"])).is_file(),
-            f"YOLO_WEIGHTS_MISSING: {cfg['yolo_weights']}")
-    require(Path(str(cfg["grounded_root"])).is_dir(),
-            f"GROUNDED_ROOT_MISSING: {cfg['grounded_root']}")
     if cfg["platform"] == "darwin":
         farm = Path("/opt/ros/jazzy/dylib_farm/current")
         require(farm.is_dir(), f"DYLIB_FARM_MISSING: {farm}; run scripts/so101-macos.zsh prepare")
@@ -182,17 +153,9 @@ def child_environment(cfg: dict[str, object], paths: dict[str, Path], root: Path
     env["SO101_RUNTIME_ENTRY"] = str(paths["entry"])
     env["SO101_UNIFIED_EVIDENCE_ROOT"] = str(root)
     env["SO101_TASK_ROOT"] = str(root)
-    env["SO101_VALIDATION_PARALLEL_CONFIG"] = str(paths["config"].resolve())
-    env["SO101_VALIDATION_COORDINATOR"] = str(paths["coordinator"].resolve())
-    env["SO101_VALIDATION_POINTS"] = str(paths["points"].resolve())
-    env["SO101_VALIDATION_YOLO_WEIGHTS"] = str(cfg["yolo_weights"])
-    env["SO101_VALIDATION_GROUNDED_ROOT"] = str(cfg["grounded_root"])
     env["ROS_DOMAIN_ID"] = str(cfg["domain_id"])
     env["GZ_PARTITION"] = str(cfg["partition"])
-    if cfg["platform"] == "linux":
-        env["SO101_VALIDATION_ADAPTIVE_CONFIG"] = str(paths["adaptive_config"].resolve())
-        env["SO101_VALIDATION_ADAPTIVE_WRAPPER"] = str(paths["adaptive_wrapper"].resolve())
-    else:
+    if cfg["platform"] == "darwin":
         env["GZ_CONFIG_PATH"] = (
             "/opt/homebrew/opt/gz-sim8/share/gz:/opt/homebrew/opt/gz-transport13/share/gz:"
             "/opt/homebrew/opt/gz-msgs10/share/gz:/opt/homebrew/opt/gz-plugin2/share/gz:"
@@ -296,8 +259,8 @@ def request_json(url: str, timeout: float = 2) -> object:
 
 def ready(url: str) -> bool:
     try:
-        health = request_json(url + "/health")
-        if not isinstance(health, dict) or health.get("domains", {}).get("validation") != "ready":
+        live = request_json(url + "/health/live")
+        if not isinstance(live, dict) or live.get("live") is not True or live.get("started") is not True:
             return False
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(url + "/", timeout=2) as response:
@@ -396,15 +359,11 @@ def cleanup(state_path: Path) -> None:
         return
     url = f"http://{record['host']}:{record['port']}"
     try:
-        campaigns = request_json(url + "/expert-validation/campaigns")
+        health = request_json(url + "/health")
     except (OSError, ValueError, urllib.error.URLError) as error:
-        raise Refused(f"CAMPAIGN_STATUS_UNKNOWN: {error}") from error
-    require(isinstance(campaigns, list) and all(isinstance(row, dict) for row in campaigns),
-            "CAMPAIGN_STATUS_INVALID")
-    active = [str(row.get("campaign_id", "unknown")) for row in campaigns
-              if row.get("status") not in TERMINAL_CAMPAIGNS or
-              row.get("batch_cleanup_complete") is not True]
-    require(not active, "CAMPAIGN_ACTIVE: " + ",".join(active))
+        raise Refused(f"SERVICE_STATE_UNKNOWN: {error}") from error
+    require(isinstance(health, dict) and isinstance(health.get("global_state"), str), "SERVICE_STATE_INVALID")
+    require(health["global_state"] == "IDLE", f"SERVICE_BUSY: {health['global_state']}")
     pid = int(record["pid"])
     if not verify_owned(record):
         record["running"] = False
@@ -473,10 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             paths = preflight(cfg)
             print(json.dumps({"result": "READY", "platform": cfg["platform"],
                               "host": cfg["host"], "port": cfg["port"],
-                              "python": cfg["python"], "install_prefix": cfg["install_prefix"],
-                              "config": str(paths["config"]),
-                              "yolo_weights": cfg["yolo_weights"],
-                              "grounded_root": cfg["grounded_root"]}, sort_keys=True))
+                              "python": cfg["python"], "install_prefix": cfg["install_prefix"]}, sort_keys=True))
             return 0
         require(state_dir.is_absolute() and not state_dir.is_symlink(),
                 f"STATE_DIR_INVALID: {state_dir}")

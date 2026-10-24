@@ -16,7 +16,7 @@ RETIREMENT_MESSAGE = "MEASUREMENT_ENTRY_RETIRED"
 
 RETIREMENT_DETAIL = (
     "the per-N certified measurement runtime was removed by the lightweight start guard "
-    "design; use `so101_parallel_batch` for real execution, and history.load_history for "
+    "design; the broker batch runner is retired too (migration M5); history.load_history stays for "
     "read-only inspection of retained measurement evidence"
 )
 
@@ -27,7 +27,7 @@ def retired_document() -> dict:
         "detail": RETIREMENT_DETAIL,
         "readonly": True,
         "authorizes_execution": False,
-        "replacement": "so101_parallel_batch",
+        "replacement": None,
     }
 
 

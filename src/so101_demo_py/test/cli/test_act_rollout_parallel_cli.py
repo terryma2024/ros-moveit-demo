@@ -78,6 +78,8 @@ class Setup:
         campaign = campaign_fixture(tmp_path)
         campaign["gpu_uuid"] = GPU
         self.campaign = write_config(tmp_path, campaign)
+        from so101_demo.runtime.container_campaign.mount_build import mount_from_config
+        self.mount = mount_from_config(campaign)          # every run starts from a mount tree
         self.parallel = tmp_path / "parallel.yaml"
         self.parallel.write_bytes((PACKAGE_ROOT / "config/mujoco/parallel_batch_act_offline.yaml").read_bytes())
         (tmp_path / "unified").mkdir()
@@ -155,7 +157,7 @@ def test_a_run_makes_the_files_and_the_exit_code_of_a_clean_parallel_rollout(set
     assert (run / "host" / "containers-receipt-01-rollout.json").is_file()
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["exit_code"] == 0
     assert setup.probe_calls == list(cli.PRECONDITIONS)
-    assert setup.loaded_with.install_prefix == cli.CONTAINER_INSTALL_PREFIX       # an image-mode campaign config
+    assert setup.loaded_with.install_prefix == setup.mount.package_prefix       # the mounted install, never an image path
 
 
 def test_the_launcher_is_given_the_run_identity_the_rig_and_the_inputs_the_shards_may_read(setup):
@@ -178,7 +180,7 @@ def test_the_task_documents_carry_the_runtime_values_and_the_shared_run_identity
     document = next(iter(setup.world.documents.values()))
     assert document["execution"] == {"execution_prefix": 5, "temporal_ensembling": None}
     assert document["policy"]["service_generation"] == "run-1-policy" and document["policy"]["bundle_sha256"] == BUNDLE
-    assert document["inputs"]["install_prefix"] == str(cli.CONTAINER_INSTALL_PREFIX)
+    assert document["inputs"]["install_prefix"] == str(setup.mount.package_prefix)
     assert document["inputs"]["scenes"]["sha256"] and document["inputs"]["bundle_dir"] == str(setup.bundle)
     assert len({item["run_identity_sha256"] for item in setup.world.documents.values()}) == 1
 
@@ -336,12 +338,12 @@ def test_the_held_out_group_is_marked_after_the_first_task_is_sent_and_not_befor
     assert states == [False] and marker.is_file()
 
 
-def test_the_policy_interpreter_path_is_refused_before_anything_is_created_or_marked(setup, capsys):
+def test_the_policy_pythonpath_defaults_to_the_mounted_install_and_a_missing_interpreter_is_refused_before_anything_is_created(setup):
     argv = setup.argv("--trials", "1", group="rollout_test")
     index = argv.index("--policy-pythonpath")
     del argv[index:index + 2]
-    assert cli.main(argv, edges=setup.edges) == 2
-    assert "ROLLOUT_POLICY_PYTHONPATH_REQUIRED" in capsys.readouterr().err
+    *_, pythonpath = cli.prepare(cli.build_parser().parse_args(argv), setup.edges)
+    assert pythonpath == setup.mount.package_prefix / "lib/python3.12/site-packages"
     assert not (setup.evidence / "run-1").exists() and not (setup.evidence / "rollout-test-opened").exists()
     argv = setup.argv()
     argv[argv.index("--policy-python") + 1] = str(setup.tmp / "no-such-python")
@@ -392,3 +394,12 @@ def test_the_gpu_check_looks_only_at_the_configured_device():
 
 def test_the_policy_consecutive_error_bound_is_a_runtime_parameter_checked_before_anything_exists(setup):
     assert setup.run("--policy-max-consecutive-errors", "0") == 2 and not (setup.evidence / "run-1").exists()
+
+
+def test_a_campaign_config_without_a_mount_build_is_refused_and_no_run_root_is_made(setup, capsys):
+    document = json.loads(setup.campaign.read_text())
+    del document["mount_build"]
+    setup.campaign.write_text(json.dumps(document))
+    assert setup.run() == 2
+    assert "MOUNT_BUILD_REQUIRED" in capsys.readouterr().err
+    assert not (setup.evidence / "run-1").exists() and setup.docker_calls == []

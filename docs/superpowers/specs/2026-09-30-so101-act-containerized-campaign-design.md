@@ -1,5 +1,7 @@
 # SO-101 ACT 容器化采集 campaign 设计
 
+> Note, 2026-10-23: the image build parts of this design are superseded by mount mode (campaigns start from `so101-mount-base` with host-built mounted trees; migration P1/P2). The campaign structure it describes is unchanged.
+
 现行单 stack 版本遵循 [10-05 Teacher/ACT 分离修订](2026-10-05-so101-teacher-act-decoupling-amendment.md)，并以分支上的 10-06 Teacher 执行简化修订为其优先补充。10-05 范围内的既有执行授权不延伸到本文。本文是 10-06 所称留待后续版本的 Docker 隔离设计；进入实施前仍须单独批准实施计划。
 
 创建日期：2026-09-30；本次修订：2026-10-12。

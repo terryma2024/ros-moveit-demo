@@ -24,26 +24,11 @@ import xml.etree.ElementTree as ET
 
 
 SERIAL_MODULE_REASONS = {
-    "test_parallel_batch_resources_claims.py": (
-        "preserves the established first-module ordering for process/resource probes"
-    ),
-    "test_parallel_batch_resources_process_scan.py": (
-        "preserves the established first-module ordering for process/resource probes"
-    ),
-    "test_parallel_batch_resources_layout.py": (
-        "preserves the established first-module ordering for process/resource probes"
-    ),
-    "test_parallel_batch_resources_allocation.py": (
-        "preserves the established first-module ordering for process/resource probes"
-    ),
     "test_parallel_start_guard_launch.py": (
-        "runs the real installed allocator entry, which claims the frozen ROS domain locks"
+        "runs the installed retired-measurement entry and the installed launch resource as real processes"
     ),
     "test_text_pick_agent_e2e_process.py": (
         "owns real launch child process trees and preserves the established second-module ordering"
-    ),
-    "test_parallel_adaptive_integration.py": (
-        "starts and signals real process groups, including an unowned sentinel"
     ),
     "test_parallel_batch_worker_stop_commit.py": (
         "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
@@ -59,9 +44,6 @@ SERIAL_MODULE_REASONS = {
     ),
     "test_parallel_batch_worker_diagnostics.py": (
         "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
-    ),
-    "test_inject_so101_parallel_fault.py": (
-        "writes fault-injector fixtures beneath a shared allowlisted evidence root"
     ),
 }
 SERIAL_MODULES = tuple(SERIAL_MODULE_REASONS)

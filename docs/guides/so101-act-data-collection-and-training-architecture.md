@@ -192,7 +192,7 @@ mobile base (an AGV with a mast camera), but nothing composes them.
 | --- | --- | --- | --- |
 | Scene lists | `act_sample`, evidence-side generators | `*.scenes.json` with splits | 3.1 |
 | Gate | `scripts/gate/run_host_gate.zsh` | `R/gates/<id>/gates-result.txt`, install tree | 2.10 |
-| Images | `scripts/images/build_images.zsh` | shard and inference image digests | 3.5 |
+| Mount tree | `scripts/images/build_mount_tree.zsh`, `scripts/env/image_env.py check-image --preflight` | `mount/<commit12>/{install,source}`, `mount-preflight-<commit12>.json` (the `so101-mount-base` image is rebuilt only when the host pins move) | 3.5 |
 | Contact policy | `act_collect_contact_calibration`, `act_analyze_contact_calibration`, `act_contact_spot_check`, `act_activate_contact_policy` | activation receipt | 2.9 |
 | Qualification | `act_collect_parallel --qualification`, `act_build_parallel_qualification_report`, `act_verify_parallel_qualification` | `host/qualification-report.json`, proof | 3.2 |
 | Formal collection | `act_collect_parallel` | run root, `collection-index.json`, `campaign-result.json` | 3.2 |
@@ -219,8 +219,9 @@ produce.
 | Spot check | `--spot-check` | 1 | exactly 1 | A verdict input only; the index lists no committed episode |
 
 Sources: `cli/act_collect_parallel.py` docstring (code), template README (record). The pass counts are from the
-template README. A native single-worker launcher (`--instance-launcher native`) exists for qualification-mode runs
-with one worker; a formal run needs eight workers, so it is always containers.
+template README. There is no native collection launcher any more
+(`--instance-launcher native` was retired in the item 34 migration, M4): every worker is a container started from the mount
+tree. `act_rollout_native` stays as the single-stack rollout reference; it is not a collection.
 
 ```mermaid
 flowchart TB
@@ -258,7 +259,7 @@ Responsibilities (code, module docstrings):
 | Recording gate | `coordinator.py` `RecordingGate` | Limits when the Host may assign: recording slots, tasks in flight, gap between assignments |
 | Teacher service | `service_owner.py` | Campaign-lifetime inference container borrowed by cases and waves |
 | Shard | `shard_launcher.py`, `shard_owner.py`, `runtime/act_instance/` | One container per worker slot per wave; runs the fixed-identity ACT stack and serves task control |
-| Processor | `processor_launcher.py`, `processor_owner.py`, `runtime/act_processor/` | Phase-2 container: the shard image with a different entrypoint (`campaign_processor`) |
+| Processor | `processor_launcher.py`, `processor_owner.py`, `runtime/act_processor/` | Phase-2 container: the same base image and mounted trees with a different entrypoint (`campaign_processor`) |
 | Registry | `registry.py` | Durable launch intents; an unknown launch identity stays fenced |
 | Verifiers | `result_verifier.py`, `readback_pool.py`, `processing_verifier.py` | Independent Host readback of every scene, one short-lived interpreter per scene |
 
@@ -819,7 +820,7 @@ only logic files and replaces text patterns with behavioural tests.
 Every mutation that needs execution resources goes through `AdmissionGateway`. A mutation is classified; read-only
 operations take no reservation, and an unknown operation is refused. Collection start binds the **controlled
 identity** (`_collection_identity`): `source_sha256`, `runtime_config_sha256`, `collection_config_sha256`,
-`contact_policy_fingerprint`, `gpu_uuid`, the inference and shard image records, and (when the campaign names a rig)
+`contact_policy_fingerprint`, `gpu_uuid`, the inference and shard image records (a base-image digest plus the hashes of the mounted install and source trees) and the `mount_build` commit, and (when the campaign names a rig)
 `rig_profile_sha256`.
 
 ```mermaid
@@ -865,7 +866,7 @@ a new contact policy restarts the ladder from the gate.
 ```mermaid
 flowchart TB
     SC["Scene generation<br/>sampler inside the anchor triangle,<br/>0.004 m apart, place exclusion,<br/>five-pose Teacher reachability"] --> LISTS["lists: debug-16, qualification-40,<br/>formal N with splits"]
-    GATE["Host gate green"] --> IMG["build shard and inference images<br/>at the gated commit"]
+    GATE["Host gate green"] --> IMG["build the mount tree<br/>at the gated commit"]
     IMG --> TPL
     LISTS --> TPL["templates: new-inputs.py + author.py<br/>validate-inputs"]
     CP["contact policy activated<br/>for this model and scene"] --> TPL
@@ -1009,7 +1010,7 @@ sequenceDiagram
 Figure 24. Spot-check workflow. For the side-wrist policy `55ee6981` the runs were EXP-7001 (found the readiness
 defect, CP-3730), EXP-7002 (nominal, PASS, CP-3735 after the judge fix of CP-3734) and EXP-7003 (over-squeeze, PASS, CP-3737).
 
-### 3.5 The gate and image-build workflow
+### 3.5 The gate and mount-tree workflow
 
 ```mermaid
 sequenceDiagram
@@ -1017,28 +1018,39 @@ sequenceDiagram
     participant GATE as run_host_gate.zsh
     participant BLD as W/so101-build/gates/ID
     participant EVD as R/gates/ID
-    participant IMG as build_images.zsh
+    participant MNT as build_mount_tree.zsh
     participant TPL as templates
     DEV->>GATE: --demo-workers 12, clean worktree
     GATE->>BLD: colcon build (ccache), demo pytest, colcon test
     GATE->>EVD: gates-result.txt, build-root.txt, decisions
     GATE-->>DEV: build_rc, demo_rc, colcon_rc, head_after, dirty_after
-    DEV->>IMG: prepare-image-build.py + build_images.zsh at the gated commit
-    IMG-->>DEV: shard digest, inference digest, R/image-build-T
-    DEV->>TPL: new-inputs.py --commit --gate-dir --shard-digest --inference-digest
+    DEV->>MNT: --commit gated commit (clean worktree, submodule initialised)
+    MNT-->>DEV: W/so101-build/mount/commit12/{install,source}, BUILD-COMMIT
+    DEV->>DEV: image_env.py check-image --preflight (host against so101-mount-base)
+    DEV->>TPL: new-inputs.py --commit --gate-dir (mount_build in the campaign config)
     TPL->>BLD: read install through build-root.txt
     Note over TPL: git diff gated-commit HEAD -- src scripts third_party must be empty before a run
 ```
 
-Figure 25. Gate to image to template.
+Figure 25. Gate to mount tree to template. The campaign roles all run in `so101-mount-base` with the two trees mounted read-only;
+there is no per-commit image. The image-baked campaign images (shard, inference, shard-deps) and the native collection launcher were
+removed on 2026-10-23 (mount-tree migration); sealed image-mode records are still verified, read-only, by `legacy_image_records`.
+
+The perception broker was retired on 2026-10-24 (migration M5, commit P3b): the `so101-parallel-perception` container service
+(`parallel_perception_broker`, `docker/parallel-perception`), the mujoco parallel batch that served it (`mujoco_parallel_batch`,
+`so101_parallel_batch`, its cleanup entry, the allocator behind it and `scripts/run_so101_adaptive_*.zsh`), and the Expert Validation
+production service (the teleop `expert_validation` package, its server and recover scripts, the `/expert-validation/*` routes and the
+web page) are gone. ACT collection and rollout never used them. Kept because the macOS service campaign cannot run without them: the
+in-process MPS broker, `macos_two_worker_broker_port`, `parallel_ipc/broker_transport` and `parallel_perception_runtime`. The
+unified teleop service keeps `Domain.VALIDATION` for the admission of ACT campaign starts.
 
 Rules that go with it (record):
 
-- A run uses the images and gate of one commit. Changing anything under `src/`, `scripts/` or `third_party/` after the
+- A run uses the mount tree and gate of one commit. Changing anything under `src/`, `scripts/` or `third_party/` after the
   gate invalidates the run's provenance; the Host CLI imports the worktree source at run time, so no writer may edit
   `src/` while a collection is active.
-- Image builds: shard 155.6 s and inference 59.8 s on the first measurement, 396.5 s and 66.3 s with the vendored
-  controllers.
+- Mount tree build: about 5 minutes per commit, cached under its `<commit12>`; the base image (about 16 minutes, torch download through the
+  build proxy) is rebuilt only when the host pins move.
 - A full partition breaks the gate: each gate keeps about 12 GiB of scratch under `R/scratch/gate-<id>`, and collection
   integration tests fail with `CAMPAIGN_DISK_FLOOR_REACHED` when free space is below 50 GiB (CP-3745, CP-3747).
 
@@ -1692,7 +1704,7 @@ absent; pipelines need `set -o pipefail`; `status` is a read-only zsh parameter.
 | NBFC | NoteBook FanControl, the fan service on ai-station |
 | Oracle flag | A Teacher contact flag such as `ORACLE_CUP_OVERLOAD` that can exclude an episode |
 | PREFIX_LATE | A reply or prefix that came later than the allowed time after its observation; nothing is sent |
-| Processor | A phase-2 container (shard image, `campaign_processor` entrypoint) |
+| Processor | A phase-2 container (base image with the mounted trees, `campaign_processor` entrypoint) |
 | PROCHOT | CPU throttling signal asserted by the embedded controller |
 | QC | Independent data quality recomputation of a sealed episode |
 | Qualification | The 40-scene eight-worker run whose report admits a formal run |

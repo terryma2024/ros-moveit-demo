@@ -6,6 +6,7 @@ the controlled identity, `gpu_uuid` and the images are, and the rig profile is o
 
 import sys
 
+import pytest
 from teleop_paths import DEMO_TEST_IMPORT_PATH
 
 for _candidate in DEMO_TEST_IMPORT_PATH:
@@ -23,10 +24,11 @@ RUNTIME_KEYS = dict(processor_count=6, processing_max_attempts=3, processing_res
                     max_tasks_in_flight=4, min_assignment_gap_s=1.0)
 
 
-def test_identity_has_the_six_keys_with_the_gpu_and_the_images(tmp_path):
+def test_identity_has_the_six_keys_with_the_gpu_the_images_and_the_mount(tmp_path):
     config = campaign_fixture(tmp_path)
     identity = _collection_identity(PAYLOAD, config)
-    assert set(identity) == {*PAYLOAD, "gpu_uuid", "image_source_install"}
+    assert set(identity) == {*PAYLOAD, "gpu_uuid", "image_source_install", "mount_build"}
+    assert identity["mount_build"] == config["mount_build"]
     assert identity["gpu_uuid"] == config["gpu_uuid"]
     assert identity["image_source_install"] == dict(inference=config["teacher_service"]["image"],
                                                     shard=config["shard_image"])
@@ -46,12 +48,12 @@ def test_identity_names_the_rig_profile_only_when_the_config_does(tmp_path):
 def test_a_version_2_config_has_the_identity_without_the_gpu(tmp_path):
     config = campaign_fixture(tmp_path) | {"schema_version": 2}
     identity = _collection_identity(PAYLOAD, config)
-    assert set(identity) == {*PAYLOAD, "image_source_install"}
+    assert set(identity) == {*PAYLOAD, "image_source_install", "mount_build"}
     assert _collection_identity(PAYLOAD, config | {"gpu_uuid": "GPU-other"}) == identity      # another GPU, the same identity
 
 
-def test_a_mounted_build_is_part_of_the_identity_and_an_image_config_has_none(tmp_path):
-    config = campaign_fixture(tmp_path)
+def test_a_mounted_build_is_part_of_the_identity_and_a_sealed_image_config_has_none(tmp_path):
+    config = campaign_fixture(tmp_path, mounted=False)      # the shape of a sealed image-mode config, read by the verifiers
     assert "mount_build" not in _collection_identity(PAYLOAD, config)
     mounted = dict(commit="a" * 40, root=str(tmp_path / ("a" * 12)))
     assert _collection_identity(PAYLOAD, config | dict(mount_build=mounted))["mount_build"] == mounted

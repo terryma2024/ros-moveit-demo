@@ -29,11 +29,12 @@ SOURCE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def instance_main(argv):
-    from so101_demo.cli.act_instance_native import native_layout
     from so101_demo.runtime.act_instance import program
     from so101_demo.runtime.act_instance.identity import mark_instance
+    from so101_demo.runtime.act_instance.layout import InstanceLayout
     from so101_demo.runtime.act_instance.spec import load_spec
     from so101_demo.runtime.container_campaign.controller_stop import ControllerStopObservation
+    from so101_demo.runtime.container_campaign.paths import campaign_run_root, host_teacher_socket
     from so101_demo.runtime.container_campaign.process_identity import read_process_owner
     from so101_demo.runtime.container_campaign.retirement import NativeShardRetirement
     from so101_demo.runtime.parallel_ipc.frames import canonical_json
@@ -48,7 +49,10 @@ def instance_main(argv):
     parser.add_argument('--goal-stop', type=Path, required=True)
     args = parser.parse_args(argv)
     spec, runtime = load_spec(args.spec)
-    layout = native_layout(spec, args.install_prefix, args.ros2)
+    root = Path(spec['owned_root'])
+    layout = InstanceLayout(owned_root=root, output_root=root/'output', control_root=root/'control',
+        teacher_socket=host_teacher_socket(campaign_run_root(root)), install_prefix=Path(args.install_prefix),
+        ros2_executable=Path(args.ros2))
     mark_instance(layout.owned_root, layout.output_root)
     if args.mode == 'die_early':
         return 3

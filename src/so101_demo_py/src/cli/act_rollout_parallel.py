@@ -56,7 +56,7 @@ from so101_demo.runtime.act_rollout.policy_service import PolicyServiceOwner
 from so101_demo.runtime.act_rollout.shard_launcher import WORKLOAD_KIND, RolloutShardLauncher
 from so101_demo.runtime.act_rollout.task_builder import identity_sha256
 from so101_demo.runtime.container_campaign.mount_build import mount_from_config
-from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX, CONTAINER_POLICY_SOCKET, make_campaign_paths
+from so101_demo.runtime.container_campaign.paths import CONTAINER_POLICY_SOCKET, make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.task_control import ContainerTaskControl
 from so101_demo.runtime.container_campaign.service_owner import _docker
@@ -258,7 +258,7 @@ def approved_inputs(args, config, mount, parallel_runtime_path):
             wanted.append(Path(getattr(args, name)))
     kept = []
     for path in dict.fromkeys(item.resolve(strict=True) for item in wanted):
-        if mount is not None and (path.is_relative_to(mount.root) or mount.root.is_relative_to(path)):
+        if path.is_relative_to(mount.root) or mount.root.is_relative_to(path):
             continue
         kept.append(path)
     return tuple(path for path in kept if not any(other != path and path.is_relative_to(other) and other.is_dir() for other in kept))
@@ -288,7 +288,7 @@ def prepare(args, edges):
     check_arguments(args)
     config = load_campaign_config(args.campaign_config, roles=("teacher",), expected_sha256=_sha256(args.campaign_config))
     mount = mount_from_config(config)
-    install_prefix = mount.package_prefix if mount is not None else CONTAINER_INSTALL_PREFIX
+    install_prefix = mount.package_prefix
     if not _GPU.fullmatch(config["gpu_uuid"]):
         raise Refused("ROLLOUT_GPU_UUID_INVALID")
     arguments = SimpleNamespace(**{name: getattr(args, name) for name in (
@@ -303,9 +303,7 @@ def prepare(args, edges):
     if calibration_runtime_hash(config["controlled_runtime"]["path"]) != config["controlled_runtime"]["sha256"]:
         raise Refused("ROLLOUT_CONTROLLED_RUNTIME_DRIFT")
     rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
-    pythonpath = args.policy_pythonpath or (None if mount is None else mount.package_prefix / "lib/python3.12/site-packages")
-    if pythonpath is None:
-        raise Refused("ROLLOUT_POLICY_PYTHONPATH_REQUIRED")
+    pythonpath = args.policy_pythonpath or mount.package_prefix / "lib/python3.12/site-packages"
     if not Path(args.policy_python).is_file():
         raise Refused("ROLLOUT_POLICY_PYTHON_MISSING")
     return config, mount, install_prefix, inputs, units, rig, pythonpath
@@ -373,7 +371,7 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
     group_root = run_root / args.group
     group_root.mkdir(mode=0o700)
     parallel_runtime = _ref(args.parallel_runtime_config)
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
     from so101_demo.runtime.inference.config import validate_file_ref
 
     runtime = _load_runtime_config(validate_file_ref(parallel_runtime))
@@ -401,7 +399,7 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
     header = {"identity": dict(inputs.identity), "runtime_settings": runtime_settings, "run_identity_sha256": description["run_identity_sha256"],
               "execution": inputs.execution.document() if inputs.execution is not None else None,
               "runtime": runtime_values, "preconditions": preconditions, "install_prefix": str(install_prefix),
-              "mount_build": None if mount is None else mount.document(), "rig_profile_sha256": rig.profile_sha256,
+              "mount_build": mount.document(), "rig_profile_sha256": rig.profile_sha256,
               "gpu_uuid": config["gpu_uuid"], "campaign_config_sha256": config_sha}
     if inputs.scene_variant is not None:       # only a variant run has the key: a nominal run.json is unchanged
         header["scene_variant"] = dict(inputs.scene_variant)

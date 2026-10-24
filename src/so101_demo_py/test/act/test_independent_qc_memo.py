@@ -151,13 +151,10 @@ def test_the_result_gates_trust_the_memo_only_when_asked_and_the_readback_never_
 def test_only_the_campaign_artifact_store_asks_for_the_memo_now_that_the_native_batch_has_no_act_gate():
     import inspect
 
-    from so101_demo.cli.mujoco_batch import composition, worker_process
+    from so101_demo.cli.mujoco_batch import artifact_results
 
-    source = inspect.getsource(composition) + inspect.getsource(worker_process)
-    # the native batch composition no longer builds an ACT result verifier (the old native ACT path is removed); the store the
-    # campaign's `_ArtifactResults` builds is the one remaining asker
-    assert source.count("trust_independent_qc_memo=True") == 1
-    assert "trust_independent_qc_memo" not in inspect.getsource(composition)
+    # the store the campaign's `_ArtifactResults` builds is the one asker
+    assert inspect.getsource(artifact_results).count("trust_independent_qc_memo=True") == 1
 
 
 def test_a_valid_memo_skips_the_recomputation_in_the_result_qc_readback_and_a_missing_one_does_not(tmp_path, monkeypatch):

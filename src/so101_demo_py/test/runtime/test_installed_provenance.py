@@ -13,7 +13,6 @@ from so101_demo.runtime.provenance import installed_bundle
 from paths import TEST_ROOT
 
 EXPECTED_EXECUTABLES = {
-    "act_instance_native",
     "campaign_shard",
     "campaign_processor",
     "act_offline_episode",

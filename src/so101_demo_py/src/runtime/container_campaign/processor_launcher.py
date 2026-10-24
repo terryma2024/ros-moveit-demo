@@ -39,7 +39,7 @@ def all_phase1_attempts(run):
 
 class ContainerProcessorLauncher:
     def __init__(self, *, context, images, paths, registry, parallel_runtime, approved_inputs, config_paths,
-                 docker_runner=_docker, namespace_reader=read_container_namespace, mount_build=None, cpuset_cpus=None):
+                 docker_runner=_docker, namespace_reader=read_container_namespace, mount_build, cpuset_cpus=None):
         if type(images) is not dict or set(images) != {"head", "teacher", "shard"}:
             raise ValueError("PROCESSOR_LAUNCHER_INVALID")
         self._common(context=context, paths=paths, registry=registry, parallel_runtime=parallel_runtime,
@@ -49,7 +49,7 @@ class ContainerProcessorLauncher:
         self.mount_build, self.cpuset_cpus = mount_build, cpuset_cpus
 
     def _common(self, *, context, paths, registry, parallel_runtime, approved_inputs, config_paths):
-        from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+        from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != "act_collection_start"
                 or type(registry) is not ContainerLaunchRegistry or str(paths["run"]) != context.evidence_root

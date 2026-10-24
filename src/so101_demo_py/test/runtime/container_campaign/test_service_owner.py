@@ -11,7 +11,6 @@ import pytest
 
 from so101_demo.runtime.container_campaign.paths import make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
-from so101_demo.runtime.container_campaign.provenance import freeze_image, verify_image_freeze
 from so101_demo.runtime.parallel_ipc.frames import canonical_json
 from so101_teleop.unified.contracts import AdmittedCampaignContext
 
@@ -23,33 +22,22 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
 
     `roles`, `descriptor_given` and `descriptor_sha` override what the owner is built with, to probe its refusals."""
     mod = importlib.import_module('so101_demo.runtime.container_campaign.service_owner')
+    if mount_tree is None:
+        mount_tree = mounted_trees(tmp_path)        # every run starts from a mount tree (image mode is retired)
     paths = make_campaign_paths(tmp_path, 'campaign')
-    source, install = tmp_path/'source', tmp_path/'install'
-    source.mkdir(); install.mkdir()
-    (source/'.image-git.json').write_text(json.dumps(dict(git_commit='1'*40, submodules={})))
-    (install/'installed.py').write_text('installed')
-    runtime = dict(interpreter='/act/venv/bin/python', dependencies={'numpy':'1.26.4'},
-        module_origins={'so101_demo':'/act/install/lib/so101_demo/__init__.py'},
-        package_prefixes={'so101_demo_py':'/act/install'})
-    manifest = freeze_image(source_root=source, install_root=install,
-                           git_commit='1'*40, submodules={}, runtime=runtime)
-    report = verify_image_freeze(manifest, source_root=source, install_root=install, runtime=runtime)
-    image = dict(digest='sha256:'+'b'*64, package_source_sha256=report['package_source_sha256'],
-                 install_sha256=report['install_sha256'])
-    if mount_tree is not None:
-        from so101_demo.runtime.container_campaign import mount_build as mounts
-        image = dict(digest='sha256:'+'b'*64, **mounts.verify_records(mount_tree))
-        report = dict(schema_version=1, kind='ACT_CONTAINER_IMAGE_READBACK', git_commit=mount_tree.commit, submodules={},
-            package_source_sha256=image['package_source_sha256'], install_sha256=image['install_sha256'],
-            runtime=dict(interpreter='/act/venv/bin/python', dependencies={'numpy':'1.26.4'},
-                module_origins={'so101_demo':str(mount_tree.install)+'/so101_demo_py/x.py'},
-                package_prefixes={'so101_demo_py':str(mount_tree.install)+'/so101_demo_py'}))
-        if preflight is not None:
-            record = {'schema_version':1,'kind':'MOUNT_PREFLIGHT','result':'PASS' if preflight == 'pass' else 'FAIL',
-                'commit':mount_tree.commit,'base_image_id':image['digest'],'base_manifest_sha256':'9'*64,
-                'install_record_sha256':image['install_sha256'],'must_failures':0 if preflight == 'pass' else 3,'warnings':2,
-                'exceptions':{},'host':'antzb'}
-            mounts.preflight_path(tmp_path, mount_tree).write_text(json.dumps(record))
+    from so101_demo.runtime.container_campaign import mount_build as mounts
+    image = dict(digest='sha256:'+'b'*64, **mounts.verify_records(mount_tree))
+    report = dict(schema_version=1, kind='ACT_CONTAINER_IMAGE_READBACK', git_commit=mount_tree.commit, submodules={},
+        package_source_sha256=image['package_source_sha256'], install_sha256=image['install_sha256'],
+        runtime=dict(interpreter='/act/venv/bin/python', dependencies={'numpy':'1.26.4'},
+            module_origins={'so101_demo':str(mount_tree.install)+'/so101_demo_py/x.py'},
+            package_prefixes={'so101_demo_py':str(mount_tree.install)+'/so101_demo_py'}))
+    if preflight is not None:
+        record = {'schema_version':1,'kind':'MOUNT_PREFLIGHT','result':'PASS' if preflight == 'pass' else 'FAIL',
+            'commit':mount_tree.commit,'base_image_id':image['digest'],'base_manifest_sha256':'9'*64,
+            'install_record_sha256':image['install_sha256'],'must_failures':0 if preflight == 'pass' else 3,'warnings':2,
+            'exceptions':{},'host':'antzb'}
+        mounts.preflight_path(tmp_path, mount_tree).write_text(json.dumps(record))
     controlled = tmp_path/'runtime.json'
     controlled.write_text('{}')
     sha = hashlib.sha256(controlled.read_bytes()).hexdigest()
@@ -66,8 +54,7 @@ def fixture(tmp_path, *, measurement=False, validation=False, fail_teacher=False
             max_image_height=480, max_image_width=640, queue_timeout_s=10., inference_timeout_s=20.)
     if rig_profile_sha256 is not None:
         config['rig_profile_sha256'] = rig_profile_sha256
-    if mount_tree is not None:
-        config['mount_build'] = mount_tree.document()
+    config['mount_build'] = mount_tree.document()
     if head_weights_absent:
         # a rig without a head owns no head model: nothing of it is read
         (tmp_path/'head.pt').unlink()
@@ -429,6 +416,19 @@ def test_a_mounted_start_whose_tree_record_changed_launches_nothing(tmp_path):
     mount = mounted_trees(tmp_path)
     owner, registry, calls, containers = fixture(tmp_path, mount_tree=mount)
     (mount.install/'BUILD-COMMIT').write_text('f'*40+'\n')
+    async def run():
+        with pytest.raises(ValueError, match='SERVICE_OWNER_START_FAILED'):
+            await owner.start()
+    try:
+        asyncio.run(run())
+        assert not [argv for argv in calls if argv[:2] == ['docker','run']]
+    finally:
+        registry.close()
+
+
+def test_a_config_without_a_mount_build_launches_nothing(tmp_path):
+    owner, registry, calls, containers = fixture(tmp_path)
+    del owner.config['mount_build']
     async def run():
         with pytest.raises(ValueError, match='SERVICE_OWNER_START_FAILED'):
             await owner.start()

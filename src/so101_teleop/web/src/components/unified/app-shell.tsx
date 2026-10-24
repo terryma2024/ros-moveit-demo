@@ -13,18 +13,16 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import "@/styles/unified-layout.css";
 
-export type ShellPage = "teleop" | "validation" | "tasks" | "archives";
+export type ShellPage = "teleop" | "tasks" | "archives";
 
 export type DomainHealth = {
   teleop: "ready" | "unavailable" | "blocked";
-  validation: "ready" | "unavailable" | "blocked";
   blockedReason?: string | null;
 };
 
 const PAGES: { page: ShellPage; path: string; label: string }[] = [
   { page: "archives", path: "/archives", label: "Archives" },
   { page: "teleop", path: "/", label: "Teleop" },
-  { page: "validation", path: "/expert-validation", label: "Expert Validation" },
 ];
 
 const THEME_KEY = "so101-unified-theme";
@@ -84,7 +82,7 @@ export function AppShell({
               <SheetContent side="left" aria-label="Navigation">
                 <SheetHeader>
                   <SheetTitle>SO-101</SheetTitle>
-                  <SheetDescription>Teleop and Expert Validation</SheetDescription>
+                  <SheetDescription>Teleop and Archives</SheetDescription>
                 </SheetHeader>
                 <ul className="space-y-2">
                   {PAGES.map((entry) => (
@@ -136,9 +134,6 @@ export function AppShell({
               <>
                 <Badge variant={health.teleop === "ready" ? "secondary" : "destructive"}>
                   Teleop: {health.teleop}
-                </Badge>
-                <Badge variant={health.validation === "ready" ? "secondary" : "destructive"}>
-                  Validation: {health.validation}
                 </Badge>
               </>
             ) : null}

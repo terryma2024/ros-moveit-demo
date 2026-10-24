@@ -33,7 +33,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 | 在 macOS 上运行或测试 SO-101，含正常 package test | [`macos-runtime-environment.md`](references/macos-runtime-environment.md) |
 | 多轮实验、生命周期比较、上下文压缩、agent 交接 | [`experiment-ledger.md`](references/experiment-ledger.md) |
 | 安装 Python 依赖、uv 索引、镜像绕过代理 | [`python-dependency-install.md`](references/python-dependency-install.md) |
-| 统一 Web Expert Validation 服务的启动、检查、清理 | [`unified-teleop-service.md`](references/unified-teleop-service.md) |
+| 统一 Web 服务（Expert Validation 已退役）的说明 | [`unified-teleop-service.md`](references/unified-teleop-service.md) |
 
 `src/so101_gazebo_demo_cpp/web` 统一用 Bun 装依赖、跑 scripts 和一次性 CLI，锁文件是 `bun.lock`，不用 npm/npx，也不引入 `package-lock.json`。每个新 shell 先记录 `command -v bun` 和 `bun --version`；项目预构建、本地测试和 shadcn CLI 也走 Bun，不要回退系统 Node 18。
 

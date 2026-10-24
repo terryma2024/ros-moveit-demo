@@ -1,4 +1,4 @@
-"""Read actual image bytes and origins, not a label or commit claim."""
+"""Read the mounted trees' records and the imported runtime of a mount-mode container, not a label or commit claim."""
 
 import copy
 import importlib
@@ -8,68 +8,44 @@ from types import SimpleNamespace
 
 import pytest
 
+INSTALL = "/build/mount/0123456789ab/install"
+MOUNT_ROLE = "shard"
+
+
+def mounted_report():
+    return dict(schema_version=1, kind="ACT_CONTAINER_IMAGE_READBACK", package_source_sha256="1" * 64, install_sha256="2" * 64,
+        git_commit="a" * 40, submodules={},
+        runtime=dict(interpreter="/act/venv/bin/python", dependencies={"numpy": "1.26.4"},
+            module_origins={"so101_demo": INSTALL}, package_prefixes={"so101_demo_py": INSTALL}))
+
 
 def fixture(tmp_path):
     module = importlib.import_module("so101_demo.runtime.container_campaign.provenance")
-    source, install = tmp_path/"source", tmp_path/"install"
-    source.mkdir(); install.mkdir()
-    (source/"worker.py").write_text("source")
-    (source/".image-git.json").write_text(json.dumps(dict(git_commit="a"*40,
-        submodules={"vendor/controllers": "b"*40})))
-    (install/"worker.py").write_text("installed")
-    runtime = dict(interpreter="/act/venv/bin/python", dependencies={"numpy": "1.26.4"},
-        module_origins={"so101_demo": "/act/install/lib/so101_demo/__init__.py"},
-        package_prefixes={"so101_demo_py": "/act/install"})
-    manifest = module.freeze_image(source_root=source, install_root=install,
-        git_commit="a"*40, submodules={"vendor/controllers": "b"*40}, runtime=runtime)
-    return module, source, install, runtime, manifest
+    return module, mounted_report()
 
 
-def test_original_freeze_reads_back_all_bytes_and_runtime(tmp_path):
-    module, source, install, runtime, manifest = fixture(tmp_path)
-    report = module.verify_image_freeze(manifest, source_root=source, install_root=install,
-                                       runtime=runtime)
-    assert report["package_source_sha256"] == manifest["source"]["sha256"]
-    assert report["install_sha256"] == manifest["install"]["sha256"]
-    assert report["runtime"] == runtime
-    assert manifest["source"]["git_commit"] == "a"*40
+def read(module, container_id, docker):
+    return module.read_container_provenance(container_id, docker_runner=docker, mount_role=MOUNT_ROLE, install_root=INSTALL)
 
 
-@pytest.mark.parametrize("problem", ["source", "install", "extra_file", "dependency", "origin", "prefix", "python", "hash", "metadata", "metadata_identity", "extra_field"])
-def test_drift_refuses_provenance(tmp_path, problem):
-    module, source, install, runtime, manifest = fixture(tmp_path)
-    if problem == "source": (source/"worker.py").write_text("different")
-    elif problem == "install": (install/"worker.py").write_text("different")
-    elif problem == "extra_file": (install/"injected.py").write_text("injected")
-    elif problem == "dependency": runtime["dependencies"]["numpy"] = "other"
-    elif problem == "origin": runtime["module_origins"]["so101_demo"] = "/act/source/src/worker.py"
-    elif problem == "prefix": runtime["package_prefixes"]["so101_demo_py"] = "/host/install"
-    elif problem == "python": runtime["interpreter"] = "/usr/bin/python3"
-    elif problem == "hash": manifest["install"]["sha256"] = "f"*64
-    elif problem == "metadata": manifest["source"]["git_commit"] = "main"
-    elif problem == "metadata_identity": manifest["source"]["git_commit"] = "f"*40
-    elif problem == "extra_field": manifest["label_pass"] = True
+@pytest.mark.parametrize("problem", ["interpreter", "origin", "prefix", "hash", "metadata", "extra_field", "missing_field"])
+def test_a_report_that_is_not_a_mounted_readback_is_refused(problem):
+    module, report = fixture(None)
+    if problem == "interpreter": report["runtime"]["interpreter"] = "/usr/bin/python3"
+    elif problem == "origin": report["runtime"]["module_origins"]["so101_demo"] = "/host/install"
+    elif problem == "prefix": report["runtime"]["package_prefixes"]["so101_demo_py"] = "/opt/ros/jazzy"
+    elif problem == "hash": report["install_sha256"] = "f"
+    elif problem == "metadata": report["git_commit"] = "main"
+    elif problem == "extra_field": report["label_pass"] = True
+    elif problem == "missing_field": del report["submodules"]
     with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module.verify_image_freeze(manifest, source_root=source, install_root=install, runtime=runtime)
-
-
-def test_safe_internal_link_is_bound_but_external_source_link_is_rejected(tmp_path):
-    module, source, install, runtime, _manifest = fixture(tmp_path)
-    (install/"current.py").symlink_to("worker.py")
-    manifest = module.freeze_image(source_root=source, install_root=install,
-        git_commit="a"*40, submodules={"vendor/controllers": "b"*40}, runtime=runtime)
-    module.verify_image_freeze(manifest, source_root=source, install_root=install, runtime=runtime)
-    (install/"outside.py").symlink_to(source/"worker.py")
-    with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module.freeze_image(source_root=source, install_root=install,
-            git_commit="a"*40, submodules={"vendor/controllers": "b"*40}, runtime=runtime)
+        module._report(report, INSTALL)
 
 
 @pytest.mark.parametrize("problem", [None, "cli_failed", "exec_failed", "restart", "not_running", "label_only", "duplicate", "wrong_id"])
 def test_docker_readback_binds_live_image_identity_and_actual_probe(tmp_path, problem, monkeypatch):
-    module, source, install, runtime, manifest = fixture(tmp_path)
+    module, report = fixture(tmp_path)
     monkeypatch.setattr(module, "_sleep", lambda _seconds: None)
-    report = module.verify_image_freeze(manifest, source_root=source, install_root=install, runtime=runtime)
     container_id = "1"*64
     inspect = dict(Id=container_id, Image="sha256:"+"2"*64,
                    State=dict(Running=True, Restarting=False, Pid=800,
@@ -83,20 +59,20 @@ def test_docker_readback_binds_live_image_identity_and_actual_probe(tmp_path, pr
             if problem == "not_running": document["State"]["Running"] = False
             if problem == "wrong_id": document["Id"] = "3"*64
             return SimpleNamespace(returncode=int(problem=="cli_failed"), stdout=json.dumps([document]))
-        assert argv == ["docker", "exec", container_id, "/act/venv/bin/python", "-I", "-m",
-                        "so101_demo.runtime.container_campaign.provenance"]
+        assert argv == ["docker", "exec", container_id, "/act/bootstrap.bash", "/act/venv/bin/python", "-I", "-B", "-m",
+                        "so101_demo.runtime.container_campaign.provenance", MOUNT_ROLE]
         payload = json.dumps(report)
         if problem == "label_only": payload = '{"git_commit":"'+"a"*40+'","PASS":true}'
         if problem == "duplicate": payload = '{"schema_version":1,"schema_version":1}'
         return SimpleNamespace(returncode=int(problem=="exec_failed"), stdout=payload)
     if problem is None:
-        actual = module.read_container_provenance(container_id, docker_runner=docker_runner)
+        actual = read(module, container_id, docker_runner)
         assert actual["image_digest"] == inspect["Image"] and actual["container_id"] == container_id
         assert actual["provenance"] == report
         assert len(calls)==3
     else:
         with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-            module.read_container_provenance(container_id, docker_runner=docker_runner)
+            read(module, container_id, docker_runner)
 
 
 class StartingContainer:
@@ -130,8 +106,7 @@ class StartingContainer:
 
 
 def retry_fixture(tmp_path, monkeypatch, **faults):
-    module, source, install, runtime, manifest = fixture(tmp_path)
-    report = module.verify_image_freeze(manifest, source_root=source, install_root=install, runtime=runtime)
+    module, report = fixture(tmp_path)
     pauses = []
     monkeypatch.setattr(module, "_sleep", pauses.append)
     return module, report, StartingContainer(module, report, **faults), pauses
@@ -142,7 +117,7 @@ def retry_fixture(tmp_path, monkeypatch, **faults):
     (dict(inspect_fails=1, not_running=1, exec_fails=1), [0.5, 1.0, 2.0])])
 def test_a_container_that_is_not_up_yet_is_read_again_and_the_read_is_compared_once(tmp_path, monkeypatch, faults, pauses):
     module, report, docker, slept = retry_fixture(tmp_path, monkeypatch, **faults)
-    actual = module.read_container_provenance(docker.id, docker_runner=docker)
+    actual = read(module, docker.id, docker)
     assert actual["provenance"] == report and actual["container_id"] == docker.id
     assert slept == pauses
 
@@ -151,7 +126,7 @@ def test_a_container_that_is_not_up_yet_is_read_again_and_the_read_is_compared_o
 def test_a_read_that_never_succeeds_is_refused_after_the_bounded_attempts(tmp_path, monkeypatch, faults):
     module, _report, docker, slept = retry_fixture(tmp_path, monkeypatch, **faults)
     with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module.read_container_provenance(docker.id, docker_runner=docker)
+        read(module, docker.id, docker)
     assert slept == list(module.READ_PAUSES_S) and module.READ_ATTEMPTS == len(slept) + 1
     assert sum(slept) <= 3.5 and (docker.inspects <= module.READ_ATTEMPTS + 1)
 
@@ -160,42 +135,42 @@ def test_a_read_that_never_succeeds_is_refused_after_the_bounded_attempts(tmp_pa
 def test_a_report_that_was_read_but_is_wrong_is_never_read_again(tmp_path, monkeypatch, payload):
     module, _report, docker, slept = retry_fixture(tmp_path, monkeypatch, payloads=[payload])
     with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module.read_container_provenance(docker.id, docker_runner=docker)
+        read(module, docker.id, docker)
     assert slept == [] and docker.execs == 1
 
 
 def test_a_wrong_report_after_a_retry_is_still_refused(tmp_path, monkeypatch):
     module, _report, docker, slept = retry_fixture(tmp_path, monkeypatch, exec_fails=1, payloads=['{"git_commit":"' + "a" * 40 + '"}'])
     with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module.read_container_provenance(docker.id, docker_runner=docker)
+        read(module, docker.id, docker)
     assert slept == [0.5] and docker.execs == 2
 
 
 def test_a_container_that_restarts_between_the_two_inspects_is_not_read_again(tmp_path, monkeypatch):
     module, _report, docker, slept = retry_fixture(tmp_path, monkeypatch, restart_at=2)
     with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module.read_container_provenance(docker.id, docker_runner=docker)
+        read(module, docker.id, docker)
     assert slept == [] and docker.execs == 1 and docker.inspects == 2
 
 
 def test_another_container_id_is_never_read_again(tmp_path, monkeypatch):
     module, _report, docker, slept = retry_fixture(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module.read_container_provenance("3" * 64, docker_runner=docker)
+        read(module, "3" * 64, docker)
     assert slept == [] and docker.execs == 0
 
 
 def test_shard_prefix_readback_covers_the_patched_controller_overlay():
-    """The overlay must resolve inside /act/install; an apt fallback would read back /opt/ros/jazzy and be refused."""
+    """The overlay must resolve inside the mounted install; an apt fallback would read back /opt/ros/jazzy and be refused."""
     module = importlib.import_module("so101_demo.runtime.container_campaign.provenance")
     shard = set(module.SHARD_PACKAGES)
     assert {"joint_trajectory_controller", "joint_state_broadcaster", "so101_queued_state_publisher",
             "controller_manager"} <= shard
     assert module.INFERENCE_PACKAGES == ("so101_demo_py",)
     runtime = dict(interpreter="/act/venv/bin/python", dependencies={"numpy": "1.26.4"},
-        module_origins={"so101_demo": "/act/install/lib/so101_demo/__init__.py"},
-        package_prefixes={name: "/act/install" for name in module.SHARD_PACKAGES})
-    module._runtime_contract(runtime)
+        module_origins={"so101_demo": INSTALL + "/lib/so101_demo/__init__.py"},
+        package_prefixes={name: INSTALL for name in module.SHARD_PACKAGES})
+    module._runtime_contract(runtime, INSTALL)
     runtime["package_prefixes"]["joint_trajectory_controller"] = "/opt/ros/jazzy"
     with pytest.raises(ValueError, match="IMAGE_PROVENANCE_INVALID"):
-        module._runtime_contract(runtime)
+        module._runtime_contract(runtime, INSTALL)

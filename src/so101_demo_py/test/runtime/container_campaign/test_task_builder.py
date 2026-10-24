@@ -28,7 +28,7 @@ from test_act_policy_freeze import rehash
 from test_config_identity import campaign_fixture,write_config
 from test_shard_retirement import fixture as native_fixture
 from so101_demo.act.collection_scope import build_collection_scope,write_collection_scope
-from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.runtime.container_campaign.task_contracts import InputRef,TaskSpec
 from so101_teleop.unified.act_stack import ActStackLaunch
 from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe

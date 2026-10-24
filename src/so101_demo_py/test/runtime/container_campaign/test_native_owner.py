@@ -58,7 +58,7 @@ def test_start_registers_the_intent_spawns_a_group_leader_and_binds_the_ready_re
 def test_the_environment_is_the_hosts_with_the_fixed_identity_on_top(tmp_path):
     base = dict(PATH='/usr/bin', AMENT_PREFIX_PATH='/opt/ros', ROS_NAMESPACE='/act/w00', ROS_DOMAIN_ID='9',
                 CUDA_VISIBLE_DEVICES='3', SO101_ACT_INSTANCE_ROOT='/stale', GZ_PARTITION='stale')
-    environment = native_instance_environment(base, owned_root=tmp_path, session_id='s1', gpu_uuid='GPU-x')
+    environment = native_instance_environment(base, owned_root=tmp_path, session_id='s1', gpu_uuid='GPU-x', install_prefix='/act/install')
 
     assert environment['PATH'] == '/usr/bin' and environment['AMENT_PREFIX_PATH'] == '/opt/ros'
     assert 'ROS_NAMESPACE' not in environment and 'GZ_PARTITION' not in environment
@@ -81,7 +81,7 @@ def test_the_instance_sees_no_desktop_display_so_that_it_renders_headless_like_a
     # EXP-585: the Host's DISPLAY made the MuJoCo node open a GLFW window on the desktop X server ("using GLFW") instead of the
     # headless EGL context every container run used; a container has no display
     base = dict(PATH='/usr/bin', DISPLAY=':1', WAYLAND_DISPLAY='wayland-0', XAUTHORITY='/run/user/1000/gdm/Xauthority')
-    environment = native_instance_environment(base, owned_root=tmp_path, session_id='s1', gpu_uuid='GPU-x')
+    environment = native_instance_environment(base, owned_root=tmp_path, session_id='s1', gpu_uuid='GPU-x', install_prefix='/act/install')
     assert not {'DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY'} & set(environment) and environment['PATH'] == '/usr/bin'
     assert base['DISPLAY'] == ':1'
 

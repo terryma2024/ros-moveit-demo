@@ -252,7 +252,8 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
         identity['rig_profile_sha256'] = campaign_config['rig_profile_sha256']
     if 'mount_build' in campaign_config:
         # mount mode: the commit and the root of the mounted build are part of what two hosts must agree on (the images then name the
-        # base image and the trees' record hashes); an image-mode config has no such key and its identity is unchanged
+        # base image and the trees' record hashes); the identity of a sealed image-mode config (read by the verifiers) has no such key.
+        # A start refuses such a config before it gets here (MOUNT_BUILD_REQUIRED).
         identity['mount_build'] = dict(campaign_config['mount_build'])
     return identity
 
@@ -314,15 +315,13 @@ class UnifiedWorkloadService:
         resource_binding_id: str, owner_pid: int, owner_started_ticks: int,
         clock_ns, owner_identity_valid=_real_owner, gpu_inventory_probe=None,
         calibration_identity_probe=None, root_registration=None, container_inspect=None,
-        batch_domain_claim_probe=None,
     ) -> None:
         if gpu_arbiter.store is not arbiter.store:
             raise ValueError("WORKLOAD_STORE_MISMATCH")
         self.arbiter = arbiter
         self.gpu_arbiter = gpu_arbiter
         self.child_registry = child_registry
-        self.slot_registry = ActWorkerSlotRegistry(arbiter.store, child_registry=child_registry,
-                                                   batch_domain_claim_probe=batch_domain_claim_probe)
+        self.slot_registry = ActWorkerSlotRegistry(arbiter.store, child_registry=child_registry)
         self.root_registration = root_registration
         self.container_inspect = container_inspect or self._inspect_container
         self.service_epoch = service_epoch
@@ -422,11 +421,9 @@ class UnifiedWorkloadService:
         if type(payload["qualification_mode"]) is not bool:
             raise ValueError("QUALIFICATION_MODE_INVALID")
         if container_collection:
-            # `native` runs the instance as a Host process group with no isolation: exactly one worker, refused before anything else
+            # native collection is retired: every instance is a container
             if payload['instance_launcher'] not in LAUNCHERS:
                 raise ValueError('INSTANCE_LAUNCHER_INVALID')
-            if payload['instance_launcher'] == 'native' and payload['worker_count'] != 1:
-                raise ValueError('NATIVE_INSTANCE_SINGLE_WORKER_ONLY')
         if spec.kind.startswith("act_collection"):
             if payload["qualification_mode"]:
                 if payload["worker_count"] not in (1, 2, 8):
@@ -443,6 +440,8 @@ class UnifiedWorkloadService:
             self._verify_artifact(payload['campaign_config_path'], payload['campaign_config_sha256'])
             campaign_config = load_campaign_config(payload['campaign_config_path'], roles=('teacher',),
                                                   expected_sha256=payload['campaign_config_sha256'])
+            if 'mount_build' not in campaign_config:
+                raise ValueError('MOUNT_BUILD_REQUIRED')       # a collection starts from a mount tree (image mode is retired)
             registered = validate_registered_evidence_root(campaign_config['evidence_root'],
                 payload['registered_evidence_root'], registration=self.root_registration)
             if (root.resolve(strict=True) != root or root == registered or not root.is_relative_to(registered)
@@ -607,7 +606,7 @@ class UnifiedWorkloadService:
                 if self.slot_registry.slots():
                     # A slot has no ROS names to compare with this child's, because its container is isolated. Without
                     # one, the only safe reading of "do not collide" is that no native child starts while a container
-                    # campaign still holds a slot. (The native-instance exclusivity rule is separate.)
+                    # campaign still holds a slot.
                     raise ValueError('WORKER_SLOT_RESOURCE_SHARED')
                 proposed.register(child)
             children = tuple(ActChildLaunch(**item) for item in payload["children"])
@@ -738,8 +737,7 @@ class UnifiedWorkloadService:
 
         The context must be this owner's durable record. Slots are reserved like shard slots (the same table, the same duplicate
         and launcher exclusivity rules) before any processor container is launched, and `finish` releases them with the
-        campaign. A native campaign (one worker) admits exactly one processor slot: the native processor runs after the native shard
-        was proven stopped, and has no ROS graph, so it does not share the fixed domain with anything."""
+        campaign."""
         if not isinstance(context, AdmittedCampaignContext) or context.workload_kind != 'act_collection_start':
             raise ValueError('CAMPAIGN_CONTEXT_MISMATCH')
         if (type(slots) is not tuple or not slots
@@ -757,10 +755,8 @@ class UnifiedWorkloadService:
                 raise ValueError("CAMPAIGN_CONTEXT_MISMATCH")
             parent = store._query_one("SELECT payload_json FROM parents WHERE operation_id=?", (context.operation_id,))
             launcher = None if parent is None else json.loads(parent[0]).get('instance_launcher')
-            if launcher not in ('container', 'native'):
+            if launcher != 'container':
                 raise ValueError('PROCESSOR_SLOT_LAUNCHER_UNSUPPORTED')
-            if launcher == 'native' and len(slots) != 1:
-                raise ValueError('PROCESSOR_SLOT_NATIVE_SINGLE_ONLY')
             if not any(not slot.is_processor and slot.campaign_id == context.campaign_id
                        and slot.execution_generation == context.execution_generation for slot in self.slot_registry.slots()):
                 raise ValueError('CAMPAIGN_NOT_ACTIVE')

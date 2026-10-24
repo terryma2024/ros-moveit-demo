@@ -364,7 +364,7 @@ def _e2e_model_provenance(options: PerceptionLaunchOptions) -> dict[str, object]
                 "model_manifest_sha256": options.model_manifest_sha256,
             }
         )
-    if options.runtime in {"docker", "docker_dev"}:
+    if options.runtime == "docker":
         document["container_image"] = options.container_image
     return document
 
@@ -518,7 +518,7 @@ def _configured_text_pick_agent_e2e_actions(context):
     model_provenance = _e2e_model_provenance(perception_options)
     if (
         perception_options.backend == "yolo_seg"
-        and perception_options.runtime in {"docker", "docker_dev"}
+        and perception_options.runtime == "docker"
     ):
         container_name = f"so101-yolo-seg-{request_id}"
         model_provenance.update(

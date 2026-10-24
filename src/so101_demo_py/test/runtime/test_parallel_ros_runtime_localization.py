@@ -208,18 +208,6 @@ def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
     assert localized.tf_timestamp_s == 12.0
 
 
-def test_production_port_factory_binds_every_production_port_without_empty_side_effects():
-    from so101_demo.cli.mujoco_batch.worker_process import RosWorkerRuntimePorts
-
-    ports = RosWorkerRuntimePorts(
-        SimpleNamespace(session_id="session-1"),
-        catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
-    ).kwargs()
-    assert set(ports) == RosWorkerRuntimePorts.REQUIRED
-    assert all(callable(value) for value in ports.values())
-    assert all("RUNTIME_PORT_NOT_READY" not in repr(value) for value in ports.values())
-
-
 def test_pause_control_is_retained_across_point_freeze_and_resume() -> None:
     from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts

@@ -182,23 +182,6 @@ def test_plan_only_and_validation_runs_are_not_affected():
 
 # ---- worker-run-results.json: backward compatible ---------------------------------------------------------------------------
 
-def test_the_origin_type_is_written_only_when_it_is_set(tmp_path):
-    from so101_demo.cli.mujoco_batch.worker_process import _write_worker_results
-    from so101_demo.parallel_batch.worker_parts.contracts import WorkerRunResult
-    resources = SimpleNamespace(worker_id="worker-01", generation=1, worker_root=tmp_path)
-    plain = WorkerRunResult("task_start", None, False, "INITIAL_GATE_FAILED", failure_boundary="x", failure_type="RuntimeError",
-                            failure_message="m")
-    path = _write_worker_results(resources, (plain,))
-    assert "failure_origin_type" not in json.loads(path.read_text())["results"][0]
-    other = tmp_path / "other"
-    other.mkdir()
-    resources = SimpleNamespace(worker_id="worker-01", generation=1, worker_root=other)
-    origin = WorkerRunResult("task_start", AttemptStatus.INDETERMINATE, True, "POINT_TERMINAL", failure_boundary="request_model",
-                             failure_type="TeacherPreMotionRefused", failure_message=STALE, failure_origin_type="PerceptionError")
-    document = json.loads(_write_worker_results(resources, (origin,)).read_text())["results"][0]
-    assert document["failure_origin_type"] == "PerceptionError" and document["failure_type"] == "TeacherPreMotionRefused"
-
-
 # ---- the recorder is proven stopped ------------------------------------------------------------------------------------------
 
 def test_the_runtime_reports_whether_the_recorder_was_proven_stopped(tmp_path, monkeypatch):

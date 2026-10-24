@@ -162,21 +162,10 @@ def frozen_identity_problems(frozen, manifest_path, contract):
 
 
 def _image_problem(document, image, mount_build=None):
-    """Whether a container's recorded provenance is not the image of the identity. In mount mode (`mount_build` is the identity's
-    `{commit, root}`) the readback names that commit, its paths lie under the mounted install, and the record repeats the mount; in
-    image mode a record that names a mount is refused."""
-    try:
-        report = document['provenance']
-        from so101_demo.runtime.container_campaign.provenance import _report
+    """Whether a container's recorded provenance is not the image of the identity (`legacy_image_records.image_problem`)."""
+    from .legacy_image_records import image_problem
 
-        _report(report, '/act/install' if mount_build is None else mount_build['root'] + '/install')
-        if document.get('mount_build') != mount_build or (mount_build is not None and report['git_commit'] != mount_build['commit']):
-            return True
-        return not (document['image_digest'] == image['digest']
-                    and report['package_source_sha256'] == image['package_source_sha256']
-                    and report['install_sha256'] == image['install_sha256'])
-    except (ImportError,)+_RUN_ERRORS:
-        return True
+    return image_problem(document, image, mount_build, _RUN_ERRORS)
 
 
 class _Run:

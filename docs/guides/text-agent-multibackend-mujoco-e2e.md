@@ -686,9 +686,9 @@ Grounded SAM 续测后又单独运行了两个旧入口的 focused 回归，结�
 | YOLO-Seg | `perception_weights`、`perception_weights_sha256` | 必须成对提供 |
 | Grounded SAM | `perception_model_root`、`perception_model_manifest_sha256` | 必须成对提供 |
 | device | `perception_device`、`perception_allow_cpu_fallback` | 可选 `auto/cuda/mps/cpu`；正式 MPS/CUDA 验收关闭 fallback |
-| runtime | `perception_runtime` | 可选 `auto/host/docker/docker_dev` |
+| runtime | `perception_runtime` | 可选 `auto/host/docker`（`docker` 只读挂载 `so101_demo` 源码，镜像只含依赖） |
 | Docker | `perception_container_image` | Linux YOLO inference image |
-| 开发挂载 | `perception_source_root` | 只允许与 `docker_dev` 一起使用 |
+| 源码挂载 | `perception_source_root` | 只允许与 `docker` 一起使用；缺省为正在运行的 `so101_demo` 包 |
 | Grounding DINO | `grounding_box_threshold`、`grounding_text_threshold`、`grounding_duplicate_iou`、`grounding_max_candidates` | 只对 `grounded_sam` 有效 |
 | SAM | `sam_mask_quality_threshold`、`sam_min_mask_pixels`、`sam_max_mask_area_ratio` | 只对 `grounded_sam` 有效 |
 

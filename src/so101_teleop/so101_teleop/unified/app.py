@@ -23,31 +23,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 
 from so101_teleop.bind_policy import validate_bind_address
-from so101_teleop.expert_validation.api import (
-    CANDIDATE_FIRST_PASS_CONFIRMATION,
-    CampaignCancelRequest,
-    CandidateContextIssueRequest,
-    CandidateExecutionContextResponse,
-    CandidateFirstPassRequest,
-    CandidateFirstPassResponse,
-    CapabilitiesResponse as _ValidationCapabilitiesResponse,
-    CampaignConfiguration,
-    CampaignProjectionResponse,
-    CampaignStartRequest,
-    CapabilitiesResponse,
-    LeaseAcquireRequest,
-    LeaseMutationRequest,
-    LeaseReleaseResponse,
-    LeaseResponse,
-    ManifestCreateRequest,
-    ManifestResponse,
-    PreflightResponse,
-    RetryRequest,
-    START_GUARD_NOT_A_QUALIFICATION,
-    _error,
-    _invoke,
-    _reject_legacy_execution_contract,
-)
 from so101_teleop.models import (
     BackendCapabilitiesResponse,
     CaptureResponse,
@@ -79,7 +54,6 @@ EXECUTION_GENERATION_HEADER = "X-SO101-Execution-Generation"
 API_NAMESPACES = (
     "api",
     "tasks",
-    "expert-validation",
     "control",
     "snapshot",
     "capabilities",
@@ -123,19 +97,6 @@ class InstanceProofResponse(BaseModel):
     instance_id: str
     proof: str
     domain: str
-
-
-class CapabilitiesResponse(_ValidationCapabilitiesResponse):
-    """Capability payload: the original read-only fields plus worker qualification.
-
-    The model keeps the reviewed contract name that the generated TypeScript client already
-    imports, widens ``extra`` to ``allow`` so unknown read-only fields survive, and requires
-    the per-N qualification list so it is a real, reachable part of the schema.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    worker_qualifications: list[QualificationViewResponse]
 
 
 def unavailable(code: str, message: str, status_code: int = 503) -> JSONResponse:
@@ -737,237 +698,6 @@ def tasks_router(services: UnifiedServices) -> APIRouter:
     return router
 
 
-def validation_router(services: UnifiedServices) -> APIRouter:
-    router = APIRouter()
-
-    def owner():
-        return services.validation
-
-    async def guarded(call, *args, default_status: int = 409):
-        service = owner()
-        if service is None:
-            return unavailable("VALIDATION_UNAVAILABLE", "validation domain is not available")
-        try:
-            return await call(service, *args)
-        except Exception as error:  # noqa: BLE001 - mirrors the standalone surface
-            return _error(error, default_status=default_status)
-
-    mutation = Depends(require_authority("validation"))
-
-    @router.get("/expert-validation/capabilities", response_model=CapabilitiesResponse)
-    async def capabilities():
-        service = owner()
-        if service is None:
-            return {
-                "available": False,
-                "reason": "VALIDATION_SERVER_REQUIRED",
-                "worker_qualifications": [
-                    _qualification_payload(services.budget_source, n) for n in range(2, 9)
-                ],
-            }
-        payload = dict(await _invoke(service.capabilities))
-        return _published_capabilities(payload, services.budget_source)
-
-    @router.post("/expert-validation/lease", response_model=LeaseResponse)
-    async def acquire_lease(
-        body: LeaseAcquireRequest, binding: ChannelBinding = Depends(require_channel("validation"))
-    ):
-        result = await guarded(lambda service: _invoke(service.acquire_lease, body.model_dump()))
-        generation = _claim_acquired(getattr(services, "instances", None), binding, result)
-        if generation is not None and isinstance(result, dict):
-            result["execution_generation"] = generation
-        return result
-
-    @router.put("/expert-validation/lease/{lease_id}", response_model=LeaseResponse)
-    async def renew_lease(
-        lease_id: str, body: LeaseMutationRequest, authority: RequestAuthority = mutation
-    ):
-        result = await guarded(lambda service: _invoke(service.renew_lease, lease_id, body.model_dump()))
-        # The renewal the domain just granted has to reach the controller's projection, or the next
-        # mutation is checked against the acquisition's expiry and refused.
-        _record_renewal(getattr(services, "instances", None), authority, result)
-        return result
-
-    @router.delete("/expert-validation/lease/{lease_id}", response_model=LeaseReleaseResponse)
-    async def release_lease(
-        lease_id: str, body: LeaseMutationRequest, authority: RequestAuthority = mutation
-    ):
-        return await guarded(lambda service: _invoke(service.release_lease, lease_id, body.model_dump()))
-
-    @router.post("/expert-validation/manifests", response_model=ManifestResponse)
-    async def create_manifest(body: ManifestCreateRequest, authority: RequestAuthority = mutation):
-        return await guarded(
-            lambda service: _invoke(service.create_manifest_from_count, body.total_points)
-        )
-
-    @router.get("/expert-validation/manifests/{manifest_id}", response_model=ManifestResponse)
-    async def get_manifest(manifest_id: str):
-        return await guarded(
-            lambda service: _invoke(
-                getattr(service, "get_manifest_api", service.get_manifest), manifest_id
-            ),
-            default_status=404,
-        )
-
-    @router.post(
-        "/expert-validation/campaigns/preflight",
-        response_model=PreflightResponse,
-        dependencies=[Depends(_reject_legacy_execution_contract)],
-    )
-    async def preflight(body: CampaignConfiguration, authority: RequestAuthority = mutation):
-        return await guarded(
-            lambda service: _invoke(service.preflight_api, body.model_dump(exclude_none=True))
-        )
-
-    @router.post(
-        "/expert-validation/campaigns",
-        response_model=CampaignProjectionResponse,
-        dependencies=[Depends(_reject_legacy_execution_contract)],
-    )
-    async def start_campaign(body: CampaignStartRequest, authority: RequestAuthority = mutation):
-        return await guarded(
-            lambda service: _invoke(service.start_campaign_api, body.model_dump(exclude_none=True))
-        )
-
-    @router.get("/expert-validation/campaigns", response_model=list[CampaignProjectionResponse])
-    async def list_campaigns():
-        return await guarded(lambda service: _invoke(service.list_campaigns))
-
-    @router.get(
-        "/expert-validation/campaigns/{campaign_id}", response_model=CampaignProjectionResponse
-    )
-    async def get_campaign(campaign_id: str):
-        return await guarded(lambda service: _invoke(service.get_campaign, campaign_id), default_status=404)
-
-    @router.post(
-        "/expert-validation/campaigns/{campaign_id}/cancel",
-        response_model=CampaignProjectionResponse,
-    )
-    async def cancel_campaign(
-        campaign_id: str, body: CampaignCancelRequest, authority: RequestAuthority = mutation
-    ):
-        return await guarded(
-            lambda service: _invoke(service.cancel_campaign, campaign_id, body.model_dump())
-        )
-
-    @router.post(
-        "/expert-validation/campaigns/{campaign_id}/full-restart-retries",
-        response_model=CampaignProjectionResponse,
-    )
-    async def retry_campaign(campaign_id: str, body: RetryRequest, authority: RequestAuthority = mutation):
-        if body.confirmation != "CONFIRM FULL_RESTART RETRIES":
-            return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})
-        return await guarded(
-            lambda service: _invoke(service.retry_campaign, campaign_id, body.model_dump())
-        )
-
-    @router.post(
-        "/expert-validation/candidate-contexts",
-        response_model=CandidateExecutionContextResponse,
-    )
-    async def issue_candidate_context(
-        body: CandidateContextIssueRequest, authority: RequestAuthority = mutation
-    ):
-        return await guarded(
-            lambda service: _invoke(
-                service.issue_candidate_context_api, body.model_dump(exclude_none=True)
-            )
-        )
-
-    @router.post(
-        "/expert-validation/campaigns/candidate-first-pass",
-        response_model=CandidateFirstPassResponse,
-    )
-    async def candidate_first_pass(
-        body: CandidateFirstPassRequest, authority: RequestAuthority = mutation
-    ):
-        if body.confirmation != CANDIDATE_FIRST_PASS_CONFIRMATION:
-            return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})
-        return await guarded(
-            lambda service: _invoke(
-                service.start_candidate_first_pass_api, body.model_dump(exclude_none=True)
-            )
-        )
-
-    @router.get("/expert-validation/artifacts/{artifact_id}")
-    async def artifact(artifact_id: str):
-        service = owner()
-        if service is None:
-            return unavailable("VALIDATION_UNAVAILABLE", "validation domain is not available")
-        try:
-            verified = service.artifacts.resolve_opaque_id(artifact_id)
-        except (ArtifactAccessError, KeyError, ValueError):
-            return JSONResponse(status_code=404, content={"code": "ARTIFACT_NOT_FOUND"})
-        return FileResponse(verified.path, media_type=verified.media_type, filename=verified.path.name)
-
-    @router.websocket("/expert-validation/events")
-    async def events(websocket: WebSocket):
-        service = owner()
-        await websocket.accept()
-        subscribe = getattr(service, "subscribe", None) if service is not None else None
-        if subscribe is None:
-            await websocket.close(code=1011, reason="EVENT_STREAM_UNAVAILABLE")
-            return
-        queue = subscribe()
-        disconnect = asyncio.create_task(websocket.receive())
-        event_ready = None
-        try:
-            while True:
-                event_ready = asyncio.create_task(queue.get())
-                done, _ = await asyncio.wait(
-                    {event_ready, disconnect}, return_when=asyncio.FIRST_COMPLETED
-                )
-                if disconnect in done:
-                    return
-                await websocket.send_json(event_ready.result().model_dump())
-                event_ready = None
-        except WebSocketDisconnect:
-            return
-        finally:
-            tasks = (event_ready, disconnect)
-            for task in tasks:
-                if task is not None and not task.done():
-                    task.cancel()
-            await asyncio.gather(
-                *(task for task in tasks if task is not None), return_exceptions=True
-            )
-            service.unsubscribe(queue)
-
-    return router
-
-
-def _qualification_payload(source, selected_n: int) -> dict:
-    view = source.decision(selected_n, "uncomposed-runtime")
-    return {
-        "selected_n": view.selected_n,
-        "status": view.status,
-        "reasons": list(view.reasons),
-        "runtime_identity": view.runtime_identity,
-        "contract_version": view.contract_version,
-        "profile_sha256": view.profile_sha256,
-        "approval_sha256": view.approval_sha256,
-    }
-
-
-def _published_capabilities(payload: dict, budget_source) -> dict:
-    """The capability document a client may read, without consulting an authority it need not.
-
-    A platform-bound document (the macOS W1/W2 support matrix) is a complete statement about
-    this host: what it supports is the platform matrix, not an upstream per-N qualification.
-    Only a composition that does not declare a matrix is completed from the budget provider.
-    """
-
-    if payload.get("support_matrix"):
-        payload["worker_qualifications"] = []
-        payload.setdefault("start_guard_note", START_GUARD_NOT_A_QUALIFICATION)
-        return payload
-    if "worker_qualifications" not in payload:
-        payload["worker_qualifications"] = [
-            _qualification_payload(budget_source, n) for n in range(2, 9)
-        ]
-    return payload
-
-
 def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
     if capture_dir is not None:
         captures = Path(capture_dir)
@@ -981,11 +711,6 @@ def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
             StaticFiles(directory=root / "assets", follow_symlink=True),
             name="assets",
         )
-        app.mount(
-            "/expert-validation/assets",
-            StaticFiles(directory=root / "assets", follow_symlink=True),
-            name="validation-assets",
-        )
 
         @app.get("/", include_in_schema=False)
         async def web_root():
@@ -993,7 +718,6 @@ def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
 
         @app.get("/archives", include_in_schema=False)
         @app.get("/tasks", include_in_schema=False)
-        @app.get("/expert-validation", include_in_schema=False)
         async def compat_pages():
             return FileResponse(root / "index.html")
 
@@ -1009,7 +733,6 @@ def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
         @app.get("/", include_in_schema=False)
         @app.get("/archives", include_in_schema=False)
         @app.get("/tasks", include_in_schema=False)
-        @app.get("/expert-validation", include_in_schema=False)
         async def web_assets_missing():
             return JSONResponse(status_code=503, content={"code": "WEB_ASSETS_NOT_BUILT"})
 
@@ -1073,7 +796,6 @@ def create_unified_app(
     app.include_router(health_router(services))
     app.include_router(teleop_router(services))
     app.include_router(tasks_router(services))
-    app.include_router(validation_router(services))
     app.include_router(head_camera_router(services))
     app.include_router(archive_router(archives))
     _mount_static(app, static_dir, capture_dir)
@@ -1156,22 +878,11 @@ class _SchemaOnlyService:
         return None
 
 
-class _SchemaOnlyValidation:
-    artifacts = None
-
-    def health(self):
-        return {"ok": True}
-
-    def capabilities(self):
-        return {"available": True}
-
-
 def schema_services() -> UnifiedServices:
     """A schema-only composition: it opens no store and starts no child process."""
     return UnifiedServices(
         teleop=_SchemaOnlyService(),
         tasks=_SchemaOnlyService(),
-        validation=_SchemaOnlyValidation(),
         budget_source=UnknownBudgetSource(),
         schema_only=True,
     )
@@ -1186,5 +897,4 @@ __all__ = [
     "schema_services",
     "tasks_router",
     "teleop_router",
-    "validation_router",
 ]

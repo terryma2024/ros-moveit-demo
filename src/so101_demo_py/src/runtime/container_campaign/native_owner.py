@@ -32,7 +32,6 @@ from so101_demo.runtime.act_instance.identity import (
 from so101_demo.runtime.container_campaign.instance_owner_common import (
     check_runtime_ready, load_instance_spec, read_instance_exit)
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs, instance_private_environment
-from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX
 from so101_demo.runtime.container_campaign.native_stop import leader_state, observe_native_exit, stop_descendants
 from so101_demo.runtime.container_campaign.process_identity import (
     NATIVE_LEADER_GONE, NativeOwnerKey, pid_namespace_inode, read_process_owner)
@@ -49,7 +48,7 @@ _NOT_INHERITED = frozenset({"ROS_NAMESPACE", "ROS_DOMAIN_ID", INSTANCE_ROOT_ENV,
                             "SO101_MUJOCO_SESSION_ID", "GZ_PARTITION", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"})
 
 
-def native_instance_environment(base, *, owned_root, session_id, gpu_uuid, install_prefix=CONTAINER_INSTALL_PREFIX):
+def native_instance_environment(base, *, owned_root, session_id, gpu_uuid, install_prefix):
     """The environment of a native instance: the Host's, with the fixed instance identity and private locations on top.
 
     It mirrors the container launch: the same private temp, cache and log locations, the fixed ROS identity, and the instance
@@ -67,7 +66,7 @@ def native_instance_environment(base, *, owned_root, session_id, gpu_uuid, insta
 
 
 class NativeInstanceOwner:
-    #: the prefix of this owner's own refusal codes and the launch role it predecessors-check (`NativeProcessorOwner` overrides both)
+    #: the prefix of this owner's own refusal codes and the launch role it predecessors-check
     CODE = 'SHARD'
     ROLE = 'shard'
 
@@ -183,7 +182,7 @@ class NativeInstanceOwner:
         finally:
             self._startup_done.set()
 
-    # ---- what differs between a shard instance and a processor (`NativeProcessorOwner`) ------------------------------------
+    # ---- the shard-instance hooks of the single-stack owner ------------------------------------------------------------
 
     def _spec_unchanged(self):
         from so101_demo.runtime.act_instance.spec import load_spec

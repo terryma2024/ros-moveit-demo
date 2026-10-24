@@ -45,7 +45,7 @@ class ContainerProcessorOwner(ContainerShardOwner):
     def __init__(self, *, admitted_context, launch, entry, images, paths, registry, approved_inputs, config_paths,
                  phase1_attempts, service_token, startup_timeout_s, status_timeout_s, max_frame_bytes, stop_timeout_s,
                  docker_runner=_docker, namespace_reader=read_container_namespace, monotonic_ns=time.monotonic_ns,
-                 mount_build=None, cpuset_cpus=None):
+                 mount_build, cpuset_cpus=None):
         run = Path(paths['run'])
         if (type(admitted_context) is not AdmittedCampaignContext
                 or type(launch) is not ContainerLaunch or launch.role != 'processor'
@@ -136,13 +136,12 @@ class ContainerProcessorOwner(ContainerShardOwner):
             await self._wait_file(self.root / READY_NAME, deadline)
             check_processor_ready(self.root, generation=self.launch.launch_generation, process=binding.process)
             actual = await asyncio.to_thread(functools.partial(read_container_provenance, cid, docker_runner=self.docker,
-                **({} if self.mount_build is None else dict(mount_role='shard', install_root=str(self.mount_build.install)))))
+                mount_role='shard', install_root=str(self.mount_build.install)))
             if (actual['image_digest'] != self.image['digest'] or any(
                     actual['provenance'][name] != self.image[name] for name in ('package_source_sha256', 'install_sha256'))
-                    or (self.mount_build is not None and actual['provenance']['git_commit'] != self.mount_build.commit)):
+                    or actual['provenance']['git_commit'] != self.mount_build.commit):
                 raise ValueError('PROCESSOR_IMAGE_PROVENANCE_CHANGED')
-            if self.mount_build is not None:
-                actual = dict(actual, mount_build=self.mount_build.document())
+            actual = dict(actual, mount_build=self.mount_build.document())
             _write(self.root / 'actual-container-provenance.json', actual)
             await self._ensure_alive(deadline)
             self._runtime_ready = True
