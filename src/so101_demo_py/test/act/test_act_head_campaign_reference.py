@@ -13,7 +13,7 @@ import yaml
 @pytest.mark.parametrize('index,kind',[(0,'none'),(6,'normal_light'),(7,'amodal_cup')])
 def test_fixture_seals_reference_config_and_exact_light_baseline(tmp_path,index,kind):
     from test_act_head_search_campaign_scene import _baseline,_case
-    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    from so101_demo.act.head_search.campaign_scene import prepare_case_fixture
     baseline=_baseline(tmp_path)
     prepared=prepare_case_fixture(_case(index),baseline,tmp_path/'variant')
     render=json.loads(Path(prepared['render_config_ref']['path']).read_text())
@@ -105,7 +105,7 @@ def _save(path,raw):
 
 def test_dynamic_truth_decodes_outer_and_keeps_exact_physics_gate(tmp_path):
     from test_act_head_search_campaign_truth import _inputs
-    from so101_demo.act.head_search_campaign_truth import build_frame_truth
+    from so101_demo.act.head_search.campaign_truth import build_frame_truth
     frame_ref,state_refs,fixture_ref=_inputs(tmp_path)
     doc=json.loads(Path(frame_ref['path']).read_text())
     result=build_frame_truth(frame_ref,state_refs,fixture_ref,tmp_path/'truth')
@@ -118,7 +118,7 @@ def test_dynamic_truth_decodes_outer_and_keeps_exact_physics_gate(tmp_path):
 
 def _initial_case(tmp_path,index):
     from test_act_head_search_campaign_scene import _baseline,_case
-    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    from so101_demo.act.head_search.campaign_scene import prepare_case_fixture
     from so101_demo.adapters.act.head_execution_scene import load_scene_safety
     from types import SimpleNamespace
     from rclpy.serialization import serialize_message
@@ -173,7 +173,7 @@ def _initial_case(tmp_path,index):
 
 @pytest.mark.parametrize('index',[6,7])
 def test_initial_condition_uses_native_reference_and_never_supplies_dynamic_truth(tmp_path,index):
-    from so101_demo.act import head_search_campaign_truth as truth
+    from so101_demo.act.head_search import campaign_truth as truth
     prepared,outer,doc=_initial_case(tmp_path,index)
     initial=_save(tmp_path/'initial.json',json.dumps(doc).encode())
     result=truth.build_initial_condition_reference(initial,prepared['refs']['scenario_fixture'],tmp_path/'condition')
@@ -185,7 +185,7 @@ def test_initial_condition_uses_native_reference_and_never_supplies_dynamic_trut
 
 @pytest.mark.parametrize('damage',['moving','source','qvel','zero','full','not_subset','reference_kind'])
 def test_initial_condition_conflicts_refuse_without_creating_output(tmp_path,damage):
-    from so101_demo.act import head_search_campaign_truth as truth
+    from so101_demo.act.head_search import campaign_truth as truth
     from rclpy.serialization import serialize_message
     prepared,outer,doc=_initial_case(tmp_path,7)
     if damage=='moving':doc['reset_original']['simulation_step']=1

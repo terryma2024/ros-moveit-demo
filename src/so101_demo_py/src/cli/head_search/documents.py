@@ -31,7 +31,7 @@ def _selection_rule_parser() -> argparse.ArgumentParser:
 
     The rule of record has to exist before its measurement, so this entry takes the directory the
     measurement will own and refuses to write anything when that directory already exists; it never
-    measures, renders or detects, and `so101_demo.act.head_search_operating_point_measurement` is the
+    measures, renders or detects, and `so101_demo.act.head_search.operating_point_measurement` is the
     only library it calls.
     """
 
@@ -93,8 +93,8 @@ def _measure_selection_rule(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_operating_point_measurement.documents import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.operating_point_measurement.documents import (
         record_selection_rule_documents,
     )
 
@@ -217,8 +217,8 @@ def _measure_operating_point(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_operating_point_measurement.measurement import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.operating_point_measurement.measurement import (
         measure_operating_point_measurements,
     )
 
@@ -326,10 +326,10 @@ def _measure_admission(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_admission_document import (
+    from so101_demo.act.head_search.calibration_admission_document import (
         record_admission_document,
     )
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
 
     try:
         result = record_admission_document(
@@ -358,7 +358,7 @@ def _bundle_inputs_parser() -> argparse.ArgumentParser:
     """The `measure-bundle-inputs` entry: the declared documents, the device and the output directory.
 
     Nothing is computed and nothing is constructed here: the entry validates the declared inputs and hands
-    them to `so101_demo.act.head_search_calibration_bundle_inputs`, which constructs the installed
+    them to `so101_demo.act.head_search.calibration_bundle_inputs`, which constructs the installed
     controller and the production detector with the recorded values and records what it observes. The
     output directory must be brand new, exactly as every other runner's is.
     """
@@ -435,11 +435,11 @@ def _measure_bundle_inputs(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_bundle_inputs import (
+    from so101_demo.act.head_search.calibration_bundle_inputs import (
         DECLARED_PARAMETERS,
         record_bundle_inputs,
     )
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
 
     request = {
         "geometry_seal": parsed.geometry_seal,
@@ -527,8 +527,8 @@ def _measure_episode_records(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_episode_records import record_episode_records
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.episode_records import record_episode_records
 
     try:
         result = record_episode_records(

@@ -13,11 +13,11 @@ import json
 import math
 
 import pytest
-from so101_demo.act import head_search_fine_correction_episodes as module
-from so101_demo.act.head_search_fine_correction_episodes import contracts as module_contracts
-from so101_demo.act.head_search_fine_correction_episodes import scene as module_scene
-from so101_demo.act.head_search_fine_correction_episodes import writer as module_writer
-from so101_demo.act.head_search_fine_correction_episodes.contracts import (
+from so101_demo.act.head_search import fine_correction_episodes as module
+from so101_demo.act.head_search.fine_correction_episodes import contracts as module_contracts
+from so101_demo.act.head_search.fine_correction_episodes import scene as module_scene
+from so101_demo.act.head_search.fine_correction_episodes import writer as module_writer
+from so101_demo.act.head_search.fine_correction_episodes.contracts import (
     CAL_FINE_EPISODE_BUDGET_EXHAUSTED,
     CAL_FINE_EPISODE_CORRECTION_MISMATCH,
     CAL_FINE_EPISODE_CUP_NOT_FOUND,
@@ -35,7 +35,7 @@ from so101_demo.act.head_search_fine_correction_episodes.contracts import (
     RECORD_KEYS,
     REFUSAL_CODES,
 )
-from so101_demo.act.head_search_fine_correction_episodes.episode import (
+from so101_demo.act.head_search.fine_correction_episodes.episode import (
     build_fine_correction_episodes,
     condition_class_for_index,
     cup_count_for_condition_class,
@@ -46,10 +46,10 @@ from so101_demo.act.head_search_fine_correction_episodes.episode import (
     run_fine_correction_episode,
     verify_correction_consistency,
 )
-from so101_demo.act.head_search_fine_correction_episodes.writer import (
+from so101_demo.act.head_search.fine_correction_episodes.writer import (
     write_head_search_fine_correction_episodes,
 )
-from so101_demo.act.head_search_timing_measurement.contracts import (
+from so101_demo.act.head_search.timing_measurement.contracts import (
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
@@ -1175,7 +1175,7 @@ def test_the_producer_declares_what_it_prepared_and_what_it_never_started(tmp_pa
 def test_a_lock_that_needed_no_correction_is_refused_rather_than_written_as_a_zero():
     """Phase 6 refuses a successful episode whose count is not positive, so this producer refuses first."""
 
-    from so101_demo.act.head_search_fine_correction_episodes.contracts import (
+    from so101_demo.act.head_search.fine_correction_episodes.contracts import (
         CAL_FINE_EPISODE_NO_CORRECTION_NEEDED,
     )
 

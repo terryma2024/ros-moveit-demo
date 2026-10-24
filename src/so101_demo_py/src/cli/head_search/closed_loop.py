@@ -95,12 +95,12 @@ def _measure_deadband_candidates(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_deadband_measurement.contracts import DEFAULT_MAX_FRAMES
-    from so101_demo.act.head_search_deadband_measurement.writer import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.deadband_measurement.contracts import DEFAULT_MAX_FRAMES
+    from so101_demo.act.head_search.deadband_measurement.writer import (
         write_head_search_deadband_measurement,
     )
-    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
+    from so101_demo.act.head_search.timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
 
     optional = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
     for key in ("max_settle_s", "settle_consecutive_steps", "max_frames"):
@@ -250,15 +250,15 @@ def _measure_fine_correction_episodes(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_fine_correction_episodes.contracts import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.fine_correction_episodes.contracts import (
         DEFAULT_MAX_FRAMES,
         DEFAULT_MEASUREMENT_BUDGET,
     )
-    from so101_demo.act.head_search_fine_correction_episodes.writer import (
+    from so101_demo.act.head_search.fine_correction_episodes.writer import (
         write_head_search_fine_correction_episodes,
     )
-    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
+    from so101_demo.act.head_search.timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
 
     optional = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
     for key in ("max_settle_s", "settle_consecutive_steps", "max_frames"):
@@ -430,10 +430,10 @@ def _measure_scenarios(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_scenarios.contracts import DEFAULT_MAX_FRAMES
-    from so101_demo.act.head_search_scenarios.writer import write_head_search_scenarios
-    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.scenarios.contracts import DEFAULT_MAX_FRAMES
+    from so101_demo.act.head_search.scenarios.writer import write_head_search_scenarios
+    from so101_demo.act.head_search.timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
 
     optional: dict = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
     for key in ("max_settle_s", "settle_consecutive_steps", "max_frames", "interruption_frame"):
@@ -582,12 +582,12 @@ def _measure_camera(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_camera_measurement.declarations import DEFAULT_FRAMES_PER_POSE
-    from so101_demo.act.head_search_camera_measurement.writer import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.camera_measurement.declarations import DEFAULT_FRAMES_PER_POSE
+    from so101_demo.act.head_search.camera_measurement.writer import (
         write_head_search_camera_measurement,
     )
-    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
+    from so101_demo.act.head_search.timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
 
     optional = {
         "frames_per_pose": DEFAULT_FRAMES_PER_POSE,

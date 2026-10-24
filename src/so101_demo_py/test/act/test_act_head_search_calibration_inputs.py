@@ -47,8 +47,7 @@ class _PermissiveAdmission:
 
 
 def _module():
-    from so101_demo.act import head_search_calibration_inputs
-
+    from so101_demo.act.head_search import calibration_inputs as head_search_calibration_inputs
     return head_search_calibration_inputs
 
 

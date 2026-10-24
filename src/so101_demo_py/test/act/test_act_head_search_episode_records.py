@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_episode_records import (
+from so101_demo.act.head_search.episode_records import (
     CAL_EPISODE_RECORDS_INCOMPLETE,
     CANDIDATE_IDS,
     RECEIPT_NAME,

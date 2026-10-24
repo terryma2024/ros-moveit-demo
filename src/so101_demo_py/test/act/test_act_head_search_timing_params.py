@@ -21,19 +21,19 @@ from __future__ import annotations
 import json
 
 import pytest
-from so101_demo.act.head_search_calibration_bundle import (
+from so101_demo.act.head_search.calibration_bundle import (
     ALSO_RECORDED_ITEMS,
     ALSO_RECORDED_KEYS,
     PARAMETER_EVIDENCE_KEYS,
     RUNTIME_IDENTITY_FIELDS,
     assemble_calibration_bundle,
 )
-from so101_demo.act.head_search_calibration_inputs import (
+from so101_demo.act.head_search.calibration_inputs import (
     SEALED_INPUT_NAMES,
     CalibrationInputsRefused,
 )
-from so101_demo.act.head_search_calibration_run import TIMING_NAME
-from so101_demo.act.head_search_timing_params import (
+from so101_demo.act.head_search.calibration_run import TIMING_NAME
+from so101_demo.act.head_search.timing_params import (
     ARTIFACT_NAME,
     CAL_EFFECTIVE_VALUE_MISMATCH,
     CAL_FRESHNESS_EXCEEDED,
@@ -925,7 +925,7 @@ def test_the_five_blocks_and_the_frame_contract_survive_phase_8_assembly_verbati
 def test_a_constructed_readback_keeps_its_own_observation_and_verdict():
     """A readback taken off the running component is not relabelled as a caller's report."""
 
-    from so101_demo.act.head_search_measured_readback import CONSTRUCTED_OBSERVATION
+    from so101_demo.act.head_search.measured_readback import CONSTRUCTED_OBSERVATION
 
     computed = build()["parameters"]["max_age_s"]["value"]
     document = build(
@@ -948,7 +948,7 @@ def test_a_constructed_readback_keeps_its_own_observation_and_verdict():
 def test_a_constructed_readback_of_an_unobservable_value_stays_unverified():
     """A value the component could not be queried for is recorded unverified, never as an observation."""
 
-    from so101_demo.act.head_search_measured_readback import NOT_OBSERVABLE
+    from so101_demo.act.head_search.measured_readback import NOT_OBSERVABLE
 
     computed = build()["parameters"]["max_age_s"]["value"]
     document = build(

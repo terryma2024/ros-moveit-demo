@@ -10,8 +10,8 @@ import os
 from pathlib import Path
 import sys
 
-from so101_demo.act import head_search_ownership as ownership
-from so101_demo.act.head_search_ownership import process_ancestry
+from so101_demo.act.head_search import ownership as ownership
+from so101_demo.act.head_search.ownership import process_ancestry
 from so101_demo.cli.head_search.common import _command_line
 from so101_demo.cli.head_search.flags import (
     HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
@@ -25,8 +25,8 @@ from so101_demo.cli.head_search.flags import (
 def _production_smoke_parser() -> argparse.ArgumentParser:
     """The `measure-production-smoke` entry: one owned stack, one bounded search, one sealed journal."""
 
-    from so101_demo.act.head_search_production_smoke.journal import ANCHORS as SMOKE_ANCHORS
-    from so101_demo.act.head_search_production_smoke.journal import CONDITION_CLASS
+    from so101_demo.act.head_search.production_smoke.journal import ANCHORS as SMOKE_ANCHORS
+    from so101_demo.act.head_search.production_smoke.journal import CONDITION_CLASS
 
     parser = argparse.ArgumentParser(
         prog="so101_head_search_calibration measure-production-smoke",
@@ -142,8 +142,8 @@ def _measure_production_smoke(arguments: list[str], *, entry: str = PRODUCTION_S
 
     from functools import partial
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_production_smoke.aggregate import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.production_smoke.aggregate import (
         read_runtime_of_record,
         run_smoke_flight,
         write_head_search_production_smoke,
@@ -352,8 +352,8 @@ def _measure_qualification_readback(
 
     from functools import partial
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_qualification_readback.readback_run import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.qualification_readback.readback_run import (
         run_readback_observation,
         write_head_search_qualification_readback,
     )

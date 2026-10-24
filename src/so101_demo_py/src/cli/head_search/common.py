@@ -154,7 +154,7 @@ def _verify_promoted_config(
     every other runner.
     """
 
-    from so101_demo.act.head_search_qualification import _require_new_root, write_exclusive
+    from so101_demo.act.head_search.qualification import _require_new_root, write_exclusive
 
     if not approved:
         print("HEAD_SEARCH_APPROVAL_REQUIRED: pass --approved-bundle-sha256", file=sys.stderr)

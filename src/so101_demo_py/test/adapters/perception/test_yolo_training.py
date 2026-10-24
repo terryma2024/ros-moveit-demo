@@ -116,7 +116,7 @@ def test_prepare_training_run_refuses_existing_output_root(tmp_path: Path) -> No
 # 1:1 batch composition, and both are scored and trained exactly like candidate A.
 # ----------------------------------------------------------------------------------------------------------------------
 
-from so101_demo.act.head_search_training import (  # noqa: E402
+from so101_demo.act.head_search.training import (  # noqa: E402
     CandidatePlanError,
     build_candidate_plan,
     load_training_contract,

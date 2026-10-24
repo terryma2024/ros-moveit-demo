@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 if TYPE_CHECKING:  # pragma: no cover - the import is only for the annotation
-    from so101_demo.act.head_search_training import CandidatePlan
+    from so101_demo.act.head_search.training import CandidatePlan
 
 import yaml
 
@@ -246,7 +246,7 @@ def prepare_candidate_run(
     import json
     import shutil
 
-    from so101_demo.act.head_search_training import CandidatePlan
+    from so101_demo.act.head_search.training import CandidatePlan
     from so101_demo.perception_benchmark.contracts import canonical_sha256
     from so101_demo.runtime.task_artifacts import atomic_json
 

@@ -17,7 +17,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from so101_demo.act.head_search_scenarios.contracts import (
+from so101_demo.act.head_search.scenarios.contracts import (
     ARTIFACT,
     EVIDENCE_DIR,
     EXPECTED_TERMINALS,
@@ -26,19 +26,19 @@ from so101_demo.act.head_search_scenarios.contracts import (
     PHASE,
     QUALIFICATION_SPLIT,
 )
-from so101_demo.act.head_search_scenarios.journal import aggregate_scenarios, scenario_journal_entry
-from so101_demo.act.head_search_scenarios.plan import (
+from so101_demo.act.head_search.scenarios.journal import aggregate_scenarios, scenario_journal_entry
+from so101_demo.act.head_search.scenarios.plan import (
     check_frame_cadence,
     declared_cup_count,
     expected_terminals,
     requires_interruption,
 )
-from so101_demo.act.head_search_scenarios.scenario_run import classify_scenario
-from so101_demo.act.head_search_scenarios.stop_proof import stop_proof
-from so101_demo.act.head_search_timing_measurement.contracts import FRAME_PERIOD_S
-from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
-from so101_demo.act.head_search_ownership import OPERATION as OWNERSHIP_OPERATION
-from so101_demo.act.head_search_ownership import read_runtime_identity
+from so101_demo.act.head_search.scenarios.scenario_run import classify_scenario
+from so101_demo.act.head_search.scenarios.stop_proof import stop_proof
+from so101_demo.act.head_search.timing_measurement.contracts import FRAME_PERIOD_S
+from so101_demo.act.head_search.binding import _CAMERA_MEASURED, _MEASURED
+from so101_demo.act.head_search.ownership import OPERATION as OWNERSHIP_OPERATION
+from so101_demo.act.head_search.ownership import read_runtime_identity
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SOURCE_COMMIT = "9" * 40
@@ -277,7 +277,7 @@ def _scenarios_document(
         "records": [scenario_journal_entry(entry) for entry in entries],
         "qualification_verdict": None,
         "qualification_verdict_owner": (
-            "so101_demo.act.head_search_qualification (the qualifier's `aggregate` phase)"
+            "so101_demo.act.head_search.qualification (the qualifier's `aggregate` phase)"
         ),
         "fit_warning": "fixture",
         "runtime_identity": dict(runtime_identity),
@@ -499,7 +499,7 @@ def build_fixture(root: Path, *, run_root: Path | None = None, seed_base: int = 
             },
             "journal": {"path": str(journal_path), "sha256": digest(journal_path)},
             "aggregator": {
-                "entry": "so101_demo.act.head_search_qualification",
+                "entry": "so101_demo.act.head_search.qualification",
                 "journal_sha256": digest(journal_path),
                 "status": "SUCCEEDED",
             },

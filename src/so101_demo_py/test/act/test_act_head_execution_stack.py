@@ -174,7 +174,7 @@ def test_batched_spawner_cannot_extend_original_startup_deadline(tmp_path):
 def test_start_keeps_four_controllers_and_truthful_child_count(
         tmp_path, monkeypatch, batched, expected_children):
     from so101_demo.act.head_execution_stack import RestartStack
-    from so101_demo.act import head_search_transport_measurement as transport
+    from so101_demo.act.head_search import transport_measurement as transport
     script = tmp_path/'installed-child'
     script.write_text(f'#!{sys.executable}\nimport sys,json\n'
                       'print(json.dumps(sys.argv[1:]),flush=True)\n')

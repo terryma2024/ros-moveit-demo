@@ -66,7 +66,7 @@ def test_measure_deadband_candidates_refuses_a_missing_input_an_existing_output_
 def test_measure_deadband_candidates_hands_the_flight_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "deadband"
-    from so101_demo.act.head_search_deadband_measurement import writer as measurement_writer
+    from so101_demo.act.head_search.deadband_measurement import writer as measurement_writer
 
     class Plant:
         """A yaw-only plant whose cup sits at the principal point once the neck reaches the anchor."""
@@ -164,8 +164,8 @@ def test_measure_deadband_candidates_prints_the_librarys_refusal_and_returns_two
 ) -> None:
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "deadband"
-    from so101_demo.act.head_search_deadband_measurement import contracts as measurement_contracts
-    from so101_demo.act.head_search_deadband_measurement import writer as measurement_writer
+    from so101_demo.act.head_search.deadband_measurement import contracts as measurement_contracts
+    from so101_demo.act.head_search.deadband_measurement import writer as measurement_writer
 
     def refuse(request):
         raise measurement_contracts.CalibrationDeadbandMeasurementRefused(
@@ -305,10 +305,10 @@ def test_measure_camera_hands_the_flight_to_the_library_and_refuses_an_undeclare
 
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "camera"
-    from so101_demo.act.head_search_camera_measurement import (
+    from so101_demo.act.head_search.camera_measurement import (
         declarations as measurement_declarations,
     )
-    from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
+    from so101_demo.act.head_search.camera_measurement import writer as measurement_writer
 
     monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", _CameraPlant)
     monkeypatch.setattr(
@@ -350,10 +350,10 @@ def test_measure_camera_accepts_a_declared_safety_margin_and_returns_zero(
     output = tmp_path / "camera"
     declaration = tmp_path / "camera-safety.json"
     declaration.write_text(json.dumps({"safety_margin_px": 4.0}), encoding="utf-8")
-    from so101_demo.act.head_search_camera_measurement import (
+    from so101_demo.act.head_search.camera_measurement import (
         declarations as measurement_declarations,
     )
-    from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
+    from so101_demo.act.head_search.camera_measurement import writer as measurement_writer
 
     monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", _CameraPlant)
     monkeypatch.setattr(
@@ -378,10 +378,10 @@ def test_measure_camera_prints_the_librarys_refusal_and_returns_two(
 ) -> None:
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "camera"
-    from so101_demo.act.head_search_camera_measurement import (
+    from so101_demo.act.head_search.camera_measurement import (
         declarations as measurement_declarations,
     )
-    from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
+    from so101_demo.act.head_search.camera_measurement import writer as measurement_writer
 
     def refuse(request):
         raise measurement_declarations.CalibrationCameraMeasurementRefused(

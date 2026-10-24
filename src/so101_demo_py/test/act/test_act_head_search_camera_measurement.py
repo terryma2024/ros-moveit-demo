@@ -18,10 +18,10 @@ import json
 import math
 
 import pytest
-from so101_demo.act.head_search_camera_measurement import declarations as module_declarations
-from so101_demo.act.head_search_camera_measurement import frames as module_frames
-from so101_demo.act.head_search_camera_measurement import writer as module_writer
-from so101_demo.act.head_search_camera_measurement.declarations import (
+from so101_demo.act.head_search.camera_measurement import declarations as module_declarations
+from so101_demo.act.head_search.camera_measurement import frames as module_frames
+from so101_demo.act.head_search.camera_measurement import writer as module_writer
+from so101_demo.act.head_search.camera_measurement.declarations import (
     CAL_CAMERA_CUP_LOST,
     CAL_CAMERA_POSE_OUT_OF_CORRIDOR,
     CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY,
@@ -38,20 +38,20 @@ from so101_demo.act.head_search_camera_measurement.declarations import (
     spread,
     undeclared_safety_margin,
 )
-from so101_demo.act.head_search_camera_measurement.frames import (
+from so101_demo.act.head_search.camera_measurement.frames import (
     build_camera_measurements,
     measure_anchor_frames,
 )
-from so101_demo.act.head_search_camera_measurement.writer import (
+from so101_demo.act.head_search.camera_measurement.writer import (
     write_head_search_camera_measurement,
 )
-from so101_demo.act.head_search_search_params import (
+from so101_demo.act.head_search.search_params import (
     CAL_VERTICAL_BOUNDS_UNPROJECTED,
     CalibrationSearchParamsRefused,
     compute_center_deadband_px,
     compute_vertical_bounds_px,
 )
-from so101_demo.act.head_search_timing_measurement.contracts import (
+from so101_demo.act.head_search.timing_measurement.contracts import (
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
@@ -60,7 +60,7 @@ from so101_demo.act.head_search_timing_measurement.contracts import (
     CAL_TIMING_TIME_BASE_UNVERIFIED,
     FRAME_PERIOD_S,
 )
-from so101_demo.act.head_search_timing_measurement.control import planned_stops
+from so101_demo.act.head_search.timing_measurement.control import planned_stops
 
 WIDTH_PX = 640
 HEIGHT_PX = 480

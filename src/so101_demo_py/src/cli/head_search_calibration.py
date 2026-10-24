@@ -1,34 +1,34 @@
 """The formal head search calibration CLI: check-ownership, run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, measure-scenarios, measure-restarts, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
-hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
+hands the phases to `so101_demo.act.head_search.calibration_run`, where the order, the entry binding, the
 trajectory precondition and the run status live (plan rule 4). `check-ownership` is the
 stack-free ownership gate: it reads the process table, ROS graph, GPU processes, tmux panes and evidence root,
 refuses any second owner by name, binds the frozen runtime identity, writes its receipt into a brand-new
-root and starts nothing (`so101_demo.act.head_search_ownership`). Every subcommand refuses a run root that
+root and starts nothing (`so101_demo.act.head_search.ownership`). Every subcommand refuses a run root that
 already exists, so there is no way to resume or continue a stage. `measure-coarse-step`,
 `measure-mujoco`, `measure-search-timing`, `measure-deadband-candidates`, `measure-camera` and
 `measure-workspace-projection` are the measurement flights the run cannot take itself - the run declares
 documents, it does not render, read a sealed model, step a simulator, project a workspace or close a
 control loop - so they are their own installed entries, validated
-here and produced by `so101_demo.act.head_search_coarse_step_measurement`,
-`so101_demo.act.head_search_mujoco_measurements`,
-`so101_demo.act.head_search_timing_measurement`,
-`so101_demo.act.head_search_deadband_measurement`,
-`so101_demo.act.head_search_camera_measurement` and
-`so101_demo.act.head_search_workspace_projection`. `measure-selection-rule` and
+here and produced by `so101_demo.act.head_search.coarse_step_measurement`,
+`so101_demo.act.head_search.mujoco_measurements`,
+`so101_demo.act.head_search.timing_measurement`,
+`so101_demo.act.head_search.deadband_measurement`,
+`so101_demo.act.head_search.camera_measurement` and
+`so101_demo.act.head_search.workspace_projection`. `measure-selection-rule` and
 `measure-operating-point` are phase 3's two inputs: the first writes the rule record before any
 measurement can exist, the second measures the frames that rule consumes and has the installed phase 3
-select every candidate's point (`so101_demo.act.head_search_operating_point_measurement`).
+select every candidate's point (`so101_demo.act.head_search.operating_point_measurement`).
 `measure-scenarios` is the scenario flight: it runs the declared qualification seeds one at a time through the producer controller's closed loop, journals every outcome - including the ones that fail or refuse - and writes the aggregate that claims no verdict. `measure-admission` produces the run's `--admission` from the six sealed inputs the run declares - the
 flat measurement plan the installed controller is constructed with, the six-field
 `CalibrationMeasurementAdmission` for `role=calibration`, and the receipt that records every refusal the
 runtime contract fixes - and `measure-bundle-inputs` produces the declared geometry and perception
 parameter blocks with the live effective-value readback
-(`so101_demo.act.head_search_calibration_admission_document`,
-`so101_demo.act.head_search_calibration_bundle_inputs`), and `measure-episode-records` reshapes the
+(`so101_demo.act.head_search.calibration_admission_document`,
+`so101_demo.act.head_search.calibration_bundle_inputs`), and `measure-episode-records` reshapes the
 installed phase-3 measurement document into the per-seed contract phase 4's gate declares
-(`so101_demo.act.head_search_episode_records`).
+(`so101_demo.act.head_search.episode_records`).
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-from so101_demo.act.head_search_qualification import (
+from so101_demo.act.head_search.qualification import (
     HEAD_SEARCH_QUALIFIED,
     qualification_parser,
     qualify_head_search,

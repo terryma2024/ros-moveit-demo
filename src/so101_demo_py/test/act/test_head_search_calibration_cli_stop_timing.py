@@ -180,7 +180,7 @@ def test_measure_controller_stop_config_refuses_a_header_without_the_tolerance(
         STOP_DECLARATION.replace("STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002\n", ""),
         encoding="utf-8",
     )
-    from so101_demo.act.head_search_stop_measurement.contracts import (
+    from so101_demo.act.head_search.stop_measurement.contracts import (
         CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED,
     )
 
@@ -207,7 +207,7 @@ def test_measure_feedback_refuses_an_undeclared_quantisation_and_accepts_a_decla
     tmp_path: Path, capsys
 ) -> None:
     inputs = _stop_inputs(tmp_path)
-    from so101_demo.act.head_search_stop_measurement.contracts import (
+    from so101_demo.act.head_search.stop_measurement.contracts import (
         CAL_FEEDBACK_QUANTISATION_UNDECLARED,
     )
 
@@ -258,8 +258,8 @@ def test_measure_feedback_refuses_an_undeclared_quantisation_and_accepts_a_decla
 def test_measure_stationary_hands_the_flight_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
     inputs = _stop_inputs(tmp_path)
     output = tmp_path / "stationary"
-    from so101_demo.act.head_search_stop_measurement import contracts as measurement_contracts
-    from so101_demo.act.head_search_stop_measurement import flights as measurement_flights
+    from so101_demo.act.head_search.stop_measurement import contracts as measurement_contracts
+    from so101_demo.act.head_search.stop_measurement import flights as measurement_flights
 
     monkeypatch.setattr(measurement_flights, "MujocoStopFlight", _StopPlant)
 
@@ -287,7 +287,7 @@ def test_measure_controller_submissions_hands_the_flight_to_the_library(
 ) -> None:
     inputs = _stop_inputs(tmp_path)
     output = tmp_path / "submissions"
-    from so101_demo.act.head_search_stop_measurement import flights as measurement_flights
+    from so101_demo.act.head_search.stop_measurement import flights as measurement_flights
 
     monkeypatch.setattr(measurement_flights, "MujocoStopFlight", _StopPlant)
 
@@ -306,7 +306,7 @@ def test_measure_controller_submissions_hands_the_flight_to_the_library(
 def test_measure_stop_proofs_hands_the_flight_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
     inputs = _stop_inputs(tmp_path)
     output = tmp_path / "stop-proofs"
-    from so101_demo.act.head_search_stop_measurement import flights as measurement_flights
+    from so101_demo.act.head_search.stop_measurement import flights as measurement_flights
 
     monkeypatch.setattr(measurement_flights, "MujocoStopFlight", _StopPlant)
 
@@ -512,8 +512,7 @@ def test_measure_skew_refuses_a_missing_input_and_an_existing_output(tmp_path: P
 def test_measure_skew_hands_the_flight_to_the_library(tmp_path: Path, monkeypatch, capsys) -> None:
     """The CLI parses and validates; the capture itself belongs to the library module."""
 
-    from so101_demo.act import head_search_transport_measurement as measurement
-
+    from so101_demo.act.head_search import transport_measurement as measurement
     inputs = _transport_inputs(tmp_path)
     arguments = ["measure-skew"]
     for flag, path in inputs.items():
@@ -555,8 +554,7 @@ def test_measure_skew_hands_the_flight_to_the_library(tmp_path: Path, monkeypatc
 def test_measure_skew_prints_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act import head_search_transport_measurement as measurement
-
+    from so101_demo.act.head_search import transport_measurement as measurement
     inputs = _transport_inputs(tmp_path)
     arguments = ["measure-skew"]
     for flag, path in inputs.items():

@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from so101_demo.act.head_search_binding import validate_head_search_binding
+from so101_demo.act.head_search.binding import validate_head_search_binding
 
 
 PROVENANCE = "a1" * 32

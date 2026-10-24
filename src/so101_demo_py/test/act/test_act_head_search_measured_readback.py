@@ -15,7 +15,7 @@ installed stop criterion already documents) is the harness's.
 from __future__ import annotations
 
 import pytest
-from so101_demo.act.head_search_measured_readback import (
+from so101_demo.act.head_search.measured_readback import (
     CONSTRUCTED_OBSERVATION,
     MEASURED_PARAMETERS,
     NOT_OBSERVABLE,
@@ -82,11 +82,11 @@ def _refusing(message):
 
 
 def test_the_eleven_measured_parameters_are_exactly_the_two_phases_own_values():
-    from so101_demo.act.head_search_coarse_step_measurement.contracts import (
+    from so101_demo.act.head_search.coarse_step_measurement.contracts import (
         PARAMETER as COARSE_STEP,
     )
-    from so101_demo.act.head_search_search_params import PARAMETERS as PHASE_SIX
-    from so101_demo.act.head_search_timing_params import PARAMETERS as PHASE_SEVEN
+    from so101_demo.act.head_search.search_params import PARAMETERS as PHASE_SIX
+    from so101_demo.act.head_search.timing_params import PARAMETERS as PHASE_SEVEN
 
     # phase 6 owns five of the eleven in its `PARAMETERS` tuple and `coarse_step_rad` beside it
     assert set(MEASURED_PARAMETERS) == set(PHASE_SIX) | set(PHASE_SEVEN) | {COARSE_STEP}

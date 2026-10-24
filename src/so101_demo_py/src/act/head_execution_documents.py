@@ -326,7 +326,7 @@ def build_run_detector_factory(inputs, *, loader=None, builder=None):
     else:
         material = require_binding_material(inputs)
         if loader is None:
-            from so101_demo.act.head_search_binding import load_promoted_head_search as loader
+            from so101_demo.act.head_search.binding import load_promoted_head_search as loader
         binding = loader(material['binding'], material['report'])
         snapshot_root = material['snapshot_root']
     production_builder = builder is None
@@ -384,7 +384,7 @@ def resolve_run_search_config(inputs, *, session_id, attempt_id, search_start_ra
             _refuse(CONFIG_MISMATCH,'development scope differs from sealed run or pose')
         return config
     import json as _json
-    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.head_search.binding import validate_head_search_binding
 
     material = require_binding_material(inputs)
     # the configuration is assembled by the VALIDATED binding, whose object carries search_config (CP-HFP-276):

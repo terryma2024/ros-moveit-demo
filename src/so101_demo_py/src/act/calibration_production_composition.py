@@ -459,7 +459,7 @@ def _admitted_controller_config(*, context, descriptor, session_id=None, attempt
     name rather than being papered over.
     """
 
-    from .head_search_binding import validate_head_search_binding
+    from .head_search.binding import validate_head_search_binding
 
     calibration = getattr(context, "calibration_report", None)
     if not isinstance(calibration, dict):

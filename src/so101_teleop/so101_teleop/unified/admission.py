@@ -524,7 +524,7 @@ class UnifiedWorkloadService:
             # Per the owner's amendment the report's own recorded identity is not
             # compared with the tree that is running; the probe above still refuses a missing profile.
             if pick_place_validation:
-                from so101_demo.act.head_search_binding import validate_head_search_binding
+                from so101_demo.act.head_search.binding import validate_head_search_binding
                 try:
                     validate_head_search_binding(json.loads(runtime_bytes), calibration)
                 except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:

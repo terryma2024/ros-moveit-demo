@@ -8,7 +8,7 @@ import signal
 import subprocess
 import time
 
-from .head_search_transport_measurement import MujocoRosTransport
+from .head_search.transport_measurement import MujocoRosTransport
 
 STACK_LOG = 'transport-stack.log'
 CONTROLLERS = ('joint_state_broadcaster', 'arm_controller', 'gripper_controller', 'neck_controller')
@@ -20,7 +20,7 @@ NECK = 'neck_controller'
 class RestartStack(MujocoRosTransport):
     """The production ACT composition: MuJoCo, the camera plugin, TF and the four controllers.
 
-    ``so101_demo.act.head_search_transport_measurement.MujocoRosTransport`` is the frozen, measured
+    ``so101_demo.act.head_search.transport_measurement.MujocoRosTransport`` is the frozen, measured
     producer of exactly this transport (EGL, headless, the camera plugin publishing ``/head_camera``
     on the simulator's own clock). This subclass uses that composition with the settings a restart needs:
 
@@ -109,7 +109,7 @@ class RestartStack(MujocoRosTransport):
         return dict(ready=True, children=outcomes)
 
     def start(self) -> None:
-        from so101_demo.act.head_search_transport_measurement import _package_executable
+        from so101_demo.act.head_search.transport_measurement import _package_executable
 
         self.workspace.mkdir(parents=True, exist_ok=True)
         if self.log_path is None:

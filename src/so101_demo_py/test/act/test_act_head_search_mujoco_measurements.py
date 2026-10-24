@@ -26,8 +26,8 @@ import hashlib
 import json
 
 import pytest
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_mujoco_measurements import (
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.mujoco_measurements import (
     CAL_MUJOCO_EVIDENCE_CONTRADICTORY,
     CAL_MUJOCO_EVIDENCE_MISSING,
     DIGEST_CONVENTION,
@@ -322,7 +322,7 @@ def test_a_readback_that_disagrees_with_the_declaration_is_refused(tmp_path, mon
     seal = _seal(tmp_path, scene)
     output = tmp_path / "run"
 
-    import so101_demo.act.head_search_mujoco_measurements as module
+    import so101_demo.act.head_search.mujoco_measurements as module
 
     monkeypatch.setattr(module, "mujoco_model_timestep_s", lambda path: 0.004)
     with pytest.raises(CalibrationMujocoMeasurementsRefused) as refused:
@@ -336,7 +336,7 @@ def test_a_readback_that_disagrees_with_the_declaration_is_refused(tmp_path, mon
 def test_the_document_is_the_one_phase_seven_reads(tmp_path):
     """The produced document is fed to the consumer itself: phase 7 adds one timestep to the lead."""
 
-    from so101_demo.act.head_search_timing_params import compute_submit_lead_s
+    from so101_demo.act.head_search.timing_params import compute_submit_lead_s
 
     document = _document(tmp_path)
     submissions = {

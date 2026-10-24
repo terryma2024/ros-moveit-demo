@@ -4,7 +4,7 @@ import math
 
 from .bearing import bearing, optical_ray_base
 from .contracts import fields, finite, identifier, integer, validate_search_result, vector
-from .head_search_domain import TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, bounded_search_stops
+from .head_search.domain import TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, bounded_search_stops
 from .lock_band import counts_for_lock
 from .head_feedback import FeedbackPolicy, nanoseconds
 from .head_evidence_identity import canonical_bytes

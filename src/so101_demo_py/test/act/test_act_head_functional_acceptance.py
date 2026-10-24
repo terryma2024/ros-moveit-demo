@@ -20,7 +20,7 @@ def scene_state(tmp_path):
 
 @pytest.mark.parametrize('turns', [-2, 0, 3])
 def test_geometric_yaw_uses_camera_and_actual_cup_pose_on_nearest_branch(tmp_path, turns):
-    from so101_demo.act.head_search_functional_acceptance import calculate_final_yaw
+    from so101_demo.act.head_search.functional_acceptance import calculate_final_yaw
     model, state = scene_state(tmp_path)
     actual = .23 + turns * 2 * math.pi
     result = calculate_final_yaw(model, state, actual)
@@ -33,7 +33,7 @@ def test_geometric_yaw_uses_camera_and_actual_cup_pose_on_nearest_branch(tmp_pat
 
 @pytest.mark.parametrize('damage', ['identity', 'short_state', 'nan'])
 def test_geometry_refuses_unproven_actual_state(tmp_path, damage):
-    from so101_demo.act.head_search_functional_acceptance import calculate_final_yaw
+    from so101_demo.act.head_search.functional_acceptance import calculate_final_yaw
     model, state = scene_state(tmp_path)
     if damage == 'identity':
         state['model_sha256'] = 'a' * 64
@@ -62,7 +62,7 @@ def locked_facts():
     ('wrong_image', 'INVALID'), ('wrong_review', 'INVALID'), ('moving_cup', 'UNKNOWN'),
     ('uncentered', 'FAIL'), ('stop_unknown', 'UNKNOWN'), ('exit_failed', 'FAIL')])
 def test_functional_lock_requires_reviewed_final_original_and_five_degree_bound(damage, expected):
-    from so101_demo.act.head_search_functional_acceptance import classify_functional_case
+    from so101_demo.act.head_search.functional_acceptance import classify_functional_case
     facts = locked_facts()
     if damage == 'angle_above': facts['geometry']['absolute_error_deg'] = 5.0001
     elif damage == 'no_visual': facts.pop('visual')
@@ -78,7 +78,7 @@ def test_functional_lock_requires_reviewed_final_original_and_five_degree_bound(
 
 
 def test_no_cup_requires_actual_bounded_search_completion():
-    from so101_demo.act.head_search_functional_acceptance import classify_functional_case
+    from so101_demo.act.head_search.functional_acceptance import classify_functional_case
     facts = locked_facts()
     facts.update(actual_os_return_code=1, business_rc=1,
                  original_terminal='TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL',
@@ -90,7 +90,7 @@ def test_no_cup_requires_actual_bounded_search_completion():
 
 @pytest.mark.parametrize('damage', ['identity_type', 'missing_source', 'missing_hash'])
 def test_malformed_final_proof_cannot_pass(damage):
-    from so101_demo.act.head_search_functional_acceptance import classify_functional_case
+    from so101_demo.act.head_search.functional_acceptance import classify_functional_case
     facts = locked_facts()
     if damage == 'identity_type':
         facts['identity'] = None
@@ -107,7 +107,7 @@ def test_malformed_final_proof_cannot_pass(damage):
 def test_functional_fixture_keeps_reset_and_disables_native_paired_truth(tmp_path):
     import yaml
     from pathlib import Path
-    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    from so101_demo.act.head_search.campaign_scene import prepare_case_fixture
     baseline = _baseline(tmp_path)
     prepared = prepare_case_fixture(_case(0), baseline, tmp_path/'functional',
                                     paired_truth_enabled=False)
@@ -129,7 +129,7 @@ def test_explicit_disabled_campaign_collector_creates_no_ros_or_writer_resources
 def test_disabled_truth_omits_unused_ros_parameters_including_untyped_empty_arrays(tmp_path, index):
     import yaml
     from pathlib import Path
-    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    from so101_demo.act.head_search.campaign_scene import prepare_case_fixture
     prepared = prepare_case_fixture(_case(index), _baseline(tmp_path), tmp_path/'fixture',
                                     paired_truth_enabled=False)
     camera = yaml.safe_load(Path(prepared['refs']['mujoco_plugin']['path']).read_text())[

@@ -12,7 +12,7 @@ from head_search_scenarios_support import (
 )
 import pytest
 
-from so101_demo.act.head_search_scenarios.contracts import (
+from so101_demo.act.head_search.scenarios.contracts import (
     CAL_SCENARIO_BUDGET_EXHAUSTED,
     CAL_SCENARIO_COVERAGE_INCOMPLETE,
     CAL_SCENARIO_CUP_NOT_FOUND,
@@ -26,12 +26,12 @@ from so101_demo.act.head_search_scenarios.contracts import (
     QUALIFICATION_FIT_WARNING,
     CalibrationScenarioRefused,
 )
-from so101_demo.act.head_search_scenarios.journal import (
+from so101_demo.act.head_search.scenarios.journal import (
     JOURNAL_KEYS,
     aggregate_scenarios,
     scenario_journal_entry,
 )
-from so101_demo.act.head_search_scenarios.scenario_run import (
+from so101_demo.act.head_search.scenarios.scenario_run import (
     classify_scenario,
     run_scenario,
 )

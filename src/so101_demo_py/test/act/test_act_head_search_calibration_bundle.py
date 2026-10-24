@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_calibration_bundle import (
+from so101_demo.act.head_search.calibration_bundle import (
     ALSO_RECORDED_ITEMS,
     ARTIFACT_NAMES,
     CAL_BUNDLE_INCOMPLETE,
@@ -29,7 +29,7 @@ from so101_demo.act.head_search_calibration_bundle import (
     assemble_calibration_bundle,
     build_run_status,
 )
-from so101_demo.act.head_search_calibration_inputs import SEALED_INPUT_NAMES
+from so101_demo.act.head_search.calibration_inputs import SEALED_INPUT_NAMES
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 COMMAND = "ros2 run so101_demo_py so101_head_search_calibration run --run-root /evidence/run-01"
@@ -192,7 +192,7 @@ def _evidence(name, value):
             "samples": 120,
         },
         "safety_margin": {"bound": 1.5, "observed": 1.0},
-        "production_owner": "src/act/head_search_calibration.py",
+        "production_owner": "src/act/head_search/calibration.py",
         "startup_readback": {"source": "ros2 param get", "observed_value": value},
     }
 

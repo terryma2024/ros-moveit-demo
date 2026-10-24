@@ -29,9 +29,9 @@ import hashlib
 import json
 
 import pytest
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_search_params import compute_search_timeout_s
-from so101_demo.act.head_search_timing_measurement.contracts import (
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.search_params import compute_search_timeout_s
+from so101_demo.act.head_search.timing_measurement.contracts import (
     AGE_TIME_BASE,
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
@@ -54,15 +54,15 @@ from so101_demo.act.head_search_timing_measurement.contracts import (
     SETTLE_RULE,
     SIMULATION_TIME_BASE,
 )
-from so101_demo.act.head_search_timing_measurement.control import (
+from so101_demo.act.head_search.timing_measurement.control import (
     controller_config,
     read_control_period,
     SettleTracker,
 )
-from so101_demo.act.head_search_timing_measurement.writer import (
+from so101_demo.act.head_search.timing_measurement.writer import (
     write_head_search_timing_measurement,
 )
-from so101_demo.act.head_search_timing_params import compute_max_age_s
+from so101_demo.act.head_search.timing_params import compute_max_age_s
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 TIMESTEP_S = 0.002
@@ -553,7 +553,7 @@ def test_a_device_that_would_fall_back_to_the_cpu_is_refused(tmp_path, monkeypat
     fixture["production"]["weight_sha256"] = _digest(weights)
     _write(fixture["production_search_config_path"], fixture["production"])
 
-    import so101_demo.act.head_search_timing_measurement.writer as module
+    import so101_demo.act.head_search.timing_measurement.writer as module
 
     monkeypatch.setattr(module, "_cuda_available", lambda: False)
     with pytest.raises(CalibrationTimingMeasurementRefused) as refused:

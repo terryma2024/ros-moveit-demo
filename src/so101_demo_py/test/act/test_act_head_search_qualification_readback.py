@@ -19,14 +19,14 @@ from head_search_qualification_fixtures import (
     FIXTURE_VALUES,
     build_fixture,
 )
-from so101_demo.act.head_search_aggregate import contracts as aggregate_contracts
-from so101_demo.act.head_search_aggregate import run_gates as aggregate_run_gates
-from so101_demo.act.head_search_qualification_readback import observations as readback_observations
-from so101_demo.act.head_search_qualification_readback import readback_run as readback_readback_run
-from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_ownership import read_runtime_identity
-from so101_demo.act.head_search_timing_measurement.control import controller_config
+from so101_demo.act.head_search.aggregate import contracts as aggregate_contracts
+from so101_demo.act.head_search.aggregate import run_gates as aggregate_run_gates
+from so101_demo.act.head_search.qualification_readback import observations as readback_observations
+from so101_demo.act.head_search.qualification_readback import readback_run as readback_readback_run
+from so101_demo.act.head_search.binding import _CAMERA_MEASURED, _MEASURED
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.ownership import read_runtime_identity
+from so101_demo.act.head_search.timing_measurement.control import controller_config
 from so101_demo.cli.head_search.flags import HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE
 from so101_demo.cli.head_search_calibration import main
 from so101_demo.perception_benchmark.contracts import canonical_sha256

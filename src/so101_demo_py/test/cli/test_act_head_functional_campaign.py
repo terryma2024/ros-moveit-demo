@@ -89,7 +89,7 @@ def test_extractor_reads_sealed_detector_records_and_actual_rgb_payload(tmp_path
     import so101_demo.cli.head_search_functional_campaign as campaign
     from head_run_audit_support import corpus,reseal,RUN
     from test_act_head_search_campaign_scene import _baseline,_case
-    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    from so101_demo.act.head_search.campaign_scene import prepare_case_fixture
     baseline=_baseline(tmp_path)
     baseline['run']=dict(RUN)
     prepared=prepare_case_fixture(_case(0),baseline,tmp_path/'fixture',paired_truth_enabled=False)
@@ -292,7 +292,7 @@ def _extracted_stop_confirmed(base,monkeypatch,protocol_rows):
     import so101_demo.cli.head_search_functional_campaign as campaign
     from head_run_audit_support import corpus,RUN
     from test_act_head_search_campaign_scene import _baseline,_case
-    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    from so101_demo.act.head_search.campaign_scene import prepare_case_fixture
     baseline=_baseline(tmp_path)
     baseline['run']=dict(RUN)
     prepared=prepare_case_fixture(_case(0),baseline,tmp_path/'fixture',paired_truth_enabled=False)

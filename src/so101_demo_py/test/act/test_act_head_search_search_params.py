@@ -13,22 +13,22 @@ from __future__ import annotations
 import json
 
 import pytest
-from so101_demo.act.head_search_calibration_bundle import (
+from so101_demo.act.head_search.calibration_bundle import (
     ALSO_RECORDED_ITEMS,
     PARAMETER_EVIDENCE_KEYS,
     RUNTIME_IDENTITY_FIELDS,
     assemble_calibration_bundle,
 )
-from so101_demo.act.head_search_calibration_inputs import (
+from so101_demo.act.head_search.calibration_inputs import (
     SEALED_INPUT_NAMES,
     CalibrationInputsRefused,
 )
-from so101_demo.act.head_search_coarse_step_measurement.contracts import (
+from so101_demo.act.head_search.coarse_step_measurement.contracts import (
     CAL_SWEEP_EVIDENCE_CONTRADICTORY,
     CAL_SWEEP_EVIDENCE_PARTIAL,
 )
-from so101_demo.act.head_search_operating_point import CAL_SPLIT_LEAK
-from so101_demo.act.head_search_search_params import (
+from so101_demo.act.head_search.operating_point import CAL_SPLIT_LEAK
+from so101_demo.act.head_search.search_params import (
     CAL_DEADBAND_OSCILLATES,
     CAL_EFFECTIVE_VALUE_MISMATCH,
     CAL_SWEEP_UNSTABLE,
@@ -259,8 +259,8 @@ def coarse_step_observations(*, geometry=None, weights_sha256=SHA_A, steps=None,
     that is not the bounded plan of its candidate.
     """
 
-    from so101_demo.act.head_search_calibration_geometry import generate_coarse_step_candidates
-    from so101_demo.act.head_search_domain import bounded_search_stops
+    from so101_demo.act.head_search.calibration_geometry import generate_coarse_step_candidates
+    from so101_demo.act.head_search.domain import bounded_search_stops
 
     geometry = sweep_document()["geometry"] if geometry is None else geometry
     if steps is None:
@@ -1111,7 +1111,7 @@ def test_the_coarse_step_is_not_computed_from_a_declared_number():
 def test_a_constructed_readback_keeps_its_own_observation_and_verdict():
     """A readback taken off the running component is not relabelled as a caller's report."""
 
-    from so101_demo.act.head_search_measured_readback import CONSTRUCTED_OBSERVATION
+    from so101_demo.act.head_search.measured_readback import CONSTRUCTED_OBSERVATION
 
     document = build(
         startup_readbacks={
@@ -1133,7 +1133,7 @@ def test_a_constructed_readback_keeps_its_own_observation_and_verdict():
 def test_a_constructed_readback_of_an_unobservable_value_stays_unverified():
     """A value the component could not be queried for is recorded unverified, never as an observation."""
 
-    from so101_demo.act.head_search_measured_readback import CONSTRUCTED_OBSERVATION, NOT_OBSERVABLE
+    from so101_demo.act.head_search.measured_readback import CONSTRUCTED_OBSERVATION, NOT_OBSERVABLE
 
     document = build(
         startup_readbacks={

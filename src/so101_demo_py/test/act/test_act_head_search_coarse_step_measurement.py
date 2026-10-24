@@ -19,12 +19,12 @@ from __future__ import annotations
 import json
 
 import pytest
-from so101_demo.act.head_search_calibration_bundle import (
+from so101_demo.act.head_search.calibration_bundle import (
     CAL_EFFECTIVE_VALUE_MISMATCH,
     PARAMETER_EVIDENCE_KEYS,
 )
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_coarse_step_measurement.contracts import (
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.coarse_step_measurement.contracts import (
     CAL_SWEEP_EVIDENCE_CONTRADICTORY,
     CAL_SWEEP_EVIDENCE_MISSING,
     CAL_SWEEP_EVIDENCE_PARTIAL,
@@ -40,18 +40,18 @@ from so101_demo.act.head_search_coarse_step_measurement.contracts import (
     SPLIT,
     UNIT,
 )
-from so101_demo.act.head_search_coarse_step_measurement.measurement import (
+from so101_demo.act.head_search.coarse_step_measurement.measurement import (
     parse_driver_version,
     plan_coarse_step_val_sweep,
 )
-from so101_demo.act.head_search_coarse_step_measurement.sweep import match_stop, sweep_plan
-from so101_demo.act.head_search_coarse_step_measurement.verdicts import (
+from so101_demo.act.head_search.coarse_step_measurement.sweep import match_stop, sweep_plan
+from so101_demo.act.head_search.coarse_step_measurement.verdicts import (
     choose_coarse_step_rad,
     load_selected_candidate,
     validate_head_search_coarse_step_measurement,
 )
-from so101_demo.act.head_search_domain import HeadSearchDomainError, bounded_search_stops
-from so101_demo.act.head_search_operating_point import CAL_SPLIT_LEAK, _metrics
+from so101_demo.act.head_search.domain import HeadSearchDomainError, bounded_search_stops
+from so101_demo.act.head_search.operating_point import CAL_SPLIT_LEAK, _metrics
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SHA_GEOMETRY = "1" * 64
@@ -981,7 +981,7 @@ def test_the_producer_preflight_measures_only_the_scenes_the_caller_limited_it_t
 def test_the_producer_loads_the_selected_frozen_candidate_through_the_repositorys_loader(tmp_path):
     """The frozen document reaches the sweep through the repository's own loader, not a copy of it."""
 
-    from so101_demo.act.head_search_candidate_freeze import freeze_candidate
+    from so101_demo.act.head_search.candidate_freeze import freeze_candidate
 
     frozen_path = tmp_path / "frozen-c.json"
     freeze_candidate(

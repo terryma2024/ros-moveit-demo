@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 import yaml
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_timing_params import (
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.timing_params import (
     compute_max_skew_s,
 )
-from so101_demo.act.head_search_transport_measurement import (
+from so101_demo.act.head_search.transport_measurement import (
     CAL_FRAME_CONTRACT_CONTRADICTORY,
     CAL_SKEW_CLOCK_UNMEASURED,
     CAL_SKEW_EVIDENCE_CONTRADICTORY,

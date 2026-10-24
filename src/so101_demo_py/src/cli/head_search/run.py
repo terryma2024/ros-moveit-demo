@@ -30,7 +30,7 @@ from so101_demo.cli.head_search.flags import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - the run module is imported where it is used
-    from so101_demo.act.head_search_calibration_run import CalibrationPhaseInputs
+    from so101_demo.act.head_search.calibration_run import CalibrationPhaseInputs
 
 
 def _run_parser() -> argparse.ArgumentParser:
@@ -132,7 +132,7 @@ def _run(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_run import (
+    from so101_demo.act.head_search.calibration_run import (
         CalibrationInputsRefused,
         execute_calibration_run,
     )
@@ -162,8 +162,8 @@ def _run(arguments: list[str]) -> int:
 def _phase_inputs(parsed) -> CalibrationPhaseInputs:
     """Build the phase inputs from the declared documents; nothing is computed here."""
 
-    from so101_demo.act.head_search_calibration_run import CalibrationPhaseInputs
-    from so101_demo.act.head_search_measured_readback import observe_measured_readbacks
+    from so101_demo.act.head_search.calibration_run import CalibrationPhaseInputs
+    from so101_demo.act.head_search.measured_readback import observe_measured_readbacks
     from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 
     admission_document = _json_document(parsed.admission)
@@ -238,14 +238,14 @@ def _serve_teleop(parsed) -> int:
     ``teardown: not-attempted``.
     """
 
-    from so101_demo.act.head_search_teleop_acceptance.acceptance import accept_teleop
-    from so101_demo.act.head_search_teleop_acceptance.receipts import (
+    from so101_demo.act.head_search.teleop_acceptance.acceptance import accept_teleop
+    from so101_demo.act.head_search.teleop_acceptance.receipts import (
         DEFAULT_FRAME_PROBE,
         DEFAULT_WEB_PORT,
         PROFILE,
         RECEIPT_ARTIFACT,
     )
-    from so101_demo.act.head_search_teleop_acceptance.runners import TeleopAcceptanceRefused
+    from so101_demo.act.head_search.teleop_acceptance.runners import TeleopAcceptanceRefused
 
     if not parsed.bundle:
         print(

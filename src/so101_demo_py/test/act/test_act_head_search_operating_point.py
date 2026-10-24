@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from so101_demo.act.head_search_operating_point import (
+from so101_demo.act.head_search.operating_point import (
     CAL_NO_CUP_FALSE_CANDIDATE,
     CAL_RULE_AFTER_MEASUREMENT,
     CAL_SPLIT_LEAK,

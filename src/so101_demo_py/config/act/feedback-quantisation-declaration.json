@@ -17,8 +17,8 @@
       "gripper_joint",
       "neck_yaw_joint"
     ],
-    "consumer": "so101_demo.act.head_search_timing_params.compute_stop_velocity_rad_s(feedback=...)",
-    "producer": "so101_demo.act.head_search_stop_measurement.declarations.declared_quantisation(path)"
+    "consumer": "so101_demo.act.head_search.timing_params.compute_stop_velocity_rad_s(feedback=...)",
+    "producer": "so101_demo.act.head_search.stop_measurement.declarations.declared_quantisation(path)"
   },
   "author": "HS-305, branch codex/so101-act-data-0917a",
   "date": "2026-10-01",

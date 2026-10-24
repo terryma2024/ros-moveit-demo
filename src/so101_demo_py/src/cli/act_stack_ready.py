@@ -419,7 +419,7 @@ def verify_head_search_startup(*, environment) -> dict | None:
     any ROS node, camera or model is touched. No named config means this stack carries no head search.
     """
 
-    from so101_demo.act.head_search_binding import load_promoted_head_search
+    from so101_demo.act.head_search.binding import load_promoted_head_search
 
     config_path = environment.get("SO101_HEAD_SEARCH_CONFIG")
     if not config_path:

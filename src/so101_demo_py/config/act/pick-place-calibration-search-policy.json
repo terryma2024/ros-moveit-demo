@@ -19,7 +19,7 @@
    "sha256": "1d9ea14ef00a788a4d2c36f7b19e8e41eec8edf524feca2e387ff48f6a10a0ae"
   },
   {
-   "path": "src/so101_demo_py/src/act/head_search_binding.py",
+   "path": "src/so101_demo_py/src/act/head_search/binding.py",
    "sha256": "6e19cb8c40c42e4555b5f2c4dd3b0481ec2ddd785ba5a3647c4e8695c3e84900"
   },
   {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from so101_demo.act.head_search_calibration import (
+from so101_demo.act.head_search.calibration import (
     HeadSearchCalibrationError,
     calibrate_head_search,
     load_scenario_partitions,

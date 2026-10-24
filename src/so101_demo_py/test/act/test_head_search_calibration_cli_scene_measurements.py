@@ -53,7 +53,7 @@ def test_measure_coarse_step_refuses_a_missing_input_and_an_existing_output(tmp_
 def test_measure_coarse_step_parses_and_hands_the_flight_to_the_library(tmp_path, monkeypatch, capsys) -> None:
     """The CLI is a parser and a validator: the measurement itself is the library module's."""
 
-    from so101_demo.act.head_search_coarse_step_measurement import measurement as coarse_step_sweep
+    from so101_demo.act.head_search.coarse_step_measurement import measurement as coarse_step_sweep
 
     input_paths = {}
     for flag, name in (
@@ -346,7 +346,7 @@ def test_the_deadband_detector_wrapper_drives_the_production_head_detector() -> 
 
     import numpy as np
 
-    from so101_demo.act.head_search_deadband_measurement.plant import ProductionHeadDetector
+    from so101_demo.act.head_search.deadband_measurement.plant import ProductionHeadDetector
     from so101_demo.adapters.act.detector import HeadRgbDetector
     from so101_demo.core.detection import DetectionBatch, DetectionCandidate
 
@@ -417,7 +417,7 @@ def test_the_real_mujoco_plant_places_the_anchor_cup_and_settles(tmp_path: Path)
     commands the neck actuator, applies the declared settle rule and reads the camera's own geometry.
     """
 
-    from so101_demo.act.head_search_deadband_measurement import plant as measurement_plant
+    from so101_demo.act.head_search.deadband_measurement import plant as measurement_plant
 
     inputs = _deadband_inputs(tmp_path)
     plant = measurement_plant.MujocoClosedLoopPlant(
@@ -470,7 +470,7 @@ def test_the_real_episode_plant_captures_the_prepared_cup_after_it_enters_the_sc
 
     import mujoco
 
-    from so101_demo.act.head_search_fine_correction_episodes.scene import MujocoEpisodePlant
+    from so101_demo.act.head_search.fine_correction_episodes.scene import MujocoEpisodePlant
 
     inputs = _fine_correction_inputs(tmp_path)
     request = {

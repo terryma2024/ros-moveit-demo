@@ -151,7 +151,7 @@ def test_measure_operating_point_refuses_an_existing_output_directory(
 def test_measure_operating_point_prints_the_librarys_selection(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
-    from so101_demo.act.head_search_operating_point_measurement import (
+    from so101_demo.act.head_search.operating_point_measurement import (
         measurement as measurement_measurement,
     )
 
@@ -192,7 +192,7 @@ def test_measure_operating_point_prints_the_librarys_selection(
 def test_the_run_entry_observes_the_measured_values_off_the_running_components(tmp_path: Path) -> None:
     """The run's phase inputs carry the observer, so phases 6 and 7 record proof rather than a restatement."""
 
-    from so101_demo.act.head_search_measured_readback import observe_measured_readbacks
+    from so101_demo.act.head_search.measured_readback import observe_measured_readbacks
     from so101_demo.cli.head_search.run import _phase_inputs, _run_parser
 
     parsed = _run_parser().parse_args(_run_arguments(tmp_path)[1:])
@@ -205,8 +205,7 @@ def test_the_run_entry_observes_the_measured_values_off_the_running_components(t
 def test_check_ownership_publishes_a_stack_free_receipt(tmp_path: Path, monkeypatch) -> None:
     """Step 1's gate is an installed entry: a clean machine is recorded, a second owner is refused."""
 
-    from so101_demo.act import head_search_ownership as ownership
-
+    from so101_demo.act.head_search import ownership as ownership
     evidence = tmp_path / "evidence"
     evidence.mkdir()
 

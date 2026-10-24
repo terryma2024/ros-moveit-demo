@@ -13,11 +13,11 @@ import sys
 
 import pytest
 from so101_demo.act.head_execution_stack import RestartStack
-from so101_demo.act.head_search_restarts import contracts as module_contracts
-from so101_demo.act.head_search_restarts import gates as module_gates
-from so101_demo.act.head_search_restarts import observation as module_observation
-from so101_demo.act.head_search_restarts import process_probes as module_process_probes
-from so101_demo.act.head_search_restarts import search_flight as module_search_flight
+from so101_demo.act.head_search.restarts import contracts as module_contracts
+from so101_demo.act.head_search.restarts import gates as module_gates
+from so101_demo.act.head_search.restarts import observation as module_observation
+from so101_demo.act.head_search.restarts import process_probes as module_process_probes
+from so101_demo.act.head_search.restarts import search_flight as module_search_flight
 
 
 @pytest.mark.parametrize('name,expected_tail',[
@@ -40,9 +40,9 @@ def test_owned_head_tf_publisher_launch_uses_joint_cadence_without_changing_othe
     finally:
         if child.poll() is None:child.terminate();child.wait(timeout=2.)
         for handle in stack.handles:handle.close()
-from so101_demo.act.head_search_aggregate.contracts import _Reasons, RESTART_KIND
-from so101_demo.act.head_search_aggregate.measurement_gates import _gate_restarts
-from so101_demo.act.head_search_restarts.contracts import (
+from so101_demo.act.head_search.aggregate.contracts import _Reasons, RESTART_KIND
+from so101_demo.act.head_search.aggregate.measurement_gates import _gate_restarts
+from so101_demo.act.head_search.restarts.contracts import (
     AGGREGATE_ARTIFACT,
     ANCHORS,
     DECLARED_FRAME_RATE_HZ,
@@ -67,13 +67,13 @@ from so101_demo.act.head_search_restarts.contracts import (
     RESTART_TEARDOWN_UNPROVEN,
     RestartRefused,
 )
-from so101_demo.act.head_search_restarts.gates import (
+from so101_demo.act.head_search.restarts.gates import (
     restart_gates,
     restart_refusals,
     timing_document,
     validate_restart_receipt,
 )
-from so101_demo.act.head_search_restarts.observation import (
+from so101_demo.act.head_search.restarts.observation import (
     anchor_declarations,
     camera_rate,
     classify_nodes,
@@ -83,8 +83,8 @@ from so101_demo.act.head_search_restarts.observation import (
     stack_observation,
     teardown_proof,
 )
-from so101_demo.act.head_search_restarts.restart_run import receipt_document
-from so101_demo.act.head_search_restarts.writer import write_head_search_restarts
+from so101_demo.act.head_search.restarts.restart_run import receipt_document
+from so101_demo.act.head_search.restarts.writer import write_head_search_restarts
 
 SHA = "a" * 64
 OTHER_SHA = "b" * 64

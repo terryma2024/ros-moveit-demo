@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
 from so101_demo.cli.head_search_calibration import main
 
 
@@ -32,8 +32,7 @@ def _arguments(inputs: dict) -> list[str]:
 
 
 def test_measure_episode_records_hands_the_declaration_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
-    from so101_demo.act import head_search_episode_records as producer
-
+    from so101_demo.act.head_search import episode_records as producer
     inputs = _inputs(tmp_path)
     seen = {}
 
@@ -87,8 +86,7 @@ def test_measure_episode_records_refuses_an_existing_output_directory(tmp_path: 
 def test_measure_episode_records_prints_the_librarys_refusal_and_returns_two(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
-    from so101_demo.act import head_search_episode_records as producer
-
+    from so101_demo.act.head_search import episode_records as producer
     def refusing(**request):
         raise CalibrationInputsRefused(
             producer.CAL_EPISODE_RECORDS_INCOMPLETE, "the partition declares a seed that was never measured"

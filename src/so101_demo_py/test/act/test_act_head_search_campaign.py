@@ -12,7 +12,7 @@ PARTITIONS = PACKAGE_ROOT / "config/act/head-search-scenario-partitions.json"
 
 
 def campaign():
-    return importlib.import_module("so101_demo.act.head_search_campaign")
+    return importlib.import_module("so101_demo.act.head_search.campaign")
 
 
 def partitions():

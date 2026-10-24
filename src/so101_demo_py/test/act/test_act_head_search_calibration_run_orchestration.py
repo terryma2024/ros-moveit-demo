@@ -25,20 +25,20 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_calibration_bundle import (
+from so101_demo.act.head_search.calibration_bundle import (
     BUNDLE_NAME,
     CAL_BUNDLE_INCOMPLETE,
     MANIFEST_NAME,
     RUN_STATUS_NAME,
 )
-from so101_demo.act.head_search_calibration_bundle import PARAMETERS as BUNDLE_PARAMETERS
-from so101_demo.act.head_search_calibration_inputs import (
+from so101_demo.act.head_search.calibration_bundle import PARAMETERS as BUNDLE_PARAMETERS
+from so101_demo.act.head_search.calibration_inputs import (
     CAL_ADMISSION_REFUSED,
     CAL_BINDING_REBOUND,
     CalibrationResourceBinder,
 )
-from so101_demo.act.head_search_calibration_readback import READBACK_NAME
-from so101_demo.act.head_search_calibration_run import (
+from so101_demo.act.head_search.calibration_readback import READBACK_NAME
+from so101_demo.act.head_search.calibration_run import (
     CAL_SAFE_INTERVAL_MISMATCH,
     CAL_TRAJECTORY_CONTRACT_UNSATISFIED,
     PHASES,
@@ -49,15 +49,15 @@ from so101_demo.act.head_search_calibration_run import (
     evaluate_frozen_candidates,
     execute_calibration_run,
 )
-from so101_demo.act.head_search_candidate_freeze import freeze_candidate
-from so101_demo.act.head_search_coarse_step_measurement.contracts import (
+from so101_demo.act.head_search.candidate_freeze import freeze_candidate
+from so101_demo.act.head_search.coarse_step_measurement.contracts import (
     CAL_SWEEP_EVIDENCE_CONTRADICTORY,
     CAL_SWEEP_EVIDENCE_PARTIAL,
     CAL_SWEEP_UNSTABLE,
 )
-from so101_demo.act.head_search_operating_point import record_selection_rule
-from so101_demo.act.head_search_search_params import CAL_TIMEOUT_UNBOUNDED
-from so101_demo.act.head_search_timing_params import CAL_FRESHNESS_EXCEEDED
+from so101_demo.act.head_search.operating_point import record_selection_rule
+from so101_demo.act.head_search.search_params import CAL_TIMEOUT_UNBOUNDED
+from so101_demo.act.head_search.timing_params import CAL_FRESHNESS_EXCEEDED
 from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
@@ -280,8 +280,8 @@ COARSE_STEP_GEOMETRY_PATH = "/evidence/head-camera-geometry.json"
 def _coarse_step_observations(*, geometry_body=None, weights_sha256=WEIGHT_SHA256) -> dict:
     """The raw sweep of the fixture's geometry: one record per candidate, val scene, anchor and stop."""
 
-    from so101_demo.act.head_search_calibration_geometry import generate_coarse_step_candidates
-    from so101_demo.act.head_search_domain import bounded_search_stops
+    from so101_demo.act.head_search.calibration_geometry import generate_coarse_step_candidates
+    from so101_demo.act.head_search.domain import bounded_search_stops
 
     geometry = GEOMETRY_BODY if geometry_body is None else geometry_body
     anchors_rad = {
@@ -387,8 +387,7 @@ def _coarse_step_observations(*, geometry_body=None, weights_sha256=WEIGHT_SHA25
 
 
 def _module():
-    from so101_demo.act import head_search_calibration_run
-
+    from so101_demo.act.head_search import calibration_run as head_search_calibration_run
     return head_search_calibration_run
 
 
@@ -1344,7 +1343,7 @@ def test_the_phase_four_runner_refuses_an_unparsable_gate_failure(tmp_path):
 def test_the_run_records_the_measured_values_observed_off_the_running_components(tmp_path):
     """With a readback observer the run proves the eleven measured values instead of restating them."""
 
-    from so101_demo.act.head_search_measured_readback import (
+    from so101_demo.act.head_search.measured_readback import (
         CONSTRUCTED_OBSERVATION,
         MEASURED_PARAMETERS,
         observe_measured_readbacks,
