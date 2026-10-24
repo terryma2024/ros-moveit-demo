@@ -67,18 +67,18 @@ def test_schema_3_4_and_5_files_load_and_hash_exactly_as_before(name):
     assert "diversity" not in policy
 
 
-def test_the_shipped_schema_6_file_is_the_schema_5_file_plus_the_diversity_block(document5):
-    shipped = yaml.safe_load((CONFIG / "teacher_execution_policy_side_wrist_diversity.yaml").read_bytes())
+def test_the_experimental_two_leg_file_is_the_schema_5_file_plus_the_diversity_block(document5):
+    shipped = yaml.safe_load((CONFIG / "teacher_execution_policy_side_wrist_experimental_two_leg_diversity.yaml").read_bytes())
     assert {key: value for key, value in shipped.items() if key not in ("schema_version", "diversity")} == {
         key: value for key, value in document5.items() if key != "schema_version"}
     assert shipped["schema_version"] == 6
-    loaded = load_teacher_execution_policy(CONFIG / "teacher_execution_policy_side_wrist_diversity.yaml")
+    loaded = load_teacher_execution_policy(CONFIG / "teacher_execution_policy_side_wrist_experimental_two_leg_diversity.yaml")
     assert loaded["diversity"]["start_pose"]["half_range_rad"] == 0.15 and loaded["diversity"]["ompl"]["num_planning_attempts"] >= 1
 
 
 def test_the_shipped_policy_plans_with_one_attempt_and_a_one_sided_via_height():
     """MoveIt runs several attempts in parallel and keeps the shortest, which reduces the diversity: one attempt is the default."""
-    loaded = load_teacher_execution_policy(CONFIG / "teacher_execution_policy_side_wrist_diversity.yaml")
+    loaded = load_teacher_execution_policy(CONFIG / "teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml")
     assert loaded["diversity"]["ompl"] == {"num_planning_attempts": 1}
     from so101_demo.act import teacher_diversity as td
 

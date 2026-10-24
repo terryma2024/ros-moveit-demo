@@ -18,7 +18,7 @@ from test_act_diagnostic_episode_scope import _write_registry
 from test_case_inputs import CONFIG, bound_registry, policies
 from paths import REPOSITORY
 
-SCHEMA6_FILE = CONFIG / "teacher_execution_policy_side_wrist_diversity.yaml"
+SCHEMA6_FILE = CONFIG / "teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml"
 
 
 def freeze_world(tmp_path_factory, name, policy_file):

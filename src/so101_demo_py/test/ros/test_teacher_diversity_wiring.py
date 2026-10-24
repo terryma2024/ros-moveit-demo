@@ -12,7 +12,7 @@ from paths import PACKAGE_ROOT
 from test_dynamic_scene_sync import RecordingTaskScenePort, _observation, _options, _runtime
 from test_teacher_runtime import TeacherExecution
 
-SCHEMA6 = PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_diversity.yaml"
+SCHEMA6 = PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml"
 SCHEMA5 = PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_two_leg_open_1s.yaml"
 
 
@@ -81,7 +81,9 @@ def test_a_schema_6_freeze_resolves_preflights_and_builds_on_the_episode_targets
     offset = tuple(values["carry_via_offset_m"])
     assert code == 0 and "runner.run" in events
     assert calls["resolve"] == (shifted, {"carry_via_offset_m": offset})
-    assert calls["preflight"] == (shifted, {"descend_final_distance_m": policy["descend_final_distance_m"], "carry_via_offset_m": offset})
+    # carry_b + diversity has no DESCEND group: the preflight gets no distance (six interpolated segments), only the via offset
+    assert "descend_final_distance_m" not in policy
+    assert calls["preflight"] == (shifted, {"carry_via_offset_m": offset})
     assert calls["execution"][0] == shifted and calls["execution"][1].carry_via is not None
     assert execution._episode_diversity == values
     assert execution.diversity_recorded == [values]

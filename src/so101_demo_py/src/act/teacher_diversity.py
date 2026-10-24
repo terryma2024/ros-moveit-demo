@@ -82,8 +82,8 @@ def parse_diversity(document) -> dict:
         _fail("campaign_seed is not an integer within 0 to 2^63-1")
     start = _closed(block["start_pose"], {"distribution", "half_range_rad", "max_redraws"}, "start_pose")
     half = _number(start["half_range_rad"], "start_pose.half_range_rad")
-    if not 0 < half <= START_HALF_RANGE_CAP_RAD:
-        _fail(f"start_pose.half_range_rad is not within (0, {START_HALF_RANGE_CAP_RAD}]")
+    if not 0 <= half <= START_HALF_RANGE_CAP_RAD:
+        _fail(f"start_pose.half_range_rad is not within [0, {START_HALF_RANGE_CAP_RAD}] (0 switches the start pose axis off)")
     parsed = {
         "campaign_seed": seed,
         "start_pose": {"distribution": _distribution(start["distribution"], "start_pose", "uniform"), "half_range_rad": half,
@@ -200,14 +200,18 @@ def start_pose_matches(diversity: dict, scene_id: str, measured_joints, draw: in
     return all(abs(measured[index] - offsets[index]) <= tolerance_rad for index in range(len(START_JOINTS)))
 
 
-def frozen_scene_identity(frozen):
-    """The scene and compiled-model hashes a frozen input set binds (`roles.scene_model.identity`), or None when it binds none."""
+def frozen_scene_identity(frozen, snapshot):
+    """The scene and compiled-model hashes of a frozen input set: the sha256 of its `scene_model` role file and the `model_sha256` of its
+    verified execution snapshot (the compile of that scene). None when either is missing."""
 
     try:
-        identity = frozen["roles"]["scene_model"]["identity"]
-        return {"scene_sha256": identity["scene_sha256"], "model_sha256": identity["model_sha256"]}
+        scene = frozen["roles"]["scene_model"]["sha256"]
+        model = snapshot["model_sha256"]
     except (KeyError, TypeError):
         return None
+    if not all(isinstance(item, str) and len(item) == 64 for item in (scene, model)):
+        return None
+    return {"scene_sha256": scene, "model_sha256": model}
 
 
 SELECTION_KIND = "TEACHER_DIVERSITY_START_POSE_SELECTION"

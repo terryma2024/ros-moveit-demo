@@ -9,7 +9,7 @@ from so101_demo.act import bundle, teacher_diversity as td
 from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
 from paths import PACKAGE_ROOT
 
-POLICY = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_diversity.yaml")
+POLICY = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml")
 
 
 def write_identity(root, scene, values=None, extra=None):

@@ -1,3 +1,7 @@
+# EXPERIMENTAL, DO NOT COLLECT WITH THIS FILE. Its base is the two-leg DESCEND salvage variant that failed on cup overload in DESCEND in EXP-635
+# (CP-3759: 8 of 14 flagged, 6 of 16 VALID); the R3-a live smoke on it (act-w8d-20261024T153327Z) repeated that (11 of 15 flagged). It stays only
+# to test that a schema 6 policy may carry the schema 5 DESCEND group. The collection policy is `teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml`.
+#
 # Schema 6 variant of `teacher_execution_policy_side_wrist_fast_two_leg_open_1s.yaml` (R3-a parametrised Teacher, design
 # docs/superpowers/specs/2026-10-23-so101-domain-randomization-design-update.md, section "R3-a 参数化 Teacher").
 # GENERATED SOURCE: every value is the two_leg_open_1s file's (schema 5) except `schema_version: 6` and the closed `diversity` block at the end.

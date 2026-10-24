@@ -83,7 +83,10 @@ class PointGate:
         identity = getattr(checker, "identity", None)
         identity = identity() if callable(identity) else None
         frozen_scene = self.dependencies.get("start_pose_frozen_scene")
-        if frozen_scene is not None and (identity is None or any(identity.get(key) != frozen_scene.get(key) for key in frozen_scene)):
+        if not isinstance(frozen_scene, dict) or not {"scene_sha256", "model_sha256"} <= set(frozen_scene):
+            # fail closed: the live path cannot claim "no collision" for a model it cannot tie to the frozen scene
+            raise RuntimeError("TEACHER_DIVERSITY_START_POSE_FROZEN_SCENE_REQUIRED")
+        if identity is None or any(identity.get(key) != frozen_scene[key] for key in ("scene_sha256", "model_sha256")):
             raise RuntimeError("TEACHER_DIVERSITY_START_POSE_MODEL_MISMATCH")
 
         def check(offsets):
@@ -99,7 +102,7 @@ class PointGate:
             "scene_id": lease.point_id, "policy_sha256": policy.get("policy_sha256"),
             "campaign_seed": policy["diversity"]["campaign_seed"], "draw_index": selection["draw_index"],
             "joints": list(joints), "joints_rad": list(vector), "cup_position_world_m": list(cup),
-            "rejected": selection["rejected"], "model": identity, "frozen_identity_verified": frozen_scene is not None})
+            "rejected": selection["rejected"], "model": identity, "frozen_identity_verified": True})
         self.__dict__.setdefault("_start_poses", {})[lease.attempt_id] = tuple(vector[:6])
         return vector
 

@@ -79,7 +79,7 @@ def test_per_point_inputs_are_the_template_of_the_episode_and_its_via_offset() -
     from test_dynamic_pick import _template
     from paths import PACKAGE_ROOT
 
-    policy = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_diversity.yaml")
+    policy = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml")
     template = _template()
     plain_template, plain_offset, plain_values = episode_check_inputs(template, None, "act-0001")
     assert plain_template is template and plain_offset is None and plain_values is None        # no schema 6 policy: nothing changes

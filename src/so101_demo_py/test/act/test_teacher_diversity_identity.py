@@ -14,7 +14,7 @@ from paths import PACKAGE_ROOT
 from test_act_recorder import PROVENANCE
 from test_act_seal_and_downgrade import SCOPE
 
-SCHEMA6 = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_diversity.yaml")
+SCHEMA6 = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml")
 
 
 def open_episode(root, **options):

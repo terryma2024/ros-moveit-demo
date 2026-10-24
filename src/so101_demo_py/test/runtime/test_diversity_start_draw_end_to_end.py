@@ -20,7 +20,7 @@ from paths import PACKAGE_ROOT
 from test_diversity_start_pose_reset import Checker, lease, ports
 from test_dynamic_pick import _template
 
-POLICY = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_diversity.yaml")
+POLICY = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml")
 SCHEMA5 = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_two_leg_open_1s.yaml")
 SCENE = "act-0001"
 FROZEN6 = {"teacher_execution_policy": {"values": {key: value for key, value in POLICY.items() if key != "policy_sha256"}}}

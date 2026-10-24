@@ -25,7 +25,10 @@ def _frozen_descend_final_distance_m(frozen):
     from ..act.teacher_endpoint import DESCEND_DISTANCE_FIELD
 
     try:
-        return float(frozen["teacher_execution_policy"]["values"][DESCEND_DISTANCE_FIELD])
+        values = frozen["teacher_execution_policy"]["values"]
+        if DESCEND_DISTANCE_FIELD not in values and _frozen_teacher_schema(frozen) > 5:
+            return None            # schema 6 without the optional DESCEND group: the preflight checks the six interpolated segments
+        return float(values[DESCEND_DISTANCE_FIELD])
     except (KeyError, TypeError, ValueError):
         raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + DESCEND_DISTANCE_FIELD) from None
 

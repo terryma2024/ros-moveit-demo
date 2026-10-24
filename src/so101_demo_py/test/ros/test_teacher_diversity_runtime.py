@@ -23,7 +23,7 @@ from test_teacher_moveit_execution import make_adapter
 from paths import PACKAGE_ROOT
 
 CONFIG = PACKAGE_ROOT / "config/act"
-SCHEMA6 = CONFIG / "teacher_execution_policy_side_wrist_diversity.yaml"
+SCHEMA6 = CONFIG / "teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml"
 SCHEMA5 = CONFIG / "teacher_execution_policy_side_wrist_fast_two_leg_open_1s.yaml"
 SAMPLE = CupPoseSample("world", 1, 0.0, Pose7((0.051023, -0.339445, 0.165, 0.0, 0.0, 0.0, 1.0)))
 
@@ -162,8 +162,10 @@ def test_descend_to_place_keeps_the_calibrated_carry_scaling_whatever_the_speed_
         assert scalings(tmp_path, policy6, State.DESCEND_TO_PLACE, speed_scale=scale) == base
 
 
-def test_the_speed_scale_scales_the_descend_approach_stage_only(tmp_path, ik, template, targets, policy6):
-    value = teacher(tmp_path, ik, template, targets, policy_path=SCHEMA6)
+def test_the_speed_scale_scales_the_descend_approach_stage_only(tmp_path, ik, template, targets):
+    two_leg = CONFIG / "teacher_execution_policy_side_wrist_experimental_two_leg_diversity.yaml"   # the only shipped schema 6 file with the DESCEND group
+    policy6 = load_teacher_execution_policy(two_leg)
+    value = teacher(tmp_path, ik, template, targets, policy_path=two_leg)
     value._episode_diversity = {"speed_scale": 1.3}
     grasp = targets.for_state(State.DESCEND)
     value._descend_grasp_target = grasp

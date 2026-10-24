@@ -141,7 +141,7 @@ def test_the_call_wrapper_passes_a_schema_6_teacher_policy_only_when_one_is_name
     points.write_text("[]")
     body = ('printf "%s\\n" "$@" >> "$FAKE_DOCKER_LOG"; printf -- "--\\n" >> "$FAKE_DOCKER_LOG"\n'
             'case "$*" in *--evidence-file*) f=$(printf "%s\\n" "$@" | sed -n "/--evidence-file/{n;p}"); echo "{}" > "$f"; echo \'{"reports": []}\';; esac\n')
-    for number, policy in enumerate((None, "/act/teacher_execution_policy_side_wrist_diversity.yaml")):
+    for number, policy in enumerate((None, "/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml")):
         evidence = tmp_path / f"res{number}" / "p.json"
         evidence.parent.mkdir()
         env = fake_docker(tmp_path / f"run{number}", body)

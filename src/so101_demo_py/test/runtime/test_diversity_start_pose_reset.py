@@ -17,7 +17,7 @@ from paths import PACKAGE_ROOT
 
 from parallel_ros_runtime_support import _valid_worker_nodes
 
-SCHEMA6 = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_diversity.yaml")
+SCHEMA6 = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml")
 SCHEMA5 = load_teacher_execution_policy(PACKAGE_ROOT / "config/act/teacher_execution_policy_side_wrist_fast_two_leg_open_1s.yaml")
 CUP = [0.02, -0.28, 0.165]
 
@@ -25,6 +25,11 @@ CUP = [0.02, -0.28, 0.165]
 def lease(point="act-0001", attempt="act-0001-lease-1"):
     return SimpleNamespace(batch_id="b", coordinator_epoch=1, worker_id="w", worker_generation=1, point_id=point,
                            attempt_id=attempt, lease_generation=1)
+
+
+IDENTITY = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64, "physics_fingerprint": "c" * 64, "physics_fingerprint_stripped": "d" * 64,
+            "mujoco_version": "3.12.0"}
+FROZEN_SCENE = {"scene_sha256": IDENTITY["scene_sha256"], "model_sha256": IDENTITY["model_sha256"]}
 
 
 class Checker:
@@ -36,11 +41,31 @@ class Checker:
         index = len(self.seen) - 1
         return (False, "COLLISION: fixture") if index in self.reject else (True, "")
 
+    def identity(self):
+        return dict(IDENTITY)
 
-def ports(tmp_path, *, policy=SCHEMA6, rig=SIDE_WRIST_RIG, checker=None, calls=None):
+
+_REAL_IDENTITY = []
+
+
+def real_frozen_scene():
+    """The scene and model hashes of the real rig scene, as the frozen inputs would bind them."""
+    if not _REAL_IDENTITY:
+        from so101_demo.act.joints import ARM_JOINTS
+
+        checker = td.StartPoseCollisionCheck.from_path(PACKAGE_ROOT / "assets/mujoco/act/scene_side_wrist.xml", cup_body="plastic_cup",
+                                                       joint_names=ARM_JOINTS)
+        identity = checker.identity()
+        _REAL_IDENTITY.append({"scene_sha256": identity["scene_sha256"], "model_sha256": identity["model_sha256"]})
+    return dict(_REAL_IDENTITY[0])
+
+
+def ports(tmp_path, *, policy=SCHEMA6, rig=SIDE_WRIST_RIG, checker=None, calls=None, frozen_scene="auto"):
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     calls = [] if calls is None else calls
+    if frozen_scene == "auto":
+        frozen_scene = dict(FROZEN_SCENE) if checker is not None else real_frozen_scene()
 
     def execute(session_id, *, keyframe, cup_position_world_m, **kwargs):
         calls.append({"keyframe": keyframe, "cup": cup_position_world_m, **kwargs})
@@ -54,7 +79,9 @@ def ports(tmp_path, *, policy=SCHEMA6, rig=SIDE_WRIST_RIG, checker=None, calls=N
         dependencies["teacher_execution_policy"] = policy
     if checker is not None:
         dependencies["start_pose_check"] = lambda _rig: checker
-    resources = SimpleNamespace(session_id="s", worker_id="w", generation=1, worker_root=tmp_path)
+    if frozen_scene is not None:
+        dependencies["start_pose_frozen_scene"] = frozen_scene
+    resources =SimpleNamespace(session_id="s", worker_id="w", generation=1, worker_root=tmp_path)
     value = ParallelRosRuntimePorts(resources, catalog={"act-0001": {"cup_position_world_m": CUP}}, dependencies=dependencies)
     return value, calls
 
@@ -155,52 +182,45 @@ def test_a_schema_6_policy_needs_the_act_profile(tmp_path):
 
 # ---- the model the check ran on ------------------------------------------------------------------------------------------------
 
-IDENTITY = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64, "physics_fingerprint": "c" * 64, "physics_fingerprint_stripped": "d" * 64,
-            "mujoco_version": "3.12.0"}
-
-
-class IdentifiedChecker(Checker):
-    def identity(self):
-        return dict(IDENTITY)
-
-
-def test_the_selection_record_names_the_model_and_says_whether_it_was_verified(tmp_path):
-    value, _ = ports(tmp_path, checker=IdentifiedChecker())
-    value.dependencies["start_pose_frozen_scene"] = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64}
+def test_the_selection_record_names_the_model_and_says_it_was_verified_against_the_frozen_scene(tmp_path):
+    value, _ = ports(tmp_path, checker=Checker())
     value.reset_point(lease())
     selection = json.loads((tmp_path / "start-pose-act-0001-lease-1.json").read_text())
     assert selection["model"] == IDENTITY and selection["frozen_identity_verified"] is True
 
 
-def test_without_a_frozen_identity_the_record_says_it_was_not_verified(tmp_path):
-    value, _ = ports(tmp_path, checker=IdentifiedChecker())
-    value.reset_point(lease())
-    selection = json.loads((tmp_path / "start-pose-act-0001-lease-1.json").read_text())
-    assert selection["model"] == IDENTITY and selection["frozen_identity_verified"] is False
+def test_without_a_frozen_scene_identity_the_reset_fails_closed_before_anything_moves(tmp_path):
+    value, calls = ports(tmp_path, checker=Checker(), frozen_scene=None)
+    with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_FROZEN_SCENE_REQUIRED"):
+        value.reset_point(lease())
+    assert calls == [] and not list(tmp_path.glob("start-pose-*"))
 
 
 @pytest.mark.parametrize("field", ["scene_sha256", "model_sha256"])
 def test_a_model_that_is_not_the_frozen_scene_is_refused_before_any_reset(tmp_path, field):
-    value, calls = ports(tmp_path, checker=IdentifiedChecker())
-    value.dependencies["start_pose_frozen_scene"] = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64, field: "e" * 64}
+    value, calls = ports(tmp_path, checker=Checker(), frozen_scene={**FROZEN_SCENE, field: "e" * 64})
     with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_MODEL_MISMATCH"):
         value.reset_point(lease())
     assert calls == [] and not list(tmp_path.glob("start-pose-*"))
 
 
-def test_a_checker_that_cannot_name_its_model_is_refused_when_a_frozen_identity_is_required(tmp_path):
-    value, calls = ports(tmp_path, checker=Checker())
-    value.dependencies["start_pose_frozen_scene"] = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64}
+def test_a_checker_that_cannot_name_its_model_is_refused(tmp_path):
+    class Anonymous:
+        def check(self, joints, cup_position=None):
+            return True, ""
+
+    value, calls = ports(tmp_path, checker=Anonymous())
     with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_MODEL_MISMATCH"):
         value.reset_point(lease())
     assert calls == []
 
 
-def test_the_frozen_scene_identity_is_read_from_the_scene_model_role():
-    frozen = {"roles": {"scene_model": {"sha256": "a" * 64, "identity": {"scene_sha256": "a" * 64, "model_sha256": "b" * 64,
-                                                                         "mujoco_version": "3.12.0"}}}}
-    assert td.frozen_scene_identity(frozen) == {"scene_sha256": "a" * 64, "model_sha256": "b" * 64}
-    assert td.frozen_scene_identity({}) is None and td.frozen_scene_identity({"roles": {"scene_model": {}}}) is None
+def test_the_frozen_scene_identity_is_the_scene_role_hash_and_the_execution_snapshot_model_hash():
+    frozen = {"roles": {"scene_model": {"sha256": "a" * 64, "path": "roles/scene.xml"}}}
+    snapshot = {"model_sha256": "b" * 64, "scene_path": "assets/mujoco/act/scene_side_wrist.xml"}
+    assert td.frozen_scene_identity(frozen, snapshot) == {"scene_sha256": "a" * 64, "model_sha256": "b" * 64}
+    for bad_frozen, bad_snapshot in (({}, snapshot), ({"roles": {"scene_model": {}}}, snapshot), (frozen, {}), (frozen, None), (frozen, {"model_sha256": 5})):
+        assert td.frozen_scene_identity(bad_frozen, bad_snapshot) is None
 
 
 def test_the_real_check_records_the_scene_file_hash(tmp_path):

@@ -159,8 +159,12 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     if (type(position) is not list or len(position)!=3 or any(not _finite(value) for value in position)):
         raise ValueError('COLLECTION_TASK_SCENE_INVALID')
     refs={name:document[name] for name in ('scope','inputs_manifest')}
-    frozen,_,_=load_teacher_frozen_inputs(validate_file_ref(refs['inputs_manifest']))
+    frozen,snapshot,_=load_teacher_frozen_inputs(validate_file_ref(refs['inputs_manifest']))
     rig=rig_from_frozen(frozen)
+    # R3-a: a schema 6 Teacher policy draws start poses checked in the frozen scene; without the frozen scene's hashes the task is refused
+    scene_identity=frozen_scene_identity(frozen,snapshot)
+    if scene_identity is None and frozen['teacher_execution_policy']['values'].get('diversity') is not None:
+        raise ValueError('COLLECTION_CASE_FROZEN_SCENE_UNAVAILABLE')
     if rig.profile_sha256!=campaign.get('rig_profile_sha256',DEFAULT_RIG.profile_sha256):
         raise ValueError('COLLECTION_CASE_RIG_MISMATCH')
     if (frozen['mode'] not in COLLECTION_MODES
@@ -187,7 +191,7 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     return TaskInput(task_id=task.task_id,root=root,scene_id=document['scene_id'],row=row,refs=refs,
         config=config,campaign=campaign,teacher_policy=dict(frozen['teacher_execution_policy']['values']),
         recorder_policy=recorder,teacher=document['teacher'],
-        shard_spec=shard_spec,rig=rig,frozen_scene=frozen_scene_identity(frozen))
+        shard_spec=shard_spec,rig=rig,frozen_scene=scene_identity)
 
 
 def local_lease(shard_spec,scene_id,*,issued,deadline):

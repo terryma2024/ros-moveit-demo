@@ -43,7 +43,7 @@
 ## R3 示教多样性：设计（2026-10-24，状态：R3-a 已获授权并实现于分支 `r3a-teacher-diversity`（待 live 冒烟）；R3-b、R3-c 仍是设计稿，未授权实施）
 
 **R3-a 实现记录（2026-10-24）**
-- 代码：`act/teacher_diversity.py`（分布块解析、派生、范围检查、起始姿态抽样与碰撞检查）、`act/teacher_endpoint.py`（schema 6）、`config/act/teacher_execution_policy_side_wrist_diversity.yaml`（示例策略，schema 5 的 two_leg_open_1s 加 `diversity` 块）。
+- 代码：`act/teacher_diversity.py`（分布块解析、派生、范围检查、起始姿态抽样与碰撞检查）、`act/teacher_endpoint.py`（schema 6）、`config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml`（采集策略：carry_b 加 `diversity` 块）。schema 6 是“基础 schema 加 diversity”：schema 5 的 DESCEND 两段键（三个键同有或同无）和 OPEN_GRIPPER 时长是可选的，缺省时 DESCEND 与 schema 4 完全一样（六个插值位姿）。`..._experimental_two_leg_diversity.yaml` 基于已在 EXP-635 上因杯子过载失败的两段 DESCEND，只作实验和测试用。
 - 搬运中间点实现为 MOVE_ABOVE_PLACE 内部的一个 waypoint（两段直线，各 3 个 waypoint），不是新状态。状态轨迹、`TEACHER_WORKFLOW`、审计的 `TEACHER_STATES` 和 `DYNAMIC_REACHABILITY_STATES` 都不变。
 - OMPL（修订，2026-10-24 评审）：OMPL 种子不适用，`MotionPlanRequest` 没有种子字段，所以多样性来自 OMPL 自身的随机性，并在每次被接受的规划记录里写 `trajectory_sha256`。种子仍按规则派生并记录（`seed_applied: false`）。`num_planning_attempts` 的示例策略值是 1：MoveIt 会并行跑多次尝试并保留最短的一条，多于 1 会降低多样性。
 - 速度比例只乘策略里的比例键（LIFT、MOVE_ABOVE_PLACE 的 carry，MOVE_ABOVE_OBJECT、RETREAT、DESCEND 接近段），上限 1。接触敏感的阶段不乘：DESCEND 最后一段、MICRO_LIFT，以及 DESCEND_TO_PLACE（放置高度是在模板速度下标定的）。

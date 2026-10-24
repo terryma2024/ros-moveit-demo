@@ -68,6 +68,8 @@ class MotionPlanning:
                 or policy.get("kind") != EXECUTION_KIND
                 or type(policy.get("schema_version")) is not int or policy["schema_version"] < EXECUTION_SCHEMA_DESCEND):
             return None
+        if DESCEND_DISTANCE_FIELD not in policy and policy["schema_version"] > EXECUTION_SCHEMA_DESCEND:
+            return None            # schema 6 without the DESCEND group: six interpolated poses, exactly as schema 4
         return speed_policy_value(policy, DESCEND_DISTANCE_FIELD, 0.0, since_schema=EXECUTION_SCHEMA_DESCEND)
 
     def _start_pick_horizon_precompute(self) -> None:

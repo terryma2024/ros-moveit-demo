@@ -59,7 +59,7 @@ def test_the_block_is_closed(mutate):
     (("campaign_seed",), -1), (("campaign_seed",), 1.5), (("campaign_seed",), True), (("campaign_seed",), "7"),
     (("campaign_seed",), 2 ** 63),
     (("start_pose", "distribution"), "normal"),
-    (("start_pose", "half_range_rad"), 0.0), (("start_pose", "half_range_rad"), -0.1), (("start_pose", "half_range_rad"), 0.31),
+    (("start_pose", "half_range_rad"), -0.1), (("start_pose", "half_range_rad"), 0.31),
     (("start_pose", "half_range_rad"), float("nan")), (("start_pose", "half_range_rad"), True),
     (("start_pose", "max_redraws"), 0), (("start_pose", "max_redraws"), 33), (("start_pose", "max_redraws"), 2.0),
     (("pregrasp_height", "half_range_m"), -0.001), (("pregrasp_height", "half_range_m"), 0.031),
