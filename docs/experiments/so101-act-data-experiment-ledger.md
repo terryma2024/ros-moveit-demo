@@ -69,8 +69,8 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3783
-next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a on branch r3a-teacher-diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator.
+latest_checkpoint: CP-3784
+next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a merged (CP-3784), next: wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator.
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -105,6 +105,15 @@ next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout poli
 - **Disk.** Bags deleted after each bucket's metrics (pre-authorised): `R/act-rollout-r0-20261023/deletions-*-mcap.log`; evidence filesystem 189 GB free before the buckets, 174 GB after; never below 30 GiB.
 - **Retained / archived / deletion candidates.** Retained: all json, jsonl, reports and scripts under `R/act-rollout-r0-20261023`. Archived: none. Deletion candidates (not deleted): `R/act-rollout-r0-20261023/*/{wave-*,ipc,live,measurement,host}` raw run trees after readback, `r0-cup_blue.failed-stop-unconfirmed`, gate worktrees `/data/work/so101-build/gate-wt-634b6c2a5231` and `gate-wt-8bfe6901489a`, gate trees and mount tree `634b6c2a5231`, test scratch directories `r35*`, `sv*` under the gate scratch, `/data/work/so101-tools/gate-env-import-{634b6c2a5231,8bfe6901489a}`.
 - Next: the friction bucket (cup-table friction 0.8x/1.2x) is deferred (D1: a dynamics change needs the contact policy recalibrated; to-do 39). R2/R3 parameters and budget are the coordinator's decision from `report.md` (D3).
+
+## CP-3784 — R3-a (schema-6 Teacher diversity) merged into `codex/so101-act-data-0917a`, merge gate green
+
+- Merged `origin/r3a-teacher-diversity` (tip `7714a3032`, branch gate `7714a3032122.t1` green, coordinator-reviewed) with `--no-ff` into `d891f951b`, merge commit `151a75f57`, pushed as a fast-forward. The R3-a branch was based on `d949c33e3`, so the merged tree is new (it now contains the item-34 merge and the indoor P2 commits). Content: schema-6 Teacher diversity (base plus diversity, DESCEND optional), review fixes 1-8, the recorder-scene test fixture restamp (assertions unchanged).
+- **Conflict.** Only `docs/experiments/so101-act-optimisation-todos.md`: row 33 taken from the R3-a side (status sentence appended), row 34 from the item-34 side. `collection_qualification_recompute.py` and `task_builder.py` auto-merged.
+- **Gate.** Full host gate `151a75f57113.t1` (`--full --gate-suffix t1`, detached worktree `/data/work/so101-build/merge-r3a-wt`, ai-station): build 0, demo 0, colcon 0, `first_run_rc=0 final_rc=0`, no known-flake rerun; 16 demo workers; HOST-BUSY held, fans 100 % then `nbfc set -a`. No interaction failure, no fix commit.
+- **Smoke evidence (from the branch).** `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-r3a-smoke-20261024T153152Z/`: control carry_b Teacher 16/16, 0 overload, 14 VALID; diversity 15/16 (1 designed unreachable before motion), 0 overload, 14 VALID.
+- **Next.** Wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity. R3-b and R3-c are not authorised.
+- **Retained / archived / deletion candidates.** Retained: the smoke root and gate result `gates/151a75f57113.t1`. Archived: none. Deletion candidates (not deleted): gate build tree and scratch of `151a75f57113.t1`.
 
 ## CP-3783 — Indoor scene: contact activation derived for `side-wrist-indoor` (human-approved), P2(a) YOLO check on the indoor nominal: detection rate 87.5 % against 100 %, STOPPED before the pilot
 
