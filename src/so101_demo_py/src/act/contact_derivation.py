@@ -44,11 +44,11 @@ def check_equivalence_record(record_bytes: bytes, *, old_scene_sha256: str, new_
         record = json.loads(record_bytes)
         old, new = record["scenes"][_OLD_SCENE], record["scenes"][_NEW_SCENE]
         conclusion = record["conclusion"]
-        cited_old, cited_new = old["v2"], new["v2"]
+        cited_old, cited_new = old["stripped_fingerprint"], new["stripped_fingerprint"]
         recorded = (old["scene_sha256"], new["scene_sha256"])
     except (ValueError, KeyError, TypeError):
         refuse("shape")
-    if conclusion.get("v2_old_nominal_equals_new_indoor_nominal") is not True or conclusion.get("all_stripped_arrays_identical") is not True:
+    if conclusion.get("stripped_fingerprint_old_equals_new_indoor") is not True or conclusion.get("all_stripped_arrays_identical") is not True:
         refuse("the record does not conclude an equivalence")
     if recorded != (old_scene_sha256, new_scene_sha256):
         refuse("the record is about other scene files")

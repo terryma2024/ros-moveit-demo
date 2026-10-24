@@ -155,10 +155,10 @@ def test_a_derivation_to_the_same_pins_or_a_malformed_input_is_refused(tmp_path)
 
 
 def _record(**changes):
-    scene = {"scene_sha256": "1" * 64, "v2": {"fingerprint_version": 2, "sha256": STRIPPED}}
-    old = {"scene_sha256": "b" * 64, "v2": {"fingerprint_version": 2, "sha256": STRIPPED}}
+    scene = {"scene_sha256": "1" * 64, "stripped_fingerprint": {"fingerprint_version": 2, "sha256": STRIPPED}}
+    old = {"scene_sha256": "b" * 64, "stripped_fingerprint": {"fingerprint_version": 2, "sha256": STRIPPED}}
     document = {"scenes": {"old_nominal_side_wrist": old, "new_nominal_side_wrist_indoor": scene},
-                "conclusion": {"v2_old_nominal_equals_new_indoor_nominal": True, "all_stripped_arrays_identical": True}}
+                "conclusion": {"stripped_fingerprint_old_equals_new_indoor": True, "all_stripped_arrays_identical": True}}
     document.update(changes)
     return json.dumps(document).encode()
 
@@ -173,8 +173,8 @@ def test_a_record_that_claims_the_equivalence_gives_the_stripped_fingerprint_it_
     ({}, dict(new_scene_sha256="c" * 64)),
     ({}, dict(fresh_new="8" * 64)),
     ({}, dict(fresh_old="8" * 64)),
-    ({"conclusion": {"v2_old_nominal_equals_new_indoor_nominal": False, "all_stripped_arrays_identical": True}}, {}),
-    ({"conclusion": {"v2_old_nominal_equals_new_indoor_nominal": True, "all_stripped_arrays_identical": False}}, {}),
+    ({"conclusion": {"stripped_fingerprint_old_equals_new_indoor": False, "all_stripped_arrays_identical": True}}, {}),
+    ({"conclusion": {"stripped_fingerprint_old_equals_new_indoor": True, "all_stripped_arrays_identical": False}}, {}),
     ({"scenes": {}}, {}),
 ])
 def test_a_record_that_disagrees_with_the_files_or_with_itself_is_refused(changes, arguments):
@@ -220,9 +220,9 @@ def _world(tmp_path, monkeypatch):
     equivalence = tmp_path / "equivalence.json"
     sides = derivation.fresh_stripped_fingerprints(SIDE_SCENE, INDOOR_SCENE)
     old_sha, new_sha = _sha(SIDE_SCENE.read_bytes()), _sha(INDOOR_SCENE.read_bytes())
-    scenes = {"old_nominal_side_wrist": {"scene_sha256": old_sha, "v2": {"fingerprint_version": 2, "sha256": sides[0]}},
-              "new_nominal_side_wrist_indoor": {"scene_sha256": new_sha, "v2": {"fingerprint_version": 2, "sha256": sides[1]}}}
-    equivalence.write_text(json.dumps({"scenes": scenes, "conclusion": {"v2_old_nominal_equals_new_indoor_nominal": True,
+    scenes = {"old_nominal_side_wrist": {"scene_sha256": old_sha, "stripped_fingerprint": {"fingerprint_version": 2, "sha256": sides[0]}},
+              "new_nominal_side_wrist_indoor": {"scene_sha256": new_sha, "stripped_fingerprint": {"fingerprint_version": 2, "sha256": sides[1]}}}
+    equivalence.write_text(json.dumps({"scenes": scenes, "conclusion": {"stripped_fingerprint_old_equals_new_indoor": True,
                                                                          "all_stripped_arrays_identical": True}}))
     # the fixture proposal carries fixture pins: stand them in for the side-wrist pins of the collector
     pins = dict(contact_collector.RIG_IDENTITIES)
