@@ -30,11 +30,12 @@ def _frozen_descend_final_distance_m(frozen):
         raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + DESCEND_DISTANCE_FIELD) from None
 
 
-def _frozen_run_inputs(frozen, point_id, template):
-    """R3-a: (episode values, template of the run, carry via offset) of a schema 6 freeze, derived from the frozen diversity block and the
-    scene id (the lease point id); (None, ``template``, None) for a freeze that is not schema 6, which changes nothing.
+def _frozen_run_inputs(frozen, point_id, template, start_draw=None):
+    """R3-a: (episode values, template of the run, carry via offset) of a schema 6 freeze, derived from the frozen diversity block, the
+    scene id (the lease point id) and the start pose draw the reset applied; (None, ``template``, None) for a freeze that is not
+    schema 6, which changes nothing (and ignores the draw).
 
-    A schema 6 freeze without a scene id, or whose block does not re-parse, is refused before any motion."""
+    A schema 6 freeze without a scene id or without the applied draw, or whose block does not re-parse, is refused before any motion."""
 
     if _frozen_teacher_schema(frozen) < 6:
         return None, template, None
@@ -42,9 +43,11 @@ def _frozen_run_inputs(frozen, point_id, template):
 
     if not isinstance(point_id, str) or not point_id:
         raise RuntimeError("TEACHER_DIVERSITY_SCENE_ID_REQUIRED")
+    if start_draw is None:
+        raise RuntimeError("TEACHER_DIVERSITY_START_DRAW_REQUIRED")
     policy = dict(frozen["teacher_execution_policy"]["values"])
     policy["diversity"] = parse_diversity(policy.get("diversity"))
-    values = values_for_policy(policy, point_id)
+    values = values_for_policy(policy, point_id, start_draw)
     return values, episode_template(template, values), tuple(values["carry_via_offset_m"])
 
 

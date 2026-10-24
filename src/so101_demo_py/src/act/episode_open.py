@@ -9,6 +9,22 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def diversity_arguments(frozen: dict, scene_id: str, start_draw) -> dict:
+    """R3-a: the `open_point_episode` arguments that put a frozen schema 6 policy's derived values, with the start pose draw the reset
+    applied, into the episode identity (episode.json); {} for a freeze without a diversity block. A schema 6 freeze without the draw
+    is refused: the identity would otherwise claim draw 0 for an episode that started from another pose."""
+
+    from .teacher_diversity import values_for_policy
+
+    binding = frozen.get("teacher_execution_policy")
+    policy_values = None if not isinstance(binding, dict) else binding.get("values")
+    if not isinstance(policy_values, dict) or policy_values.get("diversity") is None:
+        return {}
+    if start_draw is None:
+        raise ValueError("TEACHER_DIVERSITY_START_DRAW_REQUIRED")
+    return {"diversity": values_for_policy(policy_values, scene_id, start_draw), "diversity_policy": policy_values}
+
+
 def open_recorder_episode(options, *, offline: bool = False):
     """Bind the actual frozen bytes and full issued lease before opening the Recorder's episode.
 
@@ -106,14 +122,8 @@ def open_recorder_episode(options, *, offline: bool = False):
         raise ValueError("EPISODE_LOCATION_MISMATCH")
     evidence_root.mkdir(parents=True, exist_ok=True)
     # R3-a: a frozen schema 6 Teacher policy derives this scene's values; they enter the episode identity (episode.json)
-    from .teacher_diversity import values_for_policy
-
-    policy_binding = frozen.get("teacher_execution_policy")
-    policy_values = None if not isinstance(policy_binding, dict) else policy_binding.get("values")
-    diversity_values = values_for_policy(policy_values, document["scene_id"])
-    diversity_arguments = ({} if diversity_values is None else {"diversity": diversity_values, "diversity_policy": policy_values})
     episode = open_point_episode(
-        **diversity_arguments,
+        **diversity_arguments(frozen, document["scene_id"], getattr(options, "start_pose_draw", None)),
         episode_root=episode_root, session_id=options.session_id, attempt_id=lease.attempt_id,
         reset_epoch=options.expected_reset_epoch, release_epoch=0, lease=asdict(lease),
         scene_id=document["scene_id"], seed=document["seed"], mode=document["mode"],

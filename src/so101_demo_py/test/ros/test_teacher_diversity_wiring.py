@@ -27,7 +27,7 @@ class Execution(TeacherExecution):
         self.diversity_recorded.append(values)
 
 
-def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001"):
+def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", start_draw=2):
     from so101_demo.act import frozen_runtime_inputs
     from so101_demo.ros import teacher_safety
     from so101_demo.ros.dynamic_runtime import run_dynamic_execute
@@ -65,6 +65,7 @@ def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001"):
     options.frozen_inputs_manifest = tmp_path / "inputs-manifest.json"
     if point_id is not None:
         options.ready_receipt = tmp_path / "consumer-ready.json"
+        options.start_pose_draw = start_draw
         for name, value in (("batch_id", "b"), ("coordinator_epoch", 1), ("worker_id", "w0"), ("worker_generation", 1),
                             ("point_id", point_id), ("attempt_id", point_id + "-lease-1"), ("lease_generation", 1)):
             setattr(options, name, value)
@@ -74,7 +75,8 @@ def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001"):
 
 def test_a_schema_6_freeze_resolves_preflights_and_builds_on_the_episode_targets(tmp_path, monkeypatch):
     code, execution, calls, template, policy, events = diversity_run(tmp_path, monkeypatch, SCHEMA6)
-    values = td.values_for_policy(policy, "act-0001")
+    values = td.values_for_policy(policy, "act-0001", 2)             # the draw the reset applied rides in on --start-pose-draw
+    assert values["start_pose"]["draw_index"] == 2
     shifted = td.episode_template(template, values)
     offset = tuple(values["carry_via_offset_m"])
     assert code == 0 and "runner.run" in events
@@ -101,6 +103,12 @@ def test_a_schema_5_freeze_calls_everything_exactly_as_before(tmp_path, monkeypa
     assert calls["preflight"][1] == {"descend_final_distance_m": 0.02}      # the schema 5 argument, and nothing from schema 6
     assert calls["execution"][0] == template and calls["execution"][1].carry_via is None
     assert not hasattr(execution, "_episode_diversity") and execution.diversity_recorded == []
+
+
+def test_a_schema_6_freeze_without_the_applied_start_draw_is_refused_before_any_motion(tmp_path, monkeypatch, capsys):
+    code, execution, calls, _template, _policy, events = diversity_run(tmp_path, monkeypatch, SCHEMA6, start_draw=None)
+    assert code == 1 and execution is None and "runner.run" not in events and "resolve" not in calls
+    assert "TEACHER_DIVERSITY_START_DRAW_REQUIRED" in capsys.readouterr().out
 
 
 def test_a_schema_6_freeze_without_a_scene_id_is_refused_before_any_motion(tmp_path, monkeypatch, capsys):

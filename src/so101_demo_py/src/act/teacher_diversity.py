@@ -141,10 +141,13 @@ def start_pose_candidates(diversity: dict, scene_id: str) -> tuple:
         for draw in range(spec["max_redraws"] + 1))
 
 
-def derive_episode_values(diversity: dict, scene_id: str) -> dict:
-    """The per-episode values of (campaign seed, scene id). ``start_pose`` is draw 0; the draw the reset keeps is `select_start_pose`'s."""
+def derive_episode_values(diversity: dict, scene_id: str, start_draw: int = 0) -> dict:
+    """The per-episode values of (campaign seed, scene id). ``start_pose`` is draw ``start_draw`` (0 unless the reset kept a later one:
+    the draw `select_start_pose` accepted, carried to the Teacher and the episode identity)."""
 
     scene_id = _scene(scene_id)
+    if type(start_draw) is not int or not 0 <= start_draw <= diversity["start_pose"]["max_redraws"]:
+        _fail("start_draw is not a draw of the bounded list")
     seed = diversity["campaign_seed"]
     low, high = diversity["speed_scale"]["low"], diversity["speed_scale"]["high"]
     via = diversity["carry_via"]["half_extent_m"]
@@ -152,7 +155,8 @@ def derive_episode_values(diversity: dict, scene_id: str) -> dict:
         "schema": VALUES_SCHEMA,
         "scene_id": scene_id,
         "campaign_seed": seed,
-        "start_pose": {"draw_index": 0, "joints": list(START_JOINTS), "offsets_rad": list(start_pose_candidates(diversity, scene_id)[0])},
+        "start_pose": {"draw_index": start_draw, "joints": list(START_JOINTS),
+                       "offsets_rad": list(start_pose_candidates(diversity, scene_id)[start_draw])},
         "pregrasp_height_offset_m": _symmetric(diversity["pregrasp_height"]["half_range_m"], _unit(seed, scene_id, "pregrasp_height", 0)),
         "place_approach_height_offset_m": _symmetric(
             diversity["place_approach_height"]["half_range_m"], _unit(seed, scene_id, "place_approach_height", 0)),
@@ -167,15 +171,57 @@ def derive_episode_values(diversity: dict, scene_id: str) -> dict:
     return values
 
 
-def values_for_policy(policy, scene_id: str):
+def values_for_policy(policy, scene_id: str, start_draw: int | None = None):
     """The checked per-episode values of a loaded Teacher execution policy, or None for a policy without a diversity block
-    (schema 3, 4 and 5: nothing varies, and nothing is recorded)."""
+    (schema 3, 4 and 5: nothing varies, and nothing is recorded). ``start_draw`` is the start pose draw the reset applied (default 0)."""
 
     diversity = None if not isinstance(policy, dict) else policy.get("diversity")
     if diversity is None:
         return None
-    values = derive_episode_values(diversity, scene_id)
+    values = derive_episode_values(diversity, scene_id, 0 if start_draw is None else start_draw)
+    # the derived values are checked against the draw they carry, not draw 0
     return validate_episode_values(diversity, values, expect_derived=True)
+
+
+def start_pose_matches(diversity: dict, scene_id: str, measured_joints, draw: int,
+                       tolerance_rad: float = START_MATCH_TOLERANCE_RAD) -> bool:
+    """True when the measured start joints (arm joints first) are the pose of exactly this draw. Another draw that happens to match is not it."""
+
+    try:
+        measured = [float(item) for item in measured_joints]
+        offsets = start_pose_candidates(diversity, scene_id)[draw]
+    except (TypeError, ValueError, IndexError):
+        return False
+    if len(measured) not in (6, 7) or any(not math.isfinite(item) for item in measured):
+        return False
+    return all(abs(measured[index] - offsets[index]) <= tolerance_rad for index in range(len(START_JOINTS)))
+
+
+SELECTION_KIND = "TEACHER_DIVERSITY_START_POSE_SELECTION"
+
+
+def read_start_pose_selection(root, attempt_id: str):
+    """The start pose selection the reset wrote for an attempt (`start-pose-<attempt>.json` in the task root), or None when there is none.
+
+    A file that is not the closed selection document is refused (``TEACHER_DIVERSITY_START_POSE_RECORD_INVALID``)."""
+
+    import json
+
+    path = Path(root) / f"start-pose-{attempt_id}.json"
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise ValueError("TEACHER_DIVERSITY_START_POSE_RECORD_INVALID") from error
+    try:
+        document = json.loads(raw)
+    except ValueError as error:
+        raise ValueError("TEACHER_DIVERSITY_START_POSE_RECORD_INVALID") from error
+    if (not isinstance(document, dict) or document.get("kind") != SELECTION_KIND or document.get("attempt_id") != attempt_id
+            or type(document.get("draw_index")) is not int or document["draw_index"] < 0):
+        raise ValueError("TEACHER_DIVERSITY_START_POSE_RECORD_INVALID")
+    return document
 
 
 def _within(value: float, low: float, high: float) -> bool:

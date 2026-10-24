@@ -383,7 +383,9 @@ class MotionPlanning:
         if (policy is None or "carry_max_velocity_scaling" not in policy
                 or "carry_max_acceleration_scaling" not in policy):
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: carry scaling")
-        return self._speed_scaled(float(policy["carry_max_velocity_scaling"]), float(policy["carry_max_acceleration_scaling"]))
+        carry = (float(policy["carry_max_velocity_scaling"]), float(policy["carry_max_acceleration_scaling"]))
+        # the place height was calibrated at the policy's carry speed: the touchdown keeps it whatever the episode speed scale
+        return carry if state is State.DESCEND_TO_PLACE else self._speed_scaled(*carry)
 
     def _speed_scaled(self, velocity: float, acceleration: float) -> tuple[float, float]:
         """R3-a: a policy scaling pair times this episode's speed scale, each capped at 1; unchanged without episode diversity.

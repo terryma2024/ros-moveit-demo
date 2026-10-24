@@ -108,8 +108,13 @@ def _diversity_document(frozen, scene_id):
     values = values_for_policy(None if not isinstance(binding, dict) else binding.get('values'), scene_id)
     if values is None:
         return None
+    from so101_demo.act.teacher_diversity import start_pose_candidates
+
+    # `values.start_pose` is draw 0, the head of the derivation; the draw the reset applies (after rejected draws) is one of these
+    # candidates and is recorded in episode.json and start-pose-<attempt>.json
     return dict(kind=DIVERSITY_KIND, schema_version=1, scene_id=scene_id, inputs_sha256=frozen['inputs_sha256'],
-                policy_sha256=binding['policy_sha256'], values=values)
+                policy_sha256=binding['policy_sha256'], values=values,
+                start_pose_candidates=[list(item) for item in start_pose_candidates(binding['values']['diversity'], scene_id)])
 
 
 def _diversity_bytes(document):

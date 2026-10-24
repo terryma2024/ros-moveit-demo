@@ -234,10 +234,12 @@ class TeacherRun:
         values = getattr(self, "_episode_diversity", None)
         if values is None:
             return
-        from so101_demo.act.teacher_diversity import matching_start_draw
+        from so101_demo.act.teacher_diversity import start_pose_matches
 
         measured = (*(float(item) for item in self._joint_state()), float(self._positions.get("6", 0.0)))
-        draw = matching_start_draw(self._execution_policy["diversity"], values["scene_id"], measured)
+        # exactly the draw the reset applied (carried in the values): another draw that happens to be close is not it
+        selected = values["start_pose"]["draw_index"]
+        draw = selected if start_pose_matches(self._execution_policy["diversity"], values["scene_id"], measured, selected) else None
         record = self._document.setdefault("teacher_diversity", {})
         record["start_pose_measured_rad"] = list(measured)
         record["start_pose_draw_index"] = draw

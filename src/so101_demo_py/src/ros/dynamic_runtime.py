@@ -782,7 +782,8 @@ def run_dynamic_execute(
     else:
         parallel_lease_identity = None
     try:   # R3-a: a schema 6 freeze derives this episode's values from (campaign seed, scene id); every other schema changes nothing
-        episode_diversity, run_template, via_offset = _frozen_run_inputs(frozen, lease_values["point_id"], loaded.template)
+        episode_diversity, run_template, via_offset = _frozen_run_inputs(
+            frozen, lease_values["point_id"], loaded.template, getattr(options, "start_pose_draw", None))
     except Exception as error:
         failure_code = _failure_code(error)
         finish_setup("rejected", failure_code)

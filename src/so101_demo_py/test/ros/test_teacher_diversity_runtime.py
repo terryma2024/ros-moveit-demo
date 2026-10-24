@@ -130,7 +130,6 @@ def scalings(tmp_path, policy, state, *, speed_scale=None, step=None, snapshot=T
 @pytest.mark.parametrize("state,keys", [
     (State.LIFT, ("carry_max_velocity_scaling", "carry_max_acceleration_scaling")),
     (State.MOVE_ABOVE_PLACE, ("carry_max_velocity_scaling", "carry_max_acceleration_scaling")),
-    (State.DESCEND_TO_PLACE, ("carry_max_velocity_scaling", "carry_max_acceleration_scaling")),
     (State.MOVE_ABOVE_OBJECT, ("move_above_object_velocity_scaling", "move_above_object_acceleration_scaling")),
     (State.RETREAT, ("retreat_velocity_scaling", "retreat_acceleration_scaling")),
 ])
@@ -140,6 +139,14 @@ def test_the_speed_scale_multiplies_the_policy_scaling_keys(tmp_path, policy6, s
     for scale in (0.7, 1.3):
         scaled = scalings(tmp_path, policy6, state, speed_scale=scale)
         assert scaled == pytest.approx((base[0] * scale, base[1] * scale))
+
+
+def test_descend_to_place_keeps_the_calibrated_carry_scaling_whatever_the_speed_scale(tmp_path, policy6):
+    """The place height was calibrated at the policy's carry speed: the touchdown must not follow the episode speed scale."""
+    base = scalings(tmp_path, policy6, State.DESCEND_TO_PLACE)
+    assert base == (policy6["carry_max_velocity_scaling"], policy6["carry_max_acceleration_scaling"])
+    for scale in (0.7, 1.0, 1.3):
+        assert scalings(tmp_path, policy6, State.DESCEND_TO_PLACE, speed_scale=scale) == base
 
 
 def test_the_speed_scale_scales_the_descend_approach_stage_only(tmp_path, ik, template, targets, policy6):
@@ -259,12 +266,12 @@ def test_an_accepted_plan_of_a_run_without_diversity_records_what_it_always_did(
 
 # ---- the record and the start pose of an episode -----------------------------------------------------------------------------
 
-def start_value(tmp_path, policy, scene="act-0001", *, joints=None):
+def start_value(tmp_path, policy, scene="act-0001", *, joints=None, start_draw=0):
     value = make_adapter(tmp_path)
     value._execution_policy = policy
     value._document = {}
     value._write = lambda: None
-    values = episode_values(policy, scene)
+    values = td.values_for_policy(policy, scene, start_draw)
     value._record_episode_diversity(values)
     measured = joints if joints is not None else td.reset_joint_positions(
         values["start_pose"]["offsets_rad"], ("1", "2", "3", "4", "5", "6"))
@@ -289,9 +296,13 @@ def test_the_measured_start_pose_is_matched_to_its_draw_and_recorded(tmp_path, p
     record = value._document["teacher_diversity"]
     assert record["start_pose_draw_index"] == 0 and len(record["start_pose_measured_rad"]) == 6
     later = td.start_pose_candidates(policy6["diversity"], "act-0001")[2]
-    value, _ = start_value(tmp_path, policy6, joints=td.reset_joint_positions(later, ("1", "2", "3", "4", "5", "6")))
+    value, _ = start_value(tmp_path, policy6, joints=td.reset_joint_positions(later, ("1", "2", "3", "4", "5", "6")), start_draw=2)
     value._check_episode_start_pose()
     assert value._document["teacher_diversity"]["start_pose_draw_index"] == 2
+    # the pose of draw 2 is not accepted for an episode whose selected draw is 0
+    value, _ = start_value(tmp_path, policy6, joints=td.reset_joint_positions(later, ("1", "2", "3", "4", "5", "6")))
+    with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_MISMATCH"):
+        value._check_episode_start_pose()
 
 
 def test_a_start_pose_that_matches_no_draw_fails_closed_and_is_recorded(tmp_path, policy6):
