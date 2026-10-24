@@ -158,27 +158,34 @@ class Teacher:
             tamper(payload)
         return payload
 
-    def setup(self, shift_m=0.003, **kwargs):
+    def setup(self, shift_m=0.003, restamp=False, **kwargs):
+        """The SETUP calls. ``restamp`` builds every request and response first and restamps the source clocks right before the first call, so
+        the 100 ms source join measures the calls and not the cost of building the scenes (which grows with the load of the host)."""
         from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
         from so101_demo.control.planning_scene.task_scene import make_task_scene
 
-        applied = self.call(ApplyPlanningScene.Request(scene=make_task_scene(self.ctx.expected_world)),
-                            ApplyPlanningScene.Response(success=True), phase="APPLY",
+        apply_request = ApplyPlanningScene.Request(scene=make_task_scene(self.ctx.expected_world))
+        read_response = GetPlanningScene.Response(scene=self.ctx.world_scene(shift_m))
+        if restamp:
+            self.ctx.stamp()
+        applied = self.call(apply_request, ApplyPlanningScene.Response(success=True), phase="APPLY",
                             service="/apply_planning_scene", state="SETUP")
-        read = self.call(full_read_request(), GetPlanningScene.Response(scene=self.ctx.world_scene(shift_m)),
+        read = self.call(full_read_request(), read_response,
                          phase="READ_BACK", service="/get_planning_scene", state="SETUP", **kwargs)
         return applied, read
 
-    def attach(self, shift_m=0.004, scene=None, **kwargs):
+    def attach(self, shift_m=0.004, scene=None, restamp=False, **kwargs):
         from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
         from so101_demo.control.planning_scene.task_scene import make_plain_attach_scene
 
-        applied = self.call(ApplyPlanningScene.Request(scene=make_plain_attach_scene()),
-                            ApplyPlanningScene.Response(success=True), phase="DYNAMIC_ATTACH",
+        apply_request = ApplyPlanningScene.Request(scene=make_plain_attach_scene())
+        read_response = GetPlanningScene.Response(scene=self.ctx.attached_scene(shift_m) if scene is None else scene)
+        if restamp:
+            self.ctx.stamp()
+        applied = self.call(apply_request, ApplyPlanningScene.Response(success=True), phase="DYNAMIC_ATTACH",
                             service="/apply_planning_scene", state="ATTACH_MOVEIT")
-        read = self.call(full_read_request(), GetPlanningScene.Response(
-            scene=self.ctx.attached_scene(shift_m) if scene is None else scene),
-            phase="DYNAMIC_SCENE_READBACK", service="/get_planning_scene", state="ATTACH_MOVEIT", **kwargs)
+        read = self.call(full_read_request(), read_response,
+                         phase="DYNAMIC_SCENE_READBACK", service="/get_planning_scene", state="ATTACH_MOVEIT", **kwargs)
         return applied, read
 
     def detach(self, state="DETACH_MOVEIT", scene=None, **kwargs):
@@ -655,8 +662,9 @@ def sources_fixture(ctx, monkeypatch):
     return sources, engine, latched, appended, scene_calls, node
 
 
-def read_scene(sources, ctx, scene_calls):
-    """One read-only GetPlanningScene as the record-only process made it, visible to the row audit (the replay's `_refresh_scene`)."""
+def read_scene(sources, ctx, scene_calls, restamp=False):
+    """One read-only GetPlanningScene as the record-only process made it, visible to the row audit (the replay's `_refresh_scene`).
+    ``restamp`` builds the scene first and restamps the source clocks right before the recorded call (the 100 ms join then covers the call only)."""
     from moveit_msgs.msg import PlanningSceneComponents
     from moveit_msgs.srv import GetPlanningScene
 
@@ -668,6 +676,8 @@ def read_scene(sources, ctx, scene_calls):
                                      | PlanningSceneComponents.OBJECT_COLORS)
     scene_calls.append(request)
     response = over_dds(GetPlanningScene.Response(scene=ctx.world_scene(0.003)))
+    if restamp:
+        ctx.stamp()
     record_scene_service_call(request=request, phase="RECORDER_ROW_SCENE", service="/get_planning_scene",
                               invoke=lambda: response, records=sources._planning_calls, ros_clock=sources.node.get_clock())
 
@@ -697,20 +707,17 @@ def test_the_recorders_sources_turn_the_teachers_setup_and_attach_events_into_ad
     sources, engine, latched, appended, scene_calls, node = sources_fixture(ctx, monkeypatch)
     assert sources._execution_root() == ctx.root
     # the initial alignment is the Recorder's own read before the Teacher's SETUP: no Teacher event is involved
-    ctx.stamp()
-    read_scene(sources, ctx, scene_calls)
+    read_scene(sources, ctx, scene_calls, restamp=True)
     settle(sources, engine)
     assert latched == [] and [item["operation"] for item in appended] == ["initial"]
     assert sources._initial_built is True and len(sources.associations.history) == 1
-    ctx.stamp()   # the SETUP happens later: a fresh source precedes it within the 100 ms join
-    teacher = Teacher(ctx)
-    for payload in teacher.setup():
+    teacher = Teacher(ctx)   # the SETUP happens later: a fresh source precedes it within the 100 ms join (restamped right before its first call)
+    for payload in teacher.setup(restamp=True):
         sources.on_teacher_event(engine, event_of(payload))
     settle(sources, engine)
     assert latched == [] and [item["operation"] for item in appended] == ["initial", "world_sync"]
-    ctx.stamp()   # the attach happens later: a fresh source precedes it within the 100 ms join
-    teacher = Teacher(ctx)
-    for payload in teacher.attach():
+    teacher = Teacher(ctx)   # the attach happens later: a fresh source precedes it within the 100 ms join
+    for payload in teacher.attach(restamp=True):
         sources.on_teacher_event(engine, event_of(payload, seq=3))
     settle(sources, engine)
     assert latched == [] and [item["operation"] for item in appended] == ["initial", "world_sync", "attach"]
