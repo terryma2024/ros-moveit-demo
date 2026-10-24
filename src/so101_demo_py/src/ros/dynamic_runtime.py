@@ -453,7 +453,8 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
     from .dynamic_mujoco_execution import RosDynamicMujocoExecution
     from .task_reachability import RosJointStateReader, RosMoveGroupReachabilityPlanner
 
-    def reachability_preflight(node, sample, template, scene_revision, progress=None, descend_final_distance_m=None):
+    def reachability_preflight(node, sample, template, scene_revision, progress=None, descend_final_distance_m=None,
+                               carry_via_offset_m=None):
         point = TaskPoint(
             id="perceived_cup",
             label="Perceived cup",
@@ -479,6 +480,7 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
                     start,
                     planner,
                     scene_revision=scene_revision,
+                    **({} if carry_via_offset_m is None else {"carry_via_offset_m": carry_via_offset_m}),
                 )
             finally:
                 _mark_active_phase("check_task_reachability.end")

@@ -26,7 +26,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-id")
     parser.add_argument("--ik-backend", choices=("native", "quik"))
     parser.add_argument("--joint-state-timeout-s", type=float, default=5.0)
+    # R3-a: a schema 6 Teacher execution policy; each point is then checked against its per-episode targets (the point id is the scene id)
+    parser.add_argument("--teacher-execution-policy", type=Path)
     return parser
+
+
+def episode_check_inputs(template, teacher_policy, scene_id: str):
+    """(template, via offset, derived values) the reachability check of one point runs with.
+
+    A policy without a diversity block (or none) changes nothing: the template itself, no offset, no values."""
+
+    from ..act.teacher_diversity import episode_template, values_for_policy
+
+    values = values_for_policy(teacher_policy, scene_id)
+    if values is None:
+        return template, None, None
+    return episode_template(template, values), tuple(values["carry_via_offset_m"]), values
 
 
 def _segment_document(segment) -> dict[str, object]:
@@ -111,11 +126,25 @@ def main(arguments: list[str] | None = None) -> int:
             if observed_start is None
             else prepare_reachability_start_state(observed_start)
         )
-        reports = tuple(
-            check_task_reachability(point, template, start, planner)
-            for point in points
-        )
+        teacher_policy = None
+        if options.teacher_execution_policy is not None:
+            from ..act.teacher_endpoint import load_teacher_execution_policy
+
+            teacher_policy = load_teacher_execution_policy(options.teacher_execution_policy)
+        episode_values = {}
+        checks = []
+        for point in points:
+            episode_template_, via_offset, values = episode_check_inputs(template, teacher_policy, point.id)
+            if values is None:
+                checks.append(check_task_reachability(point, template, start, planner))
+                continue
+            episode_values[point.id] = values
+            checks.append(check_task_reachability(point, episode_template_, start, planner, carry_via_offset_m=via_offset))
+        reports = tuple(checks)
         document = result_document(reports)
+        if teacher_policy is not None:
+            document["teacher_execution_policy_sha256"] = teacher_policy["policy_sha256"]
+            document["episode_diversity"] = episode_values
         document["session_id"] = options.session_id
         document["ik_solver"] = planner.ik_provenance
     except Exception as error:

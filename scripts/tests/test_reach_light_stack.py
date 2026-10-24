@@ -133,6 +133,30 @@ def test_the_call_wrapper_executes_task_reachability_in_the_named_container_and_
     assert (out / "calls" / "p.json.points.json").is_file()
 
 
+def test_the_call_wrapper_passes_a_schema_6_teacher_policy_only_when_one_is_named(tmp_path):
+    out = tmp_path / "work" / "s2"
+    out.mkdir(parents=True)
+    install = tmp_path / "install"
+    points = tmp_path / "points.json"
+    points.write_text("[]")
+    body = ('printf "%s\\n" "$@" >> "$FAKE_DOCKER_LOG"; printf -- "--\\n" >> "$FAKE_DOCKER_LOG"\n'
+            'case "$*" in *--evidence-file*) f=$(printf "%s\\n" "$@" | sed -n "/--evidence-file/{n;p}"); echo "{}" > "$f"; echo \'{"reports": []}\';; esac\n')
+    for number, policy in enumerate((None, "/act/teacher_execution_policy_side_wrist_diversity.yaml")):
+        evidence = tmp_path / f"res{number}" / "p.json"
+        evidence.parent.mkdir()
+        env = fake_docker(tmp_path / f"run{number}", body)
+        if policy is not None:
+            env["REACH_TEACHER_POLICY"] = policy
+        done = subprocess.run(["zsh", str(REACH / "reach_call.zsh"), str(out), "reachlight2", "183", str(install), str(points),
+                               str(evidence), "sess2"], capture_output=True, text=True, env=env)
+        assert done.returncode == 0, done.stderr
+        (call,) = [c for c in calls(tmp_path / f"run{number}") if c[0] == "exec"]
+        if policy is None:
+            assert "--teacher-execution-policy" not in call
+        else:
+            assert call[call.index("--teacher-execution-policy") + 1] == policy
+
+
 def test_the_fake_simulator_publishes_the_joints_of_the_rig_the_launch_file_renders():
     import fake_sim
     import types

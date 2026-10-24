@@ -167,6 +167,17 @@ def derive_episode_values(diversity: dict, scene_id: str) -> dict:
     return values
 
 
+def values_for_policy(policy, scene_id: str):
+    """The checked per-episode values of a loaded Teacher execution policy, or None for a policy without a diversity block
+    (schema 3, 4 and 5: nothing varies, and nothing is recorded)."""
+
+    diversity = None if not isinstance(policy, dict) else policy.get("diversity")
+    if diversity is None:
+        return None
+    values = derive_episode_values(diversity, scene_id)
+    return validate_episode_values(diversity, values, expect_derived=True)
+
+
 def _within(value: float, low: float, high: float) -> bool:
     return low - _RANGE_SLACK <= value <= high + _RANGE_SLACK
 
