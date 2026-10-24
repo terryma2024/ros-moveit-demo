@@ -433,7 +433,7 @@ class StartPoseCollisionCheck:
                 "scene_sha256": None if path is None else hashlib.sha256(path.read_bytes()).hexdigest(),
                 "model_sha256": hashlib.sha256(buffer.tobytes()).hexdigest(),
                 "physics_fingerprint": physics_fingerprint(self._model),
-                "physics_fingerprint_v2": None if path is None else stripped_physics_fingerprint_of_file(path),
+                "physics_fingerprint_stripped": None if path is None else stripped_physics_fingerprint_of_file(path),
                 "mujoco_version": self._mujoco.__version__}
         return dict(self._identity)
 

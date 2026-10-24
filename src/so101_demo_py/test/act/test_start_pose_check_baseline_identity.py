@@ -59,7 +59,7 @@ def test_the_check_names_the_model_it_ran_on(tmp_path):
     from so101_demo.act.physics_fingerprint import physics_fingerprint, stripped_physics_fingerprint_of_file
 
     assert identity["physics_fingerprint"] == physics_fingerprint(model)
-    assert identity["physics_fingerprint_v2"] == stripped_physics_fingerprint_of_file(path)
+    assert identity["physics_fingerprint_stripped"] == stripped_physics_fingerprint_of_file(path)
     assert len(identity["model_sha256"]) == 64 and identity["mujoco_version"] == mujoco.__version__
     assert checker.identity() == identity
 

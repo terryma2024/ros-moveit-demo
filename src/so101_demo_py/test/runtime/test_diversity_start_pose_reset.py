@@ -155,7 +155,7 @@ def test_a_schema_6_policy_needs_the_act_profile(tmp_path):
 
 # ---- the model the check ran on ------------------------------------------------------------------------------------------------
 
-IDENTITY = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64, "physics_fingerprint": "c" * 64, "physics_fingerprint_v2": "d" * 64,
+IDENTITY = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64, "physics_fingerprint": "c" * 64, "physics_fingerprint_stripped": "d" * 64,
             "mujoco_version": "3.12.0"}
 
 
