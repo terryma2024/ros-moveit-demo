@@ -74,10 +74,9 @@ def test_the_side_wrist_and_head_wrist_rigs_did_not_change():
     assert hashlib.sha256((PACKAGE_ROOT / SIDE.scene).read_bytes()).hexdigest() == contact_collector.RIG_IDENTITIES["side-wrist"][0]
     assert INDOOR.exclusive & SIDE.exclusive == {SIDE.robot_mjcf, SIDE.urdf, SIDE.plugins, SIDE.controllers}
     assert not foreign_files(SIDE_WRIST_INDOOR_RIG) & INDOOR.exclusive
-    # the contact calibration of the indoor rig is a separate, confirmed step: no scene or model pin exists for it yet
-    assert "side-wrist-indoor" not in contact_collector.RIG_IDENTITIES
-    with pytest.raises(ValueError, match="RIG_PROFILE_UNKNOWN"):
-        contact_collector.rig_identity(SIDE_WRIST_INDOOR_RIG)
+    # the indoor rig has its own contact pins (the derived activation re-binds the side-wrist calibration to them); the side-wrist
+    # pins stay those of the files the approved receipt is keyed on
+    assert contact_collector.rig_identity(SIDE_WRIST_INDOOR_RIG)[0] != contact_collector.RIG_IDENTITIES["side-wrist"][0]
 
 
 def test_the_indoor_scene_is_the_side_wrist_model_with_its_cameras_and_the_cup_keyframes():

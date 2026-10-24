@@ -39,6 +39,10 @@ _RECEIPT_KEYS = frozenset(
     }
 )
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+#: a receipt that re-binds an approved calibration to another scene and model whose stripped physics fingerprint is the same
+#: (`contact_derivation.py`): it names how it was derived and cites the old receipt, the equivalence record and the fingerprint
+DERIVED_BY = "stripped_physics_fingerprint_equivalence"
+_DERIVED_KEYS = frozenset({"derived_by", "old_receipt_sha256", "equivalence_record_sha256", "stripped_fingerprint_sha256"})
 
 #: The user's recorded rule deviation: fit offline, validate with Teacher spot-checks instead of the live cohort.
 VALIDATION_OFFLINE_SPOT_CHECK = "offline_fit_teacher_spot_check"
@@ -155,7 +159,16 @@ def verify_activation(
     try:
         fingerprint = policy_fingerprint(payload)
         keyed = isinstance(receipt, dict) and "receipt_kind" in receipt
-        approved = _exact(receipt, _RECEIPT_KEYS | ({"receipt_kind"} if keyed else set()), "activation receipt")
+        derived = isinstance(receipt, dict) and "derived_by" in receipt
+        if keyed and derived:
+            raise ValueError("a derived receipt has no kind")
+        approved = _exact(receipt, _RECEIPT_KEYS | ({"receipt_kind"} if keyed else set()) | (_DERIVED_KEYS if derived else set()),
+                          "activation receipt")
+        if derived:
+            if approved["derived_by"] != DERIVED_BY:
+                raise ValueError("unknown derivation")
+            for field in ("old_receipt_sha256", "equivalence_record_sha256", "stripped_fingerprint_sha256"):
+                _sha(approved[field], field)
         if keyed:
             if (not allow_spot_check_candidate or approved["receipt_kind"] != SPOT_CHECK_CANDIDATE
                     or payload["live_collector_sha256"] != validation_descriptor_sha256()
