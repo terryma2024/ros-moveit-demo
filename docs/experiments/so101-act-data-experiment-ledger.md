@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3782
+latest_checkpoint: CP-3783
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a on branch r3a-teacher-diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3783 — To-do 36: the rgb_sync reject counter splits deferred sets from true rejects (goal 11, item 2; behaviour unchanged)
+
+- `ObservationAssembler` (`adapters/act/rollout_ros.py`) tracks the fate of each skipped complete image set. `reject_document()` now returns `poll_skips` (unchanged: sets not emitted at a poll, once per set and reason), `deferred_until_joint_state` (the same set was emitted unchanged later, e.g. its stamp was ahead of the newest joint state), `poll_rejects` (a newer set superseded it, or a session reset dropped it, without emission: the true rejects) and `rgb_sync_pending` (undecided). `poll_skips` = deferred + poll_rejects + pending by reason. `rgb_sync_rejects` = refused inputs + true rejects; before, it was refused inputs + all skips, which counted the sets that were emitted a few ms later.
+- Emission is untouched: the existing assembler and session tests pass unchanged except the document-equality assertion; 4 new tests (deferred, superseded for stale and skew, reset, exact split) were written first and failed red.
 
 ## CP-3781 — Indoor scene P1: rig `side-wrist-indoor`, scene and texture assets, stripped physics fingerprint (record v2), `indoor` scene-variant whitelist, receipt equivalence record, real-stack render check
 

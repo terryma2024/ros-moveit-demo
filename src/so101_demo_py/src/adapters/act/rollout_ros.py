@@ -78,6 +78,9 @@ class ObservationAssembler:
         self.rejected_count = 0
         self._skip_keys = {}
         self.poll_skips = {}            # diagnostics: complete image sets `poll` did not emit, by reason (rgb_skew, rgb_stale, joint_causal)
+        self.deferred = {}              # of those, sets emitted later unchanged (held until the joint state caught up), by first-skip reason
+        self.poll_rejects = {}          # of those, sets superseded or dropped without ever being emitted: the true rejects, by reason
+        self._pending = None            # (set key, [reasons]) of the newest skipped set whose fate is not decided yet
 
     @property
     def joint_names(self) -> tuple:
@@ -90,25 +93,46 @@ class ObservationAssembler:
             self._emitted = dict.fromkeys(self.cameras)
             self._floor_ns = time_ns(finite(source_floor_s, nonnegative=True))
             self.session_id = session_id
+            self._resolve_pending(emitted=False)
 
     def _reject(self, reason: str) -> bool:
         self.rejected.append(reason)
         self.rejected_count += 1
         return False
 
-    def _skip(self, reason: str, key) -> None:
-        """Count a complete set `poll` did not emit, once per set (poll runs every millisecond; one stale set is one skip, not hundreds)."""
+    def _skip(self, reason: str, key, set_key) -> None:
+        """Count a complete set `poll` did not emit, once per set (poll runs every millisecond; one stale set is one skip, not hundreds).
+
+        The set stays pending until its fate is known: emitted unchanged later (deferred, e.g. its stamp was ahead of the newest
+        joint state) or superseded / dropped without being emitted (a true reject)."""
 
         if self._skip_keys.get(reason) != key:
             self._skip_keys[reason] = key
             self.poll_skips[reason] = self.poll_skips.get(reason, 0) + 1
+            if self._pending is None or self._pending[0] != set_key:
+                self._resolve_pending(emitted=False)
+                self._pending = (set_key, [])
+            self._pending[1].append(reason)
+
+    def _resolve_pending(self, *, emitted: bool) -> None:
+        if self._pending is not None:
+            counts = self.deferred if emitted else self.poll_rejects
+            for reason in self._pending[1]:
+                counts[reason] = counts.get(reason, 0) + 1
+            self._pending = None
 
     def reject_document(self) -> dict:
-        """Diagnostics: the inputs the callbacks refused and the complete sets `poll` skipped; their sum is the rgb_sync reject count."""
+        """Diagnostics: the inputs the callbacks refused and the complete sets `poll` skipped.
+
+        `poll_skips` = `deferred_until_joint_state` + `poll_rejects` + `rgb_sync_pending` (by reason, a set skipped for two reasons counts
+        under both). The rgb_sync reject count is the refused inputs plus the true rejects; a deferred or still undecided set is not one."""
 
         with self._lock:
             return {"input_rejects": self.rejected_count, "recent_input_rejects": list(self.rejected)[-8:],
-                    "poll_skips": dict(self.poll_skips), "rgb_sync_rejects": self.rejected_count + sum(self.poll_skips.values())}
+                    "poll_skips": dict(self.poll_skips), "deferred_until_joint_state": dict(self.deferred),
+                    "poll_rejects": dict(self.poll_rejects),
+                    "rgb_sync_pending": len(self._pending[1]) if self._pending else 0,
+                    "rgb_sync_rejects": self.rejected_count + sum(self.poll_rejects.values())}
 
     def note_rejected(self, reason: str) -> None:
         """Count a message the ROS callback itself refused (wrong encoding or shape, unreadable joint names)."""
@@ -173,6 +197,9 @@ class ObservationAssembler:
             if not self._joints or any(not ring for ring in self._frames.values()):
                 return None
             newest = {name: ring[-1] for name, ring in self._frames.items()}
+            set_key = tuple(sorted((name, frame[0]) for name, frame in newest.items()))
+            if self._pending is not None and self._pending[0] != set_key:
+                self._resolve_pending(emitted=False)
             if any(self._emitted[name] is not None and time_ns(frame[0]) <= time_ns(self._emitted[name])
                    for name, frame in newest.items()):
                 return None
@@ -180,17 +207,17 @@ class ObservationAssembler:
             now_ns = time_ns(self._joints[-1][0])
             ages = [now_ns - time_ns(stamp) for stamp in stamps.values()]
             if max(map(time_ns, stamps.values())) - min(map(time_ns, stamps.values())) > time_ns(self.max_skew_s):
-                self._skip("rgb_skew", tuple(sorted(stamps.items())))
+                self._skip("rgb_skew", tuple(sorted(stamps.items())), set_key)
                 return None
             if not all(source_age_ok_ns(now_ns, time_ns(stamp), time_ns(self.max_age_s)) for stamp in stamps.values()):
-                self._skip("rgb_stale", tuple(sorted(stamps.items())))
+                self._skip("rgb_stale", tuple(sorted(stamps.items())), set_key)
                 return None
             at_s = max(stamps.values())
             try:
                 joint_stamp, values, joint_received = causal_sample(
                     [(stamp, (stamp, vector, received)) for stamp, vector, received in self._joints], at_s, self.max_age_s)
             except ValueError:
-                self._skip("joint_causal", at_s)
+                self._skip("joint_causal", at_s, set_key)
                 return None
             state = list(values[:6])
             if self.state_dim == STATE_WITH_NECK:
@@ -204,6 +231,8 @@ class ObservationAssembler:
             for name, frame in newest.items():
                 observation[name] = frame[1]
                 self._emitted[name] = frame[0]
+            if self._pending is not None and self._pending[0] == set_key:
+                self._resolve_pending(emitted=True)
             return observation, audit
 
 
