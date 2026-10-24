@@ -1,10 +1,9 @@
 """The macOS campaign entry point a service can own.
 
-The service launches a fixed coordinator with one fixed argv (``supervisor.FIXED_COORDINATOR_FLAGS``)
-and expects it to open the control socket named by ``SO101_FIXED_CONTROL_SOCKET``. On Linux that argv
-is ``so101_parallel_batch``; on macOS that runner refuses the host
-(``CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION``, then ``GPU_TARGET_UNAVAILABLE``), and the entry point
-that does run here - ``so101_demo.cli.macos_two_worker_campaign`` - takes a different set of flags and has no
+A service launches a fixed coordinator with one fixed argv (``supervisor.FIXED_COORDINATOR_FLAGS``)
+and expects it to open the control socket named by ``SO101_FIXED_CONTROL_SOCKET``. The Linux runner of that
+argv was retired with the perception broker (migration M5); the entry point that
+runs on macOS - ``so101_demo.cli.macos_two_worker_campaign`` - takes a different set of flags and has no
 control path at all.
 
 This module is the typed adapter between the two. It is deliberately narrow:

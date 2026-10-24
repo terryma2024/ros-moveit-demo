@@ -85,10 +85,6 @@ setup(
             [f"resource/{package_name}"],
         ),
         (f"share/{package_name}", ["package.xml"]),
-        (
-            f"lib/{package_name}",
-            ["../../scripts/run_so101_adaptive_batch.zsh"],
-        ),
     ]
     + installed_resources(),
     cmdclass={"install": DebugProvenanceInstall},
@@ -149,18 +145,14 @@ setup(
             "act_rollout_native = so101_demo.cli.act_rollout_native:main",
             "act_policy_service = so101_demo.cli.act_policy_service:main",
             "act_rollout_parallel = so101_demo.cli.act_rollout_parallel:main",
-            "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
-            # launches on this platform, because so101_parallel_batch refuses it outright.
+            # launches on this platform.
             "so101_macos_service_campaign = "
             "so101_demo.cli.macos_service_campaign:main",
             # The two public W1 entry points. Each names exactly one approved profile, so the
             # support matrix is a choice of program rather than a flag a caller can get wrong.
             "so101_macos_single_worker_retry = so101_demo.cli.macos_mps_single_worker_retry:main",
             "so101_macos_single_worker_first_pass = so101_demo.cli.macos_mps_single_worker_first_pass:main",
-            "so101_parallel_batch_cleanup = "
-            "so101_demo.cli.parallel_batch_cleanup:main",
-            "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",
             "campaign_inference = so101_demo.cli.campaign_inference:main",
             "campaign_shard = so101_demo.cli.campaign_shard:main",
             "campaign_processor = so101_demo.cli.campaign_processor:main",

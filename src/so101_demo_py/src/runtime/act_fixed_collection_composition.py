@@ -29,7 +29,7 @@ def collection_parallel_runtime(path):
 
 def _collection_runtime(path):
     """Resolve lease/domain budgets from the frozen collection runtime binding."""
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 
     return _load_runtime_config(validate_file_ref(collection_parallel_runtime(path)))
 
@@ -174,7 +174,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
     Phase 2 (processing): with an `admit_processor_slots(context, slots)` (the unified service's), the owner gets a `ProcessingScheduler`
     over `ContainerProcessorLauncher`. Without `admit_processor_slots` the campaign ends after phase 1.
     """
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 
     def given(**values):
         return {name: value for name, value in values.items() if value is not None}

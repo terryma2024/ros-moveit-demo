@@ -44,7 +44,7 @@ from paths import PACKAGE_ROOT, REPOSITORY
 from so101_demo.act.diagnostic_episode_inputs import DEVELOPMENT_RUNTIME_FILE, resource_policy_identity
 from so101_demo.cli import act_collect_parallel as cli
 from so101_demo.cli.act_collect_parallel import CollectionEdges, main
-from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.runtime import act_fixed_collection_composition as composition
 from so101_demo.runtime.container_campaign import result_verifier
 from so101_demo.runtime.container_campaign.process_identity import pid_namespace_inode, read_process_owner

@@ -1,13 +1,11 @@
 """Contract: container images that install ``so101_demo_py`` must carry every file
 its ``setup.py`` packages relative to the package directory.
 
-``setup.py`` adds ``../../scripts/run_so101_adaptive_batch.zsh`` to ``data_files``.
-Relative to the package directory inside an image (``/opt/so101_demo_py``) that path
-resolves to ``/scripts/run_so101_adaptive_batch.zsh``. A Dockerfile that copies only
-``src/so101_demo_py`` therefore fails while the wheel build copies data files, long
-before the image can be used. The build context and the ``COPY`` instructions must
-agree with ``setup.py``, so that contract is asserted here instead of being rediscovered
-by a full image build.
+If ``setup.py`` adds a parent-relative file to ``data_files`` (``../../scripts/...``), that path resolves outside the package
+directory inside an image (``/opt/so101_demo_py``). A Dockerfile that copies only ``src/so101_demo_py`` would then fail while the
+wheel build copies data files, long before the image can be used. The build context and the ``COPY`` instructions must agree
+with ``setup.py``, so that contract is asserted here instead of being rediscovered by a full image build. ``setup.py`` packages
+no parent-relative file now (the broker batch wrapper was its last one), and the contract holds vacuously until one returns.
 """
 
 from __future__ import annotations
@@ -50,7 +48,6 @@ def _packaged_parent_paths() -> list[str]:
         and isinstance(node.value, str)
         and node.value.startswith("../")
     }
-    assert found, "setup.py no longer packages any parent-relative file"
     return sorted(found)
 
 

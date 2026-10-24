@@ -17,11 +17,10 @@ import {
 import type { DomainName } from "@/api/instance-client";
 import type { DomainRuntime } from "./domain-runtime";
 
-export type PageName = "teleop" | "validation" | "tasks" | "archives";
+export type PageName = "teleop" | "tasks" | "archives";
 
 export function pageFromPath(pathname: string): PageName {
   if (pathname === "/archives") return "archives";
-  if (pathname.startsWith("/expert-validation")) return "validation";
   if (pathname === "/tasks" || pathname.startsWith("/tasks/")) return "tasks";
   return "teleop";
 }

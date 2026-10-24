@@ -1,6 +1,6 @@
 """The Worker-side Broker port for the macOS two-worker campaign: permission-only, generation-checked.
 
-This is the v4 port of `cli/mujoco_parallel_batch._WorkerBrokerProxy`. Two things differ, and both
+This is the v4 port of the Linux Worker-side Broker proxy (retired, migration M5). Two things differ, and both
 follow from schema v4 rather than from taste:
 
 * the transport is `DarwinPermissionOnlyClient` - a `0600` socket under the Darwin private root, with no

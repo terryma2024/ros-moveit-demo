@@ -100,53 +100,10 @@ class ValidationArtifactPort(Protocol):
     def resolve_opaque_id(self, artifact_id: str) -> Any: ...
 
 
-class ValidationPort(Protocol):
-    artifacts: ValidationArtifactPort
-
-    def health(self) -> Any: ...
-
-    def capabilities(self) -> Any: ...
-
-    def acquire_lease(self, body: dict) -> Any: ...
-
-    def renew_lease(self, lease_id: str, body: dict) -> Any: ...
-
-    def release_lease(self, lease_id: str, body: dict) -> Any: ...
-
-    def create_manifest_from_count(self, total_points: int) -> Any: ...
-
-    def get_manifest_api(self, manifest_id: str) -> Any: ...
-
-    def preflight_api(self, body: dict) -> Any: ...
-
-    def start_campaign_api(self, body: dict) -> Any: ...
-
-    def list_campaigns(self) -> Any: ...
-
-    def get_campaign(self, campaign_id: str) -> Any: ...
-
-    def cancel_campaign(self, campaign_id: str, body: dict) -> Any: ...
-
-    def retry_campaign(self, campaign_id: str, body: dict) -> Any: ...
-
-    def subscribe(self, maxsize: int = 64) -> Any: ...
-
-    def unsubscribe(self, queue: Any) -> None: ...
-
-
-class ExecutionPort(Protocol):
-    """The innermost validation execution seam (argv construction)."""
-
-    def fixed_argv(self, request: Any) -> tuple[str, ...]: ...
-
-    def adaptive_argv(self, request: Any) -> tuple[str, ...]: ...
-
-
 @dataclass
 class UnifiedServices:
     teleop: TeleopPort | None
     tasks: TasksPort | None
-    validation: ValidationPort | None
     arbiter: Any = None
     instances: Any = None
     safety: Any = None
@@ -165,5 +122,4 @@ class UnifiedServices:
         return {
             "teleop": "ready" if self.teleop is not None else "unavailable",
             "tasks": "ready" if self.tasks is not None else "unavailable",
-            "validation": "ready" if self.validation is not None else "unavailable",
         }

@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { ArchiveBrowser } from "@/components/archives/archive-browser";
 import { App } from "./app";
 import { TaskApp } from "./task-app";
-import { ExpertValidationApp } from "./expert-validation-app";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { createHttpTransport } from "@/api/domain-transport";
@@ -12,10 +11,9 @@ import { RuntimeProvider, usePageRouting } from "@/state/runtime-provider";
 import { AppShell } from "@/components/unified/app-shell";
 import "./index.css";
 
-// The two domain runtimes live for the whole app: the root provider owns them once, and a
+// The domain runtime lives for the whole app: the root provider owns it once, and a
 // page switch only changes which page is rendered.
 const teleopRuntime = new DomainRuntime("teleop", createHttpTransport("teleop"));
-const validationRuntime = new DomainRuntime("validation", createHttpTransport("validation"));
 
 function UnifiedRoot() {
   const { page, navigate } = usePageRouting();
@@ -23,14 +21,14 @@ function UnifiedRoot() {
   // the root providers (and with them the instance channels and subscriptions) stay mounted.
   return (
     <AppShell page={page} onNavigate={navigate}>
-      {page === "archives" ? <ArchiveBrowser /> : page === "validation" ? <ExpertValidationApp /> : page === "tasks" ? <TaskApp /> : <App />}
+      {page === "archives" ? <ArchiveBrowser /> : page === "tasks" ? <TaskApp /> : <App />}
     </AppShell>
   );
 }
 
 createRoot(document.getElementById("root")!).render(
   <TooltipProvider>
-    <RuntimeProvider teleop={teleopRuntime} validation={validationRuntime} heartbeatMs={10_000}>
+    <RuntimeProvider teleop={teleopRuntime} heartbeatMs={10_000}>
       <UnifiedRoot />
     </RuntimeProvider>
     <Toaster richColors position="top-right" />

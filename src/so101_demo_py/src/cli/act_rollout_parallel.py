@@ -371,7 +371,7 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
     group_root = run_root / args.group
     group_root.mkdir(mode=0o700)
     parallel_runtime = _ref(args.parallel_runtime_config)
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
     from so101_demo.runtime.inference.config import validate_file_ref
 
     runtime = _load_runtime_config(validate_file_ref(parallel_runtime))

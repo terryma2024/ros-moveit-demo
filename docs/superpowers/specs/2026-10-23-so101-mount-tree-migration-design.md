@@ -1,6 +1,6 @@
 # SO-101: migrate every image-baked flow to the mount-tree model — design
 
-Status: decisions confirmed by the human (2026-10-23). Implemented on antzb branch `antzb/mount-migration` (P1, P2, P3 native collection, P5 docs); M6 is implemented; the P3 broker (M5) and the P4 host cleanup wait for rulings. Gate evidence of each phase is in `progress-item34.md` of the antzb work root.
+Status: decisions confirmed by the human (2026-10-23). Implemented on antzb branch `antzb/mount-migration` (P1, P2, P3 native collection, P5 docs); M6 is implemented; the perception broker (M5) was retired by the human's ruling of 2026-10-24 as P3b (see below); the P4 host cleanup waits for the human. Gate evidence of each phase is in `progress-item34.md` of the antzb work root.
 
 Human decisions (2026-10-23), all on the recommended option:
 - **M1:** mount only.
@@ -48,6 +48,7 @@ The image-baked path rebuilds 1–20 min of image per commit and keeps a second 
   **M3 note (2026-10-23, antzb):** the old mount base `sha256:19a57e70…` no longer exists on either host, so it cannot be `docker save`d (only the two training-source images can be archived). Sealed mount runs verify by digest only (`provenance`/`mount_build` records compare the recorded base digest and the tree hashes; no image is run), so nothing is lost. If the old base is ever needed, it can be rebuilt from the pins in git history (`scripts/images/base-image-ids.json`, `docker/mount-base/` at the commits of those runs). `image_content_manifest.py` was removed in P2: the archived tars are checked by plain `sha256sum`. | Keep everything (about 200 GB of images), or delete everything (no re-run is possible). |
 | M4 | Native launcher | **Retire native collection.** Parallel staged mount collection is the formal path, and `act_rollout_native` stays as the single-stack rollout reference; it is not a collection. If native collection must stay, its Teacher moves to mount-base. | Port the native Teacher to mount now. |
 | M5 | Perception broker (`parallel-perception`) | Phase 2. **Run the broker in mount-base** with the mount tree, replacing `COPY src` with the mounted install. The base must then carry the broker's Python dependencies; check them against `parallel-perception`'s lock first. Its users are the mujoco parallel batch and the teleop expert-validation production service. If either is retired, drop the broker instead: ask the human. | Leave it as is. It is a separate tool chain. |
+  **M5 ruling (human, 2026-10-24): retire the perception broker** (Expert Validation is no longer used). Done as phase P3b: the broker CLI, `docker/parallel-perception`, `scripts/parallel-perception-container.sh`, the mujoco parallel batch (`mujoco_parallel_batch`, `mujoco_batch` broker modules, allocator, `parallel_batch_cleanup`, the `run_so101_adaptive_*` scripts), the Expert Validation production service and its web page, the `so101-teleop-{macos,linux}` launchers and their tests and docs. The images stay on the hosts until P4. Kept, because the macOS service campaign cannot run without them: the in-process MPS broker, `macos_two_worker_broker_port`, `parallel_ipc/broker_transport`, `parallel_perception_runtime`, `parallel_batch/coordinator` (also the fixture of the ACT result-seal tests) and `adaptive_pool`.
 | M6 | YOLO perception container (`perception_launch` `docker` runtime) | Phase 3. Make the `docker_dev` pattern (bind-mounted source) into the standard, with the mount tree as the source, or move it to mount-base. Remove the baked runtime image. | Keep it. It is outside ACT. |
 | M7 | Offline training containers (yolo, grounding-dino) | **Out of scope.** These are developer training tools, not part of the identity chain. Note them in the guide only. | Migrate them too. |
 
@@ -80,4 +81,4 @@ The image-baked path rebuilds 1–20 min of image per commit and keeps a second 
 
 - **M3:** keep only the two training-source images plus the old mount base as tars, or keep more?
 - **M4:** retire native collection?
-- **M5:** are the mujoco parallel batch and the teleop expert-validation production service still used?
+- **M5:** answered 2026-10-24: not used; retired (P3b).

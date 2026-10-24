@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { chromeExecutablePath } from "./expert-validation/fixtures/config";
+import { chromeExecutablePath } from "./support/config";
 
 /**
  * Task 14 Step 6: the Teleop Head Camera acceptance case against the installed unified app.

@@ -1,5 +1,7 @@
 # SO-101 MoveIt 专家并发 Worker 池教学与源码导读
 
+> 2026-10-24 注：感知 broker 与 Expert Validation 已退役（挂载树迁移 M5，提交 P3b）。本文讲的 Linux CUDA 路径（`mujoco_parallel_batch`、`so101_parallel_batch`、`run_so101_adaptive_batch.zsh`、`run_so101_adaptive_worker_scaling.zsh`、`parallel_batch_cleanup`、`parallel-perception` 容器 broker）已删除，只作历史记录阅读；`adaptive_pool`、`coordinator`、macOS 双 worker campaign 及其进程内 MPS broker 仍在。
+
 **范围：** 20 点 MoveIt 专家回归、`SEQUENTIAL` / `PARALLEL` / `ADAPTIVE`、完整 Worker 隔离、动态抢任务、W8 降级、共享 PerceptionBroker、YOLO-first、`/cup_pose` 时序、systemd 监督、证据与精确清理
 
 **对象：** 已了解 Python、ROS 2、MoveIt 与 MuJoCo 基础，希望读懂并发验证实现、复现实验，并能定位 Worker 扩容失败的开发者

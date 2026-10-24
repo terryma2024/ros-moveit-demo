@@ -61,11 +61,11 @@ def test_act_diagnostic_episode_keeps_exactly_the_non_run_commands():
 
 
 def test_the_native_batch_worker_specification_carries_no_act_fields():
-    text = (SOURCE / "cli/mujoco_batch/worker_process.py").read_text() + (SOURCE / "cli/mujoco_batch/composition.py").read_text()
+    text = (SOURCE / "cli/mujoco_batch/artifact_results.py").read_text()
     for field in ("episode_scope_path", "episode_inputs_manifest", "collection_from_document"):
         assert field not in text, field
     # the campaign's artifact writer keeps its collection branch: it is what the container and native shards seal through
-    assert "collection_scope" in (SOURCE / "cli/mujoco_batch/worker_process.py").read_text()
+    assert "collection_scope" in text
 
 
 def test_the_station_hook_is_gone_from_the_worker_runtime():

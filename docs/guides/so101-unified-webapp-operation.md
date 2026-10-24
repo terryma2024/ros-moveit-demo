@@ -1,5 +1,7 @@
 # SO-101 单 Web 服务操作指南
 
+> 2026-10-24 注：感知 broker 与 Expert Validation 已退役（挂载树迁移 M5，提交 P3b）。Expert Validation 域、页面和 `/expert-validation/*` 路由已删除，`so101_expert_validation_server.py` 也不再存在；下文关于 Validation 的段落只作历史记录。Teleop、Tasks、Archives 不变。
+
 这份文档说明怎么启动和使用合并后的 Web 服务，以及哪些事情现在还不能做。它只描述已经实现并验证过的部分，未验证或需要单独授权的部分会明确标出来。
 
 ## 一个服务，一个端口

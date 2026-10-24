@@ -23,7 +23,7 @@ from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 from so101_demo.act.parallel_collection_contracts import read_document,scene_ids
 from so101_demo.act.rig_profile import DEFAULT_RIG,rig_from_frozen
 from so101_demo.cli.mujoco_batch.common import _lease_wire
-from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.parallel_batch.act_attempt import ActPerceptionDecision
 from so101_demo.parallel_batch.contracts.common import AttemptStatus,RunMode,ExecutionKind,_require_id
 from so101_demo.parallel_batch.contracts.identity import LeaseIdentity

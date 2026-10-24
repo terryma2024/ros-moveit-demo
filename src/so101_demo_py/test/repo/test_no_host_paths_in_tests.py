@@ -31,7 +31,6 @@ ALLOWED = {
     # the AF_UNIX 107-byte boundary is a property of the path string length; nothing is created
     "src/so101_demo_py/test/parallel_batch/test_parallel_adaptive_pool.py": "socket path length arithmetic on strings",
     "src/so101_demo_py/test/repo/test_pytest_full_gate_runner.py": "socket path budget arithmetic on strings",
-    "src/so101_demo_py/test/cli/test_parallel_batch_cli_composition.py": "string argument compared with the CLI's own output",
     "src/so101_demo_py/test/ports/test_pick_place_executor_adapter.py": "installed_prefix label passed to a fake adapter",
     # command-line arguments for argument-parsing / option-binding tests
     "src/so101_demo_py/test/application/test_qualification_runner.py": "CLI argument string; the runner is parsed, not executed",
@@ -41,7 +40,6 @@ ALLOWED = {
     "src/so101_teleop/test/test_tile_ai_station_guis.py": "window title string for a classifier",
     "src/so101_teleop/test/test_so101_stack_inventory.py": "process command line for a parser",
     "src/so101_teleop/test/test_unified_gate.py": "durable-root rule inputs (platform, path) for a pure predicate",
-    "src/so101_teleop/test/unified/test_unified_live_fixture.py": "asserts the literal appears in a tracked TypeScript rule file",
     # not collected by pytest: the recorded-gate helper keeps the registered-host policy constant
     "src/so101_teleop/test/e2e/record_gate.py": "registered-host policy constant for a pure predicate",
 }

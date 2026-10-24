@@ -38,7 +38,6 @@ migration. No image is needed to re-verify a sealed root.
 
 ## Other images
 
-`so101-parallel-perception` (the perception broker of the mujoco parallel batch and of the Expert Validation production service) and
-the offline training images (`yolo11n-seg-*`, `grounding-dino-tiny-train`) are separate tool chains; they are not built here.
+`so101-parallel-perception` was the perception broker image. The broker, `docker/parallel-perception`, `scripts/parallel-perception-container.sh`, the mujoco parallel batch that served it and the Expert Validation production service were retired on 2026-10-24 (migration M5, commit P3b). The image itself is still on both hosts until the human decides (P4); one explicit gate still names it as its default image (`benchmark_test/test_act_scene_perception_gate.py`, overridable with `SO101_ACT_SCENE_GATE_IMAGE`). The offline training images (`yolo11n-seg-*`, `grounding-dino-tiny-train`) are separate tool chains; they are not built here.
 
 The YOLO perception container (`perception_launch` `docker` runtime) holds dependencies only. Its Python source is the `so101_demo` package of the running build, bind-mounted read-only (migration M6; `docker_dev` is retired, `docker` is the same pattern).

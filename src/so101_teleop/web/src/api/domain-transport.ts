@@ -29,33 +29,14 @@ export type DomainEndpoints = {
   renewBody: Record<string, unknown>;
   /**
    * Optional lease-aware renewal. A domain that renews a specific lease by id cannot express that
-   * with a static path, and the validation domain renews exactly that way; returning null means
+   * with a static path; returning null means
    * there is nothing to renew.
    */
   renewTarget?: (lease: LeaseIdentity | null) => RenewTarget | null;
 };
 
-export const DOMAIN_ENDPOINTS: Record<DomainName, DomainEndpoints> = {
+export const DOMAIN_ENDPOINTS: Record<"teleop", DomainEndpoints> = {
   teleop: { snapshotPath: "/snapshot", eventsPath: "/telemetry", renewPath: "/control/lease/renew", renewBody: {} },
-  validation: {
-    snapshotPath: "/expert-validation/campaigns",
-    eventsPath: "/expert-validation/events",
-    renewPath: "/expert-validation/lease",
-    renewBody: {},
-    renewTarget: (lease) =>
-      // The guard is on the shape, not only on absence: a partial lease once produced
-      // PUT /expert-validation/lease/undefined, which no server can act on.
-      lease === null || typeof lease.lease_id !== "string" || lease.lease_id === ""
-        ? null
-        : {
-            method: "PUT",
-            path: `/expert-validation/lease/${encodeURIComponent(lease.lease_id)}`,
-            body: {
-              service_session_id: lease.service_session_id,
-              generation: lease.generation,
-            },
-          },
-  },
 };
 
 function sequenceOf(payload: unknown): number {
@@ -71,7 +52,7 @@ function sequenceOf(payload: unknown): number {
 }
 
 export function createHttpTransport(
-  domain: DomainName,
+  domain: keyof typeof DOMAIN_ENDPOINTS,
   options: {
     baseUrl?: string;
     client?: InstanceClient;
@@ -158,8 +139,8 @@ export function createHttpTransport(
       });
       if (!response.ok) throw new Error(`LEASE_RENEW_FAILED: ${response.status}`);
       const payload = (await response.json().catch(() => null)) as Partial<LeaseIdentity> | null;
-      // The validation endpoint answers with the renewed lease; the teleop endpoint answers with a
-      // CommandResult. Only a lease-shaped body is handed back for validation.
+      // A lease-aware endpoint answers with the renewed lease; the teleop endpoint answers with a
+      // CommandResult. Only a lease-shaped body is handed back.
       if (payload && typeof payload.lease_id === "string" && typeof payload.generation === "number") {
         return payload;
       }

@@ -1,12 +1,11 @@
 import { defineConfig } from "@playwright/test";
 
-import { evidenceOutputDir, evidenceReportFile, sharedUse } from "./e2e/expert-validation/fixtures/config";
+import { evidenceOutputDir, evidenceReportFile, sharedUse } from "./e2e/support/config";
 
 const baseURL = process.env.SO101_TELEOP_BASE_URL || "http://127.0.0.1:4173";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["expert-validation/installed/**", "expert-validation/live-sim/**"],
   outputDir: evidenceOutputDir("default"),
   reporter: [
     ["list"],

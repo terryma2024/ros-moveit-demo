@@ -27,23 +27,12 @@ TELEOP_JOBS=${TELEOP_JOBS:-6}
 TELEOP_XDIST=${TELEOP_XDIST:-0}
 # Tests that spawn and scan real process groups, or that proved timing-sensitive; they run alone (-j1) before the parallel rest.
 # Names are ctest names (first argument of so101_add_pytest_test). Empty the list to run everything in parallel.
-# test_expert_validation_e2e_installed_port: its test_fixed_helper_full_protocol runs fixed_helper.py with plain
-# subprocess.run (no start_new_session) so the helper sits in the shared ctest process group, and the autouse fixture in
-# test/conftest.py of a SIBLING pytest (marker = the shared SO101_IPC_SOCKET_BASE) then killpg()s that group, i.e. the gate.
-# Proven with strace + a killpg trap (see README.md "teleop parallel self-kill").
 SERIAL_TELEOP_TESTS=(
-  test_process_owner_group_cleanup
   test_unified_bridge_cleanup
-  test_expert_validation_process_owner
-  test_expert_validation_process_owner_integration
-  test_expert_validation_retry_owner_reconcile
-  test_expert_validation_owner_tree
-  test_expert_validation_supervisor
   test_unified_bridge
   test_native_bridge
   test_act_stack_owner
   test_container_child_ownership
-  test_expert_validation_e2e_installed_port
 )
 source $FG/upstream_slot.zsh
 test -x /usr/bin/colcon && test -x /usr/bin/python3 && test -x $TESTVENV/bin/python && test -r $GB/install/setup.zsh && test -d $FZ/python-deps && test "$(cat $G/build-root.txt)" = "$GB" || exit 90

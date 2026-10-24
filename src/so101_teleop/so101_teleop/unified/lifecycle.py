@@ -1,9 +1,9 @@
 """Single lifecycle owner for the unified web service.
 
 Startup order is fixed: verify configuration and durable store locks, establish the arbiter
-and domain state, then start validation lease maintenance, subscriptions and the configured
-ROS bridge. Shutdown stops accepting new mutations first, keeps the renewal and cancellation
-safety path alive while owned work converges, and only then closes maintenance, IPC and
+and domain state, then start subscriptions and the configured
+ROS bridge. Shutdown stops accepting new mutations first, keeps the cancellation
+safety path alive while owned work converges, and only then closes IPC and
 stores. Losing ROS lowers Teleop readiness; it never becomes a reason to guess a runtime.
 """
 
@@ -22,7 +22,6 @@ class UnifiedLifecycle:
         self.started = False
         self.accepting_mutations = False
         self.teleop_error: str | None = None
-        self.validation_error: str | None = None
         self._tasks: list[asyncio.Task] = []
 
     # -- startup -----------------------------------------------------------------
@@ -33,22 +32,9 @@ class UnifiedLifecycle:
         self.accepting_mutations = False
         if self.services.arbiter is not None:
             self.services.arbiter.require_idle()
-        await self._start_validation_maintenance()
         await self._start_bridge()
         self.accepting_mutations = True
         self.started = True
-
-    async def _start_validation_maintenance(self) -> None:
-        validation = self.services.validation
-        start = getattr(validation, "start_maintenance", None) if validation is not None else None
-        if start is None:
-            return
-        try:
-            result = start()
-            if asyncio.iscoroutine(result):
-                await result
-        except Exception as error:  # noqa: BLE001 - a blocked domain must stay visible
-            self.validation_error = f"{type(error).__name__}: {error}"
 
     async def _start_bridge(self) -> None:
         bridge = self.services.bridge
@@ -98,16 +84,9 @@ class UnifiedLifecycle:
         return self.accepting_mutations and self.services.teleop is not None
 
     def health(self) -> dict:
-        validation = self.services.validation
         return {
             "service_epoch": self.service_epoch,
             "started": self.started,
             "accepting_mutations": self.accepting_mutations,
-            # A lease-expiry loop that died leaves the domain unable to issue another lease, so it is
-            # reported next to the other domain errors rather than only in a log line.
-            "validation_maintenance_failed": bool(
-                getattr(validation, "maintenance_failed", False)
-            ),
             "teleop_error": self.teleop_error,
-            "validation_error": self.validation_error,
         }

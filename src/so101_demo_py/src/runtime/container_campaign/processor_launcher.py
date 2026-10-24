@@ -49,7 +49,7 @@ class ContainerProcessorLauncher:
         self.mount_build, self.cpuset_cpus = mount_build, cpuset_cpus
 
     def _common(self, *, context, paths, registry, parallel_runtime, approved_inputs, config_paths):
-        from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+        from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 
         if (type(context) is not AdmittedCampaignContext or context.workload_kind != "act_collection_start"
                 or type(registry) is not ContainerLaunchRegistry or str(paths["run"]) != context.evidence_root

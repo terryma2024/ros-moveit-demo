@@ -73,7 +73,7 @@ def source_inputs(repo: Path) -> dict[str, str]:
             if link.is_symlink() and not link.is_file():
                 raise ValueError(f"SOURCE_RESOURCE_MISSING: {link}; clone with --recurse-submodules")
     inputs.extend(repo / "scripts" / name for name in (
-        "run_so101_adaptive_batch.zsh", "setup-so101-quik.sh",
+        "setup-so101-quik.sh",
         "so101_quik_setup.py", "so101-quik-bootstrap.lock.env"))
     return {str(path.relative_to(repo)): digest(path) for path in sorted(inputs)}
 

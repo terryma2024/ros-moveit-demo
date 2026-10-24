@@ -48,16 +48,6 @@ def safety_limits_from_environment(environment: Mapping[str, str]) -> SafetyLimi
     )
 
 
-def _build_validation(evidence_root: Path, environment: Mapping[str, str], execution_port):
-    try:
-        from so101_teleop.expert_validation.production import create_production_service
-    except Exception as error:  # noqa: BLE001 - a missing upstream becomes a domain reason
-        raise CompositionBlocked(f"VALIDATION_DEPENDENCY_MISSING: {type(error).__name__}") from error
-    return create_production_service(
-        evidence_root, environment=dict(environment), execution_port=execution_port
-    )
-
-
 def resolve_visible_physical_uuids(devices, environment: Mapping[str, str]) -> tuple[str, ...]:
     """Resolve CUDA visibility order against the actual NVML physical inventory."""
     from so101_demo.parallel_batch.start_guard import ProbeError, _visible_indices
@@ -110,7 +100,6 @@ def compose_domain_services(
     worker=None,
     bridge_owner: BridgeProcessOwner | None = None,
     budget_source=None,
-    validation_execution_port=None,
     act_inventory=None,
     act_host_id=None,
     act_owner_identity=None,
@@ -173,12 +162,6 @@ def compose_domain_services(
             runtime_id=runtime_id,
             service_epoch=registry.service_epoch,
         )
-    validation = None
-    validation_error = None
-    try:
-        validation = _build_validation(evidence_root, environment, validation_execution_port)
-    except Exception as error:  # noqa: BLE001 - a blocked domain reports a reason, not a crash
-        validation_error = f"{type(error).__name__}: {error}"
     act_workload = None
     act_error = None
     if ACT_GPU_SELECTOR_ENV in environment or ACT_BINDING_ENV in environment:
@@ -216,7 +199,6 @@ def compose_domain_services(
     services = UnifiedServices(
         teleop=teleop,
         tasks=tasks,
-        validation=validation,
         arbiter=arbiter,
         instances=registry,
         safety=safety,
@@ -228,7 +210,6 @@ def compose_domain_services(
         head_camera_error=head_camera_error,
     )
     services.store = store  # type: ignore[attr-defined]
-    services.validation_error = validation_error  # type: ignore[attr-defined]
     return services
 
 

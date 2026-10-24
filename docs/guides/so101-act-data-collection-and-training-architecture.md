@@ -1036,6 +1036,14 @@ Figure 25. Gate to mount tree to template. The campaign roles all run in `so101-
 there is no per-commit image. The image-baked campaign images (shard, inference, shard-deps) and the native collection launcher were
 removed on 2026-10-23 (mount-tree migration); sealed image-mode records are still verified, read-only, by `legacy_image_records`.
 
+The perception broker was retired on 2026-10-24 (migration M5, commit P3b): the `so101-parallel-perception` container service
+(`parallel_perception_broker`, `docker/parallel-perception`), the mujoco parallel batch that served it (`mujoco_parallel_batch`,
+`so101_parallel_batch`, its cleanup entry, the allocator behind it and `scripts/run_so101_adaptive_*.zsh`), and the Expert Validation
+production service (the teleop `expert_validation` package, its server and recover scripts, the `/expert-validation/*` routes and the
+web page) are gone. ACT collection and rollout never used them. Kept because the macOS service campaign cannot run without them: the
+in-process MPS broker, `macos_two_worker_broker_port`, `parallel_ipc/broker_transport` and `parallel_perception_runtime`. The
+unified teleop service keeps `Domain.VALIDATION` for the admission of ACT campaign starts.
+
 Rules that go with it (record):
 
 - A run uses the mount tree and gate of one commit. Changing anything under `src/`, `scripts/` or `third_party/` after the

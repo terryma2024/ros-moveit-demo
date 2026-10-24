@@ -170,8 +170,7 @@ def test_setup_fingerprint_tracks_independent_quik_build_inputs(tmp_path):
             path = repo / "src" / package / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("original build input")
-    for name in ("run_so101_adaptive_batch.zsh", "setup-so101-quik.sh",
-                 "so101_quik_setup.py", "so101-quik-bootstrap.lock.env"):
+    for name in ("setup-so101-quik.sh", "so101_quik_setup.py", "so101-quik-bootstrap.lock.env"):
         path = repo / "scripts" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("bootstrap input")
