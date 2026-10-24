@@ -160,7 +160,10 @@ def derive_episode_values(diversity: dict, scene_id: str, start_draw: int = 0) -
         "pregrasp_height_offset_m": _symmetric(diversity["pregrasp_height"]["half_range_m"], _unit(seed, scene_id, "pregrasp_height", 0)),
         "place_approach_height_offset_m": _symmetric(
             diversity["place_approach_height"]["half_range_m"], _unit(seed, scene_id, "place_approach_height", 0)),
-        "carry_via_offset_m": [_symmetric(via[axis], _unit(seed, scene_id, "carry_via", axis)) for axis in range(3)],
+        # x and y are symmetric about the lift to above-place midpoint; z is one-sided, 0 to the extent: the via-point is never lower
+        # than the line (review 2026-10-24: the carried cup must not dip toward the table)
+        "carry_via_offset_m": [_symmetric(via[0], _unit(seed, scene_id, "carry_via", 0)), _symmetric(via[1], _unit(seed, scene_id, "carry_via", 1)),
+                               via[2] * _unit(seed, scene_id, "carry_via", 2)],
         "speed_scale": low + (high - low) * _unit(seed, scene_id, "speed_scale", 0),
         # MoveIt's GetMotionPlan request has no seed field (OMPL seeds its generator once per process), so the seed is derived and
         # recorded as the requested one, and `seed_applied` says it is not delivered: the planner's output is recorded instead.
@@ -195,6 +198,16 @@ def start_pose_matches(diversity: dict, scene_id: str, measured_joints, draw: in
     if len(measured) not in (6, 7) or any(not math.isfinite(item) for item in measured):
         return False
     return all(abs(measured[index] - offsets[index]) <= tolerance_rad for index in range(len(START_JOINTS)))
+
+
+def frozen_scene_identity(frozen):
+    """The scene and compiled-model hashes a frozen input set binds (`roles.scene_model.identity`), or None when it binds none."""
+
+    try:
+        identity = frozen["roles"]["scene_model"]["identity"]
+        return {"scene_sha256": identity["scene_sha256"], "model_sha256": identity["model_sha256"]}
+    except (KeyError, TypeError):
+        return None
 
 
 SELECTION_KIND = "TEACHER_DIVERSITY_START_POSE_SELECTION"
@@ -260,8 +273,10 @@ def validate_episode_values(diversity: dict, values, *, expect_derived: bool = F
     if not isinstance(via, list) or len(via) != 3:
         _fail("carry_via_offset_m is not three numbers")
     for axis, item in enumerate(via):
-        if not _within(abs(_number(item, "carry_via_offset_m")), 0.0, diversity["carry_via"]["half_extent_m"][axis]):
-            _fail("carry_via_offset_m is outside its box")
+        value = _number(item, "carry_via_offset_m")
+        extent = diversity["carry_via"]["half_extent_m"][axis]
+        if not (_within(value, 0.0, extent) if axis == 2 else _within(abs(value), 0.0, extent)):
+            _fail("carry_via_offset_m is outside its box (x and y symmetric, z from 0 up)")
     if not _within(_number(document["speed_scale"], "speed_scale"), diversity["speed_scale"]["low"], diversity["speed_scale"]["high"]):
         _fail("speed_scale is outside its range")
     ompl = _closed(document["ompl"], OMPL_FIELDS, "ompl")
@@ -380,7 +395,11 @@ class StartPoseCollisionCheck:
             if joint < 0:
                 raise ValueError("TEACHER_DIVERSITY_START_POSE_MODEL_INVALID")
             self._joints.append(joint)
+        # the baseline is the reset keyframe, not qpos0: a fresh MjData holds qpos0, whose contacts are not the reset state's
+        self._mujoco.mj_resetDataKeyframe(model, self._data, self._key)
         self._baseline = self._contacts()
+        self._scene_path = None
+        self._identity = None
 
     @classmethod
     def from_xml_string(cls, xml: str, **options) -> "StartPoseCollisionCheck":
@@ -392,7 +411,31 @@ class StartPoseCollisionCheck:
     def from_path(cls, path, **options) -> "StartPoseCollisionCheck":
         import mujoco
 
-        return cls(mujoco.MjModel.from_xml_path(str(Path(path))), **options)
+        checker = cls(mujoco.MjModel.from_xml_path(str(Path(path))), **options)
+        checker._scene_path = Path(path)
+        return checker
+
+    def identity(self) -> dict:
+        """The model this check ran on: the scene file's sha256 (None for a model built from a string), the sha256 of the compiled model
+        (the recipe of the execution snapshot's `model_sha256`), both physics fingerprints and the MuJoCo version."""
+
+        if self._identity is None:
+            import hashlib
+
+            import numpy as np
+
+            from .physics_fingerprint import physics_fingerprint, stripped_physics_fingerprint_of_file
+
+            buffer = np.empty(self._mujoco.mj_sizeModel(self._model), dtype=np.uint8)
+            self._mujoco.mj_saveModel(self._model, None, buffer)
+            path = self._scene_path
+            self._identity = {
+                "scene_sha256": None if path is None else hashlib.sha256(path.read_bytes()).hexdigest(),
+                "model_sha256": hashlib.sha256(buffer.tobytes()).hexdigest(),
+                "physics_fingerprint": physics_fingerprint(self._model),
+                "physics_fingerprint_v2": None if path is None else stripped_physics_fingerprint_of_file(path),
+                "mujoco_version": self._mujoco.__version__}
+        return dict(self._identity)
 
     def _geom(self, identifier: int) -> str:
         name = self._mujoco.mj_id2name(self._model, self._mujoco.mjtObj.mjOBJ_GEOM, identifier)

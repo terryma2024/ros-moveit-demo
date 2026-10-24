@@ -49,6 +49,35 @@ def test_a_malformed_via_offset_is_refused(offset):
         resolve_motion_targets(_sample(), _template(), carry_via_offset_m=offset)
 
 
+def test_the_cup_bottom_clearance_along_both_via_legs_is_at_least_three_centimetres():
+    """The held cup rises with the TCP: its bottom is (TCP z - TCP z at the grasp) above the table, checked at the leg ends (the legs are
+    straight, so the minimum is at an end)."""
+    from so101_demo.core.dynamic_pick import CARRY_VIA_MIN_CLEARANCE_M
+
+    assert CARRY_VIA_MIN_CLEARANCE_M == 0.03
+    template = _template()                                    # lift 0.10 above the grasp, place approach 0.08 above the place pose
+    resolve_motion_targets(_sample(), template, carry_via_offset_m=(0.0, 0.0, 0.0))
+    # approach clearance 0.031 (0.046 - 0.015, the lowest the policy range allows) passes; 0.025 does not
+    low = dataclasses.replace(template, place_approach_world_z_clearance_m=0.031)
+    resolve_motion_targets(_sample(), low, carry_via_offset_m=(0.0, 0.0, 0.0))
+    too_low = dataclasses.replace(template, place_approach_world_z_clearance_m=0.025)
+    with pytest.raises(DynamicPickError, match="CARRY_VIA_CLEARANCE"):
+        resolve_motion_targets(_sample(), too_low, carry_via_offset_m=(0.0, 0.0, 0.0))
+    # a lift that is not 3 cm clear of the table fails the first leg's start
+    with pytest.raises(DynamicPickError, match="CARRY_VIA_CLEARANCE"):
+        resolve_motion_targets(_sample(), dataclasses.replace(template, lift_world_z_clearance_m=0.02), carry_via_offset_m=(0.0, 0.0, 0.0))
+    # the via-point itself: a negative z offset deep enough to bring the cup within 3 cm of the table
+    with pytest.raises(DynamicPickError, match="CARRY_VIA_CLEARANCE"):
+        resolve_motion_targets(_sample(), dataclasses.replace(template, lift_world_z_clearance_m=0.06,
+                                                              place_approach_world_z_clearance_m=0.06),
+                               carry_via_offset_m=(0.0, 0.0, -0.04))
+
+
+def test_without_a_via_point_the_clearance_is_not_checked_and_nothing_changes():
+    low = dataclasses.replace(_template(), place_approach_world_z_clearance_m=0.025)
+    assert resolve_motion_targets(_sample(), low).carry_via is None
+
+
 def test_the_episode_template_shifts_only_the_two_clearances():
     template = _template()
     values = {"pregrasp_height_offset_m": 0.012, "place_approach_height_offset_m": -0.014}

@@ -123,7 +123,7 @@ def test_every_derived_value_lies_inside_the_declared_ranges_over_many_scenes(di
         td.validate_episode_values(diversity, values)                 # does not raise
         assert all(abs(v) <= 0.15 for v in values["start_pose"]["offsets_rad"])
         assert abs(values["pregrasp_height_offset_m"]) <= 0.015 and abs(values["place_approach_height_offset_m"]) <= 0.015
-        assert all(abs(v) <= 0.03 for v in values["carry_via_offset_m"])
+        assert all(abs(v) <= 0.03 for v in values["carry_via_offset_m"][:2]) and 0.0 <= values["carry_via_offset_m"][2] <= 0.03
         assert 0.7 <= values["speed_scale"] <= 1.3
         seen_signs.add(values["start_pose"]["offsets_rad"][0] > 0)
     assert seen_signs == {True, False}                                # it really varies
@@ -140,7 +140,7 @@ def test_the_axes_are_drawn_independently(diversity):
     lambda v: v["start_pose"]["offsets_rad"].__setitem__(0, 0.151),
     lambda v: v.__setitem__("pregrasp_height_offset_m", 0.0151),
     lambda v: v.__setitem__("place_approach_height_offset_m", -0.016),
-    lambda v: v["carry_via_offset_m"].__setitem__(2, 0.031),
+    lambda v: v["carry_via_offset_m"].__setitem__(2, 0.031), lambda v: v["carry_via_offset_m"].__setitem__(2, -0.001),
     lambda v: v.__setitem__("speed_scale", 1.31), lambda v: v.__setitem__("speed_scale", 0.69),
     lambda v: v.__setitem__("speed_scale", float("nan")),
     lambda v: v["ompl"].__setitem__("num_planning_attempts", 4),
@@ -292,7 +292,7 @@ GOLDEN_ACT_0001 = {
                                    -0.02433788321297124]},
     "pregrasp_height_offset_m": -0.006276165724012548,
     "place_approach_height_offset_m": -0.0028139076573739158,
-    "carry_via_offset_m": [-0.027416624694475412, -0.01926847853537975, 0.015787550513664848],
+    "carry_via_offset_m": [-0.027416624694475412, -0.01926847853537975, 0.02289377525683242],
     "speed_scale": 1.1224881797308135,
     "ompl": {"num_planning_attempts": 3, "seed": 1501262828, "seed_applied": False},
 }

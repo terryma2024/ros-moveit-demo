@@ -76,6 +76,17 @@ def test_the_shipped_schema_6_file_is_the_schema_5_file_plus_the_diversity_block
     assert loaded["diversity"]["start_pose"]["half_range_rad"] == 0.15 and loaded["diversity"]["ompl"]["num_planning_attempts"] >= 1
 
 
+def test_the_shipped_policy_plans_with_one_attempt_and_a_one_sided_via_height():
+    """MoveIt runs several attempts in parallel and keeps the shortest, which reduces the diversity: one attempt is the default."""
+    loaded = load_teacher_execution_policy(CONFIG / "teacher_execution_policy_side_wrist_diversity.yaml")
+    assert loaded["diversity"]["ompl"] == {"num_planning_attempts": 1}
+    from so101_demo.act import teacher_diversity as td
+
+    values = [td.values_for_policy(loaded, f"act-{n:04d}") for n in range(200)]
+    assert all(v["ompl"]["num_planning_attempts"] == 1 and v["ompl"]["seed_applied"] is False for v in values)
+    assert all(0.0 <= v["carry_via_offset_m"][2] <= 0.03 for v in values)
+
+
 def test_schema_6_carries_the_diversity_block_and_every_schema_5_value(document5, document6):
     old, new = load_document(document5), load_document(document6)
     assert new["schema_version"] == 6 and new["diversity"] == DIVERSITY

@@ -153,6 +153,69 @@ def test_a_schema_6_policy_needs_the_act_profile(tmp_path):
     assert calls == []
 
 
+# ---- the model the check ran on ------------------------------------------------------------------------------------------------
+
+IDENTITY = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64, "physics_fingerprint": "c" * 64, "physics_fingerprint_v2": "d" * 64,
+            "mujoco_version": "3.12.0"}
+
+
+class IdentifiedChecker(Checker):
+    def identity(self):
+        return dict(IDENTITY)
+
+
+def test_the_selection_record_names_the_model_and_says_whether_it_was_verified(tmp_path):
+    value, _ = ports(tmp_path, checker=IdentifiedChecker())
+    value.dependencies["start_pose_frozen_scene"] = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64}
+    value.reset_point(lease())
+    selection = json.loads((tmp_path / "start-pose-act-0001-lease-1.json").read_text())
+    assert selection["model"] == IDENTITY and selection["frozen_identity_verified"] is True
+
+
+def test_without_a_frozen_identity_the_record_says_it_was_not_verified(tmp_path):
+    value, _ = ports(tmp_path, checker=IdentifiedChecker())
+    value.reset_point(lease())
+    selection = json.loads((tmp_path / "start-pose-act-0001-lease-1.json").read_text())
+    assert selection["model"] == IDENTITY and selection["frozen_identity_verified"] is False
+
+
+@pytest.mark.parametrize("field", ["scene_sha256", "model_sha256"])
+def test_a_model_that_is_not_the_frozen_scene_is_refused_before_any_reset(tmp_path, field):
+    value, calls = ports(tmp_path, checker=IdentifiedChecker())
+    value.dependencies["start_pose_frozen_scene"] = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64, field: "e" * 64}
+    with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_MODEL_MISMATCH"):
+        value.reset_point(lease())
+    assert calls == [] and not list(tmp_path.glob("start-pose-*"))
+
+
+def test_a_checker_that_cannot_name_its_model_is_refused_when_a_frozen_identity_is_required(tmp_path):
+    value, calls = ports(tmp_path, checker=Checker())
+    value.dependencies["start_pose_frozen_scene"] = {"scene_sha256": "a" * 64, "model_sha256": "b" * 64}
+    with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_MODEL_MISMATCH"):
+        value.reset_point(lease())
+    assert calls == []
+
+
+def test_the_frozen_scene_identity_is_read_from_the_scene_model_role():
+    frozen = {"roles": {"scene_model": {"sha256": "a" * 64, "identity": {"scene_sha256": "a" * 64, "model_sha256": "b" * 64,
+                                                                         "mujoco_version": "3.12.0"}}}}
+    assert td.frozen_scene_identity(frozen) == {"scene_sha256": "a" * 64, "model_sha256": "b" * 64}
+    assert td.frozen_scene_identity({}) is None and td.frozen_scene_identity({"roles": {"scene_model": {}}}) is None
+
+
+def test_the_real_check_records_the_scene_file_hash(tmp_path):
+    import hashlib
+
+    pytest.importorskip("mujoco")
+    value, _ = ports(tmp_path, checker=None)
+    value.dependencies["start_pose_model_root"] = PACKAGE_ROOT
+    value.reset_point(lease())
+    selection = json.loads((tmp_path / "start-pose-act-0001-lease-1.json").read_text())
+    scene = PACKAGE_ROOT / "assets/mujoco/act/scene_side_wrist.xml"
+    assert selection["model"]["scene_sha256"] == hashlib.sha256(scene.read_bytes()).hexdigest()
+    assert len(selection["model"]["physics_fingerprint"]) == 64
+
+
 # ---- the initial gate --------------------------------------------------------------------------------------------------------
 
 def gate_observation(joints):

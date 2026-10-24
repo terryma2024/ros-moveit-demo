@@ -53,8 +53,13 @@ def test_with_a_via_point_the_preflight_plans_the_via_leg_and_the_target_leg(mon
     value._remember_carry_via(via_targets)
     target = via_targets.for_state(State.MOVE_ABOVE_PLACE)
     seen = solved_waypoints(monkeypatch, lambda: value._steps_for(State.MOVE_ABOVE_PLACE, target, start))
-    assert seen == [(deterministic_horizon.HorizonWaypoint(State.MOVE_ABOVE_PLACE, 0, via_targets.carry_via),
-                     deterministic_horizon.HorizonWaypoint(State.MOVE_ABOVE_PLACE, 1, target))]
+    # all six waypoints the execution plans (three per leg), each of them solved by the IK, not just the leg ends
+    from_pose = ik.forward(START)
+    via = via_targets.carry_via
+    interpolate = ros_reachability.RosMoveGroupReachabilityPlanner._interpolate_pose
+    expected = tuple(deterministic_horizon.HorizonWaypoint(State.MOVE_ABOVE_PLACE, index, pose) for index, pose in enumerate(
+        [interpolate(from_pose, via, step / 3.0) for step in (1, 2, 3)] + [interpolate(via, target, step / 3.0) for step in (1, 2, 3)]))
+    assert seen == [expected] and len(expected) == 6
     # the other states are planned as they were
     other = solved_waypoints(monkeypatch, lambda: value._steps_for(State.LIFT, via_targets.for_state(State.LIFT), start))
     assert [len(item) for item in other] == [1]

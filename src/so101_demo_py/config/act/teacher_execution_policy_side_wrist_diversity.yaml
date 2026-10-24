@@ -83,10 +83,12 @@ diversity:
   # Offsets of the pre-grasp and place-approach clearances (template values 0.059 and 0.046 m).
   pregrasp_height: {distribution: uniform, half_range_m: 0.015}
   place_approach_height: {distribution: uniform, half_range_m: 0.015}
-  # One via-point of MOVE_ABOVE_PLACE, in a box around the midpoint of the lift and above-place targets.
+  # One via-point of MOVE_ABOVE_PLACE: x and y within +-0.03 m of the midpoint of the lift and above-place targets, z from 0 to +0.03 m above
+  # the line (never lower). The held cup's bottom must stay at least 0.03 m above the table along both legs, else the targets are refused.
   carry_via: {distribution: uniform_box, half_extent_m: [0.03, 0.03, 0.03]}
   # Factor on the policy scaling keys (carry, MOVE_ABOVE_OBJECT, RETREAT, DESCEND approach), capped at 1. The template-scaled phases
   # (the last DESCEND stage, MICRO_LIFT, DESCEND_TO_PLACE) keep their values.
   speed_scale: {distribution: uniform, low: 0.7, high: 1.3}
-  # MoveIt's request has no planner seed; the attempts are passed and the planner output is recorded.
-  ompl: {num_planning_attempts: 3}
+  # MoveIt's request has no planner seed (not applicable): the diversity comes from OMPL's own randomness and the plan's digest is recorded. One
+  # attempt: MoveIt runs several attempts in parallel and keeps the shortest, which would reduce the diversity.
+  ompl: {num_planning_attempts: 1}

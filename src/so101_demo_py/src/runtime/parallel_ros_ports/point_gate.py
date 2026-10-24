@@ -79,6 +79,12 @@ class PointGate:
         td.values_for_policy(policy, lease.point_id)            # the derived values are range-checked before anything moves
         cup = tuple(float(item) for item in point["cup_position_world_m"])
         checker = self._start_pose_checker(rig)
+        # the model the check runs on must be the frozen scene: a different model would make "no collision" a claim about another world
+        identity = getattr(checker, "identity", None)
+        identity = identity() if callable(identity) else None
+        frozen_scene = self.dependencies.get("start_pose_frozen_scene")
+        if frozen_scene is not None and (identity is None or any(identity.get(key) != frozen_scene.get(key) for key in frozen_scene)):
+            raise RuntimeError("TEACHER_DIVERSITY_START_POSE_MODEL_MISMATCH")
 
         def check(offsets):
             vector = td.reset_joint_positions(offsets, joints)
@@ -93,7 +99,7 @@ class PointGate:
             "scene_id": lease.point_id, "policy_sha256": policy.get("policy_sha256"),
             "campaign_seed": policy["diversity"]["campaign_seed"], "draw_index": selection["draw_index"],
             "joints": list(joints), "joints_rad": list(vector), "cup_position_world_m": list(cup),
-            "rejected": selection["rejected"]})
+            "rejected": selection["rejected"], "model": identity, "frozen_identity_verified": frozen_scene is not None})
         self.__dict__.setdefault("_start_poses", {})[lease.attempt_id] = tuple(vector[:6])
         return vector
 

@@ -265,8 +265,13 @@ class RosMoveGroupReachabilityPlanner:
         start_positions = self._arm_positions(start)
         waypoints = (HorizonWaypoint(state, 0, target),)
         if state is State.MOVE_ABOVE_PLACE and self._carry_via is not None:
-            # R3-a: the executed MOVE_ABOVE_PLACE runs two straight legs through the via-point; the ends of the legs are checked
-            waypoints = (HorizonWaypoint(state, 0, self._carry_via), HorizonWaypoint(state, 1, target))
+            # R3-a: the executed MOVE_ABOVE_PLACE runs two straight legs through the via-point, three waypoints each, from the pose of
+            # the start state (the end of LIFT); all six are solved here, exactly the waypoints `_motion_waypoints` plans
+            from_pose = self._ik.forward(start_positions)
+            via = self._carry_via
+            poses = ([self._interpolate_pose(from_pose, via, step / 3.0) for step in (1, 2, 3)]
+                     + [self._interpolate_pose(via, target, step / 3.0) for step in (1, 2, 3)])
+            waypoints = tuple(HorizonWaypoint(state, index, pose) for index, pose in enumerate(poses))
         result = _compute_while_progressing(
             lambda: solve_horizon(
                 self._ik,

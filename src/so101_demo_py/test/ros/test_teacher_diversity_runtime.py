@@ -114,6 +114,19 @@ def test_the_via_waypoint_is_a_planned_segment_of_the_horizon_and_passes_the_ik(
     assert len(failures) <= 4 and {message for _, message in failures} <= {"DYNAMIC_IK_HORIZON_FAILED"}, failures
 
 
+def test_every_derived_episode_keeps_the_held_cup_three_centimetres_above_the_table_on_the_real_template(template, policy6):
+    """The real mujoco template and the shipped ranges: the via-point never lowers the carry and the clearance rule never fires."""
+    from so101_demo.core.dynamic_pick import CARRY_VIA_MIN_CLEARANCE_M
+
+    for number in range(300):
+        values = episode_values(policy6, f"act-{number:04d}")
+        via_targets, _ = diversity_targets(template, values)            # raises CARRY_VIA_CLEARANCE when the rule fires
+        lift, above = via_targets.for_state(State.LIFT).position_m[2], via_targets.for_state(State.MOVE_ABOVE_PLACE).position_m[2]
+        grasp = via_targets.for_state(State.DESCEND).position_m[2]
+        assert via_targets.carry_via.position_m[2] >= (lift + above) / 2.0 - 1e-12
+        assert min(lift, via_targets.carry_via.position_m[2], above) - grasp >= CARRY_VIA_MIN_CLEARANCE_M
+
+
 # ---- the speed scale ---------------------------------------------------------------------------------------------------------
 
 def scalings(tmp_path, policy, state, *, speed_scale=None, step=None, snapshot=True):
