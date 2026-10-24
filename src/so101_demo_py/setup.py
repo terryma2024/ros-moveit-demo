@@ -175,6 +175,12 @@ setup(
             "e2e_acceptance = so101_demo.cli.e2e_acceptance:main",
             "generate_yolo_seg_dataset = "
             "so101_demo.cli.generate_yolo_seg_dataset:main",
+            "generate_indoor_yolo_dataset = "
+            "so101_demo.cli.generate_indoor_yolo_dataset:main",
+            "evaluate_indoor_yolo = "
+            "so101_demo.cli.evaluate_indoor_yolo:main",
+            "finetune_indoor_yolo = "
+            "so101_demo.cli.finetune_indoor_yolo:main",
             "prepare_grounding_dino_dataset = "
             "so101_demo.cli.prepare_grounding_dino_dataset:main",
             "train_grounding_dino = so101_demo.cli.train_grounding_dino:main",
