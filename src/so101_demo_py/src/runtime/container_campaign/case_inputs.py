@@ -95,6 +95,42 @@ def freeze_campaign_inputs(run, *, candidates, scene_manifest, teacher_endpoint,
     return _ref(manifest)
 
 
+DIVERSITY_DIRECTORY = 'diversity'
+DIVERSITY_KIND = 'ACT_TEACHER_DIVERSITY_CASE'
+
+
+def _diversity_document(frozen, scene_id):
+    """The case record of one scene (R3-a): its derived Teacher diversity values, bound to the frozen set and policy; None for a freeze
+    whose Teacher execution policy has no diversity block (schema 3, 4, 5), which records nothing."""
+    from so101_demo.act.teacher_diversity import values_for_policy
+
+    binding = frozen.get('teacher_execution_policy')
+    values = values_for_policy(None if not isinstance(binding, dict) else binding.get('values'), scene_id)
+    if values is None:
+        return None
+    return dict(kind=DIVERSITY_KIND, schema_version=1, scene_id=scene_id, inputs_sha256=frozen['inputs_sha256'],
+                policy_sha256=binding['policy_sha256'], values=values)
+
+
+def _diversity_bytes(document):
+    import json
+
+    return json.dumps(document, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+
+
+def _write_diversity(directory, scene_id, document):
+    import os
+
+    try:
+        descriptor = os.open(directory / (scene_id + '.json'), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    except OSError as error:
+        raise ValueError('CASE_DIVERSITY_UNWRITABLE') from error
+    with os.fdopen(descriptor, 'wb') as stream:
+        stream.write(_diversity_bytes(document))
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def _frozen(run, inputs_manifest):
     """The verified frozen set of `inputs_manifest`, which must be this run's own `inputs/frozen` manifest."""
     path = _manifest_path(inputs_manifest)
@@ -122,6 +158,13 @@ def write_case_scopes(run, *, inputs_manifest, plane='formal'):
         directory.mkdir()
     except FileExistsError as error:
         raise ValueError('CASE_SCOPES_EXIST') from error
+    diversity = {row['scene_id']: _diversity_document(frozen, row['scene_id']) for row in rows}
+    diversity_directory = run / INPUTS_DIRECTORY / DIVERSITY_DIRECTORY
+    if any(document is not None for document in diversity.values()):
+        try:
+            diversity_directory.mkdir()
+        except FileExistsError as error:
+            raise ValueError('CASE_DIVERSITY_EXIST') from error
     cases = {}
     for row in rows:
         scope = build_collection_scope(mode, scene_id=row['scene_id'], seed=row['seed'],
@@ -129,6 +172,8 @@ def write_case_scopes(run, *, inputs_manifest, plane='formal'):
         require_scope_for_inputs(scope, frozen, path)
         target = directory / (row['scene_id'] + '.json')
         write_collection_scope(scope, target)
+        if diversity[row['scene_id']] is not None:
+            _write_diversity(diversity_directory, row['scene_id'], diversity[row['scene_id']])
         cases[row['scene_id']] = dict(scope=_ref(target), inputs_manifest=dict(inputs_manifest))
     return cases
 
@@ -149,6 +194,15 @@ def read_case_scopes(run, *, inputs_manifest, plane='formal'):
         target = run / INPUTS_DIRECTORY / SCOPES_DIRECTORY / (row['scene_id'] + '.json')
         scope = read_collection_scope(target, expected_inputs_sha256=frozen['inputs_sha256'], expected_mode=mode)
         require_scope_for_inputs(scope, frozen, path)
+        expected = _diversity_document(frozen, row['scene_id'])
+        if expected is not None:
+            # R3-a: the recorded values must be the derivation of this scene under the frozen policy
+            try:
+                recorded = (run / INPUTS_DIRECTORY / DIVERSITY_DIRECTORY / (row['scene_id'] + '.json')).read_bytes()
+            except OSError as error:
+                raise ValueError('CASE_DIVERSITY_INVALID') from error
+            if recorded != _diversity_bytes(expected):
+                raise ValueError('CASE_DIVERSITY_INVALID')
         cases[row['scene_id']] = dict(scope=_ref(target), inputs_manifest=dict(inputs_manifest))
     return cases
 

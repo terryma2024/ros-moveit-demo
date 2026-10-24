@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 import sys
 import threading
 import time
@@ -331,16 +332,29 @@ def transactional_reset(
     timeout_s: float = 10.0,
     act_profile: bool = False,
     rig=DEFAULT_RIG,
+    start_joint_positions=None,
 ):
     """Run the qualified controller/pause/reset/epoch transaction.
 
     `act_profile=True` is the ACT station: the neck controller is switched with the arm and gripper and the seven ACT
     joints are written and verified (with the paused scalar snapshot). It carries no broker, lease or reservation.
     A `rig` without a neck (the side+wrist rig) has no neck controller and its ACT joints are the six arm joints.
+
+    `start_joint_positions` (R3-a) is the joint vector the ACT reset writes and verifies instead of all zero, one finite value per ACT
+    joint of the rig; None is the all-zero `task_start` reset. Only the ACT station takes it.
     """
 
     teacher = act_profile is True
     joints = act_joints_for(rig)
+    if start_joint_positions is None:
+        start = (0.,) * len(joints)
+    else:
+        try:
+            start = tuple(float(value) for value in start_joint_positions)
+        except (TypeError, ValueError):
+            start = ()
+        if not teacher or len(start) != len(joints) or any(not math.isfinite(value) for value in start):
+            raise ValueError("START_JOINT_POSITIONS_INVALID: one finite value per ACT joint, ACT station only")
     scope = _RosScope()
     nodes = []
     try:
@@ -362,7 +376,7 @@ def transactional_reset(
             observer,
             simulation_session_id=simulation_session_id,
             controller_names=(*CONTROLLERS,*(("neck_controller",) if rig.has_neck else ())) if teacher else CONTROLLERS,
-            expected_joint_positions=(0.,)*len(joints) if teacher else RESET_JOINTS,
+            expected_joint_positions=start if teacher else RESET_JOINTS,
             expected_object_position=expected_object_position,
             timeout_s=timeout_s,
             progress=progress,
@@ -372,7 +386,7 @@ def transactional_reset(
         scope.abandon(nodes)
         raise
     try:
-        reset_kwargs={"joint_overrides":tuple(JointResetOverride(name,0.) for name in joints)} if teacher else {}
+        reset_kwargs={"joint_overrides":tuple(JointResetOverride(name,position) for name,position in zip(joints,start))} if teacher else {}
         receipt = resetter.reset(keyframe, free_joint_overrides,**reset_kwargs)
         return TransactionalResetEvidence(receipt, services.latest_joint_positions())
     finally:

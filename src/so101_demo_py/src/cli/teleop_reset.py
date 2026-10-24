@@ -52,14 +52,18 @@ def execute_mujoco_reset(
     cup_position_world_m: tuple[float, float, float] | None = None,
     act_profile: bool = False,
     rig=None,
+    start_joint_positions=None,
 ):
     """Reset physical state, then restore MoveIt's canonical scene shadow.
 
-    `rig` (a camera rig profile; default the head+wrist rig) selects the ACT joints and controllers the reset drives."""
+    `rig` (a camera rig profile; default the head+wrist rig) selects the ACT joints and controllers the reset drives.
+    `start_joint_positions` (R3-a) is the joint vector the ACT reset writes instead of all zero; None is the all-zero reset."""
 
     act_kwargs = {"act_profile": True} if act_profile else {}
     if act_profile and rig is not None:
         act_kwargs["rig"] = rig
+    if start_joint_positions is not None:
+        act_kwargs["start_joint_positions"] = start_joint_positions
     if cup_position_world_m is None:
         receipt = transactional_reset(session_id, keyframe=keyframe,**act_kwargs)
     else:

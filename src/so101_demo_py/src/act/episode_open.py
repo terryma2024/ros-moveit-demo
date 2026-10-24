@@ -105,7 +105,15 @@ def open_recorder_episode(options, *, offline: bool = False):
             or any(path.is_symlink() for path in (episode_root, *episode_root.parents))):
         raise ValueError("EPISODE_LOCATION_MISMATCH")
     evidence_root.mkdir(parents=True, exist_ok=True)
+    # R3-a: a frozen schema 6 Teacher policy derives this scene's values; they enter the episode identity (episode.json)
+    from .teacher_diversity import values_for_policy
+
+    policy_binding = frozen.get("teacher_execution_policy")
+    policy_values = None if not isinstance(policy_binding, dict) else policy_binding.get("values")
+    diversity_values = values_for_policy(policy_values, document["scene_id"])
+    diversity_arguments = ({} if diversity_values is None else {"diversity": diversity_values, "diversity_policy": policy_values})
     episode = open_point_episode(
+        **diversity_arguments,
         episode_root=episode_root, session_id=options.session_id, attempt_id=lease.attempt_id,
         reset_epoch=options.expected_reset_epoch, release_epoch=0, lease=asdict(lease),
         scene_id=document["scene_id"], seed=document["seed"], mode=document["mode"],
