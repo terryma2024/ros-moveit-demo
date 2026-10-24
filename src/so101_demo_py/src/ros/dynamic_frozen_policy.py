@@ -30,6 +30,24 @@ def _frozen_descend_final_distance_m(frozen):
         raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + DESCEND_DISTANCE_FIELD) from None
 
 
+def _frozen_run_inputs(frozen, point_id, template):
+    """R3-a: (episode values, template of the run, carry via offset) of a schema 6 freeze, derived from the frozen diversity block and the
+    scene id (the lease point id); (None, ``template``, None) for a freeze that is not schema 6, which changes nothing.
+
+    A schema 6 freeze without a scene id, or whose block does not re-parse, is refused before any motion."""
+
+    if _frozen_teacher_schema(frozen) < 6:
+        return None, template, None
+    from ..act.teacher_diversity import episode_template, parse_diversity, values_for_policy
+
+    if not isinstance(point_id, str) or not point_id:
+        raise RuntimeError("TEACHER_DIVERSITY_SCENE_ID_REQUIRED")
+    policy = dict(frozen["teacher_execution_policy"]["values"])
+    policy["diversity"] = parse_diversity(policy.get("diversity"))
+    values = values_for_policy(policy, point_id)
+    return values, episode_template(template, values), tuple(values["carry_via_offset_m"])
+
+
 def _frozen_policy_file(frozen, snapshot) -> str:
     """The file name, under the snapshot's `config/act`, of the Teacher execution policy the freeze bound: the default file, or the
     `teacher_execution_policy_*.yaml` variant whose bytes the freeze carries."""

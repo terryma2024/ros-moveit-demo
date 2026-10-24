@@ -37,6 +37,7 @@ from .dynamic_frozen_policy import (
     _execution_state_max_age_s,
     _frozen_descend_final_distance_m,
     _frozen_policy_file,
+    _frozen_run_inputs,
     _frozen_teacher_schema,
     _load_safety_inputs,
 )
@@ -780,6 +781,15 @@ def run_dynamic_execute(
         parallel_lease_identity = lease_values
     else:
         parallel_lease_identity = None
+    try:   # R3-a: a schema 6 freeze derives this episode's values from (campaign seed, scene id); every other schema changes nothing
+        episode_diversity, run_template, via_offset = _frozen_run_inputs(frozen, lease_values["point_id"], loaded.template)
+    except Exception as error:
+        failure_code = _failure_code(error)
+        finish_setup("rejected", failure_code)
+        emit_failure(failure_code)
+        print(status_line("ERROR", failure=failure_code, message=error), file=status_stream)
+        return 1
+    via_arguments = {} if via_offset is None else {"carry_via_offset_m": via_offset}
     phase_timer = _PhaseTimer()
     _ACTIVE_PHASE_TIMER = phase_timer
     mark = phase_timer.mark
@@ -935,7 +945,7 @@ def run_dynamic_execute(
         validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if teacher_run else {}))
         mark("validate_cup_scene.2.check.end")
         mark("resolve_motion_targets.begin")
-        targets = runtime.resolve_motion_targets(sample, loaded.template)
+        targets = runtime.resolve_motion_targets(sample, run_template, **via_arguments)
         mark("resolve_motion_targets.end")
         mark("reachability_preflight.begin")
         # schema 5 Teacher: the preflight checks the two-stage DESCEND the execution will run (None for schema 3 and 4: no extra argument)
@@ -943,9 +953,10 @@ def run_dynamic_execute(
         reachability = runtime.reachability_preflight(
             node,
             sample,
-            loaded.template,
+            run_template,
             getattr(initial, "reset_epoch", None),
             **({} if descend_distance is None else {"descend_final_distance_m": descend_distance}),
+            **via_arguments,
         )
         mark("reachability_preflight.end")
         stop_flags.raise_if_stopped()
@@ -965,7 +976,7 @@ def run_dynamic_execute(
         execution = runtime.execution(
 
             node,
-            loaded.template,
+            run_template,
             targets,
             session_id=options.session_id,
             expected_reset_epoch=options.expected_reset_epoch,
@@ -981,6 +992,8 @@ def run_dynamic_execute(
         )
         mark("execution.construct.end")
         execution._task_geometry = geometry
+        if episode_diversity is not None:
+            execution._record_episode_diversity(episode_diversity)
         if getattr(options, "final_stop_proof", False) is True:
             execution.final_stop_proof_enabled = True
         if inject_failure_at is not None:

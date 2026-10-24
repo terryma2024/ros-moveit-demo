@@ -252,3 +252,74 @@ def test_an_accepted_plan_of_a_run_without_diversity_records_what_it_always_did(
     accepted = [record for record in records if record.get("accepted") is True][0]
     assert set(accepted) == {"kind", "state", "segment_index", "candidate_index", "candidate_count", "accepted", "failure_code",
                              "joint_target_rad", "trajectory_sample_count"}
+
+
+# ---- the record and the start pose of an episode -----------------------------------------------------------------------------
+
+def start_value(tmp_path, policy, scene="act-0001", *, joints=None):
+    value = make_adapter(tmp_path)
+    value._execution_policy = policy
+    value._document = {}
+    value._write = lambda: None
+    values = episode_values(policy, scene)
+    value._record_episode_diversity(values)
+    measured = joints if joints is not None else td.reset_joint_positions(
+        values["start_pose"]["offsets_rad"], ("1", "2", "3", "4", "5", "6"))
+    value._positions = {name: measured[index] for index, name in enumerate(("1", "2", "3", "4", "5", "6"))}
+    value._ARM_JOINTS = ("1", "2", "3", "4", "5")
+    value._joint_state = lambda *a, **k: tuple(value._positions[name] for name in value._ARM_JOINTS)
+    return value, values
+
+
+def test_the_values_and_their_digest_are_on_the_teacher_document(tmp_path, policy6):
+    import json
+
+    value, values = start_value(tmp_path, policy6)
+    record = value._document["teacher_diversity"]
+    assert record["values"] == values and value._episode_diversity is values
+    assert record["values_sha256"] == hashlib.sha256(json.dumps(values, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def test_the_measured_start_pose_is_matched_to_its_draw_and_recorded(tmp_path, policy6):
+    value, values = start_value(tmp_path, policy6)
+    value._check_episode_start_pose()
+    record = value._document["teacher_diversity"]
+    assert record["start_pose_draw_index"] == 0 and len(record["start_pose_measured_rad"]) == 6
+    later = td.start_pose_candidates(policy6["diversity"], "act-0001")[2]
+    value, _ = start_value(tmp_path, policy6, joints=td.reset_joint_positions(later, ("1", "2", "3", "4", "5", "6")))
+    value._check_episode_start_pose()
+    assert value._document["teacher_diversity"]["start_pose_draw_index"] == 2
+
+
+def test_a_start_pose_that_matches_no_draw_fails_closed_and_is_recorded(tmp_path, policy6):
+    value, _ = start_value(tmp_path, policy6, joints=(0.0,) * 6)         # the reset was not given the pose
+    with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_MISMATCH"):
+        value._check_episode_start_pose()
+    assert value._document["teacher_diversity"]["start_pose_draw_index"] is None
+
+
+def test_without_episode_diversity_the_start_pose_is_not_looked_at(tmp_path):
+    value = make_adapter(tmp_path)
+    value._joint_state = lambda *a, **k: pytest.fail("a run without diversity reads no joint state for this")
+    value._check_episode_start_pose()
+    assert "teacher_diversity" not in value._document
+
+
+def test_the_start_pose_mismatch_is_a_failed_teacher_execution_not_a_stop():
+    from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
+
+    result = SimpleNamespace(status=SimpleNamespace(value="ERROR"), failure=SimpleNamespace(code="TEACHER_DIVERSITY_START_POSE_MISMATCH"))
+    assert RosDynamicMujocoExecution._teacher_execution_status(result, {}) == "FAILED"
+
+
+def test_the_start_pose_is_checked_before_the_start_snapshot_in_the_capture(tmp_path, policy6, monkeypatch):
+    value, _ = start_value(tmp_path, policy6, joints=(0.0,) * 6)
+    value._teacher_config_error = None
+    value._teacher_endpoint_policy = {"tolerances": {}}
+    value._teacher_targets = lambda: ({"position": [0, 0, 0]}, {"position": [1, 1, 0]})
+    value._snapshot = lambda: pytest.fail("the start snapshot must not be taken for a mismatching start pose")
+    import so101_demo.act.teacher_endpoint as endpoint
+
+    monkeypatch.setattr(endpoint, "validate_task_targets", lambda *a, **k: None)
+    with pytest.raises(RuntimeError, match="TEACHER_DIVERSITY_START_POSE_MISMATCH"):
+        value._capture_teacher_start()
