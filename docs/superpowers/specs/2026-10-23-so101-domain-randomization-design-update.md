@@ -40,7 +40,15 @@
 - **杯–桌摩擦桶暂缓**：按 D1，动力学变化需要重新校准接触策略，R0 首版只做视觉。这一项记入待办。
 - **磁盘**：每桶的 bag 在提取完指标后删除（已预授权，并记日志），只保留 json 和 jsonl。
 
-## R3 示教多样性：设计（2026-10-24，状态：设计稿，未授权实施）
+## R3 示教多样性：设计（2026-10-24，状态：R3-a 已获授权并实现于分支 `r3a-teacher-diversity`（待 live 冒烟）；R3-b、R3-c 仍是设计稿，未授权实施）
+
+**R3-a 实现记录（2026-10-24）**
+- 代码：`act/teacher_diversity.py`（分布块解析、派生、范围检查、起始姿态抽样与碰撞检查）、`act/teacher_endpoint.py`（schema 6）、`config/act/teacher_execution_policy_side_wrist_diversity.yaml`（示例策略，schema 5 的 two_leg_open_1s 加 `diversity` 块）。
+- 搬运中间点实现为 MOVE_ABOVE_PLACE 内部的一个 waypoint（两段直线，各 3 个 waypoint），不是新状态。状态轨迹、`TEACHER_WORKFLOW`、审计的 `TEACHER_STATES` 和 `DYNAMIC_REACHABILITY_STATES` 都不变。
+- OMPL：MoveIt 的 `MotionPlanRequest` 没有种子字段，种子只能派生并记录（`seed_applied: false`）；实际传入 `num_planning_attempts`，并在每次被接受的规划记录里写 `trajectory_sha256`。
+- 速度比例只乘策略里的比例键（carry、MOVE_ABOVE_OBJECT、RETREAT、DESCEND 接近段），上限 1。接触敏感的模板比例阶段（DESCEND 最后一段、MICRO_LIFT、DESCEND_TO_PLACE）不乘。
+- 每个 episode 的取值记录在四处：`inputs/diversity/<scene>.json`（case inputs，读回时重新派生比对）、Teacher manifest 的 `teacher_diversity`、审计 `episode.json` 的 `teacher_diversity`、任务目录下的 `start-pose-<attempt>.json`（抽样过程与被拒绝的抽样）。
+- 起始姿态的碰撞检查只在 reset 前用 MuJoCo 的 `mj_forward` 接触表，不单步仿真；超出关节限位 0.02 rad 余量或出现基线之外的接触就重抽，最多 `max_redraws` 次，全部被拒绝则该 episode 在任何动作之前失败（不回退到未变化的姿态）。
 
 ### 现状核对（只读，均有代码出处）
 
