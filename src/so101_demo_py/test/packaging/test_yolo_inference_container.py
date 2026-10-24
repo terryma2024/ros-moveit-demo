@@ -136,3 +136,15 @@ def test_build_uses_buildx_only_when_external_cache_is_requested(
         "type=registry,ref=registry.example/so101/cache:main,mode=max",
         str(REPOSITORY_ROOT),
     ]
+
+
+def test_dockerfile_holds_dependencies_only_and_runs_the_mounted_source() -> None:
+    text = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "COPY src/so101_demo_py /opt/so101_demo_py" not in text
+    assert "pip install --no-cache-dir --no-deps /opt/so101_demo_py" not in text
+    assert "ENV PYTHONPATH=/workspace/so101-source" in text
+    assert text.rstrip().endswith(
+        'ENTRYPOINT ["/ros_entrypoint.sh", "python", "-m", '
+        '"so101_demo.cli.rgbd_object_pose"]'
+    )

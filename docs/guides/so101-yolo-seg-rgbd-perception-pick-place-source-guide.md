@@ -748,19 +748,19 @@ ros2 run so101_demo_py so101_mujoco_perception_pick_place \
 
 `perception_runtime:=auto` 在 macOS 选择宿主机并把 `auto` 设备收敛为 `mps`，在 Linux 选择 Docker 并把容器设备收敛为 `cuda`。调试时可以显式指定 `perception_runtime:=host`；`perception_runtime:=docker` 只接受 Linux，且拒绝 `mps` 和 `cpu`。如果使用自定义镜像，通过 `perception_container_image:=<image>` 传入。
 
-Linux 上频繁修改容器内推理 Python 代码时，可以显式启用开发模式：
+Linux 的 `docker` runtime 现在就是挂载源码模式（迁移 M6，2026-10-23）：镜像只含依赖（ROS、torch、ultralytics、字体），`so101_demo` 源码由 launch 只读挂载到容器的 `/workspace/so101-source/so101_demo`，`PYTHONPATH` 指向它，入口是 `python -m so101_demo.cli.rgbd_object_pose`。默认源码就是正在运行这次 launch 的 `so101_demo` 包，即当前 mount tree 的 install；改用别的源码时显式写：
 
 ```bash
 ros2 run so101_demo_py so101_mujoco_perception_pick_place \
   ... \
-  perception_runtime:=docker_dev \
+  perception_runtime:=docker \
   perception_source_root:="$(pwd)/src/so101_demo_py/src" \
   perception_device:=cuda
 ```
 
-`perception_source_root` 必须指向绝对、非符号链接的物理源码目录，也就是包含 `__init__.py` 和 `runtime/` 的 `src/so101_demo_py/src`。launch 会把它只读挂载到容器的 `/workspace/so101-source/so101_demo`，并用 `PYTHONPATH` 覆盖镜像内已安装的同名包。默认的 `auto` 和 `docker` 不挂载源码，发布运行仍使用镜像中的不可变代码。
+`perception_source_root` 必须是绝对、非符号链接的物理源码目录，即包含 `__init__.py` 和 `runtime/` 的目录；只允许与 `docker` 一起使用。`docker_dev` 已退役（传入会报错）。
 
-这个开发挂载只覆盖 Python 包源码。修改依赖锁、`setup.py`、入口点、配置、资源或 Dockerfile 后仍要重建镜像；修改宿主机 launch composition 后，也要重新构建并 source 对应的 ROS 2 overlay。macOS 不支持 `docker_dev`，因为 Docker Desktop 容器不能使用 MPS，macOS 仍走宿主机 `mps` 分支。
+只有依赖锁、Dockerfile 变化才需要重建镜像；改源码只需要新的 mount tree。macOS 不支持 `docker`，因为 Docker Desktop 容器不能使用 MPS，macOS 仍走宿主机 `mps` 分支。
 
 无头运行仍要显式 `sensor_rendering:=true`，否则 Viewer 虽然不显示，相机也可能停止产生 RGB-D。感知组合栈把 MuJoCo 仿真速度固定为实时 `1.0`，防止无头快速仿真让合法 source stamp 在墙钟下变成陈旧 Pose。
 
