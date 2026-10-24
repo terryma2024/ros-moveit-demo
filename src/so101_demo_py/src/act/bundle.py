@@ -890,6 +890,30 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     return {**document, "manifest_path": str(manifest_path), "export_sha256": digest}
 
 
+def _manifest_episodes(records):
+    """The per-episode entries of the export manifest. An episode that ran under a schema 6 Teacher policy also carries the diversity
+    values it was applied (R3-a); every other episode has the entry it always had."""
+    return [{"scene_id": record["scene_id"], "split": record["split"], "content_sha256": record["content_sha256"],
+             "frames": {destination: digest for destination, (_, digest) in sorted(record["frames"].items())},
+             **({"teacher_diversity": record["teacher_diversity"]} if record.get("teacher_diversity") is not None else {})}
+            for record in records]
+
+
+def episode_diversity_record(root, scene_id):
+    """The diversity values applied to a sealed episode (R3-a): `teacher_diversity` of its audit identity (`audit/episode.json`, the file the
+    data QC verified), or None for an episode without them. Values that name another scene are refused."""
+    try:
+        document = json.loads((Path(root) / "audit" / "episode.json").read_bytes())
+    except (OSError, ValueError):
+        return None
+    values = document.get("teacher_diversity") if isinstance(document, dict) else None
+    if values is None:
+        return None
+    if document.get("scene_id") != scene_id or not isinstance(values, dict) or values.get("scene_id") != scene_id:
+        raise ValueError("EXPORT_EPISODE_DIVERSITY_UNBOUND")
+    return values
+
+
 def _export_records(episodes, seen, frame_jobs, trust_qc_memo=False):
     """The export records of every episode, in order; the frame checks of each go to ``frame_jobs`` for `_check_frames`."""
     records = []
@@ -933,7 +957,7 @@ def _export_records(episodes, seen, frame_jobs, trust_qc_memo=False):
         payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE
         records.append({"scene_id": scene_id, "split": split,
                         "content_sha256": hashlib.sha256(payload).hexdigest(),
-                        "payload": payload, "root": root,
+                        "payload": payload, "root": root, "teacher_diversity": episode_diversity_record(root, scene_id),
                         "frames": {destination: (name, digest) for name, destination, digest in plan}})
     return records
 
@@ -1051,9 +1075,7 @@ def _write_export(target, records, source_manifest_sha256, campaign_index_sha256
     else:
         for record in records:
             _write_episode(target, episodes_dir, record, fsync_each)
-    manifest_episodes = [{"scene_id": record["scene_id"], "split": record["split"], "content_sha256": record["content_sha256"],
-                          "frames": {destination: digest for destination, (_, digest) in sorted(record["frames"].items())}}
-                         for record in records]
+    manifest_episodes = _manifest_episodes(records)
     document = {"schema_version": 1, "kind": "act_dataset_export", "scene_count": len(records),
                 "source_manifest_sha256": source_manifest_sha256,
                 "campaign_index_sha256": campaign_index_sha256, "episodes": manifest_episodes}
