@@ -1,6 +1,6 @@
 # SO-101: migrate every image-baked flow to the mount-tree model — design
 
-Status: decisions confirmed by the human (2026-10-23). Implemented on antzb branch `antzb/mount-migration` (P1, P2, P3 native collection, P5 docs); the P3 broker (M5), M6 is implemented (commit "M6"); the P4 host cleanup and the broker wait for rulings. Gate evidence of each phase is in `progress-item34.md` of the antzb work root.
+Status: decisions confirmed by the human (2026-10-23). Implemented on antzb branch `antzb/mount-migration` (P1, P2, P3 native collection, P5 docs); M6 is implemented; the P3 broker (M5) and the P4 host cleanup wait for rulings. Gate evidence of each phase is in `progress-item34.md` of the antzb work root.
 
 Human decisions (2026-10-23), all on the recommended option:
 - **M1:** mount only.
