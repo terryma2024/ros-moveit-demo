@@ -1,6 +1,6 @@
 """The ACT camera rig profile: camera names, topics, frame-file keys, head/neck presence and the state layout as data.
 
-A profile is a closed YAML document (`config/act/rig-v1.yaml`, `config/act/rig-v2.yaml`). Every component that used to
+A profile is a closed YAML document (`config/act/rig-v1.yaml`, `config/act/rig-v2.yaml`, `config/act/rig-v3.yaml`). Every component that used to
 hard-code a `head`/`wrist` pair, a neck or an 8-wide state reads it instead.
 
 Where the active profile comes from:
@@ -9,10 +9,15 @@ Where the active profile comes from:
 * training, export and rollout: the bundle's `normalization.observation` (`cameras`, `state_dim`; `rig_from_observation`);
 * a caller that has neither (a unit test, a tool pointed at old data) passes `HEAD_WRIST_RIG` explicitly.
 
-Two rigs are known. `rig-v1.yaml` and `rig-v2.yaml` are the confirmed design's names for them (rig v1: head and wrist cameras with
-the neck, the sealed EXP-620/622 data; rig v2: side and wrist cameras, no head, no neck). In code and in manifests they are
-`HEAD_WRIST_RIG` (`rig: head-wrist`) and `SIDE_WRIST_RIG` (`rig: side-wrist`); the constants are the content of the YAML files
-(a test pins that).
+Three rigs are known. `rig-v1.yaml`, `rig-v2.yaml` and `rig-v3.yaml` are the confirmed designs' names for them (rig v1: head and
+wrist cameras with the neck, the sealed EXP-620/622 data; rig v2: side and wrist cameras, no head, no neck; rig v3: the rig v2
+cameras, state and robot in the bright indoor scene of the 2026-10-24 design). In code and in manifests they are `HEAD_WRIST_RIG`
+(`rig: head-wrist`), `SIDE_WRIST_RIG` (`rig: side-wrist`) and `SIDE_WRIST_INDOOR_RIG` (`rig: side-wrist-indoor`); the constants are
+the content of the YAML files (a test pins that). `side-wrist-indoor` has the cameras and the state of `side-wrist` and differs only
+in its name (and, in `rig_files.py`, in its scene file), so the lookups that go by cameras alone (`rig_from_observation`,
+`rig_from_frame_keys`, the training config) resolve to `side-wrist`: they are the same observation, and a policy trained on either
+scene is the same policy contract. Only the name (`rig_from_profile_sha256`, `known_rig`, the frozen `rig_profile` binding) says which
+scene a record belongs to.
 
 `HEAD_WRIST_RIG` (= `DEFAULT_RIG`) is the default ONLY where an already sealed artifact carries no profile (a frozen manifest
 without the `rig_profile` key and so its audits and episodes, a campaign config without `rig_profile_sha256`, a bundle without an
@@ -211,7 +216,11 @@ SIDE_WRIST_RIG = validate_rig_profile({
     "has_head": False, "has_neck": False,
     "state": {"arm_joints": list(ARM_JOINTS), "neck_features": [], "state_dim": 6}})
 
-KNOWN_RIGS = {profile.rig: profile for profile in (HEAD_WRIST_RIG, SIDE_WRIST_RIG)}
+#: rig v3: the side+wrist rig in the indoor scene (same cameras, topics and state; only the name differs, and the scene in `rig_files.py`)
+SIDE_WRIST_INDOOR_RIG = validate_rig_profile({**SIDE_WRIST_RIG.document, "rig": "side-wrist-indoor"})
+
+#: the order matters for the camera-only lookups below: the first rig with the cameras wins, so `side-wrist` precedes its indoor twin
+KNOWN_RIGS = {profile.rig: profile for profile in (HEAD_WRIST_RIG, SIDE_WRIST_RIG, SIDE_WRIST_INDOOR_RIG)}
 #: The profile of every artifact sealed before profiles existed.
 DEFAULT_RIG = HEAD_WRIST_RIG
 

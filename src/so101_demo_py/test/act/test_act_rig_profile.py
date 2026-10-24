@@ -16,17 +16,19 @@ import yaml
 
 from paths import PACKAGE_ROOT
 from so101_demo.act.rig_profile import (
-    DEFAULT_RIG, HEAD_WRIST_RIG, SIDE_WRIST_RIG, dump_rig_profile, known_rig, load_rig_profile, load_rig_profile_bytes, rig_from_frame_keys,
+    DEFAULT_RIG, HEAD_WRIST_RIG, SIDE_WRIST_INDOOR_RIG, SIDE_WRIST_RIG, dump_rig_profile, known_rig, load_rig_profile, load_rig_profile_bytes, rig_from_frame_keys,
     rig_from_frozen, rig_from_observation, stack_state, validate_rig_profile)
 
 CONFIG = PACKAGE_ROOT / "config/act"
-RIGS = [pytest.param(HEAD_WRIST_RIG, id="head-wrist"), pytest.param(SIDE_WRIST_RIG, id="side-wrist")]
+RIGS = [pytest.param(HEAD_WRIST_RIG, id="head-wrist"), pytest.param(SIDE_WRIST_RIG, id="side-wrist"),
+        pytest.param(SIDE_WRIST_INDOOR_RIG, id="side-wrist-indoor")]
 
 
 # ---- the profile documents -----------------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("file, name, constant", [("rig-v1.yaml", "head-wrist", HEAD_WRIST_RIG),
-                                                  ("rig-v2.yaml", "side-wrist", SIDE_WRIST_RIG)])
+                                                  ("rig-v2.yaml", "side-wrist", SIDE_WRIST_RIG),
+                                                  ("rig-v3.yaml", "side-wrist-indoor", SIDE_WRIST_INDOOR_RIG)])
 def test_the_yaml_files_are_the_constants_the_code_defaults_to(file, name, constant):
     loaded = load_rig_profile(CONFIG / file)
     assert loaded.document == constant.document and loaded.profile_sha256 == constant.profile_sha256

@@ -5,6 +5,10 @@ proves that the physics fingerprint of the variant equals the nominal one. The r
 fingerprint into its identity. Each shard (`prepare_shard_scene`) realizes the same file into its OWN directory, proves the same two
 facts again, compares the realized hash with the Host's, and hands the stack that file as its `mujoco_scene`. The contact-activation
 receipt stays on the nominal installed files: nothing in this module touches it.
+
+A variant over the indoor nominal (`"base": "indoor"`) is compared with the indoor nominal scene under the version 2 physics fingerprint
+(`physics_fingerprint.py`, which strips the visual-only room); the record then says `fingerprint_version: 2`. A variant without a base
+is compared under version 1, and its record has no such key, exactly as before the indoor scene existed.
 """
 
 from __future__ import annotations
@@ -14,9 +18,9 @@ import json
 import tempfile
 from pathlib import Path
 
-from .physics_fingerprint import physics_fingerprint_of_file
+from .physics_fingerprint import physics_fingerprint_of_file, physics_fingerprint_v2_of_file
 from .scene_variant import (
-    KIND, NOMINAL_SCENE, SCHEMA_VERSION, SceneVariantRefused, normalize_variant, realize)
+    BASE_INDOOR, INDOOR_SCENE, KIND, NOMINAL_SCENE, SCHEMA_VERSION, SceneVariantRefused, normalize_variant, realize)
 
 SCENE_DIRECTORY = "scene-variant"
 SCENE_FILE = "scene_variant.xml"
@@ -61,28 +65,40 @@ def read_variant_file(path) -> dict:
 
 
 def _document(variant: dict) -> dict:
-    return {"schema_version": SCHEMA_VERSION, "kind": KIND, "name": variant["name"], "set": variant["set"]}
+    document = {"schema_version": SCHEMA_VERSION, "kind": KIND, "name": variant["name"], "set": variant["set"]}
+    if "base" in variant:
+        document["base"] = variant["base"]
+    return document
 
 
 def realize_into(directory, share, variant: dict) -> dict:
     """Realize `variant` into `directory` (created if absent), check the physics, and return the full record.
 
-    The scene file stays only when the variant's physics fingerprint equals the nominal one; otherwise nothing is left behind."""
+    The scene file stays only when the variant's physics fingerprint equals the nominal one (version 1 for a side+wrist variant, version 2
+    for an indoor one); otherwise nothing is left behind."""
     realized = realize(nominal_dir(share), _document(variant))
     target = Path(directory)
     target.mkdir(parents=True, exist_ok=True)
     scene = target / SCENE_FILE
     scene.write_text(realized.xml_text, encoding="utf-8")
+    indoor = variant.get("base") == BASE_INDOOR
     try:
-        nominal = physics_fingerprint_of_file(nominal_dir(share) / NOMINAL_SCENE)
-        variant_print = physics_fingerprint_of_file(scene)
+        if indoor:
+            nominal = physics_fingerprint_v2_of_file(nominal_dir(share) / INDOOR_SCENE)
+            variant_print = physics_fingerprint_v2_of_file(scene)
+        else:
+            nominal = physics_fingerprint_of_file(nominal_dir(share) / NOMINAL_SCENE)
+            variant_print = physics_fingerprint_of_file(scene)
         if variant_print != nominal:
             raise SceneVariantRefused("SCENE_VARIANT_PHYSICS_MISMATCH: the variant changes the physics of the scene")
     except BaseException:
         scene.unlink(missing_ok=True)
         raise
-    return {**realized.document(), "scene_path": str(scene), "physics_fingerprint": variant_print,
-            "nominal_physics_fingerprint": nominal}
+    record = {**realized.document(), "scene_path": str(scene), "physics_fingerprint": variant_print,
+              "nominal_physics_fingerprint": nominal}
+    if indoor:
+        record["fingerprint_version"] = 2
+    return record
 
 
 def identity_entry(record: dict) -> dict:
