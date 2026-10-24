@@ -26,6 +26,14 @@ from so101_demo.act.teacher_event_stream import StreamIdentity, TeacherEventStre
 from test_act_scene_association import association, frozen_scene  # noqa: F401  (pytest fixture)
 from test_act_scene_attachment_association import _restamp_clocks, alignment_geometry_attached_scene
 
+# Warm the lazy imports of `Teacher.setup`/`attach`/`call` at collection. `ctx.stamp()` starts a 100 ms wall-clock join (the source must
+# precede the Teacher's request by at most 100 ms), and the first use of these ROS message and planning-scene modules in a pytest-xdist
+# worker costs more than that when the host is loaded (a gate runs this suite next to the colcon tests), so the join failed with
+# RECORDER_SOURCE_ALIGNMENT_UNAVAILABLE for whichever worker happened to run this test first.
+from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene  # noqa: E402,F401
+from so101_demo.control.planning_scene.task_scene import (  # noqa: E402,F401
+    make_plain_attach_scene, make_task_scene, record_scene_service_call)
+
 IDENTITY = {"session_id": "alignment-session", "reset_epoch": 1}
 STREAM_IDENTITY = StreamIdentity("alignment-session", 1, "alignment-attempt")
 
