@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3783
+latest_checkpoint: CP-3784
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a on branch r3a-teacher-diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3784 — Indoor YOLO fine-tune: synthetic dataset generator and a report-only fine-tune of the Teacher weights on the hard negative red landing ring (goal 11, item 1; weights NOT deployed)
+
+- **Generator** (`act/indoor_yolo_dataset.py` plan, `act/indoor_yolo_render.py` renderer, `cli/generate_indoor_yolo_dataset.py`): `task_camera` frames of the indoor nominal plus draws from the indoor whitelist (layouts A, B, C; wall, floor and table texture and tint; lights; cup colour; prop visibility), cup positions across the Teacher cup region (boundary polygon B_1..B_8), fixed master seed, labels are sim-truth segmentation masks (body `plastic_cup`) in the YOLO-seg format. Split by asset identity: no texture, tint band or cup colour family is shared between train and val/test, layout C is test only. Hard-negative sets after the coordinator's diagnosis (the red landing ring, not the shadow): `ring`, `ringnear` (ring under or next to the cup, with and without cast shadows) and `negative` (cup hidden), all with the ring unlabelled. Dataset: 3680 frames, plan sha256 `02f31c65d147fbefc945844f4195e6b5ceada45259d4ff7e48670ec357e7cc07`. Fixture tests were written first (`test/act/test_indoor_yolo_*.py`, `test/cli/test_*indoor_yolo.py`); render tests skip without mujoco.
+- **Fine-tune** (`cli/finetune_indoor_yolo.py`): base = deployed Teacher weights `f281d252...`, AdamW lr0 5e-4, 40 epochs max, seed 0, on the RTX 5080 in the train image. New weights sha256 `f9cce63b17b1a3d2a32cd6d841c25a7482f1db87b8f96cd31bd4e03149dfcfee`, kept in the evidence root only.
+- **Result (old -> new).** Indoor nominal, 100 frames: detection 1.00 -> 1.00, TARGET_AMBIGUOUS 17 -> 0, IoU 0.953 -> 0.964. Old dark nominal, 100 frames: 1.00 -> 1.00, IoU 0.950 -> 0.964. Held-out appearance test (300): 1.000 -> 0.997 (one miss, a teal cup). No false positives on the cup-hidden sets. Coordinator `yolo_check` on the 12-point file: indoor 8/12 -> 12/12, old nominal 12/12 -> 12/12, xy median 0.774 -> 0.807 mm (indoor), 0.799 -> 0.806 mm (old). Acceptance (>=95% indoor, old nominal no regression, xy within 1 mm) is met on that file; the real 32-position list is still to be run.
+- Environment findings: libtriton and OSMesa each bundle LLVM, so `import torch, triton` must precede the first OSMesa renderer (otherwise a segfault at predict time); the train image has no C compiler (`TORCH_DISABLE_NATIVE_JIT=1`) and no network for ultralytics assets.
+- Evidence: `act-train-profile/20261019-nsys-3a7c/progress-goal11.md`, `goal11-work/`.
 
 ## CP-3783 — To-do 36: the rgb_sync reject counter splits deferred sets from true rejects (goal 11, item 2; behaviour unchanged)
 
