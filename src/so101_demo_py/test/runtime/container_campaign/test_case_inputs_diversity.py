@@ -4,6 +4,7 @@ Real here, as in test_case_inputs.py: `freeze_inputs` through `freeze_campaign_i
 derivation of (the frozen policy's campaign seed, scene id); reading the case inputs back re-derives and compares them. A schema 3, 4 or 5
 freeze writes no diversity record and its case inputs are what they were."""
 
+import gc
 import json
 from pathlib import Path
 
@@ -43,12 +44,14 @@ def freeze_world(tmp_path_factory, name, policy_file):
 
 @pytest.fixture(scope="module")
 def schema6(tmp_path_factory):
-    return freeze_world(tmp_path_factory, "case-diversity", SCHEMA6_FILE)
+    yield freeze_world(tmp_path_factory, "case-diversity", SCHEMA6_FILE)
+    gc.collect()        # the freezes leave a large heap behind; a full collection later inside a 100 ms timing window of another test is a flake
 
 
 @pytest.fixture(scope="module")
 def schema3(tmp_path_factory):
-    return freeze_world(tmp_path_factory, "case-plain", CONFIG / "teacher_execution_policy.yaml")
+    yield freeze_world(tmp_path_factory, "case-plain", CONFIG / "teacher_execution_policy.yaml")
+    gc.collect()
 
 
 def record_path(world, scene):
