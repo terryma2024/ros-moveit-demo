@@ -23,7 +23,6 @@ REMOVED_PATHS = (
     REPOSITORY / "scripts/parallel-perception-container.sh",
     REPOSITORY / "scripts/run_so101_adaptive_batch.zsh",
     REPOSITORY / "scripts/run_so101_adaptive_worker_scaling.zsh",
-    REPOSITORY / "scripts/so101-teleop-service.py",
     TELEOP / "so101_teleop/expert_validation",
     TELEOP / "so101_teleop/expert_validation_openapi.json",
     TELEOP / "scripts/so101_expert_validation_server.py",
@@ -41,7 +40,7 @@ REMOVED_NAMES = (
     "so101_teleop." + "expert_validation", "so101_teleop.expert_" + "validation", "expert-validation-" + "app",
     "mujoco_batch." + "request", "mujoco_batch." + "provenance", "mujoco_batch." + "composition", "mujoco_batch." + "worker_process",
     "mujoco_batch." + "rpc_proxies", "mujoco_batch." + "servers", "mujoco_batch." + "outcome", "parallel_batch." + "adaptive_runner",
-    "parallel_batch." + "resources import", "resource_allocation." + "allocator", "so101-teleop-" + "service.py",
+    "parallel_batch." + "resources import", "resource_allocation." + "allocator",
 )
 
 SUFFIXES = {".py", ".zsh", ".sh", ".ts", ".tsx", ".json", ".txt", ".cmake", ".yaml", ".yml", ".xml", ".toml", ".cfg"}

@@ -8,7 +8,7 @@
 
 统一入口是 `so101_unified_web_server.py`，默认监听 `127.0.0.1:8000`。旧的两个脚本 `so101_teleop_server.py` 和 `so101_expert_validation_server.py` 现在只打印弃用提示并转发到同一个入口，它们不再各自打开端口。所以不会出现两个 Web listener 抢同一个页面的事情。
 
-启动方式：
+启动方式（`scripts/so101-teleop-linux.sh` / `scripts/so101-teleop-macos.zsh` 是只启动这个服务的精简启动器，见 `.agents/skills/so101-dev/references/unified-teleop-service.md`）：
 
 ```
 python3 <install_prefix>/so101_teleop/lib/so101_teleop/so101_unified_web_server.py
