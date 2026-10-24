@@ -284,15 +284,15 @@ def test_the_cup_position_enters_the_check(checker):
     assert accepted is False and "cup_collision" in reason
 
 
-#: derived once from the recipe `so101-teacher-diversity-v1` (sha256 of "recipe|seed|scene|axis|index|draw", first 8 bytes / 2^64) and pinned
+#: derived once from the recipe `teacher-diversity-recipe` (sha256 of "recipe|seed|scene|axis|index|draw", first 8 bytes / 2^64) and pinned
 GOLDEN_ACT_0001 = {
     "schema": 1, "scene_id": "act-0001", "campaign_seed": 20261024,
     "start_pose": {"draw_index": 0, "joints": ["1", "2", "3", "4", "5"],
-                   "offsets_rad": [0.1254207088368319, -0.019722030860760954, 0.1470936144669786, 0.10952324618889642,
-                                   -0.12332865620907094]},
-    "pregrasp_height_offset_m": 0.012363921029548615,
-    "place_approach_height_offset_m": 0.005297577684898027,
-    "carry_via_offset_m": [-0.013135852765072618, 0.019323227120371173, -0.019649629566175938],
-    "speed_scale": 1.2144501484832424,
-    "ompl": {"num_planning_attempts": 3, "seed": 569365291, "seed_applied": False},
+                   "offsets_rad": [0.10434948375284224, 0.0025184181089542347, 0.005092085326115159, -0.11619381066260862,
+                                   -0.02433788321297124]},
+    "pregrasp_height_offset_m": -0.006276165724012548,
+    "place_approach_height_offset_m": -0.0028139076573739158,
+    "carry_via_offset_m": [-0.027416624694475412, -0.01926847853537975, 0.015787550513664848],
+    "speed_scale": 1.1224881797308135,
+    "ompl": {"num_planning_attempts": 3, "seed": 1501262828, "seed_applied": False},
 }

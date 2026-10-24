@@ -20,7 +20,7 @@ from pathlib import Path
 
 CODE = "TEACHER_DIVERSITY_INVALID"
 VALUES_SCHEMA = 1
-RECIPE = "so101-teacher-diversity-v1"
+RECIPE = "teacher-diversity-recipe"
 #: the arm joints the start pose varies (the gripper, and the neck of a neck rig, stay at their reset value)
 START_JOINTS = ("1", "2", "3", "4", "5")
 BLOCK_FIELDS = frozenset({"campaign_seed", "start_pose", "pregrasp_height", "place_approach_height", "carry_via", "speed_scale", "ompl"})
