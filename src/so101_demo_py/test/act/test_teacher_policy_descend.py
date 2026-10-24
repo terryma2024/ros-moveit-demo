@@ -63,10 +63,10 @@ def test_schema_5_requires_every_new_key_and_older_schemas_refuse_them(document4
         load_document({**yaml.safe_load(TEACHER_POLICY_PATH.read_bytes()), key: document5[key]})   # and so is schema 3
 
 
-def test_schema_5_is_closed_and_schema_6_is_unknown(document5):
+def test_schema_5_is_closed_and_an_unknown_schema_is_refused(document5):
     with pytest.raises(ValueError, match=INVALID):
         load_document({**document5, "invented": 1})
-    for version in (6, True, "5", 5.0):
+    for version in (7, True, "5", 5.0):
         with pytest.raises(ValueError, match=INVALID):
             load_document({**document5, "schema_version": version})
 

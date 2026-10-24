@@ -225,6 +225,8 @@ class ResolvedMotionTargets:
     input_pose: CupPoseSample
     template: DynamicPickTemplate
     targets: Mapping[State, PoseEvidence]
+    #: R3-a: the carry via-point between the lift and above-place targets (a waypoint of MOVE_ABOVE_PLACE, not a state), or None
+    carry_via: PoseEvidence | None = None
 
     def __post_init__(self) -> None:
         if set(self.targets) != DYNAMIC_MOTION_STATES:
@@ -254,8 +256,24 @@ def _check_workspace(value: Pose7, bounds: tuple[float, ...]) -> None:
         raise DynamicPickError("CUP_POSE_OUT_OF_WORKSPACE: resolved TCP target is outside bounds")
 
 
+def _carry_via(lift: Pose7, above_place: Pose7, offset_m, bounds: tuple[float, ...]) -> PoseEvidence:
+    """The via-point: the midpoint of the lift and above-place poses (orientation interpolated) shifted by ``offset_m``."""
+
+    if (not isinstance(offset_m, (tuple, list)) or len(offset_m) != 3
+            or any(isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item) for item in offset_m)):
+        raise DynamicPickError("DYNAMIC_PICK_INVALID: carry via offset must be three finite numbers")
+    low, high = lift.values, above_place.values
+    if sum(a * b for a, b in zip(low[3:], high[3:], strict=True)) < 0.0:
+        high = (*high[:3], *(-component for component in high[3:]))
+    position = tuple((a + b) / 2.0 + float(o) for a, b, o in zip(low[:3], high[:3], offset_m, strict=True))
+    quaternion = tuple((a + b) / 2.0 for a, b in zip(low[3:], high[3:], strict=True))
+    via = normalized_pose(Pose7((*position, *quaternion)))
+    _check_workspace(via, bounds)
+    return _evidence(via)
+
+
 def resolve_motion_targets(
-    sample: CupPoseSample, template: DynamicPickTemplate
+    sample: CupPoseSample, template: DynamicPickTemplate, *, carry_via_offset_m=None
 ) -> ResolvedMotionTargets:
     grasp = compose_pose(sample.pose_world, template.cup_to_tcp_grasp)
     pregrasp = _offset_world_z(grasp, template.pregrasp_world_z_clearance_m)
@@ -279,4 +297,5 @@ def resolve_motion_targets(
         State.RECOVER_DESCEND_TO_PICK: _evidence(grasp),
         State.RECOVER_RETREAT: _evidence(retreat),
     }
-    return ResolvedMotionTargets(sample, template, targets)
+    via = None if carry_via_offset_m is None else _carry_via(lift, above_place, carry_via_offset_m, template.workspace_bounds_m)
+    return ResolvedMotionTargets(sample, template, targets, via)

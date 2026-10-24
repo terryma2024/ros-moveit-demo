@@ -69,10 +69,17 @@ OPEN_DURATION_FIELD = "open_gripper_duration_s"
 DESCEND_FIELDS = frozenset((*DESCEND_SCALING_FIELDS, DESCEND_DISTANCE_FIELD, OPEN_DURATION_FIELD))
 #: the open range (low, high] of the final distance (m)
 DESCEND_FINAL_DISTANCE_RANGE_M = (0.005, 0.05)
+#: Schema 6 (R3-a, human approval 2026-10-24) is schema 5 plus one closed `diversity` block: the distributions of the per-episode
+#: parameters and the campaign seed (`act/teacher_diversity.py`). The block is frozen with the policy and part of its hash; the actual
+#: values of an episode derive from (campaign seed, scene id). Schema 3, 4 and 5 documents are closed without the key and load and hash
+#: exactly as before.
+EXECUTION_SCHEMA_DIVERSITY = 6
+DIVERSITY_FIELD = "diversity"
 TEACHER_EXECUTION_FIELDS_BY_SCHEMA = {
     EXECUTION_SCHEMA: TEACHER_EXECUTION_FIELDS,
     EXECUTION_SCHEMA_SPEED: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS,
     EXECUTION_SCHEMA_DESCEND: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS | DESCEND_FIELDS,
+    EXECUTION_SCHEMA_DIVERSITY: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS | DESCEND_FIELDS | frozenset({DIVERSITY_FIELD}),
 }
 QUATERNION_NORM_TOLERANCE = 1e-6
 WORLD_FRAME = "world"
@@ -139,7 +146,7 @@ def load_teacher_endpoint_policy(source) -> dict:
 
 
 def load_teacher_execution_policy(source) -> dict:
-    """Load and validate the Teacher execution policy (schema 3: tilt-compensated place height; schema 4: plus the speed keys; schema 5: plus the DESCEND stage and OPEN_GRIPPER keys)
+    """Load and validate the Teacher execution policy (schema 3: tilt-compensated place height; schema 4: plus the speed keys; schema 5: plus the DESCEND stage and OPEN_GRIPPER keys; schema 6: plus the closed diversity block)
     from YAML bytes or a path, with its sha256. An unknown schema, an unknown place height mode, a missing or extra field is
     refused (``TEACHER_EXECUTION_POLICY_INVALID``)."""
 
@@ -191,6 +198,13 @@ def load_teacher_execution_policy(source) -> dict:
                 or not low < distance <= high):
             raise ValueError(f"{code}: {DESCEND_DISTANCE_FIELD} is not a finite distance above {low} m through {high} m")
         policy[DESCEND_DISTANCE_FIELD] = float(distance)
+    if version >= EXECUTION_SCHEMA_DIVERSITY:
+        from .teacher_diversity import parse_diversity
+
+        try:
+            policy[DIVERSITY_FIELD] = parse_diversity(document[DIVERSITY_FIELD])
+        except ValueError as error:
+            raise ValueError(f"{code}: {error}") from error
     from ..core.place_height import MODE, PlaceHeightPolicy
 
     if document["place_height_mode"] != MODE:
