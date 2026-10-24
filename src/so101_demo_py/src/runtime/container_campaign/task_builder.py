@@ -22,6 +22,7 @@ from so101_demo.act.frozen_runtime_inputs import load_teacher_frozen_inputs,load
 from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 from so101_demo.act.parallel_collection_contracts import read_document,scene_ids
 from so101_demo.act.rig_profile import DEFAULT_RIG,rig_from_frozen
+from so101_demo.act.teacher_diversity import frozen_scene_identity
 from so101_demo.cli.mujoco_batch.common import _lease_wire
 from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.parallel_batch.act_attempt import ActPerceptionDecision
@@ -76,6 +77,8 @@ class TaskInput:
     shard_spec: dict
     #: the camera rig of the collection: the profile the frozen inputs bind
     rig: object = DEFAULT_RIG
+    #: the scene and compiled-model hashes the frozen inputs bind; the R3-a start pose check must run on exactly that model
+    frozen_scene: object = None
 
 
 def _finite(value):
@@ -156,8 +159,12 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     if (type(position) is not list or len(position)!=3 or any(not _finite(value) for value in position)):
         raise ValueError('COLLECTION_TASK_SCENE_INVALID')
     refs={name:document[name] for name in ('scope','inputs_manifest')}
-    frozen,_,_=load_teacher_frozen_inputs(validate_file_ref(refs['inputs_manifest']))
+    frozen,snapshot,_=load_teacher_frozen_inputs(validate_file_ref(refs['inputs_manifest']))
     rig=rig_from_frozen(frozen)
+    # R3-a: a schema 6 Teacher policy draws start poses checked in the frozen scene; without the frozen scene's hashes the task is refused
+    scene_identity=frozen_scene_identity(frozen,snapshot)
+    if scene_identity is None and frozen['teacher_execution_policy']['values'].get('diversity') is not None:
+        raise ValueError('COLLECTION_CASE_FROZEN_SCENE_UNAVAILABLE')
     if rig.profile_sha256!=campaign.get('rig_profile_sha256',DEFAULT_RIG.profile_sha256):
         raise ValueError('COLLECTION_CASE_RIG_MISMATCH')
     if (frozen['mode'] not in COLLECTION_MODES
@@ -184,7 +191,7 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     return TaskInput(task_id=task.task_id,root=root,scene_id=document['scene_id'],row=row,refs=refs,
         config=config,campaign=campaign,teacher_policy=dict(frozen['teacher_execution_policy']['values']),
         recorder_policy=recorder,teacher=document['teacher'],
-        shard_spec=shard_spec,rig=rig)
+        shard_spec=shard_spec,rig=rig,frozen_scene=scene_identity)
 
 
 def local_lease(shard_spec,scene_id,*,issued,deadline):
@@ -730,6 +737,8 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
         broker_generation=resources.generation,dependencies=dict(act_profile=True,rig=loaded.rig,
             workspace_provider=artifacts.workspace,authorize=local_authorize(state),
             teacher_execution_policy=loaded.teacher_policy,
+            **({} if loaded.frozen_scene is None or loaded.teacher_policy.get('diversity') is None
+               else dict(start_pose_frozen_scene=loaded.frozen_scene)),
             **({} if evidence else dict(retained_evidence=reader)),
             ready_probe=lambda requirements:_stack_ready(ports,ready_check))|dict(dependencies or {}))
     settings=loaded.campaign['teacher_service']

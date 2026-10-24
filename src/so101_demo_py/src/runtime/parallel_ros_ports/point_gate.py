@@ -31,9 +31,102 @@ from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotR
 
 RESET_EVIDENCE_WAIT_S = 3.0
 RESET_EVIDENCE_RETRY_S = 0.05
+#: the start pose collision checks (R3-a) by (scene file, rig): the MuJoCo model is loaded once per process
+_START_POSE_CHECKERS: dict = {}
 
 
 class PointGate:
+    def _start_pose_checker(self, rig):
+        """The collision check of a reset pose on the rig's scene: the `start_pose_check` dependency, else the model of the installed share
+        directory (or `start_pose_model_root`), loaded once per process."""
+
+        factory = self.dependencies.get("start_pose_check")
+        if factory is not None:
+            return factory(rig)
+        from so101_demo.act.joints import act_joints_for
+        from so101_demo.act.rig_files import rig_model_files
+        from so101_demo.act.teacher_diversity import StartPoseCollisionCheck
+
+        root = self.dependencies.get("start_pose_model_root")
+        if root is None:
+            from ament_index_python.packages import get_package_share_directory
+
+            root = get_package_share_directory("so101_demo_py")
+        scene = Path(root) / rig_model_files(rig).scene
+        key = (str(scene), rig.rig)
+        if key not in _START_POSE_CHECKERS:
+            _START_POSE_CHECKERS[key] = StartPoseCollisionCheck.from_path(scene, cup_body="plastic_cup", joint_names=act_joints_for(rig))
+        return _START_POSE_CHECKERS[key]
+
+    def _draw_start_pose(self, lease, point):
+        """R3-a: the reset joint vector of this episode, or None when the Teacher policy has no diversity block.
+
+        The first draw of (campaign seed, scene id = point id) that keeps the simulator joint limits and passes the MuJoCo collision check
+        of the reset pose on this episode's cup position; at most max_redraws + 1 draws, then the episode fails before any reset. The
+        selection (draw index, rejected draws and their reasons) is written beside the task's other evidence, and the initial gate
+        expects the drawn pose."""
+
+        policy = self.dependencies.get("teacher_execution_policy")
+        if not isinstance(policy, dict) or policy.get("diversity") is None:
+            return None
+        if self.dependencies.get("act_profile") is not True:
+            raise RuntimeError("TEACHER_DIVERSITY_REQUIRES_ACT_PROFILE")
+        from so101_demo.act import teacher_diversity as td
+        from so101_demo.act.joints import act_joints_for
+
+        rig = self.dependencies.get("rig") or DEFAULT_RIG
+        joints = act_joints_for(rig)
+        td.values_for_policy(policy, lease.point_id)            # the derived values are range-checked before anything moves
+        cup = tuple(float(item) for item in point["cup_position_world_m"])
+        checker = self._start_pose_checker(rig)
+        # the model the check runs on must be the frozen scene: a different model would make "no collision" a claim about another world
+        identity = getattr(checker, "identity", None)
+        identity = identity() if callable(identity) else None
+        frozen_scene = self.dependencies.get("start_pose_frozen_scene")
+        if not isinstance(frozen_scene, dict) or not {"scene_sha256", "model_sha256"} <= set(frozen_scene):
+            # fail closed: the live path cannot claim "no collision" for a model it cannot tie to the frozen scene
+            raise RuntimeError("TEACHER_DIVERSITY_START_POSE_FROZEN_SCENE_REQUIRED")
+        if identity is None or any(identity.get(key) != frozen_scene[key] for key in ("scene_sha256", "model_sha256")):
+            raise RuntimeError("TEACHER_DIVERSITY_START_POSE_MODEL_MISMATCH")
+
+        def check(offsets):
+            vector = td.reset_joint_positions(offsets, joints)
+            if not td.joints_within_limits(vector[:6]):
+                return False, "JOINT_LIMIT: a drawn joint is within the margin of a simulator limit"
+            return checker.check(vector, cup)
+
+        selection = td.select_start_pose(policy["diversity"], lease.point_id, check)
+        vector = td.reset_joint_positions(selection["offsets_rad"], joints)
+        self._write_start_pose(lease, {
+            "schema_version": 1, "kind": "TEACHER_DIVERSITY_START_POSE_SELECTION", "attempt_id": lease.attempt_id,
+            "scene_id": lease.point_id, "policy_sha256": policy.get("policy_sha256"),
+            "campaign_seed": policy["diversity"]["campaign_seed"], "draw_index": selection["draw_index"],
+            "joints": list(joints), "joints_rad": list(vector), "cup_position_world_m": list(cup),
+            "rejected": selection["rejected"], "model": identity, "frozen_identity_verified": True})
+        self.__dict__.setdefault("_start_poses", {})[lease.attempt_id] = tuple(vector[:6])
+        return vector
+
+    def _write_start_pose(self, lease, document):
+        root = getattr(self.resources, "worker_root", None)
+        attempt = str(lease.attempt_id)
+        if root is None or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,100}", attempt) is None:
+            raise RuntimeError("TEACHER_DIVERSITY_RECORD_UNWRITABLE")
+        payload = json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        target = Path(root) / f"start-pose-{attempt}.json"
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            if target.read_bytes() != payload:        # a retry of the same attempt draws the same pose
+                raise RuntimeError("TEACHER_DIVERSITY_RECORD_EXISTS") from None
+            return
+        except OSError as error:
+            raise RuntimeError("TEACHER_DIVERSITY_RECORD_UNWRITABLE") from error
+        try:
+            os.write(descriptor, payload)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
     def reset_point(self, lease):
         self._reset_started.add(lease.attempt_id)   # from here a fault may have left motion state behind
         call = self.dependencies.get("reset_point")
@@ -50,6 +143,9 @@ class PointGate:
 
             call = execute_mujoco_reset
         if qualified:
+            start = self._draw_start_pose(lease, point)
+            if start is not None:
+                act_kwargs["start_joint_positions"] = start
             value, scene = call(
                 self.resources.session_id,
                 keyframe="task_start",
@@ -131,7 +227,10 @@ class PointGate:
                     all(
                         abs(actual - expected) <= 0.002
                         for actual, expected in zip(
-                            value.joint_positions, _RESET_JOINTS, strict=True
+                            # R3-a: the drawn start pose of this attempt; every other attempt resets to zero
+                            value.joint_positions,
+                            getattr(self, "_start_poses", {}).get(lease.attempt_id, _RESET_JOINTS),
+                            strict=True,
                         )
                     ),
                 ),

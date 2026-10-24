@@ -194,6 +194,7 @@ class TeacherRun:
             self._write()
             raise RuntimeError(str(invalid)) from invalid
         self._document["teacher_targets"] = {"start_target": start_target, "end_target": end_target}
+        self._check_episode_start_pose()
         snapshot = self._snapshot()
         self._document["teacher_start_observation"] = self._teacher_observation(snapshot)
         self._write()
@@ -208,6 +209,44 @@ class TeacherRun:
             "received_monotonic_ns": boundary.get("received_monotonic_ns", time.monotonic_ns())})
         self._stream_emit("teacher_start_observation", {"observation": copy.deepcopy(observation)})
         return snapshot
+
+    def _record_episode_diversity(self, values) -> None:
+        """R3-a: keep this episode's derived values (planning reads them) and put them, with their digest, on the Teacher document.
+
+        The values are a pure function of (campaign seed, scene id) and were range-checked when derived; the document is what the
+        episode identity and the case inputs are compared with."""
+
+        import hashlib
+        import json
+
+        self._episode_diversity = values
+        canonical = json.dumps(values, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        self._document["teacher_diversity"] = {"values": values, "values_sha256": hashlib.sha256(canonical.encode()).hexdigest()}
+        self._write()
+
+    def _check_episode_start_pose(self) -> None:
+        """R3-a, before any motion: the arm stands on one of the start poses this episode's seed draws.
+
+        The reset path applied the first draw that passed the joint-limit and collision checks; the Teacher cannot see which, so it matches
+        the measured joints back to a draw (within `START_MATCH_TOLERANCE_RAD`) and records the index. A start that matches none (the
+        reset was not given the pose, or the arm is somewhere else) fails closed as ``TEACHER_DIVERSITY_START_POSE_MISMATCH``."""
+
+        values = getattr(self, "_episode_diversity", None)
+        if values is None:
+            return
+        from so101_demo.act.teacher_diversity import start_pose_matches
+
+        measured = (*(float(item) for item in self._joint_state()), float(self._positions.get("6", 0.0)))
+        # exactly the draw the reset applied (carried in the values): another draw that happens to be close is not it
+        selected = values["start_pose"]["draw_index"]
+        draw = selected if start_pose_matches(self._execution_policy["diversity"], values["scene_id"], measured, selected) else None
+        record = self._document.setdefault("teacher_diversity", {})
+        record["start_pose_measured_rad"] = list(measured)
+        record["start_pose_draw_index"] = draw
+        if draw is None:
+            self._write()
+            raise RuntimeError("TEACHER_DIVERSITY_START_POSE_MISMATCH")
+        self._write()
 
     def _verified_reset_boundary(self):
         """The first retained `SimulationEvidence` of this session and the expected reset epoch, or None.

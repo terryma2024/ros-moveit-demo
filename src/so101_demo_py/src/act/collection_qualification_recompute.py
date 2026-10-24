@@ -158,6 +158,16 @@ def frozen_identity_problems(frozen, manifest_path, contract):
         return ['frozen_inputs']
     if frozen_rig != identity.get('rig_profile_sha256', DEFAULT_RIG.profile_sha256):
         problems.append('rig_profile_sha256')
+    # the Teacher execution policy (R3-a): a schema 6 freeze (a diversity block: distributions and campaign seed) must be pinned by the
+    # identity, so schema 5 and 6 runs and runs under different seeds never share one qualification or one merge; an older freeze is
+    # compared only when the identity names a policy
+    from .parallel_collection_contracts import TEACHER_POLICY_IDENTITY_KEY
+    policy = frozen.get('teacher_execution_policy')
+    if isinstance(policy, dict):
+        pinned = identity.get(TEACHER_POLICY_IDENTITY_KEY)
+        diversity = isinstance(policy.get('values'), dict) and policy['values'].get('diversity') is not None
+        if (diversity and pinned is None) or (pinned is not None and pinned != policy.get('policy_sha256')):
+            problems.append(TEACHER_POLICY_IDENTITY_KEY)
     return problems
 
 

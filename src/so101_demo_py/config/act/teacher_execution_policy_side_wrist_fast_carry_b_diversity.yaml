@@ -1,0 +1,86 @@
+# Schema 6 variant of `teacher_execution_policy_side_wrist_fast_carry_b.yaml` (R3-a parametrised Teacher, design
+# docs/superpowers/specs/2026-10-23-so101-domain-randomization-design-update.md, section "R3-a 参数化 Teacher").
+# GENERATED SOURCE: every value is the carry_b file's (schema 4: MOVE_ABOVE_OBJECT / RETREAT scaling 0.10, carry 0.08 / 0.03, six interpolated
+# DESCEND poses, 2.0 s gripper commands) except `schema_version: 6` and the closed `diversity` block at the end. Schema 6 is a base plus the
+# diversity block: the schema 5 DESCEND group and OPEN_GRIPPER duration are optional and absent here, so DESCEND is exactly schema 4's.
+# To regenerate after the carry_b file changes, copy it, set `schema_version: 6` and append the block; nothing else differs.
+# SO-101 Teacher execution policy: the minimal runtime gates (design
+# docs/superpowers/specs/2026-10-10-so101-teacher-minimal-runtime-gates-design.md, ledger CP-3502, CP-3504).
+# The Teacher's motion, the carry scaling, the tilt-compensated place height with its closed fallback, and the fields below.
+# What is not in the Teacher runtime: cup force/compression/collision/hazard stops, the release proofs, the grasp/settle waits,
+# the place refusals and the whole RECOVER_* chain. Their facts are recorded in `teacher_process_summary` and never stop,
+# refuse or branch the Teacher. The only aborts are input availability, execution failure, the operator and watchdog stops,
+# TEACHER_JOINT_STATE_UNAVAILABLE and SIM_INTEGRITY_*. The r10b limits and the contact calibration hash are unchanged: they
+# are only the thresholds of the telemetry flags.
+#
+# Schema 4 variant of `teacher_execution_policy.yaml` (plan docs/superpowers/specs/2026-10-20-so101-act-teacher-speed-and-recording-throughput-plan.md,
+# tiers 1 and 2). Every value is the schema 3 file's except the five speed keys below. Schema 4 also switches on the tier 1
+# sequencing (the telemetry safety inputs load while the physics is paused for the cup pose, and the pick-prefix IK horizon is
+# computed during PREPARE_OPEN_GRIPPER); the arm motion those two produce is unchanged.
+kind: ACT_TEACHER_EXECUTION_POLICY
+schema_version: 6
+# MoveIt scaling of the free-space approach (MOVE_ABOVE_OBJECT) and of RETREAT; the file for schema 3 uses the template's 0.03 / 0.03.
+# DESCEND, MICRO_LIFT and the carry (carry_max_* below) are not touched.
+move_above_object_velocity_scaling: 0.10
+move_above_object_acceleration_scaling: 0.10
+retreat_velocity_scaling: 0.10
+retreat_acceleration_scaling: 0.10
+# The PREPARE_OPEN_GRIPPER trajectory duration (s); CLOSE_GRIPPER and OPEN_GRIPPER keep their 2.0 s.
+prepare_open_gripper_duration_s: 1.0
+state_max_age_s: 0.5
+state_unavailable_stop_s: 1.0
+execution_deadline_s: 180.0
+# The CLOSE_GRIPPER target (joint 6, rad): the grasp_close_q6 baseline the contact calibration was fitted under. The general
+# runtime keeps its own -0.0485 and never reads this value.
+gripper_close_target_rad: -0.047608632840292
+# MoveIt scaling of the carry (LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE); the acceleration scaling is a quarter of the velocity's so
+# the base-yaw ramp does not run the cup compression away. Used only with frozen inputs.
+carry_max_velocity_scaling: 0.08
+carry_max_acceleration_scaling: 0.03
+# Place height (a strategy): target = z_touch(theta) + k + tracking offset - guard. Outside the calibrated tilt range, the k band
+# or the deviation bound, or when the measurement fails, the Teacher uses the fallback target (hover + place_reference_offset_m)
+# and records the closed reason; it never refuses.
+place_height_mode: tilt_compensated
+place_touchdown_guard_m: 0.0007
+place_tracking_offset_m: 0.000158
+place_tilt_min_rad: 0.05235987755982989
+place_tilt_max_rad: 0.0959931088596881
+place_grasp_offset_m: 0.037454
+place_grasp_offset_half_band_m: 0.0003
+place_target_max_deviation_m: 0.002
+# The constant place offset (-13.25 mm): the fallback target offset and the reference of the deviation bound.
+place_reference_offset_m: -0.01325
+place_geometry_scene_sha256: ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb
+# Fixed dwells that replace the grasp-stable and release-settle waits (the states and their order are unchanged).
+grasp_stable_dwell_s: 0.25
+release_settle_dwell_s: 0.5
+# Release sequence: bounded wait for the arm to stop before the detach (an execution precondition, not a safety proof).
+arm_stop_wait_s: 1.0
+arm_stop_velocity_rad_s: 0.002
+# Provenance recorded in the episode metadata: the pre-grasp cup pose is the broker's RGB-D localization, the verdict reads the
+# simulator truth (the Teacher observer's world evidence).
+cup_pose_source: broker_rgbd
+verdict_source: sim_truth
+# Schema 6 (R3-a). The distributions of the per-episode parameters and the campaign seed. Frozen with the policy and part of its hash. The actual
+# values of an episode derive from (campaign_seed, scene id), are recorded in the case inputs, the Teacher manifest and episode.json, and are
+# range-checked here, when they are derived and when they are read back. Hard caps: start_pose.half_range_rad <= 0.30,
+# *_height.half_range_m <= 0.03, carry_via.half_extent_m <= 0.06 per axis, speed_scale low in [0.5, 1.0] and high in [1.0, 1.5],
+# max_redraws <= 32, num_planning_attempts <= 10. A zero range (or speed_scale low = high = 1) switches that axis off.
+diversity:
+  campaign_seed: 20261024
+  # task_start (all joints 0) plus a uniform offset per arm joint 1..5 (the gripper stays 0). A drawn pose that is outside the simulator
+  # joint limits (0.02 rad margin) or collides in the MuJoCo contact check of the reset pose is redrawn, at most max_redraws times; if every
+  # draw is rejected the episode fails before any motion, it never falls back to an unvaried pose.
+  start_pose: {distribution: uniform, half_range_rad: 0.15, max_redraws: 8}
+  # Offsets of the pre-grasp and place-approach clearances (template values 0.059 and 0.046 m).
+  pregrasp_height: {distribution: uniform, half_range_m: 0.015}
+  place_approach_height: {distribution: uniform, half_range_m: 0.015}
+  # One via-point of MOVE_ABOVE_PLACE: x and y within +-0.03 m of the midpoint of the lift and above-place targets, z from 0 to +0.03 m above
+  # the line (never lower). The held cup's bottom must stay at least 0.03 m above the table along both legs, else the targets are refused.
+  carry_via: {distribution: uniform_box, half_extent_m: [0.03, 0.03, 0.03]}
+  # Factor on the policy scaling keys (LIFT and MOVE_ABOVE_PLACE carry, MOVE_ABOVE_OBJECT, RETREAT), capped at 1. The template-scaled phases
+  # (DESCEND, MICRO_LIFT) and DESCEND_TO_PLACE (the place height was calibrated at its speed) keep their values.
+  speed_scale: {distribution: uniform, low: 0.7, high: 1.3}
+  # MoveIt's request has no planner seed (not applicable): the diversity comes from OMPL's own randomness and the plan's digest is recorded. One
+  # attempt: MoveIt runs several attempts in parallel and keeps the shortest, which would reduce the diversity.
+  ompl: {num_planning_attempts: 1}

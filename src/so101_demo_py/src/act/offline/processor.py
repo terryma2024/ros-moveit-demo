@@ -167,6 +167,26 @@ def read_lease(path) -> dict:
     return {name: document[name] for name in LEASE_FIELDS}
 
 
+def teacher_start_draw(path):
+    """R3-a: the start pose draw the Teacher applied and verified, read from its manifest (`teacher_diversity`), or None when the manifest
+    is missing or has no diversity record. The Teacher's matched draw must be the one its values carry; a manifest that disagrees with
+    itself is refused (``TEACHER_DIVERSITY_START_POSE_MISMATCH``) rather than recorded."""
+
+    try:
+        record = json.loads(Path(path).read_bytes()).get("teacher_diversity")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(record, dict):
+        return None
+    try:
+        carried = record["values"]["start_pose"]["draw_index"]
+    except (KeyError, TypeError):
+        return None
+    if record.get("start_pose_draw_index") != carried:
+        raise ValueError("TEACHER_DIVERSITY_START_POSE_MISMATCH")
+    return carried
+
+
 def _sha256(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -346,7 +366,10 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     options = SimpleNamespace(session_id=identity["session_id"], expected_reset_epoch=identity["reset_epoch"],
                               episode_root=episode_root,
                               evidence_root=out / "offline-evidence" / "dynamic", episode_scope=Path(scope),
-                              episode_inputs_manifest=inputs_manifest, fault="none", **lease)
+                              episode_inputs_manifest=inputs_manifest, fault="none", **lease,
+                              # R3-a: the start pose draw the Teacher applied, for the episode identity of a schema 6 freeze
+                              start_pose_draw=teacher_start_draw(
+                                  (out / "dynamic" / "dynamic-execute-manifest.json") if teacher_manifest is None else teacher_manifest))
     stream = BagStream(bag, clock_map)
     first = stream.peek()
     if first is None:

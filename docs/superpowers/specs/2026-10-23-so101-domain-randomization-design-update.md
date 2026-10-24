@@ -40,7 +40,18 @@
 - **杯–桌摩擦桶暂缓**：按 D1，动力学变化需要重新校准接触策略，R0 首版只做视觉。这一项记入待办。
 - **磁盘**：每桶的 bag 在提取完指标后删除（已预授权，并记日志），只保留 json 和 jsonl。
 
-## R3 示教多样性：设计（2026-10-24，状态：设计稿，未授权实施）
+## R3 示教多样性：设计（2026-10-24，状态：R3-a 已获授权并实现于分支 `r3a-teacher-diversity`（待 live 冒烟）；R3-b、R3-c 仍是设计稿，未授权实施）
+
+**R3-a 实现记录（2026-10-24）**
+- 代码：`act/teacher_diversity.py`（分布块解析、派生、范围检查、起始姿态抽样与碰撞检查）、`act/teacher_endpoint.py`（schema 6）、`config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml`（采集策略：carry_b 加 `diversity` 块）。schema 6 是“基础 schema 加 diversity”：schema 5 的 DESCEND 两段键（三个键同有或同无）和 OPEN_GRIPPER 时长是可选的，缺省时 DESCEND 与 schema 4 完全一样（六个插值位姿）。`..._experimental_two_leg_diversity.yaml` 基于已在 EXP-635 上因杯子过载失败的两段 DESCEND，只作实验和测试用。
+- 搬运中间点实现为 MOVE_ABOVE_PLACE 内部的一个 waypoint（两段直线，各 3 个 waypoint），不是新状态。状态轨迹、`TEACHER_WORKFLOW`、审计的 `TEACHER_STATES` 和 `DYNAMIC_REACHABILITY_STATES` 都不变。
+- OMPL（修订，2026-10-24 评审）：OMPL 种子不适用，`MotionPlanRequest` 没有种子字段，所以多样性来自 OMPL 自身的随机性，并在每次被接受的规划记录里写 `trajectory_sha256`。种子仍按规则派生并记录（`seed_applied: false`）。`num_planning_attempts` 的示例策略值是 1：MoveIt 会并行跑多次尝试并保留最短的一条，多于 1 会降低多样性。
+- 速度比例只乘策略里的比例键（LIFT、MOVE_ABOVE_PLACE 的 carry，MOVE_ABOVE_OBJECT、RETREAT、DESCEND 接近段），上限 1。接触敏感的阶段不乘：DESCEND 最后一段、MICRO_LIFT，以及 DESCEND_TO_PLACE（放置高度是在模板速度下标定的）。
+- 搬运中间点的 z 偏移是单侧的，0 到 +0.03 m，不会低于“抬升点–放置上方”连线；x、y 仍是 ±0.03 m。并且沿两段路径，被夹持杯子的底部离桌面至少 0.03 m（杯底高度 = TCP 高度减去抓取时的 TCP 高度），不满足时目标被拒绝（`CARRY_VIA_CLEARANCE`）。
+- 起始姿态：实际使用的是第 k 次抽样，k 随选择记录（`start-pose-<attempt>.json`）通过 `--start-pose-draw` 传给 Teacher，Teacher 要求测得的姿态恰好是第 k 次抽样；episode.json 和 Teacher manifest 里的 `start_pose` 是第 k 次的姿态；case inputs 列出全部候选。碰撞检查的基线取 reset 关键帧，记录里写模型的 scene sha256、编译模型 sha256 和两种物理指纹，并与冻结输入的场景核对。
+- 合并身份：Teacher 执行策略的 sha256 进入受控身份（`teacher_execution_policy_sha256`），schema 6 必须被固定；导出清单的每个 episode 带上实际取值。五姿态采样过滤器的点 id 不是最终场景 id，所以它拒绝 Teacher 策略；分配场景 id 之后用 `refilter_scenes` 按最终场景 id 重新过滤。
+- 每个 episode 的取值记录在四处：`inputs/diversity/<scene>.json`（case inputs，读回时重新派生比对）、Teacher manifest 的 `teacher_diversity`、审计 `episode.json` 的 `teacher_diversity`、任务目录下的 `start-pose-<attempt>.json`（抽样过程与被拒绝的抽样）。
+- 起始姿态的碰撞检查只在 reset 前用 MuJoCo 的 `mj_forward` 接触表，不单步仿真；超出关节限位 0.02 rad 余量或出现基线之外的接触就重抽，最多 `max_redraws` 次，全部被拒绝则该 episode 在任何动作之前失败（不回退到未变化的姿态）。
 
 ### 现状核对（只读，均有代码出处）
 

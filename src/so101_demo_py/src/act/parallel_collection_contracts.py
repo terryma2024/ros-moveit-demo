@@ -58,6 +58,10 @@ def read_document(path, *, limit=16*1024*1024):
 #: Present in the identity of a campaign that names its camera rig (sha256 of the rig profile, `act.rig_profile`); absent for every
 #: identity written before rig profiles existed, which is rig v1.
 RIG_IDENTITY_KEY = 'rig_profile_sha256'
+#: Present in the identity of a campaign under a schema 6 Teacher execution policy (R3-a: sha256 of the loaded policy, which holds the
+#: diversity distributions and the campaign seed); optional for older policies, which name it only to pin it. Two sources whose
+#: identities differ in it (schema 5 and 6, or two campaign seeds) do not merge.
+TEACHER_POLICY_IDENTITY_KEY = 'teacher_execution_policy_sha256'
 #: Present in the identity of a campaign run in mount mode (`{commit, root}` of the mounted build); absent in image mode.
 MOUNT_IDENTITY_KEY = 'mount_build'
 
@@ -69,12 +73,12 @@ ENVIRONMENT_IDENTITY_KEYS = frozenset({'gpu_uuid'})
 
 def validate_controlled_identity(identity):
     _require(type(identity) is dict)
-    version_keys = set(identity) - {RIG_IDENTITY_KEY, MOUNT_IDENTITY_KEY}
+    version_keys = set(identity) - {RIG_IDENTITY_KEY, MOUNT_IDENTITY_KEY, TEACHER_POLICY_IDENTITY_KEY}
     _require(version_keys == IDENTITY_KEYS or version_keys == IDENTITY_KEYS - ENVIRONMENT_IDENTITY_KEYS)
     if MOUNT_IDENTITY_KEY in identity:
         from so101_demo.runtime.inference.config import validate_mount_build
         validate_mount_build(identity[MOUNT_IDENTITY_KEY])
-    for name in (version_keys | ({RIG_IDENTITY_KEY} & set(identity))) - {'image_source_install','gpu_uuid'}:
+    for name in (version_keys | ({RIG_IDENTITY_KEY, TEACHER_POLICY_IDENTITY_KEY} & set(identity))) - {'image_source_install','gpu_uuid'}:
         _require(type(identity[name]) is str and re.fullmatch(r'[0-9a-f]{64}',identity[name]) is not None)
     images = identity['image_source_install']
     _require(type(images) is dict and set(images) == {'inference','shard'})
