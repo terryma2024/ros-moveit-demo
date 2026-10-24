@@ -1,6 +1,6 @@
 # SO-101 ACT: bright indoor nominal scene and appearance library — design
 
-Status: draft (2026-10-24). The human approved this direction: "替换 nominal，先写设计并做效果图原型". Only P0 (prototype renders) is authorised. Every later phase needs its own confirmation.
+Status: P1 done (2026-10-24), P2 next. The human approved the direction ("替换 nominal，先写设计并做效果图原型"), then chose layout A as the nominal and kept B and C as candidates ("用 A（明亮办公室）做为[nominal]，其他环境保留候选（放到repo里），可以进入P1"). P0 and P1 are done; the contact re-activation (item 5 of P1) and every later phase still need the human's confirmation.
 
 ## Why
 
@@ -58,7 +58,7 @@ Draws come from the R0 scene-variant module (`act/scene_variant.py`), extended w
 | Phase | Content | Exit evidence |
 |---|---|---|
 | **P0 (now)** | Prototype only, outside the repo source: 3 indoor layouts (A bright office, B lab with shelves, C warm home with a window) built as scene files in an evidence root. Render side, wrist and task cameras at 3 poses (reset, pre-grasp over the cup, place). Report mean brightness, a nominal-vs-indoor comparison, and whether the v1 fingerprint changes (it will, which is expected) and what v2 must exclude. | Images for human review |
-| P1 | Rig `side-wrist-indoor`, scene and texture assets, physics fingerprint v2 with tests, the receipt equivalence and re-activation (human confirm), and the scene-variant `indoor` whitelist | Gate green, fingerprint tests, renders from the real stack |
+| P1 (done) | Rig `side-wrist-indoor`, scene and texture assets, physics fingerprint v2 with tests, the receipt equivalence and re-activation (human confirm), and the scene-variant `indoor` whitelist | Gate green, fingerprint tests, renders from the real stack |
 | P2 | YOLO check on the indoor nominal plus a fine-tune if needed; a 20-episode pilot collection (Teacher success, data chain) | Pilot report |
 | P3 | Collection of 200 to 300 episodes with randomised appearance (privileged Teacher) | Sealed, QC, ledger |
 | P4 | TRAIN-009 (TRAIN-007A config plus the image augmentation decision) | Training evidence |
@@ -68,3 +68,14 @@ Draws come from the R0 scene-variant module (`act/scene_variant.py`), extended w
 
 - Photos of the real work cell (camera views, background, light) would let the nominal layout and brightness be matched to the real robot instead of being invented.
 - After P0, which layout or layouts become the nominal? The others are then randomisation members.
+
+## P1 status (2026-10-24)
+
+Done and gated (code commit `9e5e90e20`, gate `9e5e90e20c1b` green, 15532 demo tests). Evidence root `/data/work/so101-evidence/indoor-scene/p1-20261024/` (`manifest.md`).
+
+- **Assets.** Layout A is the nominal scene `act/scene_side_wrist_indoor.xml`. B (lab) and C (home) are candidates in `act/indoor/` (`scene_side_wrist_indoor_lab.xml`, `scene_side_wrist_indoor_home.xml`); no rig loads them. Each scene is a standalone file (the three layouts share no include, because they differ in most elements). The 16 procedural textures are in `assets/mujoco/textures/indoor/` with `manifest.json` (sha256, size, seed, command), made by `scripts/assets/gen_indoor_textures.py`. `setup.py` installs every file under `assets/`, so the new directories need no install rule.
+- **Rig.** `side-wrist-indoor` (`config/act/rig-v3.yaml`) has the robot MJCF, URDF, plugins, controllers, cameras and state of `side-wrist` and only a new scene. The `side-wrist` and `head-wrist` files and their profile identity digests are unchanged (checked against the base commit); the indoor files are foreign to both digests. The camera-only lookups (`rig_from_observation`, `rig_from_frame_keys`, the training config) still resolve to `side-wrist`, because the observation is identical. `rig-v3.yaml` is a permanent entry of the versioned-name allowlist, like `rig-v1.yaml` and `rig-v2.yaml`. The contact collector has no scene or model pin for the indoor rig, so contact calibration is refused for it until the re-activation is confirmed.
+- **Fingerprint.** `act/physics_fingerprint.py` keeps v1 unchanged and adds the stripped fingerprint (`stripped_physics_fingerprint*`, record `fingerprint_version: 2`; the versioned-name guard forbids `v2` in identifiers). It removes geoms with `contype == 0` and `conaffinity == 0`, the bodies and meshes that only they carry, and the asset-path counts (`npaths`, `mesh_pathadr`, `hfield_pathadr`), and refuses a strip that changes any body mass or inertia. Tests: nominal side-wrist, A, B and C are equal under v2 and differ under v1; a colliding box, a friction edit, a mass edit, a collision-geom size edit, a timestep edit and a joint damping edit each change v2; the mass guard fires on a stripped geom that carries mass.
+- **Variant whitelist.** `act/scene_variant.py` accepts `"base": "indoor"` with wall, floor and table texture and tint, per-light diffuse, dir and active, headlight, prop visibility and cup colour. Physics and camera fields stay refused. `scene_variant_run` enforces the v2 equality with the nominal for every realized indoor variant; its record says `fingerprint_version: 2`.
+- **Receipt equivalence (evidence only).** The v2 fingerprint of the old nominal equals that of the new nominal, B and C, and the 462 compiled physics arrays are identical (`equivalence-record.json`). No receipt was created or modified and no activation ran. **Human step owed:** confirm the contact re-activation for the indoor scene.
+- **Real stack.** The `side-wrist-indoor` stack came up headless from the mount tree. Frame means from the camera topics: side 112.17, wrist 75.74, task 118.16, equal to the offline render (112.17, 75.68, 118.16). The textures, shadow and room lights render in the camera plugin.
