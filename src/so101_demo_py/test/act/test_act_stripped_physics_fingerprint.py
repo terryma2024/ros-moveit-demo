@@ -28,24 +28,24 @@ def _spec(path=INDOOR):
 
 
 @pytest.fixture(scope="module")
-def nominal_v2():
-    return pf.physics_fingerprint_v2_of_file(NOMINAL)
+def nominal_stripped():
+    return pf.stripped_physics_fingerprint_of_file(NOMINAL)
 
 
 # ---- the indoor scenes are the nominal physics -------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("name", sorted(SCENES))
-def test_every_indoor_layout_has_the_v2_fingerprint_of_the_nominal_side_wrist_scene(name, nominal_v2):
-    assert pf.physics_fingerprint_v2_of_file(SCENES[name]) == nominal_v2
+def test_every_indoor_layout_has_the_stripped_fingerprint_of_the_nominal_side_wrist_scene(name, nominal_stripped):
+    assert pf.stripped_physics_fingerprint_of_file(SCENES[name]) == nominal_stripped
 
 
 @pytest.mark.parametrize("name", sorted(SCENES))
-def test_the_v1_fingerprint_of_an_indoor_layout_differs_from_the_nominal_one(name):
+def test_the_unstripped_fingerprint_of_an_indoor_layout_differs_from_the_nominal_one(name):
     assert pf.physics_fingerprint_of_file(SCENES[name]) != pf.physics_fingerprint_of_file(NOMINAL)
 
 
-def test_v1_is_the_hash_of_the_compiled_arrays_as_it_always_was():
+def test_the_unstripped_fingerprint_is_the_hash_of_the_compiled_arrays_as_it_always_was():
     """Existing records carry v1: its algorithm (no domain prefix, no strip, `npaths` included) must not move."""
     model = mujoco.MjModel.from_xml_path(str(NOMINAL))
     digest = hashlib.sha256()
@@ -58,43 +58,43 @@ def test_v1_is_the_hash_of_the_compiled_arrays_as_it_always_was():
     assert pf.physics_fingerprint_of_file_version(NOMINAL, 1) == digest.hexdigest()
 
 
-def test_v2_is_versioned_domain_separated_and_reports_what_it_stripped(nominal_v2):
-    record = pf.physics_fingerprint_v2_record_of_file(INDOOR)
+def test_the_stripped_fingerprint_is_versioned_domain_separated_and_reports_what_it_stripped(nominal_stripped):
+    record = pf.stripped_physics_fingerprint_record_of_file(INDOOR)
     assert record["fingerprint_version"] == pf.FINGERPRINT_VERSION == 2 and pf.FINGERPRINT_VERSIONS == (1, 2)
-    assert record["sha256"] == nominal_v2 and pf.physics_fingerprint_of_file_version(INDOOR, 2) == nominal_v2
+    assert record["sha256"] == nominal_stripped and pf.physics_fingerprint_of_file_version(INDOOR, 2) == nominal_stripped
     assert set(record["stripped"]) == {"geoms", "bodies", "meshes"}
-    assert record["stripped"]["geoms"] > pf.physics_fingerprint_v2_record_of_file(NOMINAL)["stripped"]["geoms"] > 0
+    assert record["stripped"]["geoms"] > pf.stripped_physics_fingerprint_record_of_file(NOMINAL)["stripped"]["geoms"] > 0
     # v2 of a scene is never its v1 (the digest is domain separated), whichever scene it is
-    assert nominal_v2 != pf.physics_fingerprint_of_file(NOMINAL)
+    assert nominal_stripped != pf.physics_fingerprint_of_file(NOMINAL)
     with pytest.raises(ValueError, match="PHYSICS_FINGERPRINT_VERSION_UNKNOWN"):
         pf.physics_fingerprint_of_file_version(NOMINAL, 3)
 
 
-def test_v2_leaves_out_the_asset_path_counts_and_nothing_else_that_is_physics():
+def test_the_stripped_fingerprint_leaves_out_the_asset_path_counts_and_nothing_else_that_is_physics():
     stripped = pf._strip_visual_only(_spec(NOMINAL))[1]
-    names = set(pf.covered_names_v2(stripped))
+    names = set(pf.covered_names_stripped(stripped))
     assert not names & {"npaths", "paths", "mesh_pathadr", "hfield_pathadr"}
     assert {"npaths", "mesh_pathadr"} <= set(pf.covered_names(stripped))
     assert {"geom_friction", "body_mass", "dof_damping", "opt.timestep", "geom_size", "actuator_gainprm"} <= names
 
 
 def test_a_text_and_a_file_agree():
-    assert pf.physics_fingerprint_v2_of_string(INDOOR.read_text().replace(
+    assert pf.stripped_physics_fingerprint_of_string(INDOOR.read_text().replace(
         'file="../', f'file="{INDOOR.parent.parent}/').replace('<include file="so101_side_wrist.xml" />',
         f'<include file="{INDOOR.parent / "so101_side_wrist.xml"}" />').replace(
-        'file="../textures', f'file="{INDOOR.parent.parent}/textures')) == pf.physics_fingerprint_v2_of_file(INDOOR)
+        'file="../textures', f'file="{INDOOR.parent.parent}/textures')) == pf.stripped_physics_fingerprint_of_file(INDOOR)
 
 
 # ---- visual additions and edits do not move v2 -----------------------------------------------------------------------------------
 
 
-def _v2(edit, path=INDOOR):
+def _stripped(edit, path=INDOOR):
     spec = _spec(path)
     edit(spec)
-    return pf.physics_fingerprint_v2(spec)
+    return pf.stripped_physics_fingerprint(spec)
 
 
-def test_a_visual_box_a_light_a_camera_and_a_colour_edit_leave_v2_unchanged(nominal_v2):
+def test_a_visual_box_a_light_a_camera_and_a_colour_edit_leave_the_stripped_fingerprint_unchanged(nominal_stripped):
     def edit(spec):
         spec.worldbody.add_geom(name="extra_visual", type=BOX, size=[.1, .1, .1], pos=[1.5, 1.5, 0], contype=0, conaffinity=0)
         body = spec.worldbody.add_body(name="extra_prop", pos=[-1.5, 1.5, 0])
@@ -103,10 +103,10 @@ def test_a_visual_box_a_light_a_camera_and_a_colour_edit_leave_v2_unchanged(nomi
         spec.geom("table_visual").rgba = [0.1, 0.2, 0.3, 1.0]
         spec.visual.headlight.ambient = [0.5, 0.5, 0.5]
 
-    assert _v2(edit) == nominal_v2
+    assert _stripped(edit) == nominal_stripped
 
 
-def test_a_visual_only_mesh_asset_leaves_v2_unchanged(nominal_v2):
+def test_a_visual_only_mesh_asset_leaves_the_stripped_fingerprint_unchanged(nominal_stripped):
     def edit(spec):
         mesh = spec.add_mesh(name="extra_visual_mesh")
         mesh.uservert = [0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1]
@@ -114,7 +114,7 @@ def test_a_visual_only_mesh_asset_leaves_v2_unchanged(nominal_v2):
         spec.worldbody.add_geom(name="extra_mesh_geom", type=mujoco.mjtGeom.mjGEOM_MESH, meshname="extra_visual_mesh",
                                 pos=[1.5, 1.5, 0], contype=0, conaffinity=0)
 
-    assert _v2(edit) == nominal_v2
+    assert _stripped(edit) == nominal_stripped
 
 
 # ---- every physics edit moves v2 -------------------------------------------------------------------------------------------------
@@ -161,13 +161,13 @@ def _arm_joint_damping(spec):
 @pytest.mark.parametrize("edit", [_colliding_box, _colliding_box_in_a_new_body, _one_sided_collider, _friction, _mass,
                                   _collision_geom_size, _timestep, _joint_damping, _arm_joint_damping],
                          ids=lambda edit: edit.__name__.strip("_"))
-def test_a_physics_edit_changes_v2(edit, nominal_v2):
-    assert _v2(edit) != nominal_v2
+def test_a_physics_edit_changes_the_stripped_fingerprint(edit, nominal_stripped):
+    assert _stripped(edit) != nominal_stripped
 
 
-def test_the_edits_change_v2_of_the_nominal_scene_too(nominal_v2):
+def test_the_edits_change_the_stripped_fingerprint_of_the_nominal_scene_too(nominal_stripped):
     for edit in (_friction, _mass, _collision_geom_size, _timestep, _joint_damping, _colliding_box):
-        assert _v2(edit, NOMINAL) != nominal_v2
+        assert _stripped(edit, NOMINAL) != nominal_stripped
 
 
 # ---- the strip changes no mass -----------------------------------------------------------------------------------------------------
@@ -185,7 +185,7 @@ def test_the_mass_guard_fires_on_a_stripped_geom_that_carries_mass():
     spec, body = _mover()
     body.add_geom(name="heavy_visual", type=BOX, size=[.1, .1, .1], pos=[0, 0, .3], contype=0, conaffinity=0, mass=1.0)
     with pytest.raises(ValueError, match="PHYSICS_FINGERPRINT_STRIP_CHANGES_MASS: body_mass of body 'mover'"):
-        pf.physics_fingerprint_v2(spec)
+        pf.stripped_physics_fingerprint(spec)
 
 
 def test_a_moving_body_whose_only_geom_is_stripped_is_refused():
@@ -194,7 +194,7 @@ def test_a_moving_body_whose_only_geom_is_stripped_is_refused():
     body.add_freejoint()
     body.add_geom(name="only_visual", type=BOX, size=[.1, .1, .1], contype=0, conaffinity=0)
     with pytest.raises(ValueError, match="PHYSICS_FINGERPRINT_STRIP_"):
-        pf.physics_fingerprint_v2(spec)
+        pf.stripped_physics_fingerprint(spec)
 
 
 def test_a_body_with_an_explicit_inertial_is_kept_and_its_mass_is_unchanged():
@@ -209,29 +209,29 @@ def test_a_body_with_an_explicit_inertial_is_kept_and_its_mass_is_unchanged():
             body.add_geom(name="only_visual", type=BOX, size=[.1, .1, .1], contype=0, conaffinity=0)
         return spec
 
-    record = pf.physics_fingerprint_v2_record(build(True))
+    record = pf.stripped_physics_fingerprint_record(build(True))
     assert record["stripped"] == {"geoms": 1, "bodies": 0, "meshes": 0}      # the body stays: it has an inertial
-    assert record["sha256"] == pf.physics_fingerprint_v2(build(False))
+    assert record["sha256"] == pf.stripped_physics_fingerprint(build(False))
     heavier = build(True)
     heavier.body("mover").mass = 1.5
-    assert pf.physics_fingerprint_v2(heavier) != record["sha256"]
+    assert pf.stripped_physics_fingerprint(heavier) != record["sha256"]
 
 
 def test_a_static_body_that_only_carries_visual_geoms_is_removed_with_them():
     spec, _body = _mover()
     prop = spec.worldbody.add_body(name="prop", pos=[1, 0, 0])
     prop.add_geom(name="prop_geom", type=BOX, size=[.1, .1, .1], contype=0, conaffinity=0)
-    record = pf.physics_fingerprint_v2_record(spec)
+    record = pf.stripped_physics_fingerprint_record(spec)
     assert record["stripped"]["bodies"] == 1 and record["stripped"]["geoms"] == 1
-    assert record["sha256"] == pf.physics_fingerprint_v2(_mover()[0])
+    assert record["sha256"] == pf.stripped_physics_fingerprint(_mover()[0])
 
 
 def test_the_strip_does_not_touch_the_spec_it_was_given():
     spec = _spec(INDOOR)
     count = len(spec.geoms)
-    pf.physics_fingerprint_v2(spec)
+    pf.stripped_physics_fingerprint(spec)
     assert len(spec.geoms) == count
-    assert pf.physics_fingerprint_v2(spec) == pf.physics_fingerprint_v2(_spec(INDOOR))
+    assert pf.stripped_physics_fingerprint(spec) == pf.stripped_physics_fingerprint(_spec(INDOOR))
 
 
 def test_a_stripped_geom_that_a_contact_pair_names_is_refused():
@@ -239,4 +239,4 @@ def test_a_stripped_geom_that_a_contact_pair_names_is_refused():
     spec.worldbody.add_geom(name="floorish", type=BOX, size=[.5, .5, .1], contype=0, conaffinity=0)
     spec.add_pair(geomname1="hull", geomname2="floorish")
     with pytest.raises(ValueError, match="PHYSICS_FINGERPRINT_STRIP_INVALID"):
-        pf.physics_fingerprint_v2(spec)
+        pf.stripped_physics_fingerprint(spec)

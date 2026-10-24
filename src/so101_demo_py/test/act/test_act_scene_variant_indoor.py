@@ -19,7 +19,7 @@ import pytest
 from paths import PACKAGE_ROOT
 from so101_demo.act import scene_variant as sv
 from so101_demo.act import scene_variant_run as run
-from so101_demo.act.physics_fingerprint import physics_fingerprint_v2_of_file, physics_fingerprint_v2_of_string
+from so101_demo.act.physics_fingerprint import stripped_physics_fingerprint_of_file, stripped_physics_fingerprint_of_string
 
 SHARE = PACKAGE_ROOT
 NOMINAL_DIR = PACKAGE_ROOT / "assets/mujoco/act"
@@ -53,8 +53,8 @@ WHITELISTED = {
 
 
 @pytest.fixture(scope="module")
-def nominal_v2():
-    return physics_fingerprint_v2_of_file(INDOOR_SCENE)
+def nominal_stripped():
+    return stripped_physics_fingerprint_of_file(INDOOR_SCENE)
 
 
 def _write(tmp_path, realized, name="scene_variant.xml"):
@@ -173,12 +173,12 @@ def test_a_light_or_prop_the_nominal_scene_does_not_have_is_refused():
 
 
 @pytest.mark.parametrize("name", sorted(WHITELISTED))
-def test_every_whitelisted_indoor_variant_keeps_the_v2_physics_fingerprint(name, tmp_path, nominal_v2):
+def test_every_whitelisted_indoor_variant_keeps_the_stripped_physics_fingerprint(name, tmp_path, nominal_stripped):
     realized = sv.realize(NOMINAL_DIR, WHITELISTED[name])
     path = _write(tmp_path, realized)
-    assert physics_fingerprint_v2_of_file(path) == nominal_v2
+    assert stripped_physics_fingerprint_of_file(path) == nominal_stripped
     mujoco.MjModel.from_xml_path(str(path))      # and it compiles
-    assert physics_fingerprint_v2_of_string(path.read_text()) == nominal_v2
+    assert stripped_physics_fingerprint_of_string(path.read_text()) == nominal_stripped
 
 
 def test_the_realized_hash_is_pure_and_does_not_depend_on_where_the_nominal_directory_is(tmp_path):
@@ -223,10 +223,10 @@ def test_the_side_wrist_variants_are_untouched_by_the_indoor_base():
 # ---- the run: the physics fingerprint is enforced -----------------------------------------------------------------------------------
 
 
-def test_a_run_realizes_an_indoor_variant_with_the_v2_fingerprint_of_the_nominal_scene(tmp_path, nominal_v2):
+def test_a_run_realizes_an_indoor_variant_with_the_stripped_fingerprint_of_the_nominal_scene(tmp_path, nominal_stripped):
     variant = run.read_variant_file(_write_json(tmp_path, WHITELISTED["everything"]))
     record = run.realize_into(tmp_path / "scene-variant", SHARE, variant)
-    assert record["fingerprint_version"] == 2 and record["physics_fingerprint"] == record["nominal_physics_fingerprint"] == nominal_v2
+    assert record["fingerprint_version"] == 2 and record["physics_fingerprint"] == record["nominal_physics_fingerprint"] == nominal_stripped
     assert record["variant"]["base"] == "indoor"
     assert (tmp_path / "scene-variant/scene_variant.xml").is_file()
     again = run.realize_into(tmp_path / "again", SHARE, variant)
@@ -235,24 +235,24 @@ def test_a_run_realizes_an_indoor_variant_with_the_v2_fingerprint_of_the_nominal
 
 def test_a_run_refuses_an_indoor_variant_whose_physics_differs_and_leaves_no_scene(tmp_path, monkeypatch):
     variant = run.read_variant_file(_write_json(tmp_path, WHITELISTED["wall_texture"]))
-    real = run.physics_fingerprint_v2_of_file
+    real = run.stripped_physics_fingerprint_of_file
 
     def altered(path):
         return "0" * 64 if str(path).endswith("scene_variant.xml") else real(path)
 
-    monkeypatch.setattr(run, "physics_fingerprint_v2_of_file", altered)
+    monkeypatch.setattr(run, "stripped_physics_fingerprint_of_file", altered)
     with pytest.raises(sv.SceneVariantRefused, match="SCENE_VARIANT_PHYSICS_MISMATCH"):
         run.realize_into(tmp_path / "scene-variant", SHARE, variant)
     assert not (tmp_path / "scene-variant/scene_variant.xml").exists()
 
 
-def test_a_variant_that_changed_a_collision_geom_would_be_caught_by_the_v2_comparison(tmp_path, nominal_v2):
+def test_a_variant_that_changed_a_collision_geom_would_be_caught_by_the_stripped_comparison(tmp_path, nominal_stripped):
     """The whitelist cannot express it, so build the scene a hostile edit would produce and compare as `realize_into` does."""
     path = _write(tmp_path, sv.realize(NOMINAL_DIR, WHITELISTED["wall_texture"]))
     text = path.read_text().replace('name="table_collision" type="box" size="0.25 0.30 0.02"',
                                     'name="table_collision" type="box" size="0.25 0.30 0.021"')
     assert text != path.read_text()
-    assert physics_fingerprint_v2_of_string(text) != nominal_v2
+    assert stripped_physics_fingerprint_of_string(text) != nominal_stripped
 
 
 def test_a_host_record_and_a_shard_agree_on_an_indoor_variant(tmp_path):

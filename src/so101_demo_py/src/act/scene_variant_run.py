@@ -18,7 +18,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from .physics_fingerprint import physics_fingerprint_of_file, physics_fingerprint_v2_of_file
+from .physics_fingerprint import physics_fingerprint_of_file, stripped_physics_fingerprint_of_file
 from .scene_variant import (
     BASE_INDOOR, INDOOR_SCENE, KIND, NOMINAL_SCENE, SCHEMA_VERSION, SceneVariantRefused, normalize_variant, realize)
 
@@ -84,8 +84,8 @@ def realize_into(directory, share, variant: dict) -> dict:
     indoor = variant.get("base") == BASE_INDOOR
     try:
         if indoor:
-            nominal = physics_fingerprint_v2_of_file(nominal_dir(share) / INDOOR_SCENE)
-            variant_print = physics_fingerprint_v2_of_file(scene)
+            nominal = stripped_physics_fingerprint_of_file(nominal_dir(share) / INDOOR_SCENE)
+            variant_print = stripped_physics_fingerprint_of_file(scene)
         else:
             nominal = physics_fingerprint_of_file(nominal_dir(share) / NOMINAL_SCENE)
             variant_print = physics_fingerprint_of_file(scene)

@@ -11,7 +11,7 @@ a site's, tendon's and mesh's rendering data, and the counts of the excluded kin
 the fingerprint unchanged, a friction, mass, geometry, damping, gain or timestep edit changes it.
 
 Version 1 (`physics_fingerprint`, the one every existing record carries) hashes the compiled model as it is, so ADDING a purely
-visual geom changes it (the geom arrays grow). Version 2 (`physics_fingerprint_v2*`, indoor scene design 2026-10-24) is for scenes
+visual geom changes it (the geom arrays grow). Version 2 (`stripped_physics_fingerprint*`, indoor scene design 2026-10-24) is for scenes
 that add visual-only furniture: before hashing it strips every geom with `contype == 0` and `conaffinity == 0` (such a geom can
 never collide, and a guard proves it carries no mass or inertia), the bodies that carried only such geoms, the meshes only they
 used, and the asset-path bookkeeping (`npaths`, `paths`, `mesh_pathadr`, `hfield_pathadr`); the digest is domain separated and
@@ -41,7 +41,7 @@ _RENDER_NAMES = frozenset((
 _PATH_NAMES = frozenset(("npaths", "paths", "mesh_pathadr", "hfield_pathadr"))
 FINGERPRINT_VERSION = 2
 FINGERPRINT_VERSIONS = (1, 2)
-_V2_DOMAIN = b"so101-physics-fingerprint-v2\n"
+_STRIPPED_DOMAIN = b"so101-physics-fingerprint-v2\n"
 
 
 def _arrays(model, excluded=frozenset()):
@@ -161,9 +161,9 @@ def _strip_visual_only(spec):
     return full, stripped, {"geoms": stripped_geoms, "bodies": len(removed), "meshes": stripped_meshes}
 
 
-def _digest_v2(model) -> str:
+def _stripped_digest(model) -> str:
     digest = hashlib.sha256()
-    digest.update(_V2_DOMAIN)
+    digest.update(_STRIPPED_DOMAIN)
     for name, value in sorted(_arrays(model, _PATH_NAMES).items()):
         data = np.ascontiguousarray(value)
         digest.update(f"{name}|{data.dtype.str}|{data.shape}|".encode())
@@ -171,15 +171,15 @@ def _digest_v2(model) -> str:
     return digest.hexdigest()
 
 
-def physics_fingerprint_v2_record(spec) -> dict:
+def stripped_physics_fingerprint_record(spec) -> dict:
     """`{"fingerprint_version": 2, "sha256", "stripped": {"geoms", "bodies", "meshes"}}` of an `mujoco.MjSpec`."""
     _full, stripped, report = _strip_visual_only(spec)
-    return {"fingerprint_version": 2, "sha256": _digest_v2(stripped), "stripped": report}
+    return {"fingerprint_version": 2, "sha256": _stripped_digest(stripped), "stripped": report}
 
 
-def physics_fingerprint_v2(spec) -> str:
+def stripped_physics_fingerprint(spec) -> str:
     """The version 2 fingerprint (a sha256 hex digest) of an `mujoco.MjSpec`: the physics of its collision-relevant model."""
-    return physics_fingerprint_v2_record(spec)["sha256"]
+    return stripped_physics_fingerprint_record(spec)["sha256"]
 
 
 def _spec_of_file(path):
@@ -188,31 +188,31 @@ def _spec_of_file(path):
     return mujoco.MjSpec.from_file(str(path))
 
 
-def physics_fingerprint_v2_of_file(path) -> str:
+def stripped_physics_fingerprint_of_file(path) -> str:
     """The version 2 fingerprint of the MJCF file `path` (includes and meshes resolve as MuJoCo does)."""
-    return physics_fingerprint_v2(_spec_of_file(path))
+    return stripped_physics_fingerprint(_spec_of_file(path))
 
 
-def physics_fingerprint_v2_record_of_file(path) -> dict:
-    return physics_fingerprint_v2_record(_spec_of_file(path))
+def stripped_physics_fingerprint_record_of_file(path) -> dict:
+    return stripped_physics_fingerprint_record(_spec_of_file(path))
 
 
-def physics_fingerprint_v2_of_string(xml: str) -> str:
+def stripped_physics_fingerprint_of_string(xml: str) -> str:
     """The version 2 fingerprint of MJCF text (its includes and assets must be absolute paths or resolvable from the cwd)."""
     import mujoco
 
-    return physics_fingerprint_v2(mujoco.MjSpec.from_string(xml))
+    return stripped_physics_fingerprint(mujoco.MjSpec.from_string(xml))
 
 
 def physics_fingerprint_of_file_version(path, version: int) -> str:
-    """The fingerprint of `path` in the given version (1: `physics_fingerprint_of_file`; 2: `physics_fingerprint_v2_of_file`)."""
+    """The fingerprint of `path` in the given version (1: `physics_fingerprint_of_file`; 2: `stripped_physics_fingerprint_of_file`)."""
     if version == 1:
         return physics_fingerprint_of_file(path)
     if version == 2:
-        return physics_fingerprint_v2_of_file(path)
+        return stripped_physics_fingerprint_of_file(path)
     raise ValueError("PHYSICS_FINGERPRINT_VERSION_UNKNOWN: " + str(version))
 
 
-def covered_names_v2(model) -> list:
+def covered_names_stripped(model) -> list:
     """The names of the arrays version 2 covers (of a stripped model; for tests)."""
     return sorted(_arrays(model, _PATH_NAMES))
