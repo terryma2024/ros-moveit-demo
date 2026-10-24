@@ -60,24 +60,42 @@ class MotionExecution:
             INJECTED_EXECUTION_FAILURE) else "TIMED_OUT")
         raise _ExecutionFailed(f"{code}: {message}", executed)
 
+    #: the states whose motion is a Cartesian path of interpolated waypoints from the current pose to the target
+    _INTERPOLATED_STATES = frozenset({State.DESCEND, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE})
+
+    def _carry_via_target(self, state: State) -> PoseEvidence | None:
+        """R3-a: the carry via-point of this episode's MOVE_ABOVE_PLACE (the targets carry it), else None."""
+
+        if state is not State.MOVE_ABOVE_PLACE:
+            return None
+        return getattr(getattr(self, "_targets", None), "carry_via", None)
+
+    def _motion_waypoints(self, state: State, start_pose: PoseEvidence | None, target: PoseEvidence) -> list[PoseEvidence]:
+        """The Cartesian waypoints one state plans, each a separate MoveIt segment with its own corridor check.
+
+        The interpolated states take six points from the current pose to the target; DESCEND takes the schema 5 approach and final
+        stages. With a carry via-point (R3-a) MOVE_ABOVE_PLACE takes two straight legs of three points, current pose to via-point and
+        via-point to target, so the via-point is the third waypoint (segment index 2) and is planned like any other segment."""
+
+        if state not in self._INTERPOLATED_STATES:
+            return [target]
+        via = self._carry_via_target(state)
+        if via is not None:
+            return [self._interpolate_pose(start_pose, via, step / 3.0) for step in (1, 2, 3)] + [
+                self._interpolate_pose(via, target, step / 3.0) for step in (1, 2, 3)]
+        final_distance_m = self._descend_final_distance_m() if state is State.DESCEND else None
+        if final_distance_m is not None:  # schema 5: the approach stage, then the final stage
+            return [waypoint.target for waypoint in descend_waypoints(self._interpolate_pose, start_pose, target, final_distance_m)]
+        return [self._interpolate_pose(start_pose, target, step / 6.0) for step in range(1, 7)]
+
     def _motion(self, state: State, target: PoseEvidence) -> None:
         _mark_place_side(state, "motion.begin")
         before = self._snapshot()
         current = self._motion_planning_start()
-        motion_targets = [target]
         if state is State.DESCEND:
             self._descend_grasp_target = target
-        if state in {State.DESCEND, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE}:
-            start_pose = self._ik.forward(current)
-            motion_targets = [
-                self._interpolate_pose(start_pose, target, step / 6.0) for step in range(1, 7)
-            ]
-            final_distance_m = self._descend_final_distance_m() if state is State.DESCEND else None
-            if final_distance_m is not None:  # schema 5: the approach stage, then the final stage
-                motion_targets = [
-                    waypoint.target
-                    for waypoint in descend_waypoints(self._interpolate_pose, start_pose, target, final_distance_m)
-                ]
+        start_pose = self._ik.forward(current) if state in self._INTERPOLATED_STATES else None
+        motion_targets = self._motion_waypoints(state, start_pose, target)
 
         monitor = self._motion_monitor(state)
 
@@ -188,6 +206,9 @@ class MotionExecution:
                 physical_table_contact=table_contact,
                 validation_failure=None,
             )
+        via = self._carry_via_target(state)
+        if via is not None:
+            details["carry_via"] = {"pose": [*via.position_m, *via.orientation_xyzw], "segment_index": 2}
         self._record(state, before, after, **details)
 
     def _gripper_duration_s(self, state: State) -> float:

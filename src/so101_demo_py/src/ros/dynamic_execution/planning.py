@@ -225,6 +225,9 @@ class MotionPlanning:
         corridor_receipts: list[dict[str, object]] = []
         last_failure = "CUP_POSE_PLAN_FAILED"
         scaling = self._planning_scaling(state, step)
+        attempts = self._ompl_attempts()
+        # a run without episode diversity sends the request, and records the attempts, exactly as before
+        attempt_fields = {} if attempts is None else {"num_planning_attempts": attempts}
         for candidate_index in range(candidate_count):
             _mark_place_side(state, f"candidate{candidate_index}.moveit.begin")
             planned = self._planning.plan_joint_path(
@@ -237,6 +240,7 @@ class MotionPlanning:
                     planning_time_s=self._template.planning_timeout_s,
                     planning_group=self._template.planning_group,
                     tcp_link=self._template.tcp_link,
+                    **attempt_fields,
                 ),
                 timeout_s=self._template.planning_timeout_s + 5.0,
             )
@@ -257,6 +261,7 @@ class MotionPlanning:
                         "accepted": False,
                         "failure_code": last_failure,
                         "joint_target_rad": list(joint_target),
+                        **attempt_fields,
                     }
                 )
                 continue
@@ -273,6 +278,8 @@ class MotionPlanning:
                     "trajectory_sample_count": len(
                         planned.trajectory.joint_trajectory.points
                     ),
+                    **({} if attempts is None else {
+                        **attempt_fields, "trajectory_sha256": self._trajectory_digest(planned.trajectory)}),
                 }
             )
             _mark_place_side(state, f"candidate{candidate_index}.corridor.begin")
@@ -365,17 +372,51 @@ class MotionPlanning:
         policy = getattr(self, "_execution_policy", None)
         speed_keys = self._SPEED_SCALING_KEYS.get(state)
         if speed_keys is not None:
-            return (speed_policy_value(policy, speed_keys[0], template[0]),
-                    speed_policy_value(policy, speed_keys[1], template[1]))
+            return self._speed_scaled(speed_policy_value(policy, speed_keys[0], template[0]),
+                                      speed_policy_value(policy, speed_keys[1], template[1]))
         if state is State.DESCEND and self._is_descend_approach_step(step):
-            return (speed_policy_value(policy, DESCEND_SCALING_FIELDS[0], template[0], since_schema=EXECUTION_SCHEMA_DESCEND),
-                    speed_policy_value(policy, DESCEND_SCALING_FIELDS[1], template[1], since_schema=EXECUTION_SCHEMA_DESCEND))
+            return self._speed_scaled(
+                speed_policy_value(policy, DESCEND_SCALING_FIELDS[0], template[0], since_schema=EXECUTION_SCHEMA_DESCEND),
+                speed_policy_value(policy, DESCEND_SCALING_FIELDS[1], template[1], since_schema=EXECUTION_SCHEMA_DESCEND))
         if state not in self._CARRY_STATES:
             return template
         if (policy is None or "carry_max_velocity_scaling" not in policy
                 or "carry_max_acceleration_scaling" not in policy):
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: carry scaling")
-        return float(policy["carry_max_velocity_scaling"]), float(policy["carry_max_acceleration_scaling"])
+        return self._speed_scaled(float(policy["carry_max_velocity_scaling"]), float(policy["carry_max_acceleration_scaling"]))
+
+    def _speed_scaled(self, velocity: float, acceleration: float) -> tuple[float, float]:
+        """R3-a: a policy scaling pair times this episode's speed scale, each capped at 1; unchanged without episode diversity.
+
+        Only the scaling keys of the frozen policy are scaled. The template-scaled phases (the last DESCEND stage, MICRO_LIFT,
+        DESCEND_TO_PLACE) are contact-sensitive and keep their values."""
+
+        diversity = getattr(self, "_episode_diversity", None)
+        if diversity is None:
+            return velocity, acceleration
+        from so101_demo.act.teacher_diversity import scaled_scaling
+
+        scale = diversity["speed_scale"]
+        return scaled_scaling(velocity, scale), scaled_scaling(acceleration, scale)
+
+    def _ompl_attempts(self) -> int | None:
+        """R3-a: the OMPL planning attempts of this episode, or None without episode diversity (the request keeps its single attempt)."""
+
+        diversity = getattr(self, "_episode_diversity", None)
+        return None if diversity is None else int(diversity["ompl"]["num_planning_attempts"])
+
+    @staticmethod
+    def _trajectory_digest(trajectory) -> str | None:
+        """sha256 of the planned joint positions and times: MoveIt takes no planner seed, so the planner output is what gets recorded."""
+
+        import hashlib
+
+        try:
+            rows = [(tuple(float(value) for value in point.positions), int(point.time_from_start.sec), int(point.time_from_start.nanosec))
+                    for point in trajectory.joint_trajectory.points]
+            return hashlib.sha256(repr(rows).encode()).hexdigest()
+        except (AttributeError, TypeError, ValueError):
+            return None
 
     def _is_descend_approach_step(self, step) -> bool:
         """True for the approach stage of a schema 5 DESCEND: its waypoint is the point ``descend_final_distance_m`` above the grasp
