@@ -279,3 +279,126 @@ def test_batch_poses_caps_the_size_of_a_planner_call(tmp_path, monkeypatch):
     assert json.loads((tmp_path / "report.json").read_text())["batch_poses"] == 7
     with pytest.raises(ValueError, match="SCENE_SAMPLE_BATCH_POSES_INVALID"):
         cli.main(inputs(tmp_path) + ["--reach-command", "zsh a.zsh out", "--batch-poses", "0"])
+
+
+# --- R3-a re-filter keyed by the final scene ids (to-do 33) ------------------------------------------------------------------
+def refilter_planner(rejected_ids=(), seen=None):
+    def call(document):
+        if seen is not None:
+            seen.append(document)
+        return {p["id"]: (("UNREACHABLE", "DYNAMIC_IK_HORIZON_FAILED") if p["id"] in rejected_ids else ("REACHABLE", None))
+                for p in document["points"]}
+
+    return call
+
+
+def policy_file(tmp_path):
+    path = tmp_path / "policy.yaml"
+    path.write_text("schema_version: 6\n")
+    return path
+
+
+def test_the_re_filter_asks_with_the_final_scene_ids_and_drops_a_rejected_scene_from_the_written_list(tmp_path):
+    seen = []
+    arguments = [*inputs(tmp_path), "--refilter-policy", str(policy_file(tmp_path))]
+    assert cli.main(arguments, reach_call=planner(), refilter_call=refilter_planner({"frm-005"}, seen)) == 0
+    assert len(seen) == 1 and [p["id"] for p in seen[0]["points"]][:3] == ["frm-000", "frm-001", "frm-002"]
+    assert not [p for p in seen[0]["points"] if p["id"].startswith("p0")]       # never the sampling-time point ids
+    rows = read_scene_rows(tmp_path / "scenes.json")
+    ids = [r["scene_id"] for r in rows]
+    assert len(rows) == 102 and "frm-005" not in ids and ids[:6] == ["frm-000", "frm-001", "frm-002", "frm-003", "frm-004", "frm-006"]
+    document = json.loads((tmp_path / "scenes.json").read_text())
+    record = document["generator"]["refilter"]
+    assert record["input_count"] == 103 and record["kept_count"] == 102
+    assert record["rejected"] == [{"scene_id": "frm-005", "status": "UNREACHABLE", "first_failure_code": "DYNAMIC_IK_HORIZON_FAILED"}]
+    assert record["policy"]["sha256"] == hashlib.sha256((tmp_path / "policy.yaml").read_bytes()).hexdigest()
+    assert document["split_quota"] == {"train": 82, "validation": 10, "offline_test": 10}
+    report = json.loads((tmp_path / "report.json").read_text())
+    assert report["scene_count"] == 102 and report["sampled_count"] == 103 and report["split_counts"]["train"] == 82
+    assert report["refilter"]["rejected"][0]["scene_id"] == "frm-005"
+
+
+def test_without_a_re_filter_the_single_list_output_is_what_it_was(tmp_path):
+    cli.main(inputs(tmp_path), reach_call=planner())
+    document = json.loads((tmp_path / "scenes.json").read_text())
+    assert "refilter" not in document["generator"] and "refilter" not in json.loads((tmp_path / "report.json").read_text())
+
+
+def test_the_joint_re_filter_applies_to_every_list_and_names_the_dropped_scenes(tmp_path):
+    arguments = [*joint_inputs(tmp_path), "--refilter-policy", str(policy_file(tmp_path))]
+    assert cli.main(arguments, reach_call=planner(), refilter_call=refilter_planner({"qual-03", "frm-010", "fn-01"})) == 0
+    directory = tmp_path / "out"
+    formal = read_scene_rows(directory / "formal-103.scenes.json")
+    qualification = read_scene_rows(directory / "qualification-40.scenes.json")
+    functional = read_scene_rows(directory / "functional-8.scenes.json")
+    assert (len(formal), len(qualification), len(functional)) == (102, 39, 7)
+    assert "qual-03" not in {r["scene_id"] for r in qualification} and "fn-01" not in {r["scene_id"] for r in functional}
+    assert json.loads((directory / "qualification-40.scenes.json").read_text())["split_quota"] == {"qualification": 39}
+    report = json.loads((tmp_path / "out-report.json").read_text())
+    assert report["lists"]["qualification"]["count"] == 39 and report["lists"]["qualification"]["sampled_count"] == 40
+    assert report["lists"]["formal"]["refilter"]["rejected"][0]["scene_id"] == "frm-010"
+    assert report["scene_count"] == 148 and min(report["nearest_pair_across_lists_m"].values()) >= 0.004
+
+
+def test_the_re_filter_alone_filters_an_existing_list_and_leaves_the_source_untouched(tmp_path):
+    cli.main(inputs(tmp_path), reach_call=planner())
+    source = tmp_path / "scenes.json"
+    before = source.read_bytes()
+    out = ["--refilter-scenes", str(source), "--refilter-policy", str(policy_file(tmp_path)), "--scenes-output", str(tmp_path / "refiltered.json"),
+           "--report-output", str(tmp_path / "refilter-report.json"), "--call-dir", str(tmp_path / "calls2")]
+    assert cli.main(out, refilter_call=refilter_planner({"frm-000", "frm-100"})) == 0
+    assert source.read_bytes() == before
+    rows = read_scene_rows(tmp_path / "refiltered.json")
+    assert len(rows) == 101 and rows[0]["scene_id"] == "frm-001"
+    document = json.loads((tmp_path / "refiltered.json").read_text())
+    assert document["generator"]["refilter"]["source"]["sha256"] == hashlib.sha256(before).hexdigest()
+    report = json.loads((tmp_path / "refilter-report.json").read_text())
+    assert report["kind"] == "ACT_SCENE_REFILTER_REPORT" and [r["scene_id"] for r in report["refilter"]["rejected"]] == ["frm-000", "frm-100"]
+    with pytest.raises(ValueError, match="OUTPUT_EXISTS"):
+        cli.main(out, refilter_call=refilter_planner())
+
+
+def test_an_unknown_verdict_stops_the_re_filter_and_writes_nothing(tmp_path):
+    from so101_demo.act.five_pose_reachability import ReachabilityUnknownError
+
+    arguments = [*inputs(tmp_path), "--refilter-policy", str(policy_file(tmp_path))]
+    unknown = lambda document: {p["id"]: ("UNKNOWN", None) for p in document["points"]}  # noqa: E731
+    with pytest.raises(ReachabilityUnknownError):
+        cli.main(arguments, reach_call=planner(), refilter_call=unknown)
+    assert not (tmp_path / "scenes.json").exists() and not (tmp_path / "report.json").exists()
+
+
+def test_a_re_filter_without_its_policy_or_command_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_REFILTER_NEEDS_COMMAND_AND_POLICY"):
+        cli.main(inputs(tmp_path), reach_call=planner(), refilter_call=refilter_planner())
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_REFILTER_NEEDS_COMMAND_AND_POLICY"):
+        cli.main([*inputs(tmp_path), "--refilter-policy", str(policy_file(tmp_path))], reach_call=planner())
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_REFILTER_POLICY_MISSING"):
+        cli.main([*inputs(tmp_path), "--refilter-policy", str(tmp_path / "absent.yaml")], reach_call=planner(), refilter_call=refilter_planner())
+
+
+def test_a_re_filter_that_rejects_every_scene_is_an_error_not_an_empty_list(tmp_path):
+    ids = {f"frm-{i:03d}" for i in range(103)}
+    with pytest.raises(ValueError, match="SCENE_SAMPLE_REFILTER_EMPTY"):
+        cli.main([*inputs(tmp_path), "--refilter-policy", str(policy_file(tmp_path))], reach_call=planner(), refilter_call=refilter_planner(ids))
+    assert not (tmp_path / "scenes.json").exists()
+
+
+def test_the_command_re_filter_gives_the_planner_the_policy_in_its_environment_and_may_carry_it(tmp_path):
+    captured = []
+
+    def run(command, check, env=None):
+        captured.append((command, env))
+        evidence = command[-2]
+        open(evidence, "w").write(json.dumps({"reports": [{"point_id": "frm-000", "status": "REACHABLE", "first_failure_code": None}]}))
+        open(evidence + ".rc", "w").write("0")
+
+        class Done:
+            returncode = 0
+        return Done()
+
+    policy = policy_file(tmp_path)
+    call = cli.refilter_call_from("zsh reach_call.zsh /w reachlight0 181 /i", tmp_path, policy, run=run)
+    document = {"schema_version": 1, "points": [{"id": "frm-000", "label": "x", "cup_position_world_m": [0, 0, 0.165]}]}
+    assert call(document) == {"frm-000": ("REACHABLE", None)}
+    assert captured[0][1]["REACH_TEACHER_POLICY"] == str(policy) and captured[0][0][:2] == ["zsh", "reach_call.zsh"]
