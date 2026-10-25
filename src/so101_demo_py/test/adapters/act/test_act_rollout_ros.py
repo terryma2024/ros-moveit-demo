@@ -114,7 +114,77 @@ def test_the_assembler_counts_the_sets_it_does_not_emit_by_reason_and_the_inputs
     fine.note_rejected("INPUT_RGB_INVALID")
     assert fine.rejected_count == 1
     document = fine.reject_document()
-    assert document == {"input_rejects": 1, "recent_input_rejects": ["INPUT_RGB_INVALID"], "poll_skips": {}, "rgb_sync_rejects": 1}
+    assert document == {"input_rejects": 1, "recent_input_rejects": ["INPUT_RGB_INVALID"], "poll_skips": {},
+                        "deferred_until_joint_state": {}, "poll_rejects": {}, "rgb_sync_pending": 0, "rgb_sync_rejects": 1}
+
+
+def _counts(assembler):
+    document = assembler.reject_document()
+    return (document["poll_skips"], document["deferred_until_joint_state"], document["poll_rejects"],
+            document["rgb_sync_pending"], document["rgb_sync_rejects"])
+
+
+def test_a_set_ahead_of_the_joint_state_is_deferred_not_rejected_when_it_is_emitted_later():
+    assembler = _assembler()
+    assembler.push_joints(1.0, _joints())
+    assembler.push_image("head", 1.2, _frame(1))
+    assembler.push_image("wrist", 1.2, _frame(2))
+    assert assembler.poll() is None and assembler.poll() is None
+    assert _counts(assembler) == ({"rgb_stale": 1}, {}, {}, 1, 0)       # undecided: not a reject yet
+    assembler.push_joints(1.15, _joints())                              # the joint stream catches up (the sample at or before the set)
+    assembler.push_joints(1.25, _joints())
+    observation, _audit = assembler.poll()
+    assert observation["sim_time_s"] == 1.2
+    assert _counts(assembler) == ({"rgb_stale": 1}, {"rgb_stale": 1}, {}, 0, 0)
+    assert assembler.poll() is None and _counts(assembler)[:3] == ({"rgb_stale": 1}, {"rgb_stale": 1}, {})
+
+
+def test_a_skipped_set_that_a_newer_set_supersedes_is_a_true_reject():
+    assembler = _assembler()
+    assembler.push_joints(1.0, _joints())
+    assembler.push_image("head", 0.8, _frame(1))
+    assembler.push_image("wrist", 0.8, _frame(2))
+    assert assembler.poll() is None
+    assembler.push_image("head", 1.0, _frame(3))
+    assembler.push_image("wrist", 1.0, _frame(4))
+    assert assembler.poll() is not None
+    assert _counts(assembler) == ({"rgb_stale": 1}, {}, {"rgb_stale": 1}, 0, 1)
+    skewed = _assembler()
+    skewed.push_joints(1.3, _joints())
+    skewed.push_image("head", 1.0, _frame(1))
+    skewed.push_image("wrist", 1.3, _frame(2))
+    assert skewed.poll() is None
+    skewed.push_image("head", 1.3, _frame(3))
+    assert skewed.poll() is not None                                    # the skewed pair was replaced, then a fine pair emitted
+    assert _counts(skewed) == ({"rgb_skew": 1}, {}, {"rgb_skew": 1}, 0, 1)
+
+
+def test_a_pending_set_is_a_true_reject_when_the_session_is_reset():
+    assembler = _assembler()
+    assembler.push_joints(1.0, _joints())
+    assembler.push_image("head", 1.2, _frame(1))
+    assembler.push_image("wrist", 1.2, _frame(2))
+    assert assembler.poll() is None
+    assembler.reset("session-2", source_floor_s=0.0)
+    assert _counts(assembler) == ({"rgb_stale": 1}, {}, {"rgb_stale": 1}, 0, 1)
+
+
+def test_the_skip_counts_split_exactly_into_deferred_rejected_and_pending():
+    assembler = _assembler()
+    assembler.push_joints(1.0, _joints())
+    for stamp in (1.1, 1.2, 1.3):                                       # three sets ahead of the joint state, each replaced by the next
+        assembler.push_image("head", stamp, _frame(1))
+        assembler.push_image("wrist", stamp, _frame(2))
+        assert assembler.poll() is None
+    assembler.push_joints(1.25, _joints())
+    assembler.push_joints(1.35, _joints())
+    assert assembler.poll() is not None                                 # the last one catches up
+    assembler.push_image("head", 1.5, _frame(3))
+    assembler.push_image("wrist", 1.5, _frame(4))
+    assert assembler.poll() is None                                     # ahead again, still undecided
+    skips, deferred, rejects, pending, total = _counts(assembler)
+    assert sum(skips.values()) == sum(deferred.values()) + sum(rejects.values()) + pending
+    assert (skips, deferred, rejects, pending, total) == ({"rgb_stale": 4}, {"rgb_stale": 1}, {"rgb_stale": 2}, 1, 2)
 
 
 def test_a_set_that_is_skewed_or_stale_is_not_emitted():
