@@ -37,8 +37,10 @@ from .dynamic_frozen_policy import (
     _execution_state_max_age_s,
     _frozen_descend_final_distance_m,
     _frozen_policy_file,
+    _check_teacher_source_pose,
     _frozen_run_inputs,
     _frozen_teacher_schema,
+    _frozen_teacher_source,
     _load_safety_inputs,
 )
 from .dynamic_planner import RosDynamicPlanner
@@ -784,6 +786,7 @@ def run_dynamic_execute(
     try:   # R3-a: a schema 6 freeze derives this episode's values from (campaign seed, scene id); every other schema changes nothing
         episode_diversity, run_template, via_offset = _frozen_run_inputs(
             frozen, lease_values["point_id"], loaded.template, getattr(options, "start_pose_draw", None))
+        teacher_source_entry = _frozen_teacher_source(frozen, manifest_option, share_dir, lease_values["point_id"])   # indoor P3
     except Exception as error:
         failure_code = _failure_code(error)
         finish_setup("rejected", failure_code)
@@ -914,6 +917,7 @@ def run_dynamic_execute(
             from ..act.scene_operation import make_scene_operation_hook
             task_scene.on_service_call = make_scene_operation_hook(event_stream, state=lambda: "SETUP")
         mark("task_scene_port.end")
+        gap = _check_teacher_source_pose(teacher_source_entry, sample, initial)   # indoor P3: a privileged pose is the simulator's
         mark("prepare_dynamic_cup_scene.begin")
         perception_error = None
         perception_error_failed = False
@@ -995,6 +999,8 @@ def run_dynamic_execute(
         execution._task_geometry = geometry
         if episode_diversity is not None:
             execution._record_episode_diversity(episode_diversity)
+        if teacher_source_entry is not None:
+            execution._record_teacher_source(teacher_source_entry, published_truth_gap_m=gap)
         if getattr(options, "final_stop_proof", False) is True:
             execution.final_stop_proof_enabled = True
         if inject_failure_at is not None:

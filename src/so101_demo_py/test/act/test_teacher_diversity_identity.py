@@ -49,3 +49,15 @@ def test_values_that_are_not_the_derivation_of_the_scene_are_refused_at_open(tmp
 def test_a_derivation_check_passes_for_the_right_scene(tmp_path):
     values = td.values_for_policy(SCHEMA6, "act-0001")
     assert open_episode(tmp_path / "episode", diversity=values, diversity_policy=SCHEMA6).identity["teacher_diversity"] == values
+
+
+def test_the_episode_identity_carries_the_appearance_and_the_teacher_source_only_when_given(tmp_path):
+    record = {"plan_sha256": "a" * 64, "kind": "randomised", "layout": "A", "draw_sha256": "b" * 64, "variant_sha256": "c" * 64,
+              "cup_family": "red", "realized_sha256": "d" * 64}
+    episode = open_episode(tmp_path / "episode", scene_appearance=record, teacher_source="privileged_pose")
+    assert episode.identity["scene_appearance"] == record and episode.identity["teacher_source"] == "privileged_pose"
+    written = json.loads((tmp_path / "episode" / "audit" / "episode.json").read_bytes())
+    assert written["scene_appearance"] == record and written["teacher_source"] == "privileged_pose" and written["scene_id"] == "act-0001"
+    plain = open_episode(tmp_path / "plain")
+    assert "scene_appearance" not in plain.identity and "teacher_source" not in plain.identity
+    assert "scene_appearance" not in json.loads((tmp_path / "plain" / "audit" / "episode.json").read_bytes())

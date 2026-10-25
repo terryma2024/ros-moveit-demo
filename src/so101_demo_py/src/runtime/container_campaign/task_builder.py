@@ -79,6 +79,11 @@ class TaskInput:
     rig: object = DEFAULT_RIG
     #: the scene and compiled-model hashes the frozen inputs bind; the R3-a start pose check must run on exactly that model
     frozen_scene: object = None
+    #: indoor P3: the scene's row of an appearance plan (`frozen_appearance.scene_entry`: plan, appearance, Teacher source), else None
+    appearance: object = None
+    #: the frozen compiled-model identity (the execution snapshot's `model_sha256`) and the Teacher endpoint's start tolerance (m)
+    expected_model_sha256: object = None
+    start_tolerance_m: object = None
 
 
 def _finite(value):
@@ -106,8 +111,11 @@ def _check_spec(spec):
     return spec
 
 
-def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
-    """Validate the assignment against the shard and the frozen originals; creates nothing."""
+def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic,scene_switch=None):
+    """Validate the assignment against the shard and the frozen originals; creates nothing.
+
+    `scene_switch` (`scene_switch.StackSceneSwitch`) reads the scene's appearance row of a list that carries an appearance plan; a list
+    with a plan and no switch is refused (the shard could not give the stack the scene), and so is a row that is not the plan's."""
     if type(task) is not TaskSpec:
         raise ValueError('COLLECTION_TASK_SPEC_INVALID')
     _check_spec(shard_spec)
@@ -187,6 +195,22 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
         if document['scene_manifest']['sha256']!=frozen['scene_manifest']['sha256']:
             raise ValueError('COLLECTION_CASE_SCENE_MANIFEST_MISMATCH')
         require_scope_for_inputs(scope,frozen,Path(validate_file_ref(refs['inputs_manifest'])))
+    appearance=None
+    if 'scene_manifest' in frozen:
+        from so101_demo.act import appearance_plan,frozen_appearance
+        manifest_file=Path(validate_file_ref(refs['inputs_manifest']))
+        if frozen_appearance.PLAN_KEY in frozen_appearance.scene_document(frozen,manifest_file) and scene_switch is None:
+            raise ValueError('COLLECTION_CASE_SCENE_SWITCH_REQUIRED')
+        if scene_switch is not None:
+            try:
+                appearance=scene_switch.entry(frozen,manifest_file,document['scene_id'])
+            except appearance_plan.AppearanceInvalid as error:
+                raise ValueError('COLLECTION_CASE_APPEARANCE_INVALID: '+str(error)[:200]) from error
+        if appearance is not None:
+            if appearance['plan']['rig']!=rig.rig:
+                raise ValueError('COLLECTION_CASE_APPEARANCE_RIG_MISMATCH')
+            if not appearance_plan.teacher_source_allowed(rig,appearance['teacher_source'],appearance['appearance']['kind']):
+                raise ValueError('COLLECTION_CASE_TEACHER_SOURCE_NOT_ALLOWED')
     for role in ('contact_proposal','contact_activation'):
         original=read_document(Path(refs['inputs_manifest']['path']).parent/frozen['roles'][role]['path'])
         if original.get('policy_fingerprint')!=identity['contact_policy_fingerprint']:
@@ -196,7 +220,9 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
     return TaskInput(task_id=task.task_id,root=root,scene_id=document['scene_id'],row=row,refs=refs,
         config=config,campaign=campaign,teacher_policy=dict(frozen['teacher_execution_policy']['values']),
         recorder_policy=recorder,teacher=document['teacher'],
-        shard_spec=shard_spec,rig=rig,frozen_scene=scene_identity)
+        shard_spec=shard_spec,rig=rig,frozen_scene=scene_identity,appearance=appearance,
+        expected_model_sha256=snapshot.get('model_sha256'),
+        start_tolerance_m=(frozen.get('teacher_endpoint') or {}).get('values',{}).get('tolerances',{}).get('initial_position_m'))
 
 
 def local_lease(shard_spec,scene_id,*,issued,deadline):
@@ -715,7 +741,7 @@ def _stack_ready(ports,ready_check):
 def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,ready_check=None,evidence=None,
                           inference_client_factory=InferenceClient,dependencies=None,clock=time.monotonic,
                           runtime_overrides=None,perception_runner=None,teacher_bound_s=None,recovery_timeout_s=None,
-                          process_group_factory=None):
+                          process_group_factory=None,scene_switch=None):
     """Validate, then build artifacts, resources, ports, Teacher client, runtime and workload; starts nothing.
 
     The keywords after `output_root` are test seams with production defaults: the Teacher context evidence reader, the
@@ -727,17 +753,31 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
     single-use start probe, consumed by the shard start, so it is never a fallback."""
     if not callable(ready_check) or ready_check is getattr(stack,'ready_probe',None):
         raise ValueError('COLLECTION_READY_CHECK_REQUIRED')
-    loaded=load_task_input(task,shard_spec,teacher_socket=teacher_socket,clock=clock)
+    loaded=load_task_input(task,shard_spec,teacher_socket=teacher_socket,clock=clock,scene_switch=scene_switch)
     _check_stack(stack,shard_spec,loaded.root,output_root)
     if getattr(stack.launch,'rig',DEFAULT_RIG.rig)!=loaded.rig.rig:
         raise ValueError('COLLECTION_BORROWED_STACK_MISMATCH')
     state=LocalTaskState(clock)
     scene=loaded.scene_id
+    if loaded.appearance is not None:
+        # indoor P3: the stack runs the scene of this task before anything is built on it (a switch stops and starts the stack)
+        switched=scene_switch.switch(loaded.appearance['appearance'],scene,expected_model_sha256=loaded.expected_model_sha256)
+        scene_switch.record_task(task.task_id,loaded.appearance,switched)
+        _check_stack(stack,shard_spec,loaded.root,output_root)
     # The task directory is reserved before the runtime exists: the process tree writes its manifest there.
     artifacts=CollectionCaseArtifacts(worker_id=shard_spec['worker_id'],launch_generation=shard_spec['launch_generation'],
         worker_root=Path(output_root),case_inputs={scene:loaded.refs},clock=clock,task_id=task.task_id)
     resources=task_resources(shard_spec,task_root=artifacts.root)
     reader=evidence or _retained_evidence(resources.session_id)
+    pose_source=None
+    if loaded.appearance is not None:
+        from so101_demo.runtime.container_campaign.privileged_pose import PoseSource
+        from so101_demo.runtime.container_campaign.scene_switch import APPEARANCE_DIRECTORY
+        if not _finite(loaded.start_tolerance_m):
+            raise ValueError('COLLECTION_CASE_ENDPOINT_TOLERANCE_MISSING')
+        pose_source=PoseSource(source=loaded.appearance['teacher_source'],kind=loaded.appearance['appearance']['kind'],
+            rig=loaded.rig,evidence=reader,session_id=resources.session_id,tolerance_m=loaded.start_tolerance_m,
+            record_directory=loaded.root/APPEARANCE_DIRECTORY,task_id=task.task_id)
     ports=ActRosRuntimePorts(resources,catalog={scene:loaded.row},config=loaded.config,mode=RunMode.EXECUTE,
         broker_generation=resources.generation,dependencies=dict(act_profile=True,rig=loaded.rig,
             workspace_provider=artifacts.workspace,authorize=local_authorize(state),
@@ -764,6 +804,6 @@ def build_collection_task(task,*,stack,shard_spec,output_root,teacher_socket,rea
         kwargs['process_group']=process_group_factory(resources.worker_root/'owned-runtime-processes.json')
     runtime=ContainerCollectionRuntime(resources,RunMode.EXECUTE,**kwargs)
     return CollectionTaskExecution(task_input=loaded,state=state,artifacts=artifacts,resources=resources,ports=ports,
-        teacher=teacher,runtime=runtime,workload=ActFixedCollectionWorkload(scene_ids=(scene,)),task=task,
+        teacher=teacher,runtime=runtime,workload=ActFixedCollectionWorkload(scene_ids=(scene,),pose_source=pose_source),task=task,
         stack=stack,clock=clock,teacher_bound_s=teacher_bound_s,recovery_timeout_s=recovery_timeout_s,
         evidence_reader=reader)

@@ -188,3 +188,44 @@ def test_generic_admission_return_cannot_replace_act_pose_before_teacher(tmp_pat
     result = ParallelWorker(ports).run_one()
     assert result.terminal_status is AttemptStatus.INVALID
     assert "ACT_COLLECTION_ADMITTED_POSE_CHANGED" in result.failure_message
+
+
+def test_a_pose_source_replaces_the_pose_before_admission_and_the_teacher_gets_the_replaced_chain(tmp_path):
+    import dataclasses
+
+    from test_act_ros_runtime import build_case, run
+    from so101_demo.core.task_geometry import Pose7
+    h = build_case(tmp_path, identity=dict(batch_id="batch-a", coordinator_epoch=1,
+        worker_id="w1", worker_generation=1, point_id="p1", attempt_id="p1-lease-1", lease_generation=1),
+        reset_epoch="reset-1")
+    admitted = run(h)
+    replaced = dataclasses.replace(admitted, pose_world=Pose7((0.5, 0.25, 0.1, 0.0, 0.0, 0.0, 1.0)))
+    seen = []
+
+    def pose_source(lease, chain):
+        seen.append((lease, chain))
+        return replaced
+
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: admitted
+    fake.runtime.admit_pose = lambda lease, chain: chain
+    teacher_calls = []
+    fake.runtime.execute_expert = lambda lease, pose: teacher_calls.append(pose) or NS(
+        status=AttemptStatus.FAILED, reason="TEACHER_GRASP_FAILED", physical_action_proven_absent=False)
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=pose_source)
+    ParallelWorker(ports).run_one()
+    assert len(seen) == 1 and seen[0][1] is admitted and seen[0][0].point_id == "p1"
+    assert teacher_calls == [replaced] and teacher_calls[0].pose_world.values[:3] == (0.5, 0.25, 0.1)
+
+
+def test_a_pose_source_is_never_asked_for_a_perception_terminal_and_must_be_callable(tmp_path):
+    _h, terminal = terminal_case(tmp_path, "NOT_DETECTED")
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: terminal
+    fake.runtime.execute_expert = lambda *_args: pytest.fail("Teacher motion started for a perception terminal")
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=lambda *_args: pytest.fail("pose source asked"))
+    assert ParallelWorker(ports).run_one().terminal_status is AttemptStatus.FAILED
+    with pytest.raises(ValueError, match="ACT_COLLECTION_POSE_SOURCE_INVALID"):
+        ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=5)

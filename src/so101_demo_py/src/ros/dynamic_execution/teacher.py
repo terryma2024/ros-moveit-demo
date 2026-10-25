@@ -224,6 +224,18 @@ class TeacherRun:
         self._document["teacher_diversity"] = {"values": values, "values_sha256": hashlib.sha256(canonical.encode()).hexdigest()}
         self._write()
 
+    def _record_teacher_source(self, entry, *, published_truth_gap_m) -> None:
+        """Indoor P3: this episode's Teacher source and appearance draw (from the frozen scene list, re-derived from its plan) on the Teacher
+        document, with the distance of the pose the Teacher was given from the simulator's cup position at the start. The offline processor
+        compares it with the same row when it opens the episode."""
+
+        appearance = entry["appearance"]
+        self._document["teacher_source"] = {
+            "source": entry["teacher_source"], "kind": appearance["kind"], "plan_sha256": appearance["plan_sha256"],
+            "draw_sha256": appearance["draw_sha256"], "variant_sha256": appearance["variant_sha256"],
+            "published_vs_simulator_m": published_truth_gap_m}
+        self._write()
+
     def _check_episode_start_pose(self) -> None:
         """R3-a, before any motion: the arm stands on one of the start poses this episode's seed draws.
 

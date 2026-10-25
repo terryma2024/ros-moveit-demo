@@ -1599,6 +1599,28 @@ TEST_F(AtomicEvidenceTest, FullSceneStateTracksEveryDynamicBodyAndBindsCompiledM
   EXPECT_NE(changed.model_sha256(), fingerprint);
 }
 
+TEST_F(AtomicEvidenceTest, ASceneVariantStackDeclaresTheNominalModelIdentityAndKeepsTheComputedHashApart)
+{
+  so101_mujoco_support::SceneStateBuilder plain;
+  ASSERT_TRUE(plain.configure(model_.get()));
+  EXPECT_EQ(plain.model_sha256(), plain.computed_model_sha256());
+  const std::string nominal(64, 'a');
+  so101_mujoco_support::SceneStateBuilder declared;
+  ASSERT_TRUE(declared.configure(model_.get(), nominal));
+  EXPECT_EQ(declared.model_sha256(), nominal);
+  EXPECT_EQ(declared.computed_model_sha256(), plain.model_sha256());
+  place_free_body("mast_joint", .8, .3, .4);
+  data_->time = .25;
+  const auto begin = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  EXPECT_EQ(declared.build(model_.get(), data_.get(), "session-a", 1, 1, false, begin).model_sha256, nominal);
+  for (const auto & bad : {std::string(63, 'a'), std::string(65, 'a'), std::string(64, 'A'), std::string(64, 'g'), std::string("../")}) {
+    so101_mujoco_support::SceneStateBuilder refused;
+    EXPECT_FALSE(refused.configure(model_.get(), bad)) << bad;
+    EXPECT_TRUE(refused.model_sha256().empty());
+  }
+}
+
 
 TEST(StampingChunkPublisherTest, StampsThePublishTimeInItsOwnThreadAndNeverBlocksThePostingThread)
 {

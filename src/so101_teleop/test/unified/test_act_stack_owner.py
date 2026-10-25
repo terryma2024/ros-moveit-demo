@@ -296,3 +296,54 @@ def test_a_stack_of_another_rig_is_launched_with_the_rig_and_observed_with_its_p
                    dict(rig="Side Wrist", rig_profile=profile), dict(rig="side-wrist", rig_profile=Path("rig-side.yaml"))):
         with pytest.raises(ValueError, match="ACT_STACK_RIG_INVALID"):
             ActStackLaunch(**common, **kwargs)
+
+
+def test_a_declared_model_identity_needs_a_scene_variant_a_lowercase_sha_and_reaches_only_the_simulator_environment(tmp_path):
+    from so101_teleop.unified.act_stack import DECLARED_MODEL_ENV
+
+    scene = tmp_path / "scene_variant.xml"
+    scene.write_text("<mujoco/>")
+    common = dict(ros2_executable=Path(sys.executable), session_id="act-case-1", evidence_root=tmp_path, ros_domain_id=179)
+    digest = "ab" * 32
+    plain = ActStackLaunch(**common, environment={DECLARED_MODEL_ENV: "f" * 64, "X": "1"})
+    assert DECLARED_MODEL_ENV not in plain.process_environment() and plain.process_environment()["X"] == "1"   # never inherited
+    declared = ActStackLaunch(**common, environment={"X": "1"}, mujoco_scene=scene, declared_model_sha256=digest)
+    assert declared.process_environment()[DECLARED_MODEL_ENV] == digest and declared.argv() == [*plain.argv(), f"mujoco_scene:={scene}"]
+    for bad in ("A" * 64, "a" * 63, "g" * 64, "", 5):
+        with pytest.raises(ValueError, match="ACT_STACK_DECLARED_MODEL_INVALID"):
+            ActStackLaunch(**common, environment={}, mujoco_scene=scene, declared_model_sha256=bad)
+    with pytest.raises(ValueError, match="ACT_STACK_DECLARED_MODEL_INVALID"):
+        ActStackLaunch(**common, environment={}, declared_model_sha256=digest)       # no variant scene: nothing to declare
+
+
+def test_a_stopped_stack_relaunches_with_another_scene_and_a_running_one_does_not(tmp_path):
+    from so101_teleop.unified.contracts import MutationError
+
+    scene = tmp_path / "scene_variant.xml"
+    scene.write_text("<mujoco/>")
+
+    async def run():
+        first = launch(tmp_path, "import time; time.sleep(120)")
+        item = ActStackProcessOwner(first, ready_probe=lambda: True, stop_probe=lambda: True, graph_clear_probe=lambda: True)
+        owner = await item.start(timeout_s=3)
+        second = replace(first, mujoco_scene=scene, declared_model_sha256="cd" * 32)
+        with pytest.raises(MutationError, match="ACT_STACK_RELAUNCH_WHILE_RUNNING"):
+            item.relaunch_with(second, ready_probe=lambda: True)
+        await item.stop(timeout_s=0.2)
+        (tmp_path / "cleanup-receipt.json").rename(tmp_path / "cleanup-receipt-0.json")
+        for changed in (replace(first, session_id="act-case-2"), replace(first, ros_domain_id=178),
+                        replace(first, environment={"Y": "2"})):
+            with pytest.raises(MutationError, match="ACT_STACK_RELAUNCH_IDENTITY_CHANGED"):
+                item.relaunch_with(changed, ready_probe=lambda: True)
+        with pytest.raises(ValueError, match="ACT_STACK_OWNER_CONFIG_INVALID"):
+            item.relaunch_with(second, ready_probe=None)
+        probes = []
+        item.relaunch_with(second, ready_probe=lambda: probes.append(1) or True)
+        assert item.launch is second and item.owner is None and item.process is None
+        again = await item.start(timeout_s=3)
+        assert probes and again.pid != owner.pid
+        await item.stop(timeout_s=0.2)
+        assert json.loads((tmp_path / "cleanup-receipt.json").read_text())["leader_pid"] == again.pid
+        assert json.loads((tmp_path / "cleanup-receipt-0.json").read_text())["leader_pid"] == owner.pid
+
+    asyncio.run(run())

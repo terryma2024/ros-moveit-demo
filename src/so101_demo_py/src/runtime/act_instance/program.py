@@ -27,17 +27,19 @@ def _refuse_motion(_task):
     raise ValueError("SHARD_READINESS_HAS_NO_MOTION_PORT")
 
 
-def shard_builder(spec,*,stack,layout,ready_check=None):
+def shard_builder(spec,*,stack,layout,ready_check=None,scene_switch=None):
     """The executor's task builder for this workload; readiness shards have no motion port.
 
     Collection tasks gate on `ready_check`, a repeatable fresh observation of the borrowed stack. The stack's own
-    `ready_probe` is the single-use start probe, already consumed by the shard start, so it is never the gate."""
+    `ready_probe` is the single-use start probe, already consumed by the shard start, so it is never the gate.
+
+    `scene_switch` (indoor P3) gives the stack the scene of each task when the scene list carries an appearance plan."""
     if spec['workload_kind']=='no_motion_readiness':return _refuse_motion
     if spec['workload_kind']=='act_collection':
         from so101_demo.runtime.container_campaign.task_builder import build_collection_task
         if not callable(ready_check):raise ValueError('CAMPAIGN_SHARD_READY_CHECK_REQUIRED')
         return functools.partial(build_collection_task,stack=stack,shard_spec=spec,output_root=layout.output_root,
-            teacher_socket=layout.teacher_socket,ready_check=ready_check)
+            teacher_socket=layout.teacher_socket,ready_check=ready_check,scene_switch=scene_switch)
     if spec['workload_kind']=='act_rollout':
         from so101_demo.runtime.act_rollout.task_builder import build_rollout_task
         return functools.partial(build_rollout_task,stack=stack,shard_spec=spec,output_root=layout.output_root,
@@ -63,7 +65,7 @@ def instance_id_for(spec):
 
 
 async def serve_instance(spec, runtime_config, layout, *, process, stack, ready, retirement, install_signals=True,
-                         ready_check=None):
+                         ready_check=None, scene_switch=None):
     """Serve the Host's task operations until the executor has stopped; return the process exit code."""
     from so101_demo.runtime.container_campaign import task_executor
     from so101_demo.runtime.container_campaign.retirement import _write
@@ -78,7 +80,7 @@ async def serve_instance(spec, runtime_config, layout, *, process, stack, ready,
     # Host status polling bounds owner silence (heartbeat_timeout_s); the frozen worker recovery bound covers
     # helper stop and native retirement.
     executor = task_executor.ContainerTaskExecutor(instance_id=instance_id_for(spec),
-        builder=shard_builder(spec,stack=stack,layout=layout,ready_check=ready_check),
+        builder=shard_builder(spec,stack=stack,layout=layout,ready_check=ready_check,scene_switch=scene_switch),
         retirement=start_aware,output_root=output_root,
         owner_timeout_s=runtime_config.heartbeat_timeout_s,stop_timeout_s=runtime_config.worker_recovery_timeout_s,
         retire_timeout_s=runtime_config.worker_recovery_timeout_s,ready=False)
@@ -233,5 +235,13 @@ async def run_instance(spec, runtime_config, layout):
     retirement = NativeShardRetirement(process_owner=process,launch_generation=spec["launch_generation"],
         evidence_root=root,stack=stack,
         goal_stop_budget_s=runtime_config.heartbeat_timeout_s,stack_stop_budget_s=stack.stop_timeout_s,**lanes)
+    scene_switch = None
+    if spec["workload_kind"] == "act_collection":
+        # indoor P3: a scene list with an appearance plan gives each task its own scene; the stack is started again for it
+        from so101_demo.runtime.container_campaign.scene_switch import StackSceneSwitch
+        from so101_teleop.unified.pick_place_startup_issuer import InstalledActStackReadinessProbe
+        scene_switch = StackSceneSwitch(stack=stack,owned_root=root,share=prefix/"share"/"so101_demo_py",
+            new_ready_probe=lambda switched_launch: InstalledActStackReadinessProbe(switched_launch,observer),
+            start_timeout_s=runtime_config.initializing_hard_timeout_s)
     return await serve_instance(spec,runtime_config,layout,process=process,stack=stack,ready=ready,
-        retirement=retirement,ready_check=ready_check)
+        retirement=retirement,ready_check=ready_check,scene_switch=scene_switch)

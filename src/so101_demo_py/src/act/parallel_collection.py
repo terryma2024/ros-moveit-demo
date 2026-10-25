@@ -229,11 +229,16 @@ class ActFixedCollectionWorkload:
 
     kind = "act_fixed_collection"
 
-    def __init__(self, *, scene_ids):
+    def __init__(self, *, scene_ids, pose_source=None):
         from so101_demo.parallel_batch.contracts.common import _require_id
 
         if type(scene_ids) is not tuple or not scene_ids or len(set(scene_ids)) != len(scene_ids):
             raise ValueError("ACT_COLLECTION_SCENES_INVALID")
+        if pose_source is not None and not callable(pose_source):
+            raise ValueError("ACT_COLLECTION_POSE_SOURCE_INVALID")
+        #: indoor P3 (decision D2): `pose_source(lease, chain)` returns the camera chain's admitted pose, or the same chain carrying the
+        #: simulator's pose (`runtime/container_campaign/privileged_pose.py`); None leaves the chain untouched, as for every other rig
+        self.pose_source = pose_source
         try:
             for scene_id in scene_ids:
                 _require_id("scene_id", scene_id)
@@ -282,6 +287,8 @@ class ActFixedCollectionWorkload:
                 recorder_stopped=recorder_stopped(lease)))
             self.cleanup_unconfirmed = not all(decision.stop_facts.values())
             return decision
+        if self.pose_source is not None:
+            chain = boundary(lambda current: self.pose_source(current, chain))
         admitted = boundary(lambda current: runtime.admit_pose(current, chain))
         if admitted is not chain:
             raise ValueError("ACT_COLLECTION_ADMITTED_POSE_CHANGED")

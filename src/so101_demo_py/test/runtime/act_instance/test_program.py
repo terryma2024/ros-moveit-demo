@@ -150,7 +150,10 @@ def test_the_collection_builder_gets_the_layouts_output_and_teacher_socket(tmp_p
     builder = program().shard_builder(spec, stack=stack, layout=layout, ready_check=check)
 
     assert builder.keywords == dict(stack=stack, shard_spec=spec, output_root=layout.output_root,
-        teacher_socket=layout.teacher_socket, ready_check=check)
+        teacher_socket=layout.teacher_socket, ready_check=check, scene_switch=None)
+    # indoor P3: the switch that gives the stack the scene of each task is handed on to the task builder
+    switch = object()
+    assert program().shard_builder(spec, stack=stack, layout=layout, ready_check=check, scene_switch=switch).keywords['scene_switch'] is switch
 
 
 def test_a_layout_is_absolute_without_traversal_and_distinct_from_the_owned_root(tmp_path):

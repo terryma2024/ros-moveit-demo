@@ -97,3 +97,32 @@ def _execution_state_max_age_s(share_dir, *, teacher_run: bool, file_name: str |
         return loader(Path(share_dir) / "config/act" / file_name)["state_max_age_s"]
     except (OSError, ValueError):
         return None
+
+
+def _frozen_teacher_source(frozen, manifest_option, share_dir, scene_id):
+    """Indoor P3: the verified appearance entry of this scene (plan, appearance, `teacher_source`) when the frozen scene list carries an
+    appearance plan, else None (every other freeze changes nothing). The inventory is the one of the `share_dir` the Teacher runs from."""
+
+    if frozen is None or manifest_option is None or scene_id is None or "scene_manifest" not in frozen:
+        return None
+    from ..act import appearance_plan, frozen_appearance
+
+    return frozen_appearance.scene_entry(frozen, manifest_option, scene_id,
+                                         inventory=lambda: appearance_plan.scene_inventory(Path(share_dir) / "assets/mujoco/act"))
+
+
+def _check_teacher_source_pose(entry, sample, initial):
+    """Before any motion: the distance (m) between the pose that arrived on `/cup_pose` and the simulator's cup position at the start
+    (None without a Teacher source). A privileged episode's pose IS the simulator's: more than `PRIVILEGED_PUBLISHED_TOLERANCE_M` apart is
+    refused (`TEACHER_SOURCE_PRIVILEGED_POSE_MISMATCH`), whatever the camera chain said."""
+
+    if entry is None:
+        return None
+    import math
+
+    from ..act.appearance_plan import PRIVILEGED_PUBLISHED_TOLERANCE_M, TEACHER_SOURCE_PRIVILEGED
+
+    gap = math.dist(sample.pose_world.values[:3], initial.simulator_pose_world.position_m)
+    if entry["teacher_source"] == TEACHER_SOURCE_PRIVILEGED and not gap <= PRIVILEGED_PUBLISHED_TOLERANCE_M:
+        raise RuntimeError("TEACHER_SOURCE_PRIVILEGED_POSE_MISMATCH")
+    return gap

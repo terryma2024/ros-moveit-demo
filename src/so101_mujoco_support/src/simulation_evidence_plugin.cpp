@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
 #include <limits>
 #include <stdexcept>
@@ -131,7 +132,14 @@ bool SimulationEvidencePlugin::init(
         [publisher](const msg::RobotContactEvidence & sample) {publisher->publish(sample);},
         [logger](const std::string & text) {RCLCPP_INFO(logger, "%s", text.c_str());});
       robot_contacts_->reset(0);
-      if (!scene_builder_.configure(model)) {return false;}
+      // A scene-variant stack (indoor P3) is launched with the identity of its nominal scene; no variable: the model's own hash.
+      const char * declared = std::getenv("SO101_DECLARED_MODEL_SHA256");
+      if (!scene_builder_.configure(model, declared ? std::string(declared) : std::string())) {return false;}
+      if (declared) {
+        RCLCPP_INFO(
+          node_->get_logger(), "scene state declares the model identity %s; the loaded model hashes to %s",
+          declared, scene_builder_.computed_model_sha256().c_str());
+      }
       scene_publisher_ = node_->create_publisher<msg::SceneStateEvidence>(
         "/so101/simulation/scene_state", evidence_qos);
       realtime_scene_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<msg::SceneStateEvidence>>(scene_publisher_);

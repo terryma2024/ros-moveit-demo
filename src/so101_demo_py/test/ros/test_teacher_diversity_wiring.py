@@ -21,19 +21,23 @@ class Execution(TeacherExecution):
         super().__init__(events, faults)
         self._document = {}
         self.diversity_recorded = []
+        self.source_recorded = []
 
     def _record_episode_diversity(self, values):
         self._episode_diversity = values
         self.diversity_recorded.append(values)
 
+    def _record_teacher_source(self, entry, *, published_truth_gap_m):
+        self.source_recorded.append((entry, published_truth_gap_m))
 
-def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", start_draw=2):
+
+def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", start_draw=2, simulator_x=-0.03, source_entry=None):
     from so101_demo.act import frozen_runtime_inputs
     from so101_demo.ros import teacher_safety
     from so101_demo.ros.dynamic_runtime import run_dynamic_execute
 
     events, built, calls = [], {}, {}
-    runtime = _runtime(events, observations=tuple(_observation(simulator_x=-0.03, moveit_x=-0.03) for _ in range(3)),
+    runtime = _runtime(events, observations=tuple(_observation(simulator_x=simulator_x, moveit_x=-0.03) for _ in range(3)),
                        scene=RecordingTaskScenePort())
     template = runtime.load_policy(None, backend="mujoco").template
 
@@ -61,6 +65,9 @@ def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", st
                         lambda path: (frozen, {"scene_path": "assets/mujoco/act/scene.xml"}, PACKAGE_ROOT))
     monkeypatch.setattr(teacher_safety, "load_frozen_safety", lambda path: (_ for _ in ()).throw(RuntimeError("x")))
     monkeypatch.setattr(teacher_safety.PhysicsHazardWatch, "attach", lambda self, node: None)
+    if source_entry is not None:
+        from so101_demo.ros import dynamic_runtime
+        monkeypatch.setattr(dynamic_runtime, "_frozen_teacher_source", lambda *args: source_entry)
     options = _options(tmp_path)
     options.frozen_inputs_manifest = tmp_path / "inputs-manifest.json"
     if point_id is not None:
@@ -117,3 +124,49 @@ def test_a_schema_6_freeze_without_a_scene_id_is_refused_before_any_motion(tmp_p
     code, execution, calls, _template, _policy, events = diversity_run(tmp_path, monkeypatch, SCHEMA6, point_id=None)
     assert code == 1 and execution is None and "runner.run" not in events and "resolve" not in calls
     assert "TEACHER_DIVERSITY_SCENE_ID_REQUIRED" in capsys.readouterr().out
+
+
+# --- indoor P3: the Teacher source of the scene (a scene list with an appearance plan) -----------------------------------------------
+def source_entry(source):
+    return {"teacher_source": source, "appearance": {"kind": "randomised", "plan_sha256": "a" * 64, "draw_sha256": "b" * 64,
+                                                       "variant_sha256": "c" * 64}}
+
+
+def test_a_privileged_episode_whose_pose_is_the_simulators_runs_and_records_its_source(tmp_path, monkeypatch):
+    entry = source_entry("privileged_pose")
+    code, execution, _calls, _template, _policy, events = diversity_run(tmp_path, monkeypatch, SCHEMA6, source_entry=entry)
+    assert code == 0 and "runner.run" in events
+    assert len(execution.source_recorded) == 1 and execution.source_recorded[0][0] is entry
+    assert execution.source_recorded[0][1] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_privileged_episode_whose_pose_is_not_the_simulators_is_refused_before_any_motion(tmp_path, monkeypatch, capsys):
+    code, execution, calls, _template, _policy, events = diversity_run(
+        tmp_path, monkeypatch, SCHEMA6, simulator_x=-0.02, source_entry=source_entry("privileged_pose"))
+    assert code == 1 and execution is None and "runner.run" not in events and "resolve" not in calls
+    assert "TEACHER_SOURCE_PRIVILEGED_POSE_MISMATCH" in capsys.readouterr().out
+
+
+def test_a_camera_episode_records_how_far_its_pose_is_from_the_simulators_and_is_never_refused_for_it(tmp_path, monkeypatch):
+    code, execution, _calls, _template, _policy, events = diversity_run(
+        tmp_path, monkeypatch, SCHEMA6, simulator_x=-0.02, source_entry=source_entry("camera_rgbd"))
+    assert code == 0 and "runner.run" in events
+    assert execution.source_recorded[0][1] == pytest.approx(0.01)
+
+
+def test_a_freeze_without_a_scene_list_plan_records_no_source(tmp_path, monkeypatch):
+    code, execution, *_ = diversity_run(tmp_path, monkeypatch, SCHEMA6)
+    assert code == 0 and execution.source_recorded == []
+
+
+def test_a_scene_list_that_is_not_the_plans_is_refused_before_any_motion(tmp_path, monkeypatch, capsys):
+    from so101_demo.ros import dynamic_runtime
+    from so101_demo.act import appearance_plan as ap
+
+    def refuse(*args):
+        raise ap.AppearanceInvalid("APPEARANCE_ROW_NOT_DERIVED: act-0001")
+
+    monkeypatch.setattr(dynamic_runtime, "_frozen_teacher_source", refuse)
+    code, execution, calls, *_ = diversity_run(tmp_path, monkeypatch, SCHEMA6, source_entry=None)
+    assert code == 1 and execution is None and "resolve" not in calls
+    assert "APPEARANCE_ROW_NOT_DERIVED" in capsys.readouterr().out

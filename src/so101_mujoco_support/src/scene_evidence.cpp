@@ -18,11 +18,20 @@
 
 namespace so101_mujoco_support
 {
-bool SceneStateBuilder::configure(const mjModel * model)
+bool SceneStateBuilder::configure(const mjModel * model, const std::string & declared_sha256)
 {
   model_ = nullptr;
   model_sha256_.clear();
+  computed_model_sha256_.clear();
   if (!model || mj_version() != mjVERSION_HEADER) {return false;}
+  if (!declared_sha256.empty() &&
+    (declared_sha256.size() != 64 ||
+    !std::all_of(
+      declared_sha256.begin(), declared_sha256.end(),
+      [](const char c) {return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');})))
+  {
+    return false;
+  }
   const auto size = mj_sizeModel(model);
   if (size <= 0) {return false;}
   std::vector<uint8_t> bytes(static_cast<std::size_t>(size));
@@ -37,6 +46,8 @@ bool SceneStateBuilder::configure(const mjModel * model)
     model_sha256_ += hex[value >> 4];
     model_sha256_ += hex[value & 15];
   }
+  computed_model_sha256_ = model_sha256_;
+  if (!declared_sha256.empty()) {model_sha256_ = declared_sha256;}
   model_ = model;
   return true;
 }

@@ -187,6 +187,17 @@ def teacher_start_draw(path):
     return carried
 
 
+def teacher_source_record(path):
+    """Indoor P3: the Teacher's own record of its source and appearance draw (`teacher_source` of its manifest), or None when the manifest is
+    missing or has none. The episode identity of a scene list with an appearance plan is refused without it."""
+
+    try:
+        record = json.loads(Path(path).read_bytes()).get("teacher_source")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return record if isinstance(record, dict) else None
+
+
 def _sha256(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -363,13 +374,15 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     policy = (load_recorder_frozen_policy(inputs_manifest) if policy is None else dict(policy))
     stream_identity = StreamIdentity(identity["session_id"], identity["reset_epoch"], identity["attempt_id"])
     episode_root = out / "episode"
+    teacher_manifest_path = (out / "dynamic" / "dynamic-execute-manifest.json") if teacher_manifest is None else teacher_manifest
     options = SimpleNamespace(session_id=identity["session_id"], expected_reset_epoch=identity["reset_epoch"],
                               episode_root=episode_root,
                               evidence_root=out / "offline-evidence" / "dynamic", episode_scope=Path(scope),
                               episode_inputs_manifest=inputs_manifest, fault="none", **lease,
                               # R3-a: the start pose draw the Teacher applied, for the episode identity of a schema 6 freeze
-                              start_pose_draw=teacher_start_draw(
-                                  (out / "dynamic" / "dynamic-execute-manifest.json") if teacher_manifest is None else teacher_manifest))
+                              start_pose_draw=teacher_start_draw(teacher_manifest_path),
+                              # indoor P3: the Teacher's record of its source and appearance draw, for a scene list with an appearance plan
+                              teacher_source_record=teacher_source_record(teacher_manifest_path))
     stream = BagStream(bag, clock_map)
     first = stream.peek()
     if first is None:

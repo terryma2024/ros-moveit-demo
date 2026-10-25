@@ -25,6 +25,39 @@ def diversity_arguments(frozen: dict, scene_id: str, start_draw) -> dict:
     return {"diversity": values_for_policy(policy_values, scene_id, start_draw), "diversity_policy": policy_values}
 
 
+def appearance_arguments(frozen: dict, manifest_path, scene_id: str, teacher_record, *, share=None) -> dict:
+    """Indoor P3: the `open_point_episode` arguments that put the scene's appearance and Teacher source into the episode identity
+    (episode.json); {} for a freeze whose scene list has no appearance plan.
+
+    The row of the frozen scene list is re-derived from its plan (`frozen_appearance.scene_entry`), the Teacher manifest's own record of the
+    source and draw must be that row's (the Teacher read the same list), and a variant is realized again here, on this host's install, so the
+    identity carries the realized hash and the stripped physics fingerprint that this host computes (equal to the nominal one, or refused)."""
+
+    import tempfile
+
+    from . import appearance_plan as ap
+    from . import frozen_appearance, scene_variant_run
+
+    if "scene_manifest" not in frozen:
+        return {}
+    if share is None:
+        from ament_index_python.packages import get_package_share_directory
+        share = get_package_share_directory("so101_demo_py")
+    entry = frozen_appearance.scene_entry(frozen, manifest_path, scene_id,
+                                          inventory=lambda: ap.scene_inventory(scene_variant_run.nominal_dir(share)))
+    if entry is None:
+        return {}
+    appearance = entry["appearance"]
+    if (not isinstance(teacher_record, dict) or teacher_record.get("source") != entry["teacher_source"]
+            or teacher_record.get("draw_sha256") != appearance["draw_sha256"] or teacher_record.get("plan_sha256") != appearance["plan_sha256"]):
+        raise ValueError("APPEARANCE_TEACHER_MANIFEST_MISMATCH")
+    realized = None
+    if appearance["variant"] is not None:
+        with tempfile.TemporaryDirectory(prefix="so101-appearance-") as scratch:
+            realized = scene_variant_run.realize_into(scratch + "/variant", share, appearance["variant"])
+    return {"scene_appearance": frozen_appearance.identity_record(entry, realized=realized), "teacher_source": entry["teacher_source"]}
+
+
 def open_recorder_episode(options, *, offline: bool = False):
     """Bind the actual frozen bytes and full issued lease before opening the Recorder's episode.
 
@@ -124,6 +157,7 @@ def open_recorder_episode(options, *, offline: bool = False):
     # R3-a: a frozen schema 6 Teacher policy derives this scene's values; they enter the episode identity (episode.json)
     episode = open_point_episode(
         **diversity_arguments(frozen, document["scene_id"], getattr(options, "start_pose_draw", None)),
+        **appearance_arguments(frozen, manifest_path, document["scene_id"], getattr(options, "teacher_source_record", None)),
         episode_root=episode_root, session_id=options.session_id, attempt_id=lease.attempt_id,
         reset_epoch=options.expected_reset_epoch, release_epoch=0, lease=asdict(lease),
         scene_id=document["scene_id"], seed=document["seed"], mode=document["mode"],

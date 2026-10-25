@@ -895,8 +895,31 @@ def _manifest_episodes(records):
     values it was applied (R3-a); every other episode has the entry it always had."""
     return [{"scene_id": record["scene_id"], "split": record["split"], "content_sha256": record["content_sha256"],
              "frames": {destination: digest for destination, (_, digest) in sorted(record["frames"].items())},
-             **({"teacher_diversity": record["teacher_diversity"]} if record.get("teacher_diversity") is not None else {})}
+             **({"teacher_diversity": record["teacher_diversity"]} if record.get("teacher_diversity") is not None else {}),
+             # indoor P3: the appearance the episode was recorded under and the source of the Teacher's pose (only such an episode has them)
+             **({"scene_appearance": record["scene_appearance"], "teacher_source": record["teacher_source"]}
+                if record.get("scene_appearance") is not None else {})}
             for record in records]
+
+
+def episode_appearance_record(root, scene_id):
+    """`(scene_appearance, teacher_source)` of a sealed episode's audit identity (`audit/episode.json`), or `(None, None)` for an episode
+    without them (indoor P3). An appearance that names another scene's draw, or a source that the kind of the episode does not allow,
+    is refused."""
+    try:
+        document = json.loads((Path(root) / "audit" / "episode.json").read_bytes())
+    except (OSError, ValueError):
+        return None, None
+    record = document.get("scene_appearance") if isinstance(document, dict) else None
+    if record is None:
+        return None, None
+    from . import appearance_plan as ap
+
+    source = document.get("teacher_source")
+    if (document.get("scene_id") != scene_id or not isinstance(record, dict) or record.get("kind") not in (ap.KIND_NOMINAL, ap.KIND_RANDOMISED)
+            or source != ap.teacher_source_for(record["kind"]) or (record.get("variant_sha256") is None) != (record["kind"] == ap.KIND_NOMINAL)):
+        raise ValueError("EXPORT_EPISODE_APPEARANCE_UNBOUND")
+    return record, source
 
 
 def episode_diversity_record(root, scene_id):
@@ -955,9 +978,11 @@ def _export_records(episodes, seen, frame_jobs, trust_qc_memo=False):
         relative = {name: destination for name, destination, _ in plan}
         content = _with_frame_paths(content, relative, rig)
         payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE
+        appearance, teacher_source = episode_appearance_record(root, scene_id)
         records.append({"scene_id": scene_id, "split": split,
                         "content_sha256": hashlib.sha256(payload).hexdigest(),
                         "payload": payload, "root": root, "teacher_diversity": episode_diversity_record(root, scene_id),
+                        "scene_appearance": appearance, "teacher_source": teacher_source,
                         "frames": {destination: (name, digest) for name, destination, digest in plan}})
     return records
 
