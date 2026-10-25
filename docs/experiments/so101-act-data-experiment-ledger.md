@@ -69,11 +69,15 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3786
+latest_checkpoint: CP-3787
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a merged (CP-3784), next: wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator. Indoor YOLO fine-tune and the rgb_sync counter split are merged (CP-3785, CP-3786).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3787 — Indoor scene: merge of antzb goal 11, indoor Teacher weights deployed, P2(a) re-check with the fine-tuned YOLO, pilot (in progress)
+
+- Executed by a Sonnet 5.5 subagent for the coordinator. Evidence root `/data/work/so101-evidence/indoor-scene/p2-20261024/`. The derived contact activation of the indoor rig (CP-3783) names its files for the input discovery of the collection template (which reads absolute JSON paths from this ledger): proposal `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/calibration/rig-side-wrist-indoor-contact-20261024T140000Z/proposal.json`, receipt `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/calibration/rig-side-wrist-indoor-contact-20261024T140000Z/activation-receipt.json`.
 
 ## CP-3786 — Indoor YOLO fine-tune: synthetic dataset generator and a report-only fine-tune of the Teacher weights on the hard negative red landing ring (goal 11, item 1; weights NOT deployed)
 
