@@ -16,7 +16,7 @@ OLD_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 INDOOR_SHA = "f9cce63b17b1a3d2a32cd6d841c25a7482f1db87b8f96cd31bd4e03149dfcfee"
 
 
-def _campaign(sha, model_id="plastic-cup-yolo11n-seg-v1"):
+def _campaign(sha, model_id="plastic-cup-yolo11n-seg-v1"):   # the model id is the controlled runtime's for every rig
     return {"teacher_service": {"model": {"model_id": model_id, "classes": {"0": "plastic_cup"}, "score_threshold": 0.25,
                                          "weights": {"path": "/x/best.pt", "sha256": sha}}}}
 
@@ -24,7 +24,7 @@ def _campaign(sha, model_id="plastic-cup-yolo11n-seg-v1"):
 def test_only_the_indoor_rig_has_a_teacher_model_of_its_own():
     assert teacher_model.TEACHER_MODEL_OVERRIDES == {"side-wrist-indoor": teacher_model.INDOOR_TEACHER_MODEL}
     model = teacher_model.INDOOR_TEACHER_MODEL
-    assert model.weights_sha256 == INDOOR_SHA and model.model_id == "plastic-cup-yolo11n-seg-indoor-20261025"
+    assert model.weights_sha256 == INDOOR_SHA
     assert teacher_model.teacher_model_override(SIDE_WRIST_INDOOR_RIG) is model
     assert teacher_model.teacher_model_override("side-wrist-indoor") is model
     assert teacher_model.teacher_model_override(SIDE_WRIST_RIG) is None and teacher_model.teacher_model_override(HEAD_WRIST_RIG) is None
@@ -35,10 +35,8 @@ def test_only_the_indoor_rig_has_a_teacher_model_of_its_own():
 
 
 def test_the_indoor_campaign_must_run_the_indoor_model_and_nothing_else():
-    good = _campaign(INDOOR_SHA, "plastic-cup-yolo11n-seg-indoor-20261025")
-    teacher_model.verify_campaign_teacher_model(good, SIDE_WRIST_INDOOR_RIG)
-    for config in (_campaign(OLD_SHA), _campaign(INDOOR_SHA), _campaign(OLD_SHA, "plastic-cup-yolo11n-seg-indoor-20261025"),
-                   _campaign("0" * 64, "plastic-cup-yolo11n-seg-indoor-20261025"), {}, {"teacher_service": {}}):
+    teacher_model.verify_campaign_teacher_model(_campaign(INDOOR_SHA), SIDE_WRIST_INDOOR_RIG)
+    for config in (_campaign(OLD_SHA), _campaign("0" * 64), {}, {"teacher_service": {}}):
         with pytest.raises(ValueError, match="TEACHER_MODEL_RIG_MISMATCH"):
             teacher_model.verify_campaign_teacher_model(config, SIDE_WRIST_INDOOR_RIG)
 
@@ -51,8 +49,6 @@ def test_the_other_rigs_keep_their_old_weights_and_refuse_the_indoor_ones(rig):
     teacher_model.verify_campaign_teacher_model({}, rig)
     with pytest.raises(ValueError, match="TEACHER_MODEL_RIG_MISMATCH"):
         teacher_model.verify_campaign_teacher_model(_campaign(INDOOR_SHA), rig)
-    with pytest.raises(ValueError, match="TEACHER_MODEL_RIG_MISMATCH"):
-        teacher_model.verify_campaign_teacher_model(_campaign(OLD_SHA, "plastic-cup-yolo11n-seg-indoor-20261025"), rig)
 
 
 def test_the_check_does_not_modify_the_campaign_config():

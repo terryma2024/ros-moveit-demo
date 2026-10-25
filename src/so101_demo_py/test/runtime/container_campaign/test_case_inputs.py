@@ -590,7 +590,7 @@ def test_the_indoor_teacher_weights_are_refused_for_a_campaign_of_another_rig(si
     weights.write_bytes(b'indoor weights stand-in')
     digest = hashlib.sha256(weights.read_bytes()).hexdigest()
     monkeypatch.setattr(teacher_model, 'TEACHER_MODEL_OVERRIDES',
-                        {'side-wrist-indoor': teacher_model.TeacherModel('plastic-cup-yolo11n-seg-indoor-20261025', digest)})
+                        {'side-wrist-indoor': teacher_model.TeacherModel(digest)})
     campaign = copy.deepcopy(side_world['campaign'])
     for role in ('head_service', 'teacher_service'):
         campaign[role]['model']['weights'] = dict(path=str(weights), sha256=digest)
@@ -598,3 +598,7 @@ def test_the_indoor_teacher_weights_are_refused_for_a_campaign_of_another_rig(si
     task_input = dict(side_world, campaign=campaign, campaign_path=path)
     task, spec = task_for(task_input, tmp_path / 'indoor-weights', monkeypatch, 'scene-a')
     refused('COLLECTION_CASE_TEACHER_MODEL_MISMATCH', task_builder.load_task_input, task, spec, teacher_socket=TEACHER_SOCKET)
+    # a rig whose override IS that model loads the same task: the model id is the runtime's, so only the weights hash differs
+    monkeypatch.setattr(teacher_model, 'TEACHER_MODEL_OVERRIDES', {'side-wrist': teacher_model.TeacherModel(digest)})
+    loaded = task_builder.load_task_input(task, spec, teacher_socket=TEACHER_SOCKET)
+    assert loaded.rig.rig == 'side-wrist'
