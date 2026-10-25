@@ -307,3 +307,47 @@ def test_the_edits_are_visible_to_the_camera(tmp_path):
                        "light.ind_fill2.active": 0, "light.ind_dirfill0.active": 0, "light.ind_dirfill1.active": 0,
                        "light.key_light.active": 0, "headlight.ambient": [0.02, 0.02, 0.02], "headlight.diffuse": [0.0, 0.0, 0.0]})
     assert _render(_write(tmp_path, sv.realize(NOMINAL_DIR, dark), "dark.xml")).mean() < nominal.mean() * 0.6
+
+
+# ---- the pooled textures (parametric `proc/...`, CC0 `cc0/...`) ---------------------------------------------------------------------
+
+
+def test_a_pooled_texture_is_accepted_on_a_surface_it_suits_and_refused_on_another():
+    sv.normalize_variant(_variant(**{"wall.texture": "proc/plaster_010", "floor.texture": "proc/wood_050", "table.texture": "proc/laminate_000"}))
+    sv.normalize_variant(_variant(**{"wall.texture": "cc0/wall_polyhaven_x1", "floor.texture": "cc0/floor_ambientcg_wood051"}))
+    for fields in ({"floor.texture": "proc/plaster_010"}, {"wall.texture": "proc/wood_050"}, {"table.texture": "proc/wallpaper_001"},
+                   {"wall.texture": "cc0/floor_x"}, {"wall.texture": "proc/plaster_999"}, {"wall.texture": "proc/../wall_white"},
+                   {"wall.texture": "../../etc/passwd"}, {"wall.texture": "cc0/wall_"}, {"floor.texture": "wall_white"}):
+        with pytest.raises(sv.SceneVariantRefused, match="SCENE_VARIANT_VALUE_INVALID"):
+            sv.normalize_variant(_variant(**fields))
+
+
+def test_the_legacy_texture_lists_are_unchanged():
+    assert sv.WALL_TEXTURES == ("wall_white", "wall_grey", "wall_beige")
+    assert sv.FLOOR_TEXTURES == ("floor_wood_light", "floor_tile_grey", "floor_parquet", "floor_carpet")
+    assert sv.TABLE_TEXTURES == ("table_laminate", "cabinet_wood", "floor_wood_light", "floor_parquet", "metal_shelf")
+
+
+def test_a_pooled_texture_that_was_never_written_is_refused_when_the_variant_is_realized(tmp_path):
+    root = tmp_path / "share/assets/mujoco"
+    shutil.copytree(NOMINAL_DIR, root / "act", ignore=shutil.ignore_patterns("indoor"))
+    shutil.copytree(TEXTURES, root / "textures/indoor", ignore=shutil.ignore_patterns("proc"))
+    with pytest.raises(sv.SceneVariantRefused, match=r"SCENE_VARIANT_TEXTURE_MISSING: \['proc/plaster_010'\]"):
+        sv.realize(root / "act", _variant(**{"wall.texture": "proc/plaster_010"}))
+
+
+def test_a_materialized_pooled_texture_is_realized_compiled_and_covered_by_the_realized_hash(tmp_path, nominal_stripped):
+    from indoor_pool_tree import build_pool_tree
+
+    ids = ["proc/plaster_010", "proc/wood_050", "proc/laminate_000"]
+    act = build_pool_tree(tmp_path, ids=ids)
+    variant = _variant(**{"wall.texture": ids[0], "floor.texture": ids[1], "table.texture": ids[2]})
+    realized = sv.realize(act, variant)
+    path = _write(tmp_path, realized)
+    files = [Path(item).resolve() for item in re.findall(r'<texture [^>]*file="([^"]+)"', path.read_text())]
+    wood = (act.parent / "textures/indoor/proc/wood_050.png").resolve()
+    assert files.count(wood) == 1 and all(item.is_file() for item in files)
+    mujoco.MjModel.from_xml_path(str(path))
+    assert stripped_physics_fingerprint_of_file(path) == nominal_stripped
+    wood.write_bytes(b"changed")
+    assert sv.realize(act, variant).realized_sha256 != realized.realized_sha256

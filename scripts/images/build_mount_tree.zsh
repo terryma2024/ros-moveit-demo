@@ -46,6 +46,22 @@ else
     --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DFETCHCONTENT_SOURCE_DIR_LODEPNG=$LODE -DFETCHCONTENT_FULLY_DISCONNECTED=ON $CC_ARGS \
     > $MOUNT_LOG/colcon.log 2>&1 || { print -u2 "MOUNT_BUILD_FAILED: see $MOUNT_LOG/colcon.log"; exit 4; }
 fi
+# The indoor appearance pools are not in git, only their manifests are (act/indoor_assets.py): write the parametric textures into the install tree now,
+# while it is still writable, and fail the build unless every decoded pixel hash equals the manifest's. The CC0 pack (INDOOR_CC0_PACK, a directory)
+# is copied the same way and checked against its manifest; without it the tree has no CC0 textures and a variant that names one is refused at realize.
+TEXTURES=$MOUNT_INSTALL/so101_demo_py/share/so101_demo_py/assets/mujoco/textures/indoor
+if [[ -f $TEXTURES/proc-manifest.json ]]; then
+  python3 $WT/scripts/assets/gen_indoor_textures.py --procedural --out $TEXTURES > $MOUNT_LOG/indoor-textures.log 2>&1 \
+    || { print -u2 "MOUNT_BUILD_FAILED: indoor procedural textures, see $MOUNT_LOG/indoor-textures.log"; exit 4; }
+  if [[ -f $TEXTURES/cc0-manifest.json ]]; then
+    if [[ -n ${INDOOR_CC0_PACK:-} ]]; then
+      python3 $WT/scripts/assets/gen_indoor_textures.py --cc0-pack $INDOOR_CC0_PACK --out $TEXTURES >> $MOUNT_LOG/indoor-textures.log 2>&1 \
+        || { print -u2 "MOUNT_BUILD_FAILED: indoor CC0 pack, see $MOUNT_LOG/indoor-textures.log"; exit 4; }
+    else
+      print "INDOOR_CC0_PACK not set: this tree has no CC0 textures" >> $MOUNT_LOG/indoor-textures.log
+    fi
+  fi
+fi
 # No bytecode in the mounted tree: the build does not write any (PYTHONDONTWRITEBYTECODE above), but ament_cmake_python byte-compiles what it installs and
 # install(DIRECTORY) copies a source __pycache__; both are removed here, before the record, and a remaining one fails the build.
 find $MOUNT_INSTALL -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null

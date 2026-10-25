@@ -7,6 +7,16 @@ textures are original, procedural, released under the repository licence). The s
 
     python scripts/assets/gen_indoor_textures.py --out src/so101_demo_py/assets/mujoco/textures/indoor
 
+The parametric pools (8 families x 104, `act/indoor_assets.py`) and the CC0 pack are not in git, only their manifests are:
+
+    python scripts/assets/gen_indoor_textures.py --procedural --write-manifest M.json   author the manifest (parameters, seed, hashes of all textures)
+    python scripts/assets/gen_indoor_textures.py --procedural --out DIR                 write DIR/proc/*.png from DIR/proc-manifest.json; exit 1
+                                                                                         unless every decoded pixel hash equals the manifest's
+    python scripts/assets/gen_indoor_textures.py --cc0-pack PACK --out DIR              copy the CC0 files named by DIR/cc0-manifest.json from PACK
+                                                                                         (sha256 of each resized file checked); exit 1 on any difference
+
+The mount-tree build (`scripts/images/build_mount_tree.zsh`) runs the second form into the install tree before the tree is made read-only.
+
 The PNGs are visual-only inputs of the indoor scene files (`assets/mujoco/act/scene_side_wrist_indoor*.xml`); they never enter
 the physics (`act/physics_fingerprint.py`, version 2).
 """
@@ -216,10 +226,65 @@ def generate(out: Path) -> dict:
     return manifest
 
 
+def _assets():
+    """`act/indoor_assets.py` by file path (it imports nothing of `so101_demo`, so no install is needed)."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[2] / "src/so101_demo_py/src/act/indoor_assets.py"
+    spec = importlib.util.spec_from_file_location("so101_indoor_assets", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def procedural(out: Path) -> int:
+    assets = _assets()
+    manifest = assets.load_manifest(out / assets.PROC_MANIFEST)
+    written = assets.materialize(manifest, out)
+    result = assets.verify_directory(manifest, out)
+    print(f"{len(written)} procedural textures in {out / assets.PROC_DIRECTORY}; verify {result['checked']} checked, "
+          f"{len(result['missing'])} missing, {len(result['pixels_differ'])} pixel differences, {len(result['png_differs'])} PNG byte differences")
+    if result["png_differs"] and not result["pixels_differ"]:
+        print("note: the decoded pixels are identical, the PNG bytes differ (another zlib/Pillow build than the manifest's)", file=sys.stderr)
+    return 1 if result["missing"] or result["pixels_differ"] else 0
+
+
+def cc0_pack(pack: Path, out: Path) -> int:
+    import shutil
+
+    assets = _assets()
+    manifest = assets.load_manifest(out / assets.CC0_MANIFEST)
+    target = out / assets.CC0_DIRECTORY
+    target.mkdir(parents=True, exist_ok=True)
+    bad = []
+    for entry in manifest["textures"]:
+        source = pack / (entry["id"].split("/", 1)[1] + ".png")
+        if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != entry["sha256_resized"]:
+            bad.append(entry["id"])
+            continue
+        shutil.copyfile(source, target / source.name)
+    print(f"{len(manifest['textures']) - len(bad)} of {len(manifest['textures'])} CC0 textures copied from {pack}; {len(bad)} missing or different")
+    return 1 if bad else 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--procedural", action="store_true", help="the parametric pool (see the module docstring)")
+    parser.add_argument("--write-manifest", type=Path, help="with --procedural: author the manifest of the whole pool into this file")
+    parser.add_argument("--cc0-pack", type=Path, help="copy the CC0 pack into --out/cc0 and check it against cc0-manifest.json")
     arguments = parser.parse_args(argv)
+    if arguments.procedural and arguments.write_manifest:
+        assets = _assets()
+        manifest = assets.build_proc_manifest(progress=None)
+        assets.write_manifest(arguments.write_manifest, manifest)
+        print(f"{len(manifest['textures'])} textures described in {arguments.write_manifest}")
+        return 0
+    if arguments.procedural:
+        return procedural(arguments.out)
+    if arguments.cc0_pack:
+        return cc0_pack(arguments.cc0_pack, arguments.out)
     manifest = generate(arguments.out)
     print(f"{len(manifest['textures'])} textures in {arguments.out}")
     return 0

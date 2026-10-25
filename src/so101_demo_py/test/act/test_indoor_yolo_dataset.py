@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from paths import PACKAGE_ROOT
+from so101_demo.act import indoor_assets
 from so101_demo.act import indoor_yolo_dataset as iyd
 from so101_demo.act import scene_variant
 
@@ -41,30 +42,56 @@ def test_every_variant_is_accepted_by_the_scene_variant_whitelist(plan):
         assert normalized["base"] == "indoor"
 
 
-def test_the_train_split_shares_no_texture_cup_family_or_tint_range_with_val_and_test(plan):
+def test_the_splits_share_no_texture_hue_band_or_tint_range(plan):
     iyd.check_split_disjoint()
-    used = {split: {"textures": set(), "cups": set(), "tints": []} for split in COUNTS}
+    used = {split: {"textures": set(), "bands": set(), "tints": []} for split in COUNTS}
     for item in plan:
         if item["variant"] is None:
             continue
         fields = item["variant"]["set"]
         entry = used[item["split"]]
         entry["textures"] |= {value for key, value in fields.items() if key.endswith(".texture")}
-        entry["cups"].add(item["cup_family"])
+        entry["bands"].add(item["cup"]["band"])
         entry["tints"] += [value for key, value in fields.items() if key.endswith(".rgba") and not key.startswith("cup")]
-    for held_out in ("val", "test"):
-        assert not used["train"]["textures"] & used[held_out]["textures"]
-        assert not used["train"]["cups"] & used[held_out]["cups"]
-    assert not used["val"]["cups"] & used["test"]["cups"]
+    for first, second in (("train", "val"), ("train", "test"), ("val", "test")):
+        assert not used[first]["textures"] & used[second]["textures"], (first, second)
+        assert not used[first]["bands"] & used[second]["bands"], (first, second)
+    for split, entry in used.items():
+        assert entry["bands"] <= set(indoor_assets.hue_bands(split))
     train_low = min(channel for tint in used["train"]["tints"] for channel in tint[:3])
     held_out_high = max(channel for split in ("val", "test") for tint in used[split]["tints"] for channel in tint[:3])
     assert held_out_high < train_low
 
 
-def test_layout_c_appears_only_in_the_test_split(plan):
+def test_every_surface_texture_comes_from_the_pool_of_its_split_and_suits_the_surface(plan):
+    pools = iyd.asset_pools()["pools"]
+    for item in plan:
+        if item["variant"] is None:
+            continue
+        for surface in indoor_assets.SURFACES:
+            texture = item["variant"]["set"][f"{surface}.texture"]
+            assert texture in pools[item["split"]][surface] and indoor_assets.texture_allowed(surface, texture)
+
+
+def test_the_cup_colour_is_continuous_and_clearly_different_from_the_drawn_surfaces_and_the_ring(inventories):
+    big = iyd.build_plan({"train": 150, "val": 60, "test": 60}, 5, inventories)
+    drawn = [item for item in big if item["variant"] is not None]
+    colours = {tuple(item["variant"]["set"]["cup_material.rgba"]) for item in drawn}
+    assert len(colours) == len(drawn) > 200
+    assert sum(item["cup"]["satisfied"] for item in drawn) >= 0.99 * len(drawn)
+    means = iyd.asset_pools()["means"]
+    for item in drawn:
+        if not item["cup"]["satisfied"]:
+            continue
+        fields = item["variant"]["set"]
+        surfaces = {surface: indoor_assets.surface_colour(fields[f"{surface}.rgba"], means.get(fields[f"{surface}.texture"], (0.5, 0.5, 0.5)))
+                    for surface in indoor_assets.SURFACES}
+        assert indoor_assets.cup_distinct(fields["cup_material.rgba"][:3], surfaces)
+
+
+def test_layouts_b_and_c_are_never_in_train_and_c_only_in_test(plan):
     layouts = {split: {item["layout"] for item in plan if item["split"] == split} for split in COUNTS}
-    assert "C" not in layouts["train"] and "C" not in layouts["val"] and layouts["train"] <= {"A", "B"}
-    assert layouts["test"] == {"A", "B", "C"}
+    assert layouts["train"] == {"A"} and layouts["val"] <= {"A", "B"} and layouts["test"] == {"A", "B", "C"}
 
 
 def test_cup_positions_cover_the_teacher_boundary_polygon_and_stay_inside_it(inventories):
@@ -82,9 +109,10 @@ def test_the_inventory_lists_only_lights_and_props_the_whitelist_accepts(invento
 
 
 @pytest.mark.parametrize("layout", ["A", "B", "C"])
-def test_a_layout_is_materialised_so_that_the_variant_module_can_realize_it(tmp_path, plan, layout):
-    nominal_dir = iyd.materialize_layout(ACT_ASSETS, layout, tmp_path / layout)
-    item = next(item for item in plan if item["layout"] == layout and item["variant"] is not None)
+def test_a_layout_is_materialised_so_that_the_variant_module_can_realize_it(tmp_path, indoor_pool_act, layout):
+    drawn = iyd.build_plan({"train": 10, "val": 10, "test": 10}, iyd.MASTER_SEED, iyd.layout_inventories(ACT_ASSETS), iyd.asset_pools(indoor_pool_act))
+    nominal_dir = iyd.materialize_layout(indoor_pool_act, layout, tmp_path / layout)
+    item = next(item for item in drawn if item["layout"] == layout and item["variant"] is not None)
     realized = scene_variant.realize(nominal_dir, item["variant"])
     assert realized.realized_sha256 and "<mujoco" in realized.xml_text
     assert (nominal_dir.parent / "textures/indoor/wall_white.png").is_file()
@@ -129,7 +157,7 @@ def test_negative_sets_hide_the_cup_so_only_the_ring_and_the_room_remain(invento
     plan = iyd.build_plan({"train_negative": 12, "test_negative": 6}, 3, inventories)
     assert all(item["cup_hidden"] for item in plan)
     assert {item["layout"] for item in plan if item["split"] == "test"} <= {"A", "B", "C"}
-    assert {item["layout"] for item in plan if item["split"] == "train"} <= {"A", "B"}
+    assert {item["layout"] for item in plan if item["split"] == "train"} <= {"A"}
     iyd.check_split_disjoint()
     train_textures = {value for item in plan if item["split"] == "train" for key, value in item["variant"]["set"].items() if key.endswith(".texture")}
     test_textures = {value for item in plan if item["split"] == "test" for key, value in item["variant"]["set"].items() if key.endswith(".texture")}

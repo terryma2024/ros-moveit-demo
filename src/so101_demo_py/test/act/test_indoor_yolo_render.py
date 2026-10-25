@@ -20,10 +20,10 @@ ACT_ASSETS = PACKAGE_ROOT / "assets/mujoco/act"
 
 
 @pytest.fixture(scope="module")
-def renderer(tmp_path_factory):
+def renderer(tmp_path_factory, indoor_pool_act):
     try:
-        instance = render.IndoorFrameRenderer(ACT_ASSETS, tmp_path_factory.mktemp("indoor-render"))
-        instance.render(iyd.draw_sample(1, "eval_dark_nominal", 0, iyd.layout_inventories(ACT_ASSETS)))
+        instance = render.IndoorFrameRenderer(indoor_pool_act, tmp_path_factory.mktemp("indoor-render"))
+        instance.render(iyd.draw_sample(1, "eval_dark_nominal", 0, iyd.layout_inventories(indoor_pool_act)))
     except Exception as error:      # noqa: BLE001 - no usable GL context on this host
         pytest.skip(f"no offscreen GL: {error}")
     yield instance
@@ -31,8 +31,13 @@ def renderer(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def inventories():
-    return iyd.layout_inventories(ACT_ASSETS)
+def inventories(indoor_pool_act):
+    return iyd.layout_inventories(indoor_pool_act)
+
+
+@pytest.fixture(scope="module")
+def pools(indoor_pool_act):
+    return iyd.asset_pools(indoor_pool_act)
 
 
 def test_a_frame_has_image_mask_depth_and_the_true_cup_position(renderer, inventories):
@@ -60,15 +65,15 @@ def test_the_rgbd_circle_fit_of_the_true_mask_recovers_the_cup_xy_within_a_few_m
 
 
 @pytest.mark.parametrize("layout", ["A", "B", "C"])
-def test_every_layout_renders_with_a_variant_and_the_cup_stays_visible(renderer, inventories, layout):
-    entry = next(item for item in (iyd.draw_sample(3, "test", index, inventories) for index in range(60)) if item["layout"] == layout)
+def test_every_layout_renders_with_a_variant_and_the_cup_stays_visible(renderer, inventories, pools, layout):
+    entry = next(item for item in (iyd.draw_sample(3, "test", index, inventories, assets=pools) for index in range(60)) if item["layout"] == layout)
     frame = renderer.render(entry)
     assert frame.mask.sum() > 300 and frame.realized_sha256 and len(frame.realized_sha256) == 64
     assert frame.cup_rgba == pytest.approx(entry["variant"]["set"]["cup_material.rgba"])
 
 
-def test_rendering_is_deterministic(renderer, inventories):
-    entry = iyd.draw_sample(11, "val", 4, inventories)
+def test_rendering_is_deterministic(renderer, inventories, pools):
+    entry = iyd.draw_sample(11, "val", 4, inventories, assets=pools)
     first, second = renderer.render(entry), renderer.render(entry)
     # software GL (osmesa) is bit-exact; the gate renders with EGL on the GPU, where a few pixels differ by one level between two renders of the same frame
     difference = np.abs(first.rgb.astype(int) - second.rgb.astype(int))
@@ -82,8 +87,8 @@ def test_the_cup_mask_covers_the_visible_cup_geoms_only(renderer, inventories):
     assert colour[0] > colour[2]                                         # the nominal cup is orange: more red than blue under the mask
 
 
-def test_a_negative_frame_hides_the_cup_and_keeps_the_ring_and_the_room(renderer, inventories):
-    entry = iyd.draw_sample(5, "test_negative", 0, inventories)
+def test_a_negative_frame_hides_the_cup_and_keeps_the_ring_and_the_room(renderer, inventories, pools):
+    entry = iyd.draw_sample(5, "test_negative", 0, inventories, assets=pools)
     frame = renderer.render(entry)
     assert frame.mask.sum() == 0 and frame.rgb.mean() > 40
     positive = renderer.render({**entry, "cup_hidden": False})

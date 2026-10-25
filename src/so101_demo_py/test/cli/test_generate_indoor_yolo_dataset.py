@@ -19,20 +19,20 @@ from so101_demo.cli import generate_indoor_yolo_dataset as cli  # noqa: E402
 ACT_ASSETS = PACKAGE_ROOT / "assets/mujoco/act"
 
 
-def _run(root, *extra):
-    return cli.main(["--output-root", str(root), "--act-assets", str(ACT_ASSETS), "--train", "3", "--val", "2", "--test", "2", "--eval-indoor-nominal", "2",
+def _run(root, act, *extra):
+    return cli.main(["--output-root", str(root), "--act-assets", str(act), "--train", "3", "--val", "2", "--test", "2", "--eval-indoor-nominal", "2",
                      "--eval-dark-nominal", "2", "--train-dark", "1", "--train-ring", "2", "--train-negative", "2", *extra])
 
 
 @pytest.fixture(scope="module")
-def dataset(tmp_path_factory):
+def dataset(tmp_path_factory, indoor_pool_act):
     root = tmp_path_factory.mktemp("indoor-dataset") / "ds"
     try:
-        probe = render.IndoorFrameRenderer(ACT_ASSETS, tmp_path_factory.mktemp("probe"))
-        probe.render(iyd.draw_sample(1, "eval_dark_nominal", 0, iyd.layout_inventories(ACT_ASSETS)))
+        probe = render.IndoorFrameRenderer(indoor_pool_act, tmp_path_factory.mktemp("probe"))
+        probe.render(iyd.draw_sample(1, "eval_dark_nominal", 0, iyd.layout_inventories(indoor_pool_act)))
     except Exception as error:      # noqa: BLE001 - no usable GL context on this host
         pytest.skip(f"no offscreen GL: {error}")
-    assert _run(root) == 0
+    assert _run(root, indoor_pool_act) == 0
     return root
 
 
@@ -78,8 +78,8 @@ def test_the_manifest_hashes_the_plan_and_every_file(dataset):
     assert manifest["files"] and all(len(value) == 64 for value in manifest["files"].values())
 
 
-def test_a_second_run_with_the_same_seed_writes_identical_files(dataset, tmp_path):
-    assert _run(tmp_path / "again") == 0
+def test_a_second_run_with_the_same_seed_writes_identical_files(dataset, tmp_path, indoor_pool_act):
+    assert _run(tmp_path / "again", indoor_pool_act) == 0
     first = json.loads((dataset / "dataset-manifest.json").read_text())["files"]
     second = json.loads((tmp_path / "again" / "dataset-manifest.json").read_text())["files"]
     assert set(first) == set(second)
@@ -97,6 +97,6 @@ def test_a_second_run_with_the_same_seed_writes_identical_files(dataset, tmp_pat
             assert first[key] == second[key], key       # labels (from the mask), truth records and dataset.yaml are exact
 
 
-def test_an_existing_output_root_is_refused(dataset):
+def test_an_existing_output_root_is_refused(dataset, indoor_pool_act):
     with pytest.raises(SystemExit):
-        _run(dataset)
+        _run(dataset, indoor_pool_act)
