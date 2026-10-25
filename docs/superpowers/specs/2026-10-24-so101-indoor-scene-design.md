@@ -1,6 +1,6 @@
 # SO-101 ACT: bright indoor nominal scene and appearance library — design
 
-Status: P1 done (2026-10-24), P2 next. The human approved the direction ("替换 nominal，先写设计并做效果图原型"), then chose layout A as the nominal and kept B and C as candidates ("用 A（明亮办公室）做为[nominal]，其他环境保留候选（放到repo里），可以进入P1"). P0 and P1 are done; the contact re-activation (item 5 of P1) and every later phase still need the human's confirmation.
+Status: P1 and P2 done (2026-10-25), P3 next (after the coordinator decides on the two INVALID pilot scenes). The human approved the direction ("替换 nominal，先写设计并做效果图原型"), then chose layout A as the nominal and kept B and C as candidates ("用 A（明亮办公室）做为[nominal]，其他环境保留候选（放到repo里），可以进入P1"). P0 and P1 are done; the contact re-activation (item 5 of P1) and every later phase still need the human's confirmation.
 
 ## Why
 
@@ -83,3 +83,7 @@ Done and gated (code commit `9e5e90e20`, gate `9e5e90e20c1b` green, 15532 demo t
 ## P2 status (2026-10-24)
 
 The contact activation for `side-wrist-indoor` is derived and approved (CP-3783). The YOLO check on the indoor nominal is below the stop criterion: 28 of 32 positions detected (87.5 %, old nominal 32 of 32), median xy error 0.49 mm in both scenes. The four misses are a second cup instance on the red landing ring plus the cup's cast shadow. The pilot collection has not run. Open decision: switch the shadow of `ind_main` off in the nominal scene (a new scene hash and a new derived activation) or fine-tune YOLO on indoor renders.
+
+### P2 result (2026-10-25, CP-3787)
+
+The Teacher's YOLO is fine-tuned on indoor renders and deployed for `side-wrist-indoor` only (`act/teacher_model.py`; the other rigs keep the old weights). 32-position check: 32 of 32 detected, median xy error 0.50 mm (stack samples of the four standard points 4 of 4). Pilot on 24 new scenes (two staged runs of 16 and 8): Teacher PASS 24 of 24, data VALID with QC PASS 22 of 24; the two INVALID are recording losses (topic loss, source gap), not Teacher failures. No scene file changed.
