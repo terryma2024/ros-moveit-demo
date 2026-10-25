@@ -75,6 +75,10 @@ next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout poli
 
 # SO-101 ACT Data Experiment Ledger
 
+## CP-3788 - Indoor P3 (T1 to T5): per-episode appearance, privileged-pose Teacher, declared and proved model identity; 40-scene qualification EXP-7030 (PLANNED)
+
+- PLANNED (2026-10-25): qualification run `EXP-7030` on the w8q indoor template (`REG/act-templates/w8q-qualification-indoor-staged-mount`), inputs `REG/act-w8-inputs-20261025T143822Z`, gated commit `abdb3db2e` (gate `abdb3db2eb7d` green), mount tree `/data/work/so101-build/mount/abdb3db2eb7d`. Unique variable: the appearance plan (25 % nominal / 75 % randomised, layout A) with the privileged-pose Teacher on the randomised share and the schema 6 diversity policy on every episode. Qualification plane, so no retry rounds (`STAGE_RETRY_ON_QUALIFICATION_RUN`); the coordinator agreed. Evidence root `/data/work/so101-evidence/indoor-scene/p3-20261025/` (`manifest.md`). Results follow in this entry.
+
 ## CP-3787 — Indoor scene: antzb goal 11 merged, indoor Teacher weights deployed for `side-wrist-indoor`, 32-position check 32/32 (stack 4/4), P2 pilot of 24 scenes: Teacher 24/24, VALID/QC 22/24
 
 - Executed by a Sonnet 5.5 subagent for the coordinator (human decisions 2026-10-24: deploy the fine-tuned YOLO for the indoor rig; the pilot waits for weights that pass 95 %). Evidence root `/data/work/so101-evidence/indoor-scene/p2-20261024/` (`manifest.md`). HOST-BUSY `owner: indoor-p2-*` held for the gates, the stack frames and the two runs, removed at the end; fans 100 % then `nbfc set -a`; disk 1.1 TB free. The derived contact activation of the indoor rig names its files for the input discovery of the collection template (which reads absolute JSON paths from this ledger): proposal `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/calibration/rig-side-wrist-indoor-contact-20261024T140000Z/proposal.json`, receipt `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/calibration/rig-side-wrist-indoor-contact-20261024T140000Z/activation-receipt.json`.
