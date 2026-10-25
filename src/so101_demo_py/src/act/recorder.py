@@ -10,6 +10,7 @@ from pathlib import Path
 import stat
 import struct
 import tempfile
+import threading
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 
@@ -70,6 +71,27 @@ def _rgb_png(frame) -> bytes:
             + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 640, 480, 8, 2, 0, 0, 0))
             + _png_chunk(b"IDAT", zlib.compress(raw, level=6))
             + _png_chunk(b"IEND", b""))
+
+
+_ENCODE_POOL = None
+_ENCODE_POOL_LOCK = threading.Lock()
+
+
+def _encode_pngs(frames) -> list[bytes]:
+    """Encode one sample's camera frames concurrently, in the given order.
+
+    The bytes equal `[_rgb_png(f) for f in frames]`; zlib releases the GIL, so the cameras overlap. Runtime
+    parameter only: the sample interval, queue capacity and watermark are not touched.
+    """
+    global _ENCODE_POOL
+    frames = list(frames)
+    if len(frames) < 2:
+        return [_rgb_png(frame) for frame in frames]
+    with _ENCODE_POOL_LOCK:
+        if _ENCODE_POOL is None:
+            _ENCODE_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="png-encode")
+    futures = [_ENCODE_POOL.submit(_rgb_png, frame) for frame in frames]
+    return [future.result() for future in futures]
 
 
 def _decoded_pixel_sha256(path: Path) -> str:
@@ -257,8 +279,9 @@ class EpisodeRecorder:
             "action": label, "audit": audit,
         }
         try:
-            for camera, path in paths.items():
-                self._write_file(path, _rgb_png(checked[camera]))
+            encoded = _encode_pngs([checked[camera] for camera in paths])
+            for path, data in zip(paths.values(), encoded):
+                self._write_file(path, data)
             self._records.write(_canonical(row) + b"\n")
             self._records.flush()
         except (OSError, ValueError, TypeError) as error:
