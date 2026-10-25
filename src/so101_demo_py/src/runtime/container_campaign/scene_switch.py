@@ -28,10 +28,11 @@ import time
 from pathlib import Path
 
 from so101_demo.act import appearance_plan as ap
-from so101_demo.act import frozen_appearance, scene_variant, scene_variant_run
+from so101_demo.act import frozen_appearance, model_equivalence, scene_variant, scene_variant_run
 
 SWITCH_DIRECTORY = "scene-switches"
 APPEARANCE_DIRECTORY = "scene-appearance"
+PROOF_DIRECTORY = "model-equivalence"
 RECEIPT = "cleanup-receipt.json"
 
 
@@ -77,6 +78,8 @@ class StackSceneSwitch:
         self._inventory = None
         #: the realized hash of the variant the stack runs, None for the nominal scene (every stack starts on the nominal one)
         self.current = None
+        #: the equivalence proof of the running variant stack (path, sha256, loaded hash), None on the nominal scene
+        self.proof = None
         self.switches = 0
         self._lock = threading.Lock()
 
@@ -101,10 +104,10 @@ class StackSceneSwitch:
         return nominal
 
     def prepare(self, appearance: dict, scene_id: str, *, expected_model_sha256: str) -> dict:
-        """The scene the task needs, proved: `{"variant": record or None, "declared_model_sha256", "computed_model_sha256"}`."""
+        """The scene the task needs, realized and proved physics-equal: `{"variant": record or None, "declared_model_sha256"}`."""
 
         if appearance["variant"] is None:
-            return {"variant": None, "declared_model_sha256": None, "computed_model_sha256": expected_model_sha256}
+            return {"variant": None, "declared_model_sha256": None}
         nominal = self._nominal_identity(expected_model_sha256)
         try:
             record = scene_variant_run.realize_into(self.owned_root / scene_variant_run.SCENE_DIRECTORY / scene_id, self.share,
@@ -113,37 +116,56 @@ class StackSceneSwitch:
             raise SceneSwitchRefused(f"SCENE_SWITCH_VARIANT_REFUSED: {error}") from error
         if record["variant_sha256"] != appearance["variant_sha256"]:
             raise SceneSwitchRefused("SCENE_SWITCH_VARIANT_HASH_MISMATCH")
-        return {"variant": record, "declared_model_sha256": nominal, "computed_model_sha256": self._model_sha256(record["scene_path"])}
+        return {"variant": record, "declared_model_sha256": nominal}
+
+    def _prove(self, scene_id: str, prepared: dict):
+        """The equivalence proof of a variant (written once under `model-equivalence/`): `(path, sha256, loaded hash)`."""
+
+        record = prepared["variant"]
+        loaded = self._model_sha256(record["scene_path"])
+        proof = model_equivalence.make_proof(scene_id=scene_id, declared_model_sha256=prepared["declared_model_sha256"],
+                                             loaded_model_sha256=loaded, record=record)
+        path, digest = model_equivalence.write_proof(self.owned_root / PROOF_DIRECTORY, proof)
+        return path, digest, loaded
 
     def switch(self, appearance: dict, scene_id: str, *, expected_model_sha256: str) -> dict:
         """Give the stack the scene of this task; returns the record of what was done (also written under `scene-switches/`).
 
-        Blocking (it runs on the task builder's thread): it stops the stack and starts it again, only when the scene differs."""
+        Blocking (it runs on the task builder's thread): it stops the stack and starts it again, only when the scene differs. A variant
+        stack is launched with the nominal model identity declared AND the sha256 of its equivalence proof; the proof is bound to this
+        process (and so to the Teacher it starts) for as long as that stack runs, and unbound again on the nominal scene."""
 
         with self._lock:
             prepared = self.prepare(appearance, scene_id, expected_model_sha256=expected_model_sha256)
             variant = prepared["variant"]
             wanted = None if variant is None else variant["realized_sha256"]
             record = {"scene_id": scene_id, "kind": appearance["kind"], "from_realized_sha256": self.current, "to_realized_sha256": wanted,
-                      "declared_model_sha256": prepared["declared_model_sha256"],
-                      "computed_model_sha256": prepared["computed_model_sha256"], "switched": wanted != self.current}
+                      "declared_model_sha256": prepared["declared_model_sha256"], "switched": wanted != self.current,
+                      "equivalence_proof": self.proof}
             if wanted == self.current:
                 return record
+            proof = None
+            if variant is not None:
+                proof = self._prove(scene_id, prepared)
             began = self.clock()
-            record.update(asyncio.run(self._restart(variant, prepared["declared_model_sha256"])))
+            record.update(asyncio.run(self._restart(variant, prepared["declared_model_sha256"], None if proof is None else proof[1])))
             record["total_s"] = round(self.clock() - began, 3)
             self.current = wanted
+            self.proof = None if proof is None else {"path": str(proof[0]), "sha256": proof[1], "loaded_model_sha256": proof[2]}
+            record["equivalence_proof"] = self.proof
+            model_equivalence.bind(os.environ, None if proof is None else proof[0], None if proof is None else proof[1])
             self.switches += 1
             record["switch_index"] = self.switches
             _write_once(self.owned_root / SWITCH_DIRECTORY, f"{self.switches:03d}-{scene_id}.json", record)
             return record
 
-    async def _restart(self, variant, declared) -> dict:
+    async def _restart(self, variant, declared, proof_sha256) -> dict:
         stack = self.stack
         if stack.process is None:
             raise SceneSwitchRefused("SCENE_SWITCH_STACK_NOT_RUNNING")
         old_owner = stack.owner
         began = self.clock()
+        model_equivalence.bind(os.environ, None, None)       # nothing is proved while the stack is down
         await stack.stop(timeout_s=self.stop_timeout_s)
         stopped = self.clock()
         receipt = self.owned_root / "stack" / RECEIPT
@@ -153,7 +175,7 @@ class StackSceneSwitch:
         receipt_sha256 = hashlib.sha256(receipt.read_bytes()).hexdigest()
         receipt.rename(archived)
         launch = dataclasses.replace(stack.launch, mujoco_scene=None if variant is None else Path(variant["scene_path"]),
-                                     declared_model_sha256=declared)
+                                     declared_model_sha256=declared, equivalence_proof_sha256=proof_sha256)
         probe = self.new_ready_probe(launch)
         stack.relaunch_with(launch, ready_probe=probe)
         owner = await stack.start(timeout_s=self.start_timeout_s)

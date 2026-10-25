@@ -204,7 +204,8 @@ class PointProtocol:
             if getattr(broker_result, "perception_terminal", False) is True:
                 return broker_result
             localized = getattr(broker_result, "localized", None)
-            numeric = self._capture_numeric(lease, localized, boundary)
+            # indoor P3 (D2): a privileged-pose episode whose camera detection missed has no localization and so no camera numeric evidence
+            numeric = None if localized is None else self._capture_numeric(lease, localized, boundary)
             self._accepted_poses[key] = broker_result
             self._numeric_receipts[key] = numeric
             if self.run_mode is RunMode.PLAN_ONLY:

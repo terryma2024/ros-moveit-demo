@@ -280,6 +280,11 @@ class ActFixedCollectionWorkload:
         if (any(getattr(request, field) != getattr(lease, field) for field in fields)
                 or request.reset_epoch != reset_epoch):
             raise ValueError("ACT_COLLECTION_TERMINAL_LEASE_MISMATCH")
+        privileged = self.pose_source is not None and getattr(self.pose_source, "privileged", False) is True
+        if privileged and type(chain) is ActPerceptionTerminal:
+            # D2: the camera perception is run and recorded but never gates a privileged-pose episode: a miss, an ambiguity or a rejected
+            # pose is recorded, and the Teacher's pose is the simulator's
+            chain = boundary(lambda current: self.pose_source.admit_without_camera(current, chain, snapshot))
         if type(chain) is ActPerceptionTerminal:
             _decision, fenced, stopped, confirmed = stop_before_motion(lease)
             decision = ActPerceptionDecision.from_terminal(chain, stop_facts=dict(fenced=fenced,
@@ -287,7 +292,7 @@ class ActFixedCollectionWorkload:
                 recorder_stopped=recorder_stopped(lease)))
             self.cleanup_unconfirmed = not all(decision.stop_facts.values())
             return decision
-        if self.pose_source is not None:
+        if self.pose_source is not None and not getattr(chain, "camera_missed", False):
             chain = boundary(lambda current: self.pose_source(current, chain))
         admitted = boundary(lambda current: runtime.admit_pose(current, chain))
         if admitted is not chain:

@@ -120,7 +120,17 @@ def _check_teacher_source_pose(entry, sample, initial):
         return None
     import math
 
-    from ..act.appearance_plan import PRIVILEGED_PUBLISHED_TOLERANCE_M, TEACHER_SOURCE_PRIVILEGED
+    from ..act import model_equivalence
+    from ..act.appearance_plan import KIND_RANDOMISED, PRIVILEGED_PUBLISHED_TOLERANCE_M, TEACHER_SOURCE_PRIVILEGED
+
+    # D1: a randomised episode runs on a variant stack that declares the nominal model identity, and the proof of that is bound to this process;
+    # a nominal episode runs on the nominal stack with none. Anything else is refused before any motion.
+    bound = model_equivalence.bound()
+    randomised = entry["appearance"]["kind"] == KIND_RANDOMISED
+    if randomised != (bound is not None):
+        raise RuntimeError("TEACHER_SOURCE_MODEL_EQUIVALENCE_" + ("MISSING" if randomised else "UNEXPECTED"))
+    entry["model_equivalence"] = None if bound is None else {
+        "proof_sha256": bound["sha256"], "declared_model_sha256": bound["declared"], "loaded_model_sha256": bound["loaded"], "proof": bound["proof"]}
 
     gap = math.dist(sample.pose_world.values[:3], initial.simulator_pose_world.position_m)
     if entry["teacher_source"] == TEACHER_SOURCE_PRIVILEGED and not gap <= PRIVILEGED_PUBLISHED_TOLERANCE_M:

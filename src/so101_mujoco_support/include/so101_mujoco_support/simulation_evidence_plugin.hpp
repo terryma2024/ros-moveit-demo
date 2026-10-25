@@ -40,10 +40,13 @@ namespace so101_mujoco_support
 class SceneStateBuilder
 {
 public:
-  // `declared_sha256` (empty: none) is the model identity a scene-variant stack declares in its evidence instead of the hash of the
-  // model it loaded: the Host launched a visual-only variant of the nominal scene after proving the stripped physics fingerprints equal
-  // (indoor P3), so every consumer compares the frozen nominal identity. Anything but 64 lowercase hex characters is refused.
-  bool configure(const mjModel * model, const std::string & declared_sha256 = std::string());
+  // `declared_sha256` (empty: none) is the model identity a scene-variant stack declares in `model_sha256` instead of the hash of the model it
+  // loaded: the Host launched a visual-only variant of the nominal scene after proving the stripped physics fingerprints equal (indoor P3,
+  // D1). The substitution is never silent: the message also carries the loaded hash and the sha256 of that proof. An override needs both a
+  // declared identity and a proof hash, each 64 lowercase hex characters, or `configure` refuses (false).
+  bool configure(
+    const mjModel * model, const std::string & declared_sha256 = std::string(),
+    const std::string & proof_sha256 = std::string());
   const std::string & model_sha256() const {return model_sha256_;}
   const std::string & computed_model_sha256() const {return computed_model_sha256_;}
   msg::SceneStateEvidence build(const mjModel * model, const mjData * data,
@@ -53,6 +56,8 @@ private:
   const mjModel * model_{nullptr};
   std::string model_sha256_;
   std::string computed_model_sha256_;
+  std::string declared_sha256_;
+  std::string proof_sha256_;
 };
 
 struct EvidenceState

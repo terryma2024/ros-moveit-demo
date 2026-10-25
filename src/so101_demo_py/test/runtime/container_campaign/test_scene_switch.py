@@ -15,6 +15,7 @@ import pytest
 
 from paths import PACKAGE_ROOT
 from so101_demo.act import appearance_plan as ap
+from so101_demo.act import model_equivalence
 from so101_demo.act import scene_variant_run
 from so101_demo.runtime.container_campaign import scene_switch as module
 from so101_teleop.owned_group import terminate_group
@@ -84,7 +85,9 @@ class Env:
 
 
 @pytest.fixture
-def env(tmp_path):
+def env(tmp_path, monkeypatch):
+    for name in (model_equivalence.ENV_PATH, model_equivalence.ENV_SHA256):
+        monkeypatch.delenv(name, raising=False)
     item = Env(tmp_path)
     asyncio.run(item.start())
     yield item
@@ -109,8 +112,16 @@ def test_a_randomised_task_stops_the_stack_and_starts_it_with_its_variant_and_th
     realized = env.root / "scene-variant" / scene / "scene_variant.xml"
     assert record["switched"] is True and record["switch_index"] == 1 and realized.is_file()
     assert env.stack.launch.mujoco_scene == realized and env.stack.launch.declared_model_sha256 == NOMINAL_MODEL
+    # D1: the substitution is proved before the stack starts: both hashes and the proof's hash, the proof bound to this process
+    proof = record["equivalence_proof"]
+    assert env.stack.launch.equivalence_proof_sha256 == proof["sha256"] and proof["loaded_model_sha256"] == "cd" * 32
+    bound = model_equivalence.bound()
+    assert bound["sha256"] == proof["sha256"] and (bound["declared"], bound["loaded"]) == (NOMINAL_MODEL, "cd" * 32)
+    document = json.loads(Path(proof["path"]).read_text())
+    assert document["scene_id"] == scene and document["fingerprint_version"] == 2
+    assert document["nominal_physics_fingerprint"] == document["variant_physics_fingerprint"] and document["realized_sha256"] == record["to_realized_sha256"]
     assert env.stack.owner is not None and env.stack.owner.pid != before.pid and record["stopped_owner_pid"] == before.pid
-    assert record["computed_model_sha256"] == "cd" * 32 and record["declared_model_sha256"] == NOMINAL_MODEL
+    assert record["declared_model_sha256"] == NOMINAL_MODEL
     assert record["to_realized_sha256"] and record["from_realized_sha256"] is None
     assert env.probes[-1] is env.stack.launch and record["readiness_sha256"] != ""
     assert record["stop_s"] >= 0 and record["start_s"] >= 0 and record["total_s"] >= record["stop_s"]
@@ -134,6 +145,7 @@ def test_the_same_appearance_twice_switches_once_and_another_one_switches_again_
     back = go(env, nominal)
     assert back["switched"] is True and back["to_realized_sha256"] is None and back["declared_model_sha256"] is None
     assert env.stack.launch.mujoco_scene is None and env.stack.launch.declared_model_sha256 is None
+    assert env.stack.launch.equivalence_proof_sha256 is None and back["equivalence_proof"] is None and model_equivalence.bound() is None
     # the shard's own final stop finds its receipt where it always is, whatever number of switches came before
     asyncio.run(env.stack.stop(timeout_s=2))
     assert json.loads((env.root / "stack" / "cleanup-receipt.json").read_text())["graph_clear"] is True
@@ -147,6 +159,7 @@ def test_a_nominal_scene_that_does_not_compile_to_the_frozen_identity_leaves_the
     with pytest.raises(module.SceneSwitchRefused, match="SCENE_SWITCH_NOMINAL_MODEL_MISMATCH"):
         env.switch.switch(appearance(scene), scene, expected_model_sha256="ef" * 32)
     assert env.stack.owner is owner and env.stack.process.poll() is None and env.switch.switches == 0
+    assert not (env.root / module.PROOF_DIRECTORY).exists() and model_equivalence.bound() is None
 
 
 def test_a_variant_whose_physics_differ_from_the_nominal_is_refused_and_leaves_nothing_behind(env, monkeypatch):

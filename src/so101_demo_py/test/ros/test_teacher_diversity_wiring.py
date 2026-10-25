@@ -128,12 +128,21 @@ def test_a_schema_6_freeze_without_a_scene_id_is_refused_before_any_motion(tmp_p
 
 # --- indoor P3: the Teacher source of the scene (a scene list with an appearance plan) -----------------------------------------------
 def source_entry(source):
-    return {"teacher_source": source, "appearance": {"kind": "randomised", "plan_sha256": "a" * 64, "draw_sha256": "b" * 64,
-                                                       "variant_sha256": "c" * 64}}
+    kind = "randomised" if source == "privileged_pose" else "nominal"
+    return {"teacher_source": source, "appearance": {"kind": kind, "plan_sha256": "a" * 64, "draw_sha256": "b" * 64,
+                                                       "variant_sha256": "c" * 64 if kind == "randomised" else None}}
+
+
+def bind_proof(monkeypatch, proof=True):
+    from so101_demo.act import model_equivalence
+
+    value = {"sha256": "ab" * 32, "declared": "cd" * 32, "loaded": "ef" * 32, "proof": {}} if proof else None
+    monkeypatch.setattr(model_equivalence, "bound", lambda environ=None: value)
 
 
 def test_a_privileged_episode_whose_pose_is_the_simulators_runs_and_records_its_source(tmp_path, monkeypatch):
     entry = source_entry("privileged_pose")
+    bind_proof(monkeypatch)
     code, execution, _calls, _template, _policy, events = diversity_run(tmp_path, monkeypatch, SCHEMA6, source_entry=entry)
     assert code == 0 and "runner.run" in events
     assert len(execution.source_recorded) == 1 and execution.source_recorded[0][0] is entry
@@ -141,13 +150,22 @@ def test_a_privileged_episode_whose_pose_is_the_simulators_runs_and_records_its_
 
 
 def test_a_privileged_episode_whose_pose_is_not_the_simulators_is_refused_before_any_motion(tmp_path, monkeypatch, capsys):
+    bind_proof(monkeypatch)
     code, execution, calls, _template, _policy, events = diversity_run(
         tmp_path, monkeypatch, SCHEMA6, simulator_x=-0.02, source_entry=source_entry("privileged_pose"))
     assert code == 1 and execution is None and "runner.run" not in events and "resolve" not in calls
     assert "TEACHER_SOURCE_PRIVILEGED_POSE_MISMATCH" in capsys.readouterr().out
 
 
+def test_a_randomised_episode_without_the_bound_proof_is_refused_before_any_motion(tmp_path, monkeypatch, capsys):
+    bind_proof(monkeypatch, False)
+    code, execution, calls, _template, _policy, events = diversity_run(tmp_path, monkeypatch, SCHEMA6, source_entry=source_entry("privileged_pose"))
+    assert code == 1 and execution is None and "runner.run" not in events and "resolve" not in calls
+    assert "TEACHER_SOURCE_MODEL_EQUIVALENCE_MISSING" in capsys.readouterr().out
+
+
 def test_a_camera_episode_records_how_far_its_pose_is_from_the_simulators_and_is_never_refused_for_it(tmp_path, monkeypatch):
+    bind_proof(monkeypatch, False)
     code, execution, _calls, _template, _policy, events = diversity_run(
         tmp_path, monkeypatch, SCHEMA6, simulator_x=-0.02, source_entry=source_entry("camera_rgbd"))
     assert code == 0 and "runner.run" in events

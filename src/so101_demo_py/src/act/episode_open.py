@@ -25,7 +25,7 @@ def diversity_arguments(frozen: dict, scene_id: str, start_draw) -> dict:
     return {"diversity": values_for_policy(policy_values, scene_id, start_draw), "diversity_policy": policy_values}
 
 
-def appearance_arguments(frozen: dict, manifest_path, scene_id: str, teacher_record, *, share=None) -> dict:
+def appearance_arguments(frozen: dict, manifest_path, scene_id: str, teacher_record, *, share=None, declared_expected=None) -> dict:
     """Indoor P3: the `open_point_episode` arguments that put the scene's appearance and Teacher source into the episode identity
     (episode.json); {} for a freeze whose scene list has no appearance plan.
 
@@ -55,7 +55,34 @@ def appearance_arguments(frozen: dict, manifest_path, scene_id: str, teacher_rec
     if appearance["variant"] is not None:
         with tempfile.TemporaryDirectory(prefix="so101-appearance-") as scratch:
             realized = scene_variant_run.realize_into(scratch + "/variant", share, appearance["variant"])
-    return {"scene_appearance": frozen_appearance.identity_record(entry, realized=realized), "teacher_source": entry["teacher_source"]}
+    record = frozen_appearance.identity_record(entry, realized=realized)
+    equivalence = teacher_record.get("model_equivalence")
+    if realized is None:
+        if equivalence is not None:
+            raise ValueError("APPEARANCE_MODEL_EQUIVALENCE_UNEXPECTED")
+    else:
+        record["model_equivalence"] = verified_equivalence(equivalence, realized, appearance, declared_expected)
+    return {"scene_appearance": record, "teacher_source": entry["teacher_source"]}
+
+
+def verified_equivalence(equivalence, realized: dict, appearance: dict, declared_expected) -> dict:
+    """D1: the proof the Teacher recorded, checked again against what this host realizes (the realized hash and the stripped physics fingerprints
+    do not depend on where the variant is written) and against the frozen model identity; returns the three facts the identity records."""
+
+    from . import model_equivalence as me
+
+    try:
+        proof = me.verify_proof(equivalence["proof"], declared_expected=declared_expected)
+        if me.proof_sha256(proof) != equivalence["proof_sha256"] or (proof["declared_model_sha256"], proof["loaded_model_sha256"]) != (
+                equivalence["declared_model_sha256"], equivalence["loaded_model_sha256"]):
+            raise ValueError("record")
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("APPEARANCE_MODEL_EQUIVALENCE_INVALID") from error
+    if (proof["realized_sha256"], proof["variant_sha256"], proof["variant_physics_fingerprint"], proof["nominal_physics_fingerprint"]) != (
+            realized["realized_sha256"], appearance["variant_sha256"], realized["physics_fingerprint"], realized["nominal_physics_fingerprint"]):
+        raise ValueError("APPEARANCE_MODEL_EQUIVALENCE_NOT_THIS_VARIANT")
+    return {"declared_model_sha256": proof["declared_model_sha256"], "loaded_model_sha256": proof["loaded_model_sha256"],
+            "proof_sha256": equivalence["proof_sha256"]}
 
 
 def open_recorder_episode(options, *, offline: bool = False):
@@ -157,7 +184,8 @@ def open_recorder_episode(options, *, offline: bool = False):
     # R3-a: a frozen schema 6 Teacher policy derives this scene's values; they enter the episode identity (episode.json)
     episode = open_point_episode(
         **diversity_arguments(frozen, document["scene_id"], getattr(options, "start_pose_draw", None)),
-        **appearance_arguments(frozen, manifest_path, document["scene_id"], getattr(options, "teacher_source_record", None)),
+        **appearance_arguments(frozen, manifest_path, document["scene_id"], getattr(options, "teacher_source_record", None),
+                              declared_expected=snapshot["model_sha256"]),
         episode_root=episode_root, session_id=options.session_id, attempt_id=lease.attempt_id,
         reset_epoch=options.expected_reset_epoch, release_epoch=0, lease=asdict(lease),
         scene_id=document["scene_id"], seed=document["seed"], mode=document["mode"],

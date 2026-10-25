@@ -17,10 +17,20 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import time
 from pathlib import Path
 
 from so101_demo.act import appearance_plan as ap
 from so101_demo.core.task_geometry import Pose7
+from so101_demo.runtime.parallel_ros_ports.observations import AdmittedPose
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class PrivilegedAdmittedPose(AdmittedPose):
+    """The admitted pose of a privileged episode whose camera chain ended without a pose: `localized` is None and `camera_missed` says why
+    there is no camera numeric evidence. The Teacher is given the simulator's pose all the same (decision D2)."""
+
+    camera_missed: bool = True
+
 
 class PrivilegedPoseRefused(RuntimeError):
     """The simulator's pose cannot be read for this episode; `args[0]` is the refusal code."""
@@ -57,16 +67,35 @@ class PoseSource:
     def privileged(self) -> bool:
         return self.source == ap.TEACHER_SOURCE_PRIVILEGED
 
-    def __call__(self, lease, chain):
+    def _observe(self, lease, expected_epoch):
         observed = self.evidence(self.session_id)
-        expected_epoch = int(str(chain.reset_epoch).removeprefix("reset-"))
-        if (observed.simulation_session_id != self.session_id or observed.reset_epoch != expected_epoch or not observed.paused):
+        if (observed.simulation_session_id != self.session_id or (expected_epoch is not None and observed.reset_epoch != expected_epoch)
+                or not observed.paused):
             raise PrivilegedPoseRefused("PRIVILEGED_POSE_EVIDENCE_NOT_THIS_EPISODE")
-        truth = tuple(float(value) for value in observed.object_state.position_world)
+        return observed, tuple(float(value) for value in observed.object_state.position_world)
+
+    def admit_without_camera(self, lease, terminal, snapshot):
+        """The privileged pose when the camera chain ended in a terminal (no detection, an ambiguity, a rejected geometry, a service error): the
+        episode goes on with the simulator's position, and the record keeps what the camera said (`camera_outcome`, `camera_reason`)."""
+
+        if not self.privileged:
+            raise PrivilegedPoseRefused("PRIVILEGED_POSE_SOURCE_NOT_PRIVILEGED")
+        observed, truth = self._observe(lease, None)
+        self.record = {"teacher_source": self.source, "episode_kind": self.kind, "attempt_id": lease.attempt_id, "scene_id": lease.point_id,
+                       "reset_epoch": observed.reset_epoch, "simulation_time_s": observed.simulation_time_s, "applied": True,
+                       "camera_detected": False, "camera_outcome": terminal.wire_outcome, "camera_reason": terminal.reason,
+                       "camera_rejection_reason": terminal.rejection_reason, "camera_position_m": None, "truth_position_m": list(truth),
+                       "published_position_m": list(truth), "tolerance_m": self.tolerance_m, "within_tolerance": None}
+        self._write()
+        return PrivilegedAdmittedPose("world", snapshot.source_stamp_ns, time.monotonic(), Pose7((*truth, 0.0, 0.0, 0.0, 1.0)),
+                                      f"reset-{observed.reset_epoch}", None)
+
+    def __call__(self, lease, chain):
+        observed, truth = self._observe(lease, int(str(chain.reset_epoch).removeprefix("reset-")))
         camera = tuple(float(value) for value in chain.pose_world.values[:3])
         record = {"teacher_source": self.source, "episode_kind": self.kind, "attempt_id": lease.attempt_id, "scene_id": lease.point_id,
-                  "reset_epoch": observed.reset_epoch, "simulation_time_s": observed.simulation_time_s,
-                  **agreement(camera, truth, self.tolerance_m)}
+                  "reset_epoch": observed.reset_epoch, "simulation_time_s": observed.simulation_time_s, "camera_detected": True,
+                  "camera_outcome": "DETECTED", **agreement(camera, truth, self.tolerance_m)}
         if not self.privileged:
             self.record = {**record, "applied": False}
             self._write()

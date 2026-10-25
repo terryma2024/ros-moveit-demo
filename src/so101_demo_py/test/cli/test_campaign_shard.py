@@ -125,7 +125,7 @@ def test_collection_spec_uses_original_controlled_json_and_builds_the_task_build
     from so101_demo.runtime.container_campaign.task_builder import build_collection_task
     assert type(builder) is functools.partial and builder.func is build_collection_task
     assert builder.args==() and builder.keywords==dict(stack=stack,shard_spec=actual,output_root=layout.output_root,
-        teacher_socket=layout.teacher_socket,ready_check=ready_check)
+        teacher_socket=layout.teacher_socket,ready_check=ready_check,scene_switch=None)
     with pytest.raises(ValueError,match='CAMPAIGN_SHARD_READY_CHECK_REQUIRED'):
         program().shard_builder(actual,stack=stack,layout=layout)
     assert not hasattr(mod,'build_shard_driver') and not hasattr(mod,'ChildRuntime')

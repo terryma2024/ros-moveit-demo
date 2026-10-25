@@ -27,6 +27,7 @@ from .contracts import MutationError, OwnerKey
 #: the variable the simulator's evidence plugin reads for a declared model identity (`ActStackLaunch.declared_model_sha256`); a stack that
 #: is not launched with one never inherits one from its caller
 DECLARED_MODEL_ENV = "SO101_DECLARED_MODEL_SHA256"
+PROOF_SHA256_ENV = "SO101_MODEL_EQUIVALENCE_PROOF_SHA256"
 #: the camera rig of a stack that names none (a stack launched before rigs existed): head and wrist cameras with a neck
 DEFAULT_RIG = "head-wrist"
 
@@ -50,6 +51,9 @@ class ActStackLaunch:
     #: instead of the hash of the variant it loaded; given to the simulator in `SO101_DECLARED_MODEL_SHA256`. Only valid together with a
     #: `mujoco_scene` whose physics the Host has proved equal to the nominal one (`scene_variant_run.realize_into`).
     declared_model_sha256: str | None = None
+    #: the sha256 of the equivalence proof (`act/model_equivalence.py`) of the declared identity: an override without one is refused here, in the
+    #: simulator and at every consumer (`SO101_MODEL_EQUIVALENCE_PROOF_SHA256`)
+    equivalence_proof_sha256: str | None = None
 
     def __post_init__(self) -> None:
         binary, root = Path(self.ros2_executable), Path(self.evidence_root)
@@ -67,9 +71,12 @@ class ActStackLaunch:
             scene = Path(self.mujoco_scene)
             if (not scene.is_absolute() or ".." in scene.parts or scene.is_symlink() or not scene.is_file()):
                 raise ValueError("ACT_STACK_SCENE_INVALID")
+        if (self.declared_model_sha256 is None) != (self.equivalence_proof_sha256 is None):
+            raise ValueError("ACT_STACK_DECLARED_MODEL_NEEDS_PROOF")
         if self.declared_model_sha256 is not None and (
-                self.mujoco_scene is None or not isinstance(self.declared_model_sha256, str)
-                or re.fullmatch(r"[0-9a-f]{64}", self.declared_model_sha256) is None):
+                self.mujoco_scene is None
+                or any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                       for value in (self.declared_model_sha256, self.equivalence_proof_sha256))):
             raise ValueError("ACT_STACK_DECLARED_MODEL_INVALID")
         if self.rig == DEFAULT_RIG:
             if self.rig_profile is not None:
@@ -96,13 +103,14 @@ class ActStackLaunch:
         return [] if self.rig_profile is None else ["--rig-profile", str(self.rig_profile)]
 
     def process_environment(self) -> dict[str, str]:
-        environment = {key: value for key, value in self.environment.items() if key != DECLARED_MODEL_ENV}
+        environment = {key: value for key, value in self.environment.items() if key not in (DECLARED_MODEL_ENV, PROOF_SHA256_ENV)}
         return {
             **environment,
             "ROS_DOMAIN_ID": str(self.ros_domain_id),
             "SO101_SIMULATION_SESSION_ID": self.session_id,
             "SO101_TASK_EVIDENCE_ROOT": str(self.evidence_root),
-            **({} if self.declared_model_sha256 is None else {DECLARED_MODEL_ENV: self.declared_model_sha256}),
+            **({} if self.declared_model_sha256 is None else
+               {DECLARED_MODEL_ENV: self.declared_model_sha256, PROOF_SHA256_ENV: self.equivalence_proof_sha256}),
         }
 
 

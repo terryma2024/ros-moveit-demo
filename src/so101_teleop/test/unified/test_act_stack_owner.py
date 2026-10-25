@@ -299,21 +299,31 @@ def test_a_stack_of_another_rig_is_launched_with_the_rig_and_observed_with_its_p
 
 
 def test_a_declared_model_identity_needs_a_scene_variant_a_lowercase_sha_and_reaches_only_the_simulator_environment(tmp_path):
-    from so101_teleop.unified.act_stack import DECLARED_MODEL_ENV
+    from so101_teleop.unified.act_stack import DECLARED_MODEL_ENV, PROOF_SHA256_ENV
 
     scene = tmp_path / "scene_variant.xml"
     scene.write_text("<mujoco/>")
     common = dict(ros2_executable=Path(sys.executable), session_id="act-case-1", evidence_root=tmp_path, ros_domain_id=179)
     digest = "ab" * 32
-    plain = ActStackLaunch(**common, environment={DECLARED_MODEL_ENV: "f" * 64, "X": "1"})
-    assert DECLARED_MODEL_ENV not in plain.process_environment() and plain.process_environment()["X"] == "1"   # never inherited
-    declared = ActStackLaunch(**common, environment={"X": "1"}, mujoco_scene=scene, declared_model_sha256=digest)
-    assert declared.process_environment()[DECLARED_MODEL_ENV] == digest and declared.argv() == [*plain.argv(), f"mujoco_scene:={scene}"]
+    proof = "cd" * 32
+    plain = ActStackLaunch(**common, environment={DECLARED_MODEL_ENV: "f" * 64, PROOF_SHA256_ENV: "e" * 64, "X": "1"})
+    assert DECLARED_MODEL_ENV not in plain.process_environment() and PROOF_SHA256_ENV not in plain.process_environment()
+    assert plain.process_environment()["X"] == "1"   # an override is never inherited
+    declared = ActStackLaunch(**common, environment={"X": "1"}, mujoco_scene=scene, declared_model_sha256=digest, equivalence_proof_sha256=proof)
+    assert declared.process_environment()[DECLARED_MODEL_ENV] == digest and declared.process_environment()[PROOF_SHA256_ENV] == proof
+    assert declared.argv() == [*plain.argv(), f"mujoco_scene:={scene}"]
     for bad in ("A" * 64, "a" * 63, "g" * 64, "", 5):
         with pytest.raises(ValueError, match="ACT_STACK_DECLARED_MODEL_INVALID"):
-            ActStackLaunch(**common, environment={}, mujoco_scene=scene, declared_model_sha256=bad)
+            ActStackLaunch(**common, environment={}, mujoco_scene=scene, declared_model_sha256=bad, equivalence_proof_sha256=proof)
+        with pytest.raises(ValueError, match="ACT_STACK_DECLARED_MODEL_INVALID"):
+            ActStackLaunch(**common, environment={}, mujoco_scene=scene, declared_model_sha256=digest, equivalence_proof_sha256=bad)
     with pytest.raises(ValueError, match="ACT_STACK_DECLARED_MODEL_INVALID"):
-        ActStackLaunch(**common, environment={}, declared_model_sha256=digest)       # no variant scene: nothing to declare
+        ActStackLaunch(**common, environment={}, declared_model_sha256=digest, equivalence_proof_sha256=proof)   # no variant scene
+    # an override without its proof, and a proof without an override, are refused
+    with pytest.raises(ValueError, match="ACT_STACK_DECLARED_MODEL_NEEDS_PROOF"):
+        ActStackLaunch(**common, environment={}, mujoco_scene=scene, declared_model_sha256=digest)
+    with pytest.raises(ValueError, match="ACT_STACK_DECLARED_MODEL_NEEDS_PROOF"):
+        ActStackLaunch(**common, environment={}, mujoco_scene=scene, equivalence_proof_sha256=proof)
 
 
 def test_a_stopped_stack_relaunches_with_another_scene_and_a_running_one_does_not(tmp_path):
@@ -326,7 +336,7 @@ def test_a_stopped_stack_relaunches_with_another_scene_and_a_running_one_does_no
         first = launch(tmp_path, "import time; time.sleep(120)")
         item = ActStackProcessOwner(first, ready_probe=lambda: True, stop_probe=lambda: True, graph_clear_probe=lambda: True)
         owner = await item.start(timeout_s=3)
-        second = replace(first, mujoco_scene=scene, declared_model_sha256="cd" * 32)
+        second = replace(first, mujoco_scene=scene, declared_model_sha256="cd" * 32, equivalence_proof_sha256="ef" * 32)
         with pytest.raises(MutationError, match="ACT_STACK_RELAUNCH_WHILE_RUNNING"):
             item.relaunch_with(second, ready_probe=lambda: True)
         await item.stop(timeout_s=0.2)

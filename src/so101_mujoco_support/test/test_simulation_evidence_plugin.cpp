@@ -1599,24 +1599,51 @@ TEST_F(AtomicEvidenceTest, FullSceneStateTracksEveryDynamicBodyAndBindsCompiledM
   EXPECT_NE(changed.model_sha256(), fingerprint);
 }
 
-TEST_F(AtomicEvidenceTest, ASceneVariantStackDeclaresTheNominalModelIdentityAndKeepsTheComputedHashApart)
+TEST_F(AtomicEvidenceTest, WithoutAnOverrideTheSceneStateIsWhatItAlwaysWasAndNamesTheLoadedModelOnly)
 {
   so101_mujoco_support::SceneStateBuilder plain;
   ASSERT_TRUE(plain.configure(model_.get()));
   EXPECT_EQ(plain.model_sha256(), plain.computed_model_sha256());
+  place_free_body("mast_joint", .8, .3, .4);
+  data_->time = .25;
+  const auto begin = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  const auto sample = plain.build(model_.get(), data_.get(), "session-a", 1, 1, false, begin);
+  EXPECT_EQ(sample.model_sha256, plain.model_sha256());
+  EXPECT_EQ(sample.loaded_model_sha256, plain.model_sha256());
+  EXPECT_TRUE(sample.declared_model_sha256.empty());
+  EXPECT_TRUE(sample.equivalence_proof_sha256.empty());
+}
+
+TEST_F(AtomicEvidenceTest, ASceneVariantStackPublishesBothHashesAndTheProofHashAndRefusesAnOverrideWithoutAProof)
+{
+  so101_mujoco_support::SceneStateBuilder plain;
+  ASSERT_TRUE(plain.configure(model_.get()));
   const std::string nominal(64, 'a');
+  const std::string proof(64, 'b');
   so101_mujoco_support::SceneStateBuilder declared;
-  ASSERT_TRUE(declared.configure(model_.get(), nominal));
+  ASSERT_TRUE(declared.configure(model_.get(), nominal, proof));
   EXPECT_EQ(declared.model_sha256(), nominal);
   EXPECT_EQ(declared.computed_model_sha256(), plain.model_sha256());
   place_free_body("mast_joint", .8, .3, .4);
   data_->time = .25;
   const auto begin = std::chrono::duration_cast<std::chrono::nanoseconds>(
     std::chrono::steady_clock::now().time_since_epoch()).count();
-  EXPECT_EQ(declared.build(model_.get(), data_.get(), "session-a", 1, 1, false, begin).model_sha256, nominal);
+  const auto sample = declared.build(model_.get(), data_.get(), "session-a", 1, 1, false, begin);
+  EXPECT_EQ(sample.model_sha256, nominal);
+  EXPECT_EQ(sample.declared_model_sha256, nominal);
+  EXPECT_EQ(sample.loaded_model_sha256, plain.model_sha256());
+  EXPECT_EQ(sample.equivalence_proof_sha256, proof);
+  // an override is a declared identity AND a proof hash, each 64 lowercase hex characters
+  so101_mujoco_support::SceneStateBuilder no_proof;
+  EXPECT_FALSE(no_proof.configure(model_.get(), nominal));
+  EXPECT_TRUE(no_proof.model_sha256().empty());
+  so101_mujoco_support::SceneStateBuilder proof_only;
+  EXPECT_FALSE(proof_only.configure(model_.get(), std::string(), proof));
   for (const auto & bad : {std::string(63, 'a'), std::string(65, 'a'), std::string(64, 'A'), std::string(64, 'g'), std::string("../")}) {
     so101_mujoco_support::SceneStateBuilder refused;
-    EXPECT_FALSE(refused.configure(model_.get(), bad)) << bad;
+    EXPECT_FALSE(refused.configure(model_.get(), bad, proof)) << bad;
+    EXPECT_FALSE(refused.configure(model_.get(), nominal, bad)) << bad;
     EXPECT_TRUE(refused.model_sha256().empty());
   }
 }

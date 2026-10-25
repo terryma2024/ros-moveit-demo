@@ -233,7 +233,9 @@ class TeacherRun:
         self._document["teacher_source"] = {
             "source": entry["teacher_source"], "kind": appearance["kind"], "plan_sha256": appearance["plan_sha256"],
             "draw_sha256": appearance["draw_sha256"], "variant_sha256": appearance["variant_sha256"],
-            "published_vs_simulator_m": published_truth_gap_m}
+            "published_vs_simulator_m": published_truth_gap_m,
+            # D1: the proof (both hashes, equal stripped physics fingerprints) of the declared model identity the scene state was published under
+            "model_equivalence": entry.get("model_equivalence")}
         self._write()
 
     def _check_episode_start_pose(self) -> None:

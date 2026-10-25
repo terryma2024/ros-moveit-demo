@@ -198,6 +198,23 @@ def teacher_source_record(path):
     return record if isinstance(record, dict) else None
 
 
+def bind_model_equivalence(out, record) -> None:
+    """D1 (indoor P3): bind the equivalence proof the Teacher recorded to this process, so the replayed scene state that declares the nominal
+    model identity is accepted (and only that one), or unbind any earlier one when the episode has none."""
+
+    from .. import model_equivalence as me
+
+    equivalence = None if record is None else record.get("model_equivalence")
+    if equivalence is None:
+        me.bind(os.environ, None, None)
+        return
+    document = me.verify_proof(equivalence["proof"])
+    if me.proof_sha256(document) != equivalence["proof_sha256"]:
+        raise OfflineRefused("OFFLINE_MODEL_EQUIVALENCE_INVALID")
+    path, digest = me.write_proof(Path(out) / "model-equivalence", {**document})
+    me.bind(os.environ, path, digest)
+
+
 def _sha256(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -375,6 +392,7 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     stream_identity = StreamIdentity(identity["session_id"], identity["reset_epoch"], identity["attempt_id"])
     episode_root = out / "episode"
     teacher_manifest_path = (out / "dynamic" / "dynamic-execute-manifest.json") if teacher_manifest is None else teacher_manifest
+    bind_model_equivalence(out, teacher_source_record(teacher_manifest_path))
     options = SimpleNamespace(session_id=identity["session_id"], expected_reset_epoch=identity["reset_epoch"],
                               episode_root=episode_root,
                               evidence_root=out / "offline-evidence" / "dynamic", episode_scope=Path(scope),
