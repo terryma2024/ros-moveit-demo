@@ -568,3 +568,33 @@ def test_a_spot_check_freeze_refuses_more_than_one_scene_and_the_formal_freeze_s
             plane='other', scene_manifest=one, **policies())
     refused('INPUT_NOT_APPROVED', case_inputs.freeze_campaign_inputs, run, candidates=spot_world['candidates'],
             scene_manifest=one, **policies())
+
+
+INDOOR_TEACHER_SHA = 'f9cce63b17b1a3d2a32cd6d841c25a7482f1db87b8f96cd31bd4e03149dfcfee'
+
+
+def test_the_indoor_teacher_weights_are_refused_for_a_campaign_of_another_rig(side_world, tmp_path, monkeypatch):
+    """The indoor fine-tuned YOLO belongs to the side-wrist-indoor rig only: the side+wrist campaign (old weights) refuses it."""
+    import copy
+
+    from so101_demo.runtime.container_campaign import task_builder
+
+    config = copy.deepcopy(side_world['args']['campaign_config'])
+    config['teacher_service']['model']['weights']['sha256'] = INDOOR_TEACHER_SHA
+    refused('CASE_INPUTS_TEACHER_MODEL_MISMATCH', case_inputs.campaign_binding, side_world['manifest'],
+            **dict(side_world['args'], campaign_config=config))
+    # the loader reads the weights file back, so the task-builder half uses a real file whose hash the override table is pointed at
+    from so101_demo.act import teacher_model
+
+    weights = tmp_path / 'indoor-best.pt'
+    weights.write_bytes(b'indoor weights stand-in')
+    digest = hashlib.sha256(weights.read_bytes()).hexdigest()
+    monkeypatch.setattr(teacher_model, 'TEACHER_MODEL_OVERRIDES',
+                        {'side-wrist-indoor': teacher_model.TeacherModel('plastic-cup-yolo11n-seg-indoor-20261025', digest)})
+    campaign = copy.deepcopy(side_world['campaign'])
+    for role in ('head_service', 'teacher_service'):
+        campaign[role]['model']['weights'] = dict(path=str(weights), sha256=digest)
+    path = write_config(tmp_path, campaign)
+    task_input = dict(side_world, campaign=campaign, campaign_path=path)
+    task, spec = task_for(task_input, tmp_path / 'indoor-weights', monkeypatch, 'scene-a')
+    refused('COLLECTION_CASE_TEACHER_MODEL_MISMATCH', task_builder.load_task_input, task, spec, teacher_socket=TEACHER_SOCKET)

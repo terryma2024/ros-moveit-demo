@@ -167,6 +167,11 @@ def load_task_input(task,shard_spec,*,teacher_socket,clock=time.monotonic):
         raise ValueError('COLLECTION_CASE_FROZEN_SCENE_UNAVAILABLE')
     if rig.profile_sha256!=campaign.get('rig_profile_sha256',DEFAULT_RIG.profile_sha256):
         raise ValueError('COLLECTION_CASE_RIG_MISMATCH')
+    from so101_demo.act.teacher_model import verify_campaign_teacher_model
+    try:
+        verify_campaign_teacher_model(campaign,rig)
+    except ValueError as error:
+        raise ValueError('COLLECTION_CASE_TEACHER_MODEL_MISMATCH') from error
     if (frozen['mode'] not in COLLECTION_MODES
             or frozen['roles']['runtime_config']['sha256']!=identity['runtime_config_sha256']
             or frozen['roles']['collection_config']['sha256']!=identity['collection_config_sha256']):

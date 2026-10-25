@@ -254,6 +254,12 @@ def campaign_binding(inputs_manifest, *, campaign_config, collection_config_sha2
     rig = rig_from_frozen(frozen)
     if rig.profile_sha256 != campaign_config.get('rig_profile_sha256', DEFAULT_RIG.profile_sha256):
         raise ValueError('CASE_INPUTS_RIG_PROFILE_MISMATCH')
+    # the Teacher's perception model of the rig (the indoor rig has fine-tuned weights, every other rig the frozen ones)
+    from so101_demo.act.teacher_model import verify_campaign_teacher_model
+    try:
+        verify_campaign_teacher_model(campaign_config, rig)
+    except ValueError as error:
+        raise ValueError('CASE_INPUTS_TEACHER_MODEL_MISMATCH') from error
     policy = frozen.get('runtime_policy')
     if type(policy) is not dict:
         raise ValueError('CASE_INPUTS_RUNTIME_POLICY_MISSING')
