@@ -250,6 +250,10 @@ def _collection_identity(payload: dict, campaign_config: dict) -> dict:
         # the camera rig is part of the controlled identity when the campaign names one; a config written before rig profiles
         # existed names none and its identity is the six keys it always had (rig v1)
         identity['rig_profile_sha256'] = campaign_config['rig_profile_sha256']
+    if 'teacher_execution_policy_sha256' in campaign_config:
+        # R3-a: a campaign that pins its Teacher execution policy (schema 6: the diversity distributions and the seed) binds it into the identity, so
+        # a qualification and a formal run under another policy or seed never meet; a config that names none has the identity it always had
+        identity['teacher_execution_policy_sha256'] = campaign_config['teacher_execution_policy_sha256']
     if 'mount_build' in campaign_config:
         # mount mode: the commit and the root of the mounted build are part of what two hosts must agree on (the images then name the
         # base image and the trees' record hashes); the identity of a sealed image-mode config (read by the verifiers) has no such key.

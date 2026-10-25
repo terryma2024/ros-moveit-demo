@@ -602,3 +602,21 @@ def test_the_indoor_teacher_weights_are_refused_for_a_campaign_of_another_rig(si
     monkeypatch.setattr(teacher_model, 'TEACHER_MODEL_OVERRIDES', {'side-wrist': teacher_model.TeacherModel(digest)})
     loaded = task_builder.load_task_input(task, spec, teacher_socket=TEACHER_SOCKET)
     assert loaded.rig.rig == 'side-wrist'
+
+
+# ---- R3-a: the Teacher execution policy a campaign pins is part of its controlled identity and of what the frozen set must bind ----------
+
+def test_the_campaign_config_may_pin_the_teacher_policy_and_only_by_a_sha256(world, tmp_path):
+    campaign = dict(world['campaign'], teacher_execution_policy_sha256='f' * 64)
+    assert load_campaign_config(write_config(tmp_path, campaign))['teacher_execution_policy_sha256'] == 'f' * 64
+    for bad in ('F' * 64, 'f' * 63, 5):
+        with pytest.raises(ValueError, match='CAMPAIGN_CONFIG_INVALID'):
+            load_campaign_config(write_config(tmp_path, dict(world['campaign'], teacher_execution_policy_sha256=bad)))
+
+
+def test_a_pinned_teacher_policy_must_be_the_policy_the_frozen_set_binds(world):
+    bound = verify_frozen_inputs(Path(world['manifest']['path']))['teacher_execution_policy']['policy_sha256']
+    pinned = dict(world['args']['campaign_config'], teacher_execution_policy_sha256=bound)
+    assert case_inputs.campaign_binding(world['manifest'], **dict(world['args'], campaign_config=pinned)) == world['binding']
+    other = dict(world['args']['campaign_config'], teacher_execution_policy_sha256='e' * 64)
+    refused('CASE_INPUTS_TEACHER_POLICY_MISMATCH', case_inputs.campaign_binding, world['manifest'], **dict(world['args'], campaign_config=other))

@@ -59,3 +59,12 @@ def test_a_mounted_build_is_part_of_the_identity_and_a_sealed_image_config_has_n
     assert _collection_identity(PAYLOAD, config | dict(mount_build=mounted))["mount_build"] == mounted
     other = dict(commit="b" * 40, root=str(tmp_path / ("b" * 12)))
     assert _collection_identity(PAYLOAD, config | dict(mount_build=other)) != _collection_identity(PAYLOAD, config | dict(mount_build=mounted))
+
+
+def test_identity_names_the_teacher_policy_only_when_the_config_pins_one(tmp_path):
+    config = campaign_fixture(tmp_path)
+    assert "teacher_execution_policy_sha256" not in _collection_identity(PAYLOAD, config)
+    pinned = _collection_identity(PAYLOAD, config | dict(teacher_execution_policy_sha256="6" * 64))
+    assert pinned["teacher_execution_policy_sha256"] == "6" * 64
+    # nothing else of the identity moves
+    assert {key: value for key, value in pinned.items() if key != "teacher_execution_policy_sha256"} == _collection_identity(PAYLOAD, config)

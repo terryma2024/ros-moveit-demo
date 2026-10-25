@@ -260,6 +260,12 @@ def campaign_binding(inputs_manifest, *, campaign_config, collection_config_sha2
         verify_campaign_teacher_model(campaign_config, rig)
     except ValueError as error:
         raise ValueError('CASE_INPUTS_TEACHER_MODEL_MISMATCH') from error
+    # R3-a: a campaign config that pins its Teacher execution policy must be run on exactly the policy the frozen inputs bind
+    pinned = campaign_config.get('teacher_execution_policy_sha256')
+    if pinned is not None:
+        bound = frozen.get('teacher_execution_policy')
+        if not isinstance(bound, dict) or bound.get('policy_sha256') != pinned:
+            raise ValueError('CASE_INPUTS_TEACHER_POLICY_MISMATCH')
     policy = frozen.get('runtime_policy')
     if type(policy) is not dict:
         raise ValueError('CASE_INPUTS_RUNTIME_POLICY_MISSING')
