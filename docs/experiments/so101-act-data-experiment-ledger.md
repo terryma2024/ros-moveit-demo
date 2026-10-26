@@ -69,11 +69,33 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3791
+latest_checkpoint: CP-3792
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a merged (CP-3784), next: wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator. Indoor YOLO fine-tune and the rgb_sync counter split are merged (CP-3785, CP-3786).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3792 - T5: parallel rollout on antzb (goal 12), N=6 adopted for antzb; cross-host check matches ai-station
+
+- Executed by antzb's Claude (goal 12). Evidence on antzb: `REG/act-rollout-parallel-t5-20261025/` (`diagnostics/t5-all-runs.md`, `t5-step3.md`) and `progress-goal12.md`. No repository code changed; the T4 scripts were adapted next to the evidence.
+- Setup: commit `e6a67c37c`, gate `e6a67c37c948.g12a` green (non-full), mount tree and preflight PASS. antzb's mount base is `sha256:7b1a73d9e731...` (ai-station's is `2c70618b...`). TRAIN-007A, `--execution-prefix 50`, rig side-wrist.
+- **Capacity sweep (4 standard points):**
+
+  | N | Retries | RTT p99 (ms) | Lowest RTF | Host CPU p95 | INVALID |
+  |---|---|---|---|---|---|
+  | 1 | 1/9 | 17.9 | 0.998 | 7 % | |
+  | 2 | | 18.7 | | | 0/8 |
+  | 4 | | 21.6 | | | 0/8 |
+  | 6 | | 35.8 | 0.983 | 65 % | 1/13 |
+  | 8 | | 52.5 | 0.893 | 89 % (max 100 %, load 31.7 on 24 threads) | 6/18 |
+
+  No late replies or goal timeouts at any N. N=8 also had PREFIX_LATE 5. **N=6 adopted for antzb (human 2026-10-26: "antzb上采纳6并行rollout")**; ai-station stays at 8.
+- **Cross-host check at N=6:**
+  - Standard 4 x 5: 19/20 (Wilson 76-99 %; ai-station 20/20). The one failure is forward_5cm, which lies within the interval of ai-station's 5/5.
+  - `rollout_validation` 28 x 1: 27/28 (ai-station 27/28). The failed scene is the same on both hosts: `rollout-validation-021`, index 21, 16.7 mm from a reach edge, FINAL_XY out of tolerance. Paired against ai-station's `act-rollout-parallel-n1-20261023/valA/table.md`.
+  - `rollout_test` was not opened.
+- **Open:** antzb has a higher `CONTROLLER_PAIR_FAILED` rate (first goal not accepted within 0.02 s; about 1/10 even at N=1; 4/24 and 3/31 at N=6). It is CPU-scheduling sensitive. Every one was retried with no cell lost. `accept_timeout_s` is frozen and unchanged. Measure at N=4/5 before using antzb for a formal run.
+- Follow-up (human 2026-10-26): antzb goal 14. Delete historical evidence on antzb (keep metadata) and re-fine-tune the indoor YOLO on the new pools (report only, not deployed).
 
 ## CP-3791 - Indoor P3: goal 13 merged (`6d1037983`), frozen-snapshot texture verification fixed (`01e66387b`), 40-scene re-qualification EXP-7035 QUALIFIED (36/40)
 
