@@ -292,3 +292,96 @@ def test_phase_one_keeps_its_containers_when_their_logs_cannot_be_saved(tmp_path
     assert container_receipts.receipt_files(run_root / 'host') == [] and world.docker.containers
     assert 'STAGE_CONTAINER_LOGS_UNSAVED' in json.loads((run_root / 'host/campaign-cleanup.json').read_text())['container_receipt_error']
     assert [call for call in world.docker.calls if call[:2] == ['docker', 'rm']] == []
+
+
+# ---- EXP-7036 (c): a stage that failed after admission runs again as a new attempt; close() never masks the real error ---------------
+
+def command_ids():
+    from so101_teleop.unified.intent_store import IntentStore
+    store = IntentStore.open(STORE_ROOTS[-1])
+    try:
+        return sorted(row['command_id'] for row in store._query_all('SELECT command_id FROM parents'))
+    finally:
+        store.close()
+
+
+def break_phase_two_once(monkeypatch, error='BOOM_AFTER_ADMISSION'):
+    from so101_demo.runtime.container_campaign import owner as owner_module
+    real, calls = owner_module.ContainerCampaignOwner.start_phase_two, []
+
+    async def start_phase_two(self, *args, **kwargs):
+        if not calls:
+            calls.append(1)
+            raise ValueError(error)
+        return await real(self, *args, **kwargs)
+    monkeypatch.setattr(owner_module.ContainerCampaignOwner, 'start_phase_two', start_phase_two)
+
+
+def test_a_stage_that_failed_after_admission_is_run_again_as_attempt_two_without_a_file_move_or_a_store_edit(stopped, capsys, monkeypatch):
+    break_phase_two_once(monkeypatch)
+    code, _, err = process(stopped, capsys, '--phase2')
+    host = stopped.run_root / 'host'
+    assert code == 1 and 'STAGE_FAILED' in err and 'BOOM_AFTER_ADMISSION' in err
+    _, lease, active = contexts(stopped)
+    assert lease is None and active == []                                      # settled: nothing held after the failed stage
+    assert json.loads((host / 'campaign-cleanup-phase2.json').read_text())['terminated'] is True
+    assert not stage_records.record_path(host, 'phase2').exists()
+    first = {name: (host / name).read_bytes() for name in ('runtime-used-phase2.json', 'campaign-cleanup-phase2.json')}
+    code, out, err = process(stopped, capsys, '--phase2')
+    assert code == 0, err
+    for name, raw in first.items():
+        assert (host / name).read_bytes() == raw
+    assert (host / 'runtime-used-phase2.a2.json').is_file() and (host / 'campaign-cleanup-phase2.a2.json').is_file()
+    assert stage_records.read_record(host, 'phase2')['attempt'] == 2
+    assert command_ids() == sorted([f'collection-campaign-one', f'collection-campaign-one-phase2',
+                                    f'collection-campaign-one-phase2.a2'])
+    _, lease, active = contexts(stopped)
+    assert lease is None and active == []
+    assert process(stopped, capsys, '--finalize')[0] == 0
+    code, _, err = process(stopped, capsys, '--phase2')                      # complete: refused, however many attempts it took
+    assert code == 2 and 'STAGE_ALREADY_COMPLETE' in err
+
+
+def test_an_attempt_left_without_a_cleanup_record_proving_the_stop_is_refused_before_admission(stopped, capsys):
+    host = stopped.run_root / 'host'
+    (host / 'runtime-used-phase2.json').write_bytes(b'{}\n')
+    code, _, err = process(stopped, capsys, '--phase2')
+    assert code == 2 and 'STAGE_ATTEMPT_PREVIOUS_UNPROVEN' in err
+    assert len(contexts(stopped)[0]) == 1
+
+
+def test_a_cleanup_record_that_cannot_be_written_neither_masks_the_stage_error_nor_holds_the_lease(stopped, capsys, monkeypatch):
+    """EXP-7036: `close()` raised FileExistsError for `campaign-cleanup-<stage>.json`; the CLI lost the stage's error and the lease stayed held."""
+    from so101_demo.runtime.container_campaign import owner as owner_module
+    break_phase_two_once(monkeypatch)
+    real = owner_module._write
+
+    def write(path, document):
+        if path.name.startswith('campaign-cleanup-'):
+            raise FileExistsError(17, 'File exists', str(path))
+        return real(path, document)
+    monkeypatch.setattr(owner_module, '_write', write)
+    code, _, err = process(stopped, capsys, '--phase2')
+    assert code == 1 and 'STAGE_FAILED' in err and 'BOOM_AFTER_ADMISSION' in err
+    assert 'CLEANUP_RECORD_FAILED' in err and 'FileExistsError' in err
+    _, lease, active = contexts(stopped)
+    assert lease is None and active == []                                      # the containers were proven stopped: released
+    assert not (stopped.run_root / 'host/campaign-cleanup-phase2.json').exists()
+    monkeypatch.setattr(owner_module, '_write', real)
+    code, _, err = process(stopped, capsys, '--phase2')                        # no proof on disk: fail closed, nothing admitted
+    assert code == 2 and 'STAGE_ATTEMPT_PREVIOUS_UNPROVEN' in err
+
+
+def test_a_stage_that_completed_but_whose_cleanup_record_cannot_be_written_exits_nonzero_and_still_settles(stopped, capsys, monkeypatch):
+    from so101_demo.runtime.container_campaign import owner as owner_module
+    real = owner_module._write
+
+    def write(path, document):
+        if path.name.startswith('campaign-cleanup-'):
+            raise OSError(28, 'No space left on device')
+        return real(path, document)
+    monkeypatch.setattr(owner_module, '_write', write)
+    code, _, err = process(stopped, capsys, '--phase2')
+    assert code == 1 and 'CLEANUP_RECORD_FAILED' in err and 'STAGE_FAILED' not in err
+    _, lease, active = contexts(stopped)
+    assert lease is None and active == []

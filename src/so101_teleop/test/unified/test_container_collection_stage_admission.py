@@ -312,3 +312,75 @@ def test_a_processor_launch_that_no_slot_ever_covered_does_not_settle(tmp_path):
         assert store._query_one('SELECT * FROM gpu_workload_leases') is not None
     finally:
         store.close()
+
+
+# ---- stage attempts: `collection-<id>-<stage>.a<N>` is admitted only as the attempt the run root leaves next ---------------------------
+
+def failed_attempt_record(paths, stage, attempt):
+    """What a stage that failed after admission and proved its stop leaves: its once-only files and a cleanup record."""
+    stage_records.runtime_used_path(paths['host'], stage, attempt).write_bytes(b'{}\n')
+    stage_records.cleanup_path(paths['host'], stage, attempt).write_bytes(
+        stage_records.canonical_json(dict(terminated=True, shards=[], services={}, stop_reason='CAMPAIGN_CLOSING')) + b'\n')
+
+
+def attempt_spec(spec, stage, attempt, generation):
+    later = staged(spec, stage, generation)
+    return replace(later, command_id=f'{FIRST}-{stage}' + ('' if attempt == 1 else f'.a{attempt}'))
+
+
+def test_a_stage_that_failed_after_admission_is_admitted_again_as_the_next_attempt_only(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        settle_first(paths, inspect, workload, spec)
+        record_phase1(paths, spec)
+        failed_attempt_record(paths, 'phase2', 1)
+        for wrong in (1, 3):                                   # the plain id is spent; attempt 3 skips attempt 2
+            with pytest.raises(ValueError, match='STAGE_ATTEMPT_MISMATCH'):
+                workload.start(attempt_spec(spec, 'phase2', wrong, 2), allow_existing=False)
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is None
+        context = workload.start(attempt_spec(spec, 'phase2', 2, 2), allow_existing=False)
+        assert context.campaign_id == 'campaign-1' or context.operation_id
+        assert store._query_one('SELECT COUNT(*) FROM act_campaign_contexts')[0] == 2
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('name', ['phase2.a1', 'phase2.a0', 'phase2.a02', 'phase2.b2', 'phase2.a2.a3', 'phase2.a'])
+def test_an_attempt_name_that_is_not_canonical_is_refused(tmp_path, name):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        settle_first(paths, inspect, workload, spec)
+        record_phase1(paths, spec)
+        failed_attempt_record(paths, 'phase2', 1)
+        with pytest.raises(ValueError, match='STAGE_NAME_INVALID'):
+            workload.start(replace(staged(spec, 'phase2', 2), command_id=f'{FIRST}-{name}'), allow_existing=False)
+    finally:
+        store.close()
+
+
+def test_a_complete_stage_is_not_admitted_again_under_any_attempt(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        settle_first(paths, inspect, workload, spec)
+        record_phase1(paths, spec)
+        failed_attempt_record(paths, 'phase2', 1)
+        stage_records.write_record(paths['host'], 'phase2', dict(campaign_config=logic(spec)),
+                                   previous=stage_records.read_record(paths['host'], 'phase1'), attempt=2)
+        for attempt in (1, 2, 3):
+            with pytest.raises(ValueError, match='STAGE_ALREADY_COMPLETE'):
+                workload.start(attempt_spec(spec, 'phase2', attempt, 2), allow_existing=False)
+    finally:
+        store.close()
+
+
+def test_an_attempt_after_one_that_left_no_proof_of_its_stop_is_refused_at_admission(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        settle_first(paths, inspect, workload, spec)
+        record_phase1(paths, spec)
+        stage_records.runtime_used_path(paths['host'], 'phase2', 1).write_bytes(b'{}\n')
+        with pytest.raises(ValueError, match='STAGE_ATTEMPT_PREVIOUS_UNPROVEN'):
+            workload.start(attempt_spec(spec, 'phase2', 2, 2), allow_existing=False)
+        assert store._query_one('SELECT * FROM gpu_workload_leases') is None
+    finally:
+        store.close()

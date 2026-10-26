@@ -271,6 +271,12 @@ def main(argv=None, *, edges=None) -> int:
         workload.finish(context, cleanup_confirmed=True)
     except Exception as error:  # noqa: BLE001 - a refused settle leaves everything held
         return _fail('CAMPAIGN_SETTLE_REFUSED: ' + str(error), 1)
+    record_error = cleanup[0].get('cleanup_record_error')
+    if record_error is not None:
+        # the stop is proven and the lease released; the cleanup record could not be written: a second error beside the run's own
+        if failure is not None:
+            print('act_collect_parallel: CAMPAIGN_RUN_FAILED: ' + _describe(failure), file=sys.stderr)
+        return _fail('CLEANUP_RECORD_FAILED: ' + record_error, 1)
     if failure is not None:
         return _fail('CAMPAIGN_RUN_FAILED: ' + _describe(failure), 1)
     summary = dict(campaign_id=result['campaign_id'], run=str(run), plane=plane,

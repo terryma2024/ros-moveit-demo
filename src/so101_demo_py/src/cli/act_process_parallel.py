@@ -10,6 +10,13 @@ records (the stage before, the logic document, the admitted inputs, the images; 
 (`STAGE_ALREADY_COMPLETE`), `--retry-round` is refused on a qualification run (`STAGE_RETRY_ON_QUALIFICATION_RUN`), after a retry
 round that did not run (`STAGE_RETRY_ROUND_OUT_OF_ORDER`) and beyond `retry_invalid_max_rounds` (`STAGE_RETRY_ROUNDS_EXCEEDED`).
 
+A stage that failed after admission can run again, as the next attempt (`stage_records.next_attempt`, derived here from the host
+directory, never given by the operator): no completion record, every earlier attempt left a cleanup record proving its containers
+stopped (no shard and no processor launched), and none left an output of the stage. Attempt N >= 2 is its own admission under the
+command id `collection-<campaign>-<stage>.aN` and writes its once-only artefacts as `runtime-used-<stage>.aN.json` and
+`campaign-cleanup-<stage>.aN.json`; the earlier attempts' files stay as they are. A complete stage (RUN or ABORTED) is never run again.
+`STAGE_ATTEMPT_*` codes are refusals before admission.
+
 Each completed stage proves its own containers: it inspects them again, removes them, proves none remains and writes a hash-chained
 receipt (`host/containers-receipt-NN-<stage>.json`, see `container_receipts`). A later stage and the finalize verify termination from
 the receipts and never need a live container; a missing, altered or incomplete receipt is refused before admission
@@ -115,6 +122,7 @@ def main(argv=None, *, edges=None) -> int:
                                sha256=_sha(run / INPUTS_DIRECTORY / FROZEN_DIRECTORY / MANIFEST_NAME))
         head = stage_records.check_before_admission(paths['host'], stage,
             logic=dict(path=str(resolved['campaign_config']), sha256=config_sha))
+        attempt = stage_records.next_attempt(paths['host'], stage)             # STAGE_ATTEMPT_* codes
         container_receipts.verify_for_admission(paths['host'], head)           # STAGE_CONTAINER_RECEIPT_* codes
         case_inputs = read_case_scopes(run, inputs_manifest=inputs_manifest, plane=plane)
         binding = campaign_binding(inputs_manifest, campaign_config=config, plane=plane,
@@ -123,7 +131,7 @@ def main(argv=None, *, edges=None) -> int:
             runtime_config=resolved['runtime_config'], collection_config=resolved['collection_config'],
             campaign_config=resolved['campaign_config'], root=run, qualification=bool(args.qualification or spot_check),
             spot_check=spot_check, qualification_report=report, worker_count=args.worker_count,
-            instance_launcher='container', runtime_document=runtime_document, stage=stage)
+            instance_launcher='container', runtime_document=runtime_document, stage=stage, attempt=attempt)
         spec = composition.prepare_collection_operation(arguments, services=services,
                                                         contact_policy_fingerprint=binding['contact_policy_fingerprint'])
         parallel_runtime = composition.collection_parallel_runtime(resolved['collection_config'])
@@ -145,7 +153,7 @@ def main(argv=None, *, edges=None) -> int:
             approved_disk_floor_bytes=binding['disk_floor_bytes'], docker_runner=edges.docker_runner,
             service_query=edges.service_query, namespace_reader=edges.namespace_reader,
             control_factory=edges.control_factory, admit_processor_slots=workload.admit_processor_slots,
-            runtime_document=runtime_document, stage=stage)
+            runtime_document=runtime_document, stage=stage, attempt=attempt)
     except Exception as error:  # noqa: BLE001 - admitted but not built: nothing was launched, so ask admission to settle
         return _settle_unbuilt(workload, context, run, error)
     cleanup = []
@@ -167,6 +175,13 @@ def main(argv=None, *, edges=None) -> int:
         workload.finish(context, cleanup_confirmed=True)
     except Exception as error:  # noqa: BLE001 - a refused settle leaves everything held
         return _fail_stage('CAMPAIGN_SETTLE_REFUSED: ' + str(error), 1)
+    # The stop is proven and the lease released. A cleanup record that could not be written is a second error, reported beside the
+    # stage's own and never in its place; the attempt has no proof on disk, so a new attempt of the stage is refused.
+    record_error = cleanup[0].get('cleanup_record_error')
+    if record_error is not None:
+        if failure is not None:
+            print('act_process_parallel: STAGE_FAILED: ' + _describe(failure), file=sys.stderr)
+        return _fail_stage('CLEANUP_RECORD_FAILED: ' + record_error, 1)
     if failure is not None:
         return _fail_stage('STAGE_FAILED: ' + _describe(failure), 1)
     print(json.dumps(dict(run=str(run), plane=plane, **{name: value for name, value in result.items()

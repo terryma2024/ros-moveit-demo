@@ -98,6 +98,11 @@ class ContainerCampaignOwner:
         self._sync_s=None
         self._next_wave_index=0
 
+    @property
+    def _attempt(self):
+        """The attempt of the stage this process runs (1 unless an earlier attempt failed after admission; see `stage_records`)."""
+        return getattr(self.services,'attempt',1)
+
     def stop_dispatch(self,reason):
         if type(reason) is not str or not reason:
             raise ValueError('CAMPAIGN_STOP_REASON_INVALID')
@@ -475,6 +480,10 @@ class ContainerCampaignOwner:
             if stage_records.record_path(host,stage).exists():
                 raise ValueError('STAGE_ALREADY_COMPLETE')
             previous=stage_records.verify_chain(host,after,logic=logic)
+        # the attempt this process runs as is the one the host directory leaves next: every earlier attempt proved its stop and left no
+        # stage output (`STAGE_ATTEMPT_*`); the CLI derived the same number before it admitted anything
+        if stage_records.next_attempt(host,stage)!=self._attempt:
+            raise ValueError('STAGE_ATTEMPT_MISMATCH')
         first=stage_records.read_record(host,stage_records.PHASE1)
         if (first['qualification']!=self.qualification or first['worker_count']!=self.context.worker_count
                 or any(first['inputs'].get(name)!=getattr(self.context,name) for name in STAGE_INPUTS)):
@@ -488,7 +497,7 @@ class ContainerCampaignOwner:
             raise ValueError('STAGE_PREVIOUS_RECORD_INVALID')
         # Every container an earlier stage started is proven gone by that stage's receipt; none is needed alive, none is inspected again.
         container_receipts.verify_receipts(host,previous,self.registry.records())
-        _write(host/f'runtime-used-{stage}.json',dict(schema_version=1,kind='act_collection_runtime_used',stage=stage,
+        _write(stage_records.runtime_used_path(host,stage,self._attempt),dict(schema_version=1,kind='act_collection_runtime_used',stage=stage,
             values={name:self.limits[name] for name in RUNTIME_DOCUMENT_KEYS if name in self.limits}))
         return previous,json.loads(raw)
 
@@ -507,7 +516,7 @@ class ContainerCampaignOwner:
             campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],
             processing_result_sha256=hashlib.sha256(result_path.read_bytes()).hexdigest() if result_path.exists() else None,
             processors=None if summary is None else summary.get('processors'),
-            observed=previous['observed']),previous=previous)
+            observed=previous['observed']),previous=previous,attempt=self._attempt)
         return dict(campaign_id=self.context.campaign_id,stage=stage_records.PHASE2,processing='PENDING_FINALIZE',phase2=summary)
 
     def _stage_rounds(self,ids,first,upto):
@@ -578,14 +587,16 @@ class ContainerCampaignOwner:
                     reason='RETRY_ROUND_DISK'
             decision=dict(recording_round=number,candidates=candidates,plans=plans,estimate=estimate,
                           status='RUN' if reason is None else 'SKIPPED',reason=reason)
-            _write(host/f'retry-round-{number}.json',decision)
+            _write(stage_records.retry_decision_path(host,number,self._attempt),decision)
             status,reason_text=decision['status'],reason
             if reason is None:
                 recording=dict(recording_round=number,scene_ids=candidates,waves=[])
                 self._recorded_waves=[]
-                monitor=asyncio.create_task(self._monitor())
                 try:
                     endpoints=await self.services.start()
+                    # the health monitor watches a service that is up: started before, its first `check_health()` raises
+                    # SERVICE_OWNER_NOT_AVAILABLE and fences a round that has done nothing wrong (EXP-7036)
+                    monitor=asyncio.create_task(self._monitor())
                     self._reopen_recording(estimate['recording_deadline_s'])
                     recording['waves']=await self._record_waves(plans,endpoints)
                     await self._finish_phase1(candidates,recording['waves'],round=number)
@@ -606,7 +617,7 @@ class ContainerCampaignOwner:
         stage_records.write_record(host,stage,dict(
             campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],status=status,reason=reason_text,
             observed=dict(wave_wall_s=list(self._wave_wall_s),sync_s=self._sync_s,next_wave_index=self._next_wave_index)),
-            previous=previous)
+            previous=previous,attempt=self._attempt)
         return dict(campaign_id=self.context.campaign_id,stage=stage,status=status,reason=reason_text)
 
     async def stage_finalize(self,manifest):
@@ -635,7 +646,9 @@ class ContainerCampaignOwner:
             initially_invalid={item['scene_id'] for item in first_pass['scenes'] if retry_candidate(item)}
             combined=await asyncio.to_thread(self.verifier.verify_rounds,rounds,list(ids))
             aborted=next((item['reason'] for item in retried if item['status']=='ABORTED'),None)
-            decisions=[json.loads((host/f'retry-round-{number}.json').read_bytes()) for number in range(1,len(retried)+1)]
+            # each round's decision is the one the attempt that completed it wrote
+            decisions=[json.loads(stage_records.retry_decision_path(host,number,stage_records.record_attempt(record)).read_bytes())
+                       for number,record in enumerate(retried,start=1)]
             recovered=sum(item['scene_id'] in initially_invalid and item['verdict']['export_eligible'] is True
                           for item in combined['scenes'])
             retry=dict(max_rounds=retry_invalid_max_rounds(self.limits),rounds_run=len(rounds)-1,recovered=recovered,
@@ -658,7 +671,8 @@ class ContainerCampaignOwner:
         stage_records.write_record(host,stage_records.FINALIZE,dict(
             campaign_id=self.context.campaign_id,campaign_config=previous['campaign_config'],
             campaign_result_sha256=hashlib.sha256((host/'campaign-result.json').read_bytes()).hexdigest(),
-            collection_index_sha256=hashlib.sha256((self.root/'collection-index.json').read_bytes()).hexdigest()),previous=last)
+            collection_index_sha256=hashlib.sha256((self.root/'collection-index.json').read_bytes()).hexdigest()),previous=last,
+            attempt=self._attempt)
         return result
 
     async def _finish_phase1(self,ids,completed,*,round=0):
@@ -748,7 +762,10 @@ class ContainerCampaignOwner:
             if completed and container_receipts.has_receipt(host,stage):
                 return all(self.registry.prove_terminated(item['launch']['launch_id'],self._live_document(item)) for item in mine),None
             if not completed:
-                return all(self.registry.prove_terminated(item['launch']['launch_id'],self._live_document(item)) for item in mine),None
+                proven=all(self.registry.prove_terminated(item['launch']['launch_id'],self._live_document(item)) for item in mine)
+                if proven and mine and stage.startswith('retry-'):
+                    return True,self._seal_failed_attempt(host,stage,mine)
+                return proven,None
             record=stage_records.read_record(host,stage)
             written=container_receipts.seal_stage_containers(host,stage,records=mine,live_document=self._live_document,
                 prove_terminated=self.registry.prove_terminated,runner=self.services.docker_runner,
@@ -756,6 +773,22 @@ class ContainerCampaignOwner:
             return True,f"containers-receipt-{written['seq']:02d}-{stage}.json"
         except (OSError,ValueError,RuntimeError,KeyError,TypeError) as error:
             return False,type(error).__name__+': '+str(error)
+
+    def _seal_failed_attempt(self,host,stage,mine):
+        """Receipt the containers a failed attempt of a retry round started and proved stopped, under the stage-attempt name.
+
+        The next admission refuses a run with a launch no receipt covers, so a stage that is to run again needs this; the receipt is the
+        same proof a completed stage leaves (inspect again, save the logs, remove, prove absent), bound to no stage record. The attempt's
+        stop is already proven, so a receipt that cannot be written does not hold the lease: the error is recorded in the cleanup record
+        and the next attempt is refused at admission (`STAGE_CONTAINER_RECEIPT_COVERAGE`)."""
+        tag=stage_records.failed_attempt_tag(stage,self._attempt)
+        try:
+            written=container_receipts.seal_stage_containers(host,tag,records=mine,live_document=self._live_document,
+                prove_terminated=self.registry.prove_terminated,runner=self.services.docker_runner,stage_record_sha256=None)
+        except (OSError,ValueError,RuntimeError,KeyError,TypeError) as error:
+            self._attempt_receipt_error=type(error).__name__+': '+str(error)
+            return None
+        return f"containers-receipt-{written['seq']:02d}-{tag}.json"
 
     def _live_document(self,record):
         return self.services.inspect_container(record['owner']['container_id'])
@@ -791,7 +824,17 @@ class ContainerCampaignOwner:
         if processors:
             result['processors']=[value if type(value) is dict else dict(error_type=type(value).__name__,reason=str(value))
                                   for value in processors]
-        # a later stage keeps its own cleanup record beside the first process's (written once, never replaced)
+        if getattr(self,'_attempt_receipt_error',None) is not None:
+            result['attempt_receipt_error']=self._attempt_receipt_error
+        # a later stage keeps its own cleanup record beside the first process's (written once, never replaced); a later attempt of a stage
+        # has its own (`campaign-cleanup-<stage>.aN.json`)
         stage=getattr(self.services,'stage',None)
-        _write(self.root/'host'/('campaign-cleanup.json' if stage is None else f'campaign-cleanup-{stage}.json'),result)
+        path=(self.root/'host'/'campaign-cleanup.json' if stage is None
+              else stage_records.cleanup_path(self.root/'host',stage,self._attempt))
+        try:
+            _write(path,result)
+        except Exception as error:  # noqa: BLE001 - bookkeeping must never hide the stage's own error nor keep the lease held
+            # `close()` runs in the `finally` of the stage: a raise here would replace the stage's exception. The stop is already
+            # proven (`terminated` is in the result the caller gets), so the failure is carried in the result for the CLI to report.
+            result['cleanup_record_error']=f'{type(error).__name__}: {error} ({path.name})'
         return result

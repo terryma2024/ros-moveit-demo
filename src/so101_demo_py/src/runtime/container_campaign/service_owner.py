@@ -70,7 +70,7 @@ class ContainerServiceOwner:
     def __init__(self, *, admitted_context, config, paths, roles, registry,
                  startup_timeout_s, receive_budget_s, stop_timeout_s, head_descriptor=None,
                  head_descriptor_sha256=None, docker_runner=_docker, query=_query,
-                 monotonic_ns=time.monotonic_ns, stage=None):
+                 monotonic_ns=time.monotonic_ns, stage=None, attempt=1):
         # Measurement launches Head only, a validation kind Head and Teacher, and collection Teacher only (CP-3608 ruling 2:
         # collection does not run Head Search). The Head descriptor exists only for a launched Head.
         kind = getattr(admitted_context, 'workload_kind', None)
@@ -81,6 +81,7 @@ class ContainerServiceOwner:
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind not in allowed or roles != required_roles
                 or type(registry) is not ContainerLaunchRegistry or (stage is None and registry.records())
+                or type(attempt) is not int or attempt < 1 or (stage is None and attempt != 1)
                 or any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
                        for value in (startup_timeout_s, receive_budget_s, stop_timeout_s))):
             raise ValueError('SERVICE_OWNER_CONFIG_INVALID')
@@ -115,7 +116,10 @@ class ContainerServiceOwner:
         # A later stage of a run collected stage by stage starts its own Teacher: every name it owns carries the stage, so it
         # collides with nothing the earlier stages left (the first process keeps the plain names).
         self.stage = stage
-        self._tail = '' if stage is None else '-'+stage
+        #: the attempt of the stage (1 unless an earlier attempt of it failed after admission and proved its stop): every name of a
+        #: later attempt carries `-aN`, so it collides with nothing the failed attempt left
+        self.attempt = attempt
+        self._tail = '' if stage is None else '-'+stage+('' if attempt == 1 else f'-a{attempt}')
         self._launch_ids, self._endpoints = [], {}
         self._start_task = self._close_task = None
         self._startup_done = asyncio.Event()

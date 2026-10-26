@@ -134,7 +134,12 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
         raise ValueError('CAMPAIGN_CONFIG_BINDING_MISMATCH')
     if set(payload) != _COLLECTION_PAYLOAD_KEYS:
         raise ValueError('FIXED_COLLECTION_PAYLOAD_SCHEMA_DRIFT')
-    return OperationSpec(command_id='collection-'+campaign_id+('' if stage is None else '-'+stage),domain=Domain.VALIDATION,
+    # a stage attempt after the first is a new admission: `collection-<campaign>-<stage>.a<N>` (the first keeps the plain id)
+    attempt = getattr(arguments,'attempt',1)
+    if type(attempt) is not int or attempt < 1 or (stage is None and attempt != 1):
+        raise ValueError('COLLECTION_STAGE_ATTEMPT_INVALID')
+    return OperationSpec(command_id='collection-'+campaign_id+('' if stage is None else '-'+stage+('' if attempt == 1 else f'.a{attempt}')),
+        domain=Domain.VALIDATION,
         kind='act_collection_start',payload=payload,runtime_id=workload.runtime_id,
         execution_generation=generation,
         deadline_ns=workload.clock_ns()+int(total_s*1e9))
@@ -151,7 +156,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
                                    docker_runner=None, service_query=None, namespace_reader=None, control_factory=None,
                                    admit_processor_slots=None,
                                    collection_mode='formal', runtime_document=None, stop_after_phase1=False,
-                                   stage=None):
+                                   stage=None, attempt=1):
     """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
 
     Order: the launch registry first (admission's `finish` opens it with `create=False`, so a construction failure below can
@@ -191,7 +196,7 @@ def build_container_campaign_owner(context, *, config, paths, slots, manifest_pa
             registry=registry, startup_timeout_s=runtime.initializing_hard_timeout_s,
             receive_budget_s=teacher['queue_timeout_s']+teacher['inference_timeout_s'],
             stop_timeout_s=runtime.worker_recovery_timeout_s,
-            **given(docker_runner=docker_runner, query=service_query, stage=stage))
+            **given(docker_runner=docker_runner, query=service_query, stage=stage, attempt=attempt))
         shard_arguments = dict(context=context, config=config, paths=paths, registry=registry,
             parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
             config_paths=(Path(context.campaign_config_path),),

@@ -709,15 +709,20 @@ class UnifiedWorkloadService:
         The first admission (phase 1, or a run in one piece; command id `collection-<id>`) is refused when the campaign id
         already has a context (`CAMPAIGN_FIRST_ADMISSION_REPEATED`). A later stage (`collection-<id>-<stage>`, container
         collection only) needs the first admission (`STAGE_FIRST_ADMISSION_MISSING`), the same run root and the same logic
-        document (`STAGE_RUN_ROOT_MISMATCH`), and the stage records of the run as that stage needs them (`STAGE_*` codes)."""
+        document (`STAGE_RUN_ROOT_MISMATCH`), and the stage records of the run as that stage needs them (`STAGE_*` codes).
+
+        A stage that failed after admission and stopped is admitted again under `collection-<id>-<stage>.a<N>` (N >= 2): N must be the
+        attempt the run root leaves next (`stage_records.next_attempt`; `STAGE_ATTEMPT_*` codes), so an attempt number is never chosen."""
         campaign_id = payload['campaign_id']
-        stage = None
+        stage, attempt = None, 1
         if spec.kind == 'act_collection_start':
             prefix = 'collection-' + campaign_id + '-'
             if spec.command_id.startswith(prefix):
                 stage = spec.command_id[len(prefix):]
-                if re.fullmatch(r'phase2|retry-[1-9][0-9]*|finalize', stage) is None:
+                named = re.fullmatch(r'(phase2|retry-[1-9][0-9]*|finalize)(?:\.a([2-9]|[1-9][0-9]+))?', stage)
+                if named is None:
                     raise ValueError('STAGE_NAME_INVALID')
+                stage, attempt = named.group(1), 1 if named.group(2) is None else int(named.group(2))
         rows = store._query_all("SELECT context_json FROM act_campaign_contexts WHERE campaign_id=?", (campaign_id,))
         if stage is None:
             if rows:
@@ -735,6 +740,8 @@ class UnifiedWorkloadService:
         from so101_demo.runtime.container_campaign import stage_records
         stage_records.check_before_admission(Path(payload['evidence_root']) / 'host', stage,
                                              logic=dict(sha256=payload.get('campaign_config_sha256')))
+        if stage_records.next_attempt(Path(payload['evidence_root']) / 'host', stage) != attempt:
+            raise ValueError('STAGE_ATTEMPT_MISMATCH')
 
     def admit_processor_slots(self, context: AdmittedCampaignContext, slots):
         """Reserve the phase-2 processor slots `(campaign, pNN, generation)` of an admitted container campaign.
