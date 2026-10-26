@@ -398,7 +398,8 @@ class ContainerCampaignOwner:
                     scene_count=len(candidates),worker_count=len(worker_ids),processor_count=processors,observed=observed,runtime=runtime)
                 if not estimate['fits']:
                     reason=estimate['reason']
-                largest=max((item['phase1'].get('recording_bytes',0) for item in combined['scenes'] if item['phase1']),default=0)
+                # a scene whose Teacher failed has no recording receipt (recording_bytes None): it adds nothing to the disk estimate
+                largest=max((item['phase1'].get('recording_bytes') or 0 for item in combined['scenes'] if item['phase1']),default=0)
                 if reason is None and self.disk_reader(self.root)<self.approved_disk_floor_bytes+len(candidates)*largest:
                     reason='RETRY_ROUND_DISK'
             decision=dict(recording_round=number,candidates=candidates,plans=plans,estimate=estimate,
@@ -571,7 +572,8 @@ class ContainerCampaignOwner:
                     observed=self._retry_observations(),runtime=runtime)
                 if not estimate['fits']:
                     reason=estimate['reason']
-                largest=max((item['phase1'].get('recording_bytes',0) for item in combined['scenes'] if item['phase1']),default=0)
+                # a scene whose Teacher failed has no recording receipt (recording_bytes None): it adds nothing to the disk estimate
+                largest=max((item['phase1'].get('recording_bytes') or 0 for item in combined['scenes'] if item['phase1']),default=0)
                 if reason is None and self.disk_reader(self.root)<self.approved_disk_floor_bytes+len(candidates)*largest:
                     reason='RETRY_ROUND_DISK'
             decision=dict(recording_round=number,candidates=candidates,plans=plans,estimate=estimate,

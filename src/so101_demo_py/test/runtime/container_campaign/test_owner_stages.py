@@ -253,3 +253,15 @@ def test_a_retry_round_run_twice_is_refused(tmp_path, monkeypatch):
     retry(phase, 1)
     with pytest.raises(ValueError, match='STAGE_ALREADY_COMPLETE'):
         retry(phase, 1, close=False)
+
+
+def test_a_teacher_failed_scene_without_a_recording_receipt_does_not_break_the_staged_retry_decision(tmp_path, monkeypatch):
+    """EXP-7036: `stage_retry` raised STAGE_FAILED `'>' not supported between instances of 'NoneType' and 'int'` because the disk estimate took
+    `recording_bytes` (None for a Teacher-failed scene) into `max`."""
+    from test_owner_retry import teacher_failed_scene
+    phase = retry_staged(tmp_path, monkeypatch, rounds=1, verify=teacher_failed_scene([]))
+    stage(phase, 'phase2')
+    decision = retry(phase, 1)
+    assert decision['status'] == 'RUN', decision
+    recorded = json.loads((phase.owner.root / 'host/retry-round-1.json').read_text())
+    assert recorded['candidates'] == ['scene-00'] and recorded['reason'] is None

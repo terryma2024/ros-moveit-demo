@@ -11,8 +11,8 @@ from so101_demo.runtime.container_campaign.processing_scheduler import Processin
 from test_owner_phase2 import phase2_world
 
 
-def retry_world(tmp_path, monkeypatch, *, rounds=2, outcomes=('INVALID', 'VALID'), config=None, scene_count=2):
-    phase = phase2_world(tmp_path, monkeypatch, scene_count=scene_count,
+def retry_world(tmp_path, monkeypatch, *, rounds=2, outcomes=('INVALID', 'VALID'), config=None, scene_count=2, verify=None):
+    phase = phase2_world(tmp_path, monkeypatch, scene_count=scene_count, verify=verify,
                          config=dict(retry_invalid_max_rounds=rounds, **(config or {})))
     owner = phase.owner
     owner.coordinator.config = SimpleNamespace(initializing_hard_timeout_s=180, executing_hard_timeout_s=300,
@@ -217,3 +217,27 @@ def test_the_limits_come_from_the_runtime_document_and_are_recorded(tmp_path, mo
     assert used['values']['retry_invalid_max_rounds'] == 0 and used['values']['processor_count'] == 3
     assert [call['round'] for call in phase.scheduler.calls] == [0]  # the round count came from the limits, not from the config
     assert 'retry' not in result
+
+
+def teacher_failed_scene(order):
+    """The phase-1 readback of a world in which `scene-01` failed its Teacher: no recording receipt, so `recording_bytes` is None
+    (act/result_store.py), as for the four EXP-7036 scenes whose retry round failed with `'>' not supported ... 'NoneType' and 'int'`."""
+    from test_owner_phase1 import pending_verified
+    inner = pending_verified(order)
+
+    def verify(plan, outcome, shards):
+        value = inner(plan, outcome, shards)
+        for row in value['case_results']:
+            if row['scene_id'] == 'scene-01':
+                row['proof'].update(result_status='FAILED', teacher_execution_status='FAILED', teacher_task_result='UNCONFIRMED',
+                                    processing='NOT_PENDING', act_data_status='INVALID', act_data_reason='DYNAMIC_TARGET_UNREACHABLE',
+                                    receipt_sha256=None, recording_files=None, recording_bytes=None)
+        return value
+    return verify
+
+
+def test_a_teacher_failed_scene_without_a_recording_receipt_does_not_break_the_all_in_one_retry_decision(tmp_path, monkeypatch):
+    phase = retry_world(tmp_path, monkeypatch, rounds=1, outcomes=('INVALID', 'VALID'), verify=teacher_failed_scene([]))
+    drive(phase)
+    decision = json.loads((phase.owner.root / 'host/retry-round-1.json').read_text())
+    assert decision['status'] == 'RUN' and decision['candidates'] == ['scene-00'], decision
