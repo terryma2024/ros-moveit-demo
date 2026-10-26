@@ -13,12 +13,12 @@ Inputs:
 |---|---|
 | Rig | `side-wrist-indoor`. Teacher YOLO `f9cce63b…` (deployed for this rig, CP-3787). |
 | Size | **200 committed episodes** in the formal run, plus a qualification run of 40 first. |
-| Appearance | 25 % indoor nominal (layout A as is) and 75 % randomised draws over layout A from the `indoor` whitelist: wall, floor and table materials, the indoor lights (intensity 0.7–1.3×, direction), headlight ambient and diffuse, prop visibility, cup colour (excluding colours that blend into the table or walls). Every draw keeps the stripped physics fingerprint equal to nominal (enforced). |
-| Held out | Layouts B (lab) and C (home), plus a held-out subset of textures and cup colours, are **never collected**. They are kept for appearance-generalisation evaluation. |
+| Appearance | 25 % indoor nominal (layout A as is) and 75 % randomised draws over layout A from the `indoor` whitelist: wall, floor and table materials, the indoor lights (intensity 0.7–1.3×, direction), headlight ambient and diffuse, prop visibility, cup colour (continuous HSV, with a ΔE rule against the drawn wall, floor, table and the red landing ring). Textures come from the pools of `act/indoor_assets.py` (832 procedural + 180 CC0 + the legacy set), drawn by split. Every draw keeps the stripped physics fingerprint equal to nominal (enforced). |
+| Held out | Layouts B (lab) and C (home), plus the val/test textures and hue bands (15 % each), are **never collected for train**. They are kept for appearance-generalisation evaluation. |
 | Teacher source (D2) | Nominal episodes use the camera Teacher (YOLO). Randomised episodes use the **privileged-pose Teacher** (sim-truth cup pose), recorded as `teacher_source: privileged_pose` in the episode identity. |
 | Demonstration diversity (R3-a) | On for every episode: `teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml`. The smoke runs showed no quality loss against carry_b (CP-3784). |
 | Scenes | A new Poisson-disk sample in the Teacher success region with a fixed seed. It must be disjoint (≥ 0.004 m) from every existing list and from the held-out lists. The reachability filter is re-run on the **final scene ids** with each scene's diversity values (`refilter_scenes`). |
-| Splits | By scene, spatially stratified, plus appearance-asset identity: a texture or cup colour never appears in two splits. |
+| Splits | By scene, spatially stratified, plus appearance-asset identity: a texture or cup hue band never appears in two splits (enforced by `check_split_disjoint`; counts in CP-3790). |
 | Collection | Staged mount mode: phase 1, phase 2, finalize, `--retry-invalid-max-rounds 3`, cap 6, gap 20. Sealed at the end. |
 
 ## Tasks

@@ -69,11 +69,18 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3789
+latest_checkpoint: CP-3790
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a merged (CP-3784), next: wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator. Indoor YOLO fine-tune and the rgb_sync counter split are merged (CP-3785, CP-3786).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3790 — Indoor appearance asset expansion for P3: 832 procedural textures, 180 CC0 textures (separate pack), continuous HSV cup colour with a ΔE rule, identity splits (antzb goal 13, to-do 41)
+
+- Executed by a Sonnet 5.5 subagent on antzb, branch `antzb/indoor-assets` from `e6a67c37c`; merged into `codex/so101-act-data-0917a` on ai-station (renumbered from antzb's CP-3788, which collided with the P3 CP-3788). Code: `act/indoor_assets.py`, `scene_variant.py` (pooled textures, `SCENE_VARIANT_TEXTURE_MISSING`), `indoor_yolo_dataset.py` (`asset_pools`, `check_split_disjoint`), `gen_indoor_textures.py`, `fetch_cc0_textures.py`, mount-tree build hook.
+- Procedural: 8 families x 104, reproduced byte-exactly from `proc-manifest.json` (not in git). CC0: 180 Poly Haven textures, pack sha256 `79fa5d00c9bba90021b8307e759abc09ec26a0b0ba9a017208238e054d3853ae`, 71 MB, outside git. Git cost: about 0.7 MB (manifests + licences).
+- Splits (train/val/test): wall 401/89/88, floor 477/106/105, table 409/91/90 textures (legacy included); hue bands 26/5/5 as antzb delivered them, 15/11/10 after the merge (11 train bands of the held-out cup families blue, purple, green, teal moved to val and test, deterministic, `indoor_assets._hue_assignment`). The P3 appearance plan (`act/appearance_plan.py`, schema 2) now draws only from the train pools and binds the pool identity into its hash. Random draws from every pool, over layouts A, B, C, keep the stripped physics fingerprint equal to nominal (tests).
+- Not changed: physics, validity checks, known-flakes. Merge notes (ai-station): the plan hash of `act/appearance_plan.py` binds the pool identity; the P3 held-out assets are kept out of the train pool; see the `goal 13 merge` section of `indoor-scene/p3-20261025/manifest.md`.
 
 ## CP-3789 - Indoor P3: recorder-queue watermark fix `fc31359fb` (cameras of a sample encoded concurrently, bytes unchanged), phase-2 replay re-check 16/16 VALID; T6 disk prepared
 

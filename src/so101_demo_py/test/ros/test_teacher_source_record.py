@@ -14,6 +14,21 @@ from test_frozen_appearance import frozen_set, rows
 from test_teacher_diversity_runtime import make_adapter
 
 
+SHARE = PACKAGE_ROOT
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _pool_share(indoor_pool_share):
+    """The frozen-list readers verify the installed texture files, so these tests run on a share in which they exist and match (and the plan of
+    `frozen_set` is made for that share)."""
+    import test_frozen_appearance as frozen_tests
+
+    global SHARE
+    SHARE = frozen_tests.SHARE = indoor_pool_share
+    frozen_tests.NOMINAL_DIR = indoor_pool_share / "assets/mujoco/act"
+    yield
+
+
 def sample(x, y=-0.25, z=0.165):
     return SimpleNamespace(pose_world=Pose7((x, y, z, 0.0, 0.0, 0.0, 1.0)))
 
@@ -66,13 +81,13 @@ def test_a_randomised_episode_without_a_bound_proof_and_a_nominal_one_with_a_pro
 
 def test_the_entry_of_the_scene_comes_from_the_frozen_list_and_only_a_list_with_a_plan_has_one(tmp_path):
     frozen, manifest = frozen_set(tmp_path)
-    found = _frozen_teacher_source(frozen, manifest, PACKAGE_ROOT, rows()[2]["scene_id"])
+    found = _frozen_teacher_source(frozen, manifest, SHARE, rows()[2]["scene_id"])
     assert found["teacher_source"] == ap.teacher_source_for(found["appearance"]["kind"])
     plain, plain_manifest = frozen_set(tmp_path / "plain", with_plan=False)
-    assert _frozen_teacher_source(plain, plain_manifest, PACKAGE_ROOT, "p3-000") is None
-    assert _frozen_teacher_source({"mode": "formal"}, manifest, PACKAGE_ROOT, "p3-000") is None
-    assert _frozen_teacher_source(None, None, PACKAGE_ROOT, "p3-000") is None
-    assert _frozen_teacher_source(frozen, manifest, PACKAGE_ROOT, None) is None
+    assert _frozen_teacher_source(plain, plain_manifest, SHARE, "p3-000") is None
+    assert _frozen_teacher_source({"mode": "formal"}, manifest, SHARE, "p3-000") is None
+    assert _frozen_teacher_source(None, None, SHARE, "p3-000") is None
+    assert _frozen_teacher_source(frozen, manifest, SHARE, None) is None
     with pytest.raises(ap.AppearanceInvalid, match="APPEARANCE_NOMINAL_SCENE_MISMATCH"):
         other = tmp_path / "other"
         (other / "assets/mujoco/act").mkdir(parents=True)
@@ -88,7 +103,7 @@ def test_the_source_and_the_draw_are_on_the_teacher_document(tmp_path):
     adapter._write = lambda: written.append(dict(adapter._document))
     frozen, manifest = frozen_set(tmp_path / "f")
     scene = rows()[4]["scene_id"]
-    found = _frozen_teacher_source(frozen, manifest, PACKAGE_ROOT, scene)
+    found = _frozen_teacher_source(frozen, manifest, SHARE, scene)
     found["model_equivalence"] = {"proof_sha256": "ab" * 32}
     adapter._record_teacher_source(found, published_truth_gap_m=3.2e-5)
     record = adapter._document["teacher_source"]

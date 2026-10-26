@@ -89,7 +89,7 @@ class StackSceneSwitch:
 
     def inventory(self) -> dict:
         if self._inventory is None:
-            self._inventory = ap.scene_inventory(self.nominal_dir)
+            self._inventory = ap.scene_inventory(self.nominal_dir, verify_files=True)
         return self._inventory
 
     def entry(self, frozen: dict, manifest_path, scene_id: str):

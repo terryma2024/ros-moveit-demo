@@ -16,7 +16,17 @@ from so101_demo.act import episode_open, frozen_appearance
 from so101_demo.act.diagnostic_episode_inputs import SCENE_MANIFEST_PATH
 
 NOMINAL_DIR = PACKAGE_ROOT / "assets/mujoco/act"
+SHARE = PACKAGE_ROOT
 SEED = 710025
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _pool_share(indoor_pool_share):
+    """The readers verify the installed texture files (`verify_files=True`), so the tests run on a share in which they exist and match."""
+    global SHARE, NOMINAL_DIR
+    SHARE = indoor_pool_share
+    NOMINAL_DIR = SHARE / "assets/mujoco/act"
+    yield
 
 
 def inventory():
@@ -24,7 +34,7 @@ def inventory():
 
 
 def plan():
-    return ap.make_plan(seed=SEED, nominal_share=0.25, nominal_scene_sha256=inventory()["scene_sha256"])
+    return ap.make_plan(seed=SEED, nominal_share=0.25, nominal_scene_sha256=inventory()["scene_sha256"], pool_identity=inventory()["pool_identity"])
 
 
 def rows(count=12):
@@ -130,7 +140,7 @@ def equivalence_of(entry, tmp_path):
     """What the Teacher records for a variant stack: the proof of this variant (realized on this host) and its hashes."""
     from so101_demo.act import model_equivalence, scene_variant_run
 
-    realized = scene_variant_run.realize_into(tmp_path / "proof-variant", PACKAGE_ROOT, entry["appearance"]["variant"])
+    realized = scene_variant_run.realize_into(tmp_path / "proof-variant", SHARE, entry["appearance"]["variant"])
     proof = model_equivalence.make_proof(scene_id=entry["appearance"]["scene_id"], declared_model_sha256=NOMINAL_MODEL,
                                          loaded_model_sha256=LOADED_MODEL, record=realized)
     return {"proof": proof, "proof_sha256": model_equivalence.proof_sha256(proof), "declared_model_sha256": NOMINAL_MODEL,
@@ -156,29 +166,29 @@ def scene_with(tmp_path, kind):
 def test_the_identity_of_a_randomised_episode_carries_the_draw_the_realized_hash_and_the_privileged_source(tmp_path):
     frozen, manifest, scene, entry = scene_with(tmp_path, ap.KIND_RANDOMISED)
     record_in = teacher_record(entry, tmp_path)
-    arguments = episode_open.appearance_arguments(frozen, manifest, scene, record_in, share=PACKAGE_ROOT, declared_expected=NOMINAL_MODEL)
+    arguments = episode_open.appearance_arguments(frozen, manifest, scene, record_in, share=SHARE, declared_expected=NOMINAL_MODEL)
     assert arguments["teacher_source"] == ap.TEACHER_SOURCE_PRIVILEGED
     record = arguments["scene_appearance"]
     # D1: both hashes and the proof's hash are in the identity
     assert record["model_equivalence"] == {"declared_model_sha256": NOMINAL_MODEL, "loaded_model_sha256": LOADED_MODEL,
                                            "proof_sha256": record_in["model_equivalence"]["proof_sha256"]}
     assert record["kind"] == "randomised" and record["layout"] == "A" and record["plan_sha256"] == plan()["plan_sha256"]
-    assert record["variant_sha256"] == entry["appearance"]["variant_sha256"] and record["cup_family"] in ap.POOLS["cups"]
+    assert record["variant_sha256"] == entry["appearance"]["variant_sha256"] and record["cup_family"].startswith("hue-band-")
     assert len(record["realized_sha256"]) == 64 and record["fingerprint_version"] == 2
     assert record["physics_fingerprint"] == record["nominal_physics_fingerprint"]
     assert record["variant_name"] == f"p3-{scene}"
-    again = episode_open.appearance_arguments(frozen, manifest, scene, record_in, share=PACKAGE_ROOT, declared_expected=NOMINAL_MODEL)
+    again = episode_open.appearance_arguments(frozen, manifest, scene, record_in, share=SHARE, declared_expected=NOMINAL_MODEL)
     assert again == arguments
 
 
 def test_the_identity_of_a_nominal_episode_names_the_camera_source_and_no_variant(tmp_path):
     frozen, manifest, scene, entry = scene_with(tmp_path, ap.KIND_NOMINAL)
-    arguments = episode_open.appearance_arguments(frozen, manifest, scene, teacher_record(entry), share=PACKAGE_ROOT)
+    arguments = episode_open.appearance_arguments(frozen, manifest, scene, teacher_record(entry), share=SHARE)
     assert arguments["teacher_source"] == ap.TEACHER_SOURCE_CAMERA
     assert arguments["scene_appearance"]["kind"] == "nominal" and arguments["scene_appearance"]["variant_sha256"] is None
     assert "realized_sha256" not in arguments["scene_appearance"] and "model_equivalence" not in arguments["scene_appearance"]
     with pytest.raises(ValueError, match="APPEARANCE_MODEL_EQUIVALENCE_UNEXPECTED"):
-        episode_open.appearance_arguments(frozen, manifest, scene, {**teacher_record(entry), "model_equivalence": {"proof": {}}}, share=PACKAGE_ROOT)
+        episode_open.appearance_arguments(frozen, manifest, scene, {**teacher_record(entry), "model_equivalence": {"proof": {}}}, share=SHARE)
 
 
 def test_the_identity_is_refused_when_the_teacher_manifest_does_not_say_the_same(tmp_path):
@@ -186,7 +196,7 @@ def test_the_identity_is_refused_when_the_teacher_manifest_does_not_say_the_same
     good = teacher_record(entry, tmp_path)
     for bad in (None, {}, {**good, "source": ap.TEACHER_SOURCE_CAMERA}, {**good, "draw_sha256": "0" * 64}, {**good, "plan_sha256": "1" * 64}):
         with pytest.raises(ValueError, match="APPEARANCE_TEACHER_MANIFEST_MISMATCH"):
-            episode_open.appearance_arguments(frozen, manifest, scene, bad, share=PACKAGE_ROOT)
+            episode_open.appearance_arguments(frozen, manifest, scene, bad, share=SHARE)
 
 
 def test_a_randomised_identity_without_a_valid_proof_for_this_variant_and_the_frozen_model_is_refused(tmp_path):
@@ -196,22 +206,22 @@ def test_a_randomised_identity_without_a_valid_proof_for_this_variant_and_the_fr
     # no proof at all: the run had the override set and nothing proved it
     for equivalence in (None, {}, {**proof, "proof_sha256": "00" * 32}, {**proof, "loaded_model_sha256": "ee" * 32}):
         with pytest.raises(ValueError, match="APPEARANCE_MODEL_EQUIVALENCE_INVALID"):
-            episode_open.appearance_arguments(frozen, manifest, scene, {**good, "model_equivalence": equivalence}, share=PACKAGE_ROOT,
+            episode_open.appearance_arguments(frozen, manifest, scene, {**good, "model_equivalence": equivalence}, share=SHARE,
                                               declared_expected=NOMINAL_MODEL)
     with pytest.raises(ValueError, match="APPEARANCE_MODEL_EQUIVALENCE_INVALID"):       # a proof of another declared identity than the frozen model
-        episode_open.appearance_arguments(frozen, manifest, scene, good, share=PACKAGE_ROOT, declared_expected="ef" * 32)
+        episode_open.appearance_arguments(frozen, manifest, scene, good, share=SHARE, declared_expected="ef" * 32)
     other = next(row for row in rows() if row["scene_id"] != scene
                  and frozen_appearance.scene_entry(frozen, manifest, row["scene_id"], inventory=inventory())["appearance"]["variant"] is not None)
     other_entry = frozen_appearance.scene_entry(frozen, manifest, other["scene_id"], inventory=inventory())
     with pytest.raises(ValueError, match="APPEARANCE_MODEL_EQUIVALENCE_NOT_THIS_VARIANT"):   # a proof of another variant
         episode_open.appearance_arguments(frozen, manifest, scene, {**good, "model_equivalence": equivalence_of(other_entry, tmp_path / "o")},
-                                          share=PACKAGE_ROOT, declared_expected=NOMINAL_MODEL)
+                                          share=SHARE, declared_expected=NOMINAL_MODEL)
 
 
 def test_a_freeze_that_binds_no_scene_list_or_a_list_without_a_plan_adds_nothing_to_the_identity(tmp_path):
-    assert episode_open.appearance_arguments({"mode": "formal"}, tmp_path / "m.json", "p3-000", None, share=PACKAGE_ROOT) == {}
+    assert episode_open.appearance_arguments({"mode": "formal"}, tmp_path / "m.json", "p3-000", None, share=SHARE) == {}
     plain, manifest = frozen_set(tmp_path, with_plan=False)
-    assert episode_open.appearance_arguments(plain, manifest, "p3-000", None, share=PACKAGE_ROOT) == {}
+    assert episode_open.appearance_arguments(plain, manifest, "p3-000", None, share=SHARE) == {}
 
 
 def test_a_variant_that_changed_the_physics_is_refused_when_the_identity_is_opened(tmp_path, monkeypatch):
@@ -220,4 +230,4 @@ def test_a_variant_that_changed_the_physics_is_refused_when_the_identity_is_open
 
     monkeypatch.setattr(scene_variant_run, "stripped_physics_fingerprint_of_file", lambda path: str(path))
     with pytest.raises(Exception, match="SCENE_VARIANT_PHYSICS_MISMATCH"):
-        episode_open.appearance_arguments(frozen, manifest, scene, teacher_record(entry, tmp_path), share=PACKAGE_ROOT)
+        episode_open.appearance_arguments(frozen, manifest, scene, teacher_record(entry, tmp_path), share=SHARE)

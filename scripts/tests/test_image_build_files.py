@@ -406,3 +406,66 @@ def test_a_continued_run_line_never_follows_a_line_without_its_backslash(name):
         if line.startswith("    &&") or line.startswith("      ") and lines[number - 2].rstrip().endswith("\\"):
             previous = lines[number - 2].rstrip()
             assert previous.endswith("\\") or previous.endswith("'") or previous == "", f"{name}:{number}"
+
+
+# ---- the indoor appearance pools: written into the install tree by the build, checked against their manifest -----------------------------------
+
+
+INDOOR_TEXTURES = "so101_demo_py/share/so101_demo_py/assets/mujoco/textures/indoor"
+
+
+def _worktree_with_asset_tools(tmp_path):
+    """A tiny repository holding the real texture script and `indoor_assets.py` at their repository paths."""
+    tree = tmp_path / "wt"
+    for relative in ("scripts/assets/gen_indoor_textures.py", "src/so101_demo_py/src/act/indoor_assets.py"):
+        (tree / relative).parent.mkdir(parents=True, exist_ok=True)
+        (tree / relative).write_text((ROOT / relative).read_text())
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@localhost"]
+    subprocess.run(git + ["init", "-q"], cwd=tree, check=True)
+    subprocess.run(git + ["add", "-A"], cwd=tree, check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "x"], cwd=tree, check=True)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tree, capture_output=True, text=True, check=True).stdout.strip()
+    return tree, head
+
+
+def _manifest_file(tmp_path, damage=False):
+    pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("ia_for_test", ROOT / "src/so101_demo_py/src/act/indoor_assets.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    manifest = module.build_proc_manifest(["proc/wood_000", "proc/tile_001"])
+    if damage:
+        manifest["textures"][1]["pixel_sha256"] = "0" * 64
+    path = tmp_path / "proc-manifest.json"
+    module.write_manifest(path, manifest)
+    return path
+
+
+def test_the_build_writes_the_procedural_textures_into_the_install_tree_and_they_equal_the_manifest(tmp_path):
+    tree, head = _worktree_with_asset_tools(tmp_path)
+    manifest = _manifest_file(tmp_path)
+    command = f'mkdir -p "$MOUNT_INSTALL/{INDOOR_TEXTURES}" && cp {manifest} "$MOUNT_INSTALL/{INDOOR_TEXTURES}/proc-manifest.json"'
+    done = build_mount(tree, head, tmp_path, command)
+    assert done.returncode == 0, done.stderr
+    textures = tmp_path / "br" / "mount" / head[:12] / "install" / INDOOR_TEXTURES
+    assert sorted(path.name for path in (textures / "proc").iterdir()) == ["tile_001.png", "wood_000.png"]
+    assert "2 procedural textures" in (tmp_path / "br" / "mount" / head[:12] / "log" / "indoor-textures.log").read_text()
+
+
+def test_the_build_fails_and_leaves_no_commit_record_when_a_texture_does_not_reproduce_its_manifest(tmp_path):
+    tree, head = _worktree_with_asset_tools(tmp_path)
+    manifest = _manifest_file(tmp_path, damage=True)
+    command = f'mkdir -p "$MOUNT_INSTALL/{INDOOR_TEXTURES}" && cp {manifest} "$MOUNT_INSTALL/{INDOOR_TEXTURES}/proc-manifest.json"'
+    done = build_mount(tree, head, tmp_path, command)
+    assert done.returncode == 4 and "MOUNT_BUILD_FAILED: indoor procedural textures" in done.stderr
+    assert not (tmp_path / "br" / "mount" / head[:12] / "install" / "BUILD-COMMIT").exists()
+
+
+def test_a_build_without_an_indoor_manifest_does_not_touch_textures(tmp_path, worktree):
+    tree, head = worktree
+    done = build_mount(tree, head, tmp_path, "true")
+    assert done.returncode == 0 and not (tmp_path / "br" / "mount" / head[:12] / "log" / "indoor-textures.log").exists()

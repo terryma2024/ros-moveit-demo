@@ -56,7 +56,8 @@ def main(arguments: list[str] | None = None) -> int:
     os.environ.setdefault("MUJOCO_GL", "osmesa")
     counts = {name: getattr(parsed, name) for name in SETS if getattr(parsed, name)}
     inventories = dataset.layout_inventories(parsed.act_assets)
-    plan = dataset.build_plan(counts, parsed.seed, inventories)
+    assets = dataset.asset_pools(parsed.act_assets)
+    plan = dataset.build_plan(counts, parsed.seed, inventories, assets)
     renderer = render.IndoorFrameRenderer(parsed.act_assets, root / "work")
     files, redraws, directories = {}, {}, set()
     try:
@@ -70,7 +71,7 @@ def main(arguments: list[str] | None = None) -> int:
                 attempt += 1
                 if attempt > MAX_REDRAWS:
                     raise RuntimeError(f"CUP_NOT_VISIBLE: {entry['sample_id']} after {MAX_REDRAWS} redraws")
-                entry = dataset.draw_sample(parsed.seed, entry["sample_id"].rsplit("-", 1)[0], entry["index"], inventories, attempt=attempt)
+                entry = dataset.draw_sample(parsed.seed, entry["sample_id"].rsplit("-", 1)[0], entry["index"], inventories, attempt=attempt, assets=assets)
             redraws[entry["sample_id"]] = attempt
             directory, stem = entry["directory"], entry["sample_id"]
             directories.add(directory)
@@ -99,6 +100,7 @@ def main(arguments: list[str] | None = None) -> int:
     manifest = {"schema_version": 1, "kind": "INDOOR_YOLO_SEG_DATASET", "master_seed": parsed.seed, "counts": counts,
                 "plan_sha256": document["plan_sha256"], "redraws": {key: value for key, value in redraws.items() if value},
                 "min_mask_pixels": MIN_MASK_PIXELS, "split_policy": dataset.SPLIT_POLICY, "region_xy": dataset.REGION_XY,
+                "texture_pools": {split: {surface: len(ids) for surface, ids in surfaces.items()} for split, surfaces in assets["pools"].items()},
                 "files": dict(sorted(files.items()))}
     (root / "dataset-manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=1) + "\n", encoding="utf-8")
     print(json.dumps({"status": "OK", "output_root": str(root), "frames": len(plan), "plan_sha256": document["plan_sha256"]}))

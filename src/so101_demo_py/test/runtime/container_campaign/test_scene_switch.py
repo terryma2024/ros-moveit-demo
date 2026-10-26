@@ -23,6 +23,15 @@ from so101_teleop.unified.act_stack import ActStackLaunch, ActStackProcessOwner
 
 NOMINAL_MODEL = "ab" * 32
 SEED = 710025
+SHARE = PACKAGE_ROOT
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _pool_share(indoor_pool_share):
+    """The switch verifies the installed texture files (`verify_files=True`), so it runs on a share in which they exist and match."""
+    global SHARE
+    SHARE = indoor_pool_share
+    yield
 
 
 class SleepingLaunch(ActStackLaunch):
@@ -31,11 +40,11 @@ class SleepingLaunch(ActStackLaunch):
 
 
 def inventory():
-    return ap.scene_inventory(PACKAGE_ROOT / "assets/mujoco/act")
+    return ap.scene_inventory(SHARE / "assets/mujoco/act")
 
 
 def plan():
-    return ap.make_plan(seed=SEED, nominal_share=0.25, nominal_scene_sha256=inventory()["scene_sha256"])
+    return ap.make_plan(seed=SEED, nominal_share=0.25, nominal_scene_sha256=inventory()["scene_sha256"], pool_identity=inventory()["pool_identity"])
 
 
 def appearance(scene_id):
@@ -73,7 +82,7 @@ class Env:
             self.probes.append(launch)
             return probe
 
-        self.switch = module.StackSceneSwitch(stack=self.stack, owned_root=self.root, share=PACKAGE_ROOT, new_ready_probe=new_probe,
+        self.switch = module.StackSceneSwitch(stack=self.stack, owned_root=self.root, share=SHARE, new_ready_probe=new_probe,
                                               start_timeout_s=10, stop_timeout_s=2, model_sha256=model_sha256)
 
     async def start(self):
@@ -199,6 +208,6 @@ def test_the_task_record_names_the_draw_the_source_and_the_switch(env):
 
 def test_the_switch_needs_a_positive_start_timeout_and_a_probe_factory(env):
     with pytest.raises(ValueError, match="SCENE_SWITCH_CONFIG_INVALID"):
-        module.StackSceneSwitch(stack=env.stack, owned_root=env.root, share=PACKAGE_ROOT, new_ready_probe=None, start_timeout_s=10)
+        module.StackSceneSwitch(stack=env.stack, owned_root=env.root, share=SHARE, new_ready_probe=None, start_timeout_s=10)
     with pytest.raises(ValueError, match="SCENE_SWITCH_CONFIG_INVALID"):
-        module.StackSceneSwitch(stack=env.stack, owned_root=env.root, share=PACKAGE_ROOT, new_ready_probe=lambda launch: None, start_timeout_s=0)
+        module.StackSceneSwitch(stack=env.stack, owned_root=env.root, share=SHARE, new_ready_probe=lambda launch: None, start_timeout_s=0)

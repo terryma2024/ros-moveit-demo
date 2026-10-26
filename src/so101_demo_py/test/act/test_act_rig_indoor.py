@@ -204,7 +204,7 @@ def test_the_package_installs_the_indoor_scenes_textures_and_manifest_like_every
     installed = {entry for _directory, files in namespace["installed_resources"]() for entry in files}
     wanted = {str(path.relative_to(PACKAGE_ROOT)) for path in (*TEXTURES.iterdir(), *CANDIDATES, ACT / "scene_side_wrist_indoor.xml")}
     wanted.add("config/act/rig-v3.yaml")
-    assert wanted <= installed and len(wanted) == 16 + 1 + 2 + 1 + 1
+    assert wanted <= installed and len(wanted) == 16 + 3 + 1 + 2 + 1 + 1    # textures/indoor now also holds proc-manifest.json, cc0-manifest.json and CC0-LICENSES.md (+3)
     targets = {directory for directory, files in namespace["installed_resources"]() if any(f in wanted for f in files)}
     assert "share/so101_demo_py/assets/mujoco/textures/indoor" in targets and "share/so101_demo_py/assets/mujoco/act/indoor" in targets
 

@@ -9,11 +9,13 @@ Draws come from `scene_variant` (the closed indoor whitelist: wall, floor and ta
 headlight, prop visibility, cup colour), so every draw is a valid variant document with a realized hash. The cup position is drawn
 uniformly inside the Teacher success boundary polygon B_1..B_8 (the region the ACT collections used).
 
-Split by asset identity (nothing of train is in val or test):
-  textures      the texture FILES of train, val and test are disjoint; val and test share the held-out textures
+Split by asset identity (nothing of train is in val or test, and val and test share nothing either):
+  textures      `act/indoor_assets.texture_pools`: the legacy, parametric (`proc/...`) and CC0 (`cc0/...`) textures, each assigned to one split by a
+                seeded, disjoint three-way assignment per family; a draw takes the texture of every surface from the pool of its split
   tints         each split draws tints from its own channel range (train brightest), so a held-out material is never a train one
-  cup colours   each split has its own colour families (train: warm; val: blue, purple; test: green, teal)
-  layouts       train A and B, val A and B, test A, B and C (C, the home with a sofa and a window, is never seen in training)
+  cup colours   continuous: a hue is drawn inside a 10 degree band, and the 36 bands are partitioned among the splits; saturation and value are
+                free; a draw must be clearly different (OKLab) from the drawn wall, floor and table and from the red landing ring
+  layouts       train A only, val A and B, test A, B and C (B, the lab, and C, the home, are never seen in training or collected)
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from xml.etree import ElementTree
 
 import numpy as np
 
-from so101_demo.act import scene_variant
+from so101_demo.act import indoor_assets, scene_variant
 
 MASTER_SEED = 20261024
 CLASS_NAMES = {0: "plastic_cup"}
@@ -42,20 +44,13 @@ LAYOUT_SCENES = {"A": "scene_side_wrist_indoor.xml", "B": "indoor/scene_side_wri
 NOMINAL_SCENE = "scene_side_wrist_indoor.xml"
 DARK_SCENE = "scene_side_wrist.xml"
 
-CUP_FAMILIES = {                                  # base colour (the nominal cup is "orange"); each draw jitters a channel by +-0.06
-    "orange": (1.0, 0.55, 0.12), "red": (0.85, 0.10, 0.10), "yellow": (0.95, 0.85, 0.15), "magenta": (0.85, 0.15, 0.60),
-    "blue": (0.15, 0.30, 0.85), "purple": (0.50, 0.20, 0.70), "green": (0.20, 0.70, 0.25), "teal": (0.10, 0.65, 0.65)}
-CUP_JITTER = 0.06
-
 SPLIT_POLICY = {
-    "train": {"layouts": ("A", "B"), "wall": ("wall_white", "wall_grey"), "floor": ("floor_wood_light", "floor_tile_grey", "floor_carpet"),
-              "table": ("table_laminate", "cabinet_wood", "metal_shelf"), "tint": (0.82, 1.00),
-              "cups": ("orange", "red", "yellow", "magenta"), "nominal_fraction": 0.10},
-    "val": {"layouts": ("A", "B"), "wall": ("wall_beige",), "floor": ("floor_parquet",), "table": ("floor_parquet",),
-            "tint": (0.50, 0.64), "cups": ("blue", "purple"), "nominal_fraction": 0.0},
-    "test": {"layouts": ("A", "B", "C"), "wall": ("wall_beige",), "floor": ("floor_parquet",), "table": ("floor_parquet",),
-             "tint": (0.66, 0.78), "cups": ("green", "teal"), "nominal_fraction": 0.0},
+    "train": {"layouts": ("A",), "tint": (0.82, 1.00), "nominal_fraction": 0.10},
+    "val": {"layouts": ("A", "B"), "tint": (0.50, 0.64), "nominal_fraction": 0.0},
+    "test": {"layouts": ("A", "B", "C"), "tint": (0.66, 0.78), "nominal_fraction": 0.0},
 }
+#: how many times a draw redraws its wall, floor and table when no cup colour of the split is clearly different from them
+MATERIAL_REDRAWS = 8
 LIGHT_SCALE = (0.6, 1.5)
 LIGHT_TILT = (0.92, 1.08)
 HEADLIGHT_SCALE = (0.7, 1.4)
@@ -96,27 +91,43 @@ def sample_cup_xy(rng: random.Random, zone=None) -> list:
             return [round(x, 6), round(y, 6)]
 
 
-def _textures(split: str) -> set:
-    policy = SPLIT_POLICY[split]
-    return set(policy["wall"]) | set(policy["floor"]) | set(policy["table"])
+def asset_pools(act_assets: Path | None = None) -> dict:
+    """`{"pools": {split: {surface: [texture]}}, "means": {texture: mean sRGB}}` for the textures next to `act_assets`
+    (`assets/mujoco/act`): the manifests of the procedural and CC0 pools decide which textures exist. Without `act_assets` the pools are the
+    procedural ones by name, with their means unknown (the cup rule then uses mid grey)."""
+    proc = cc0 = None
+    means = {}
+    if act_assets is not None:
+        directory = Path(act_assets).parent / "textures" / "indoor"
+        if (directory / indoor_assets.PROC_MANIFEST).is_file():
+            proc = indoor_assets.load_manifest(directory / indoor_assets.PROC_MANIFEST)
+        if (directory / indoor_assets.CC0_MANIFEST).is_file():
+            cc0 = indoor_assets.load_manifest(directory / indoor_assets.CC0_MANIFEST)
+        means = indoor_assets.texture_means(directory, proc, cc0)
+    return {"pools": indoor_assets.texture_pools(proc, cc0), "means": means}
 
 
-def check_split_disjoint() -> None:
-    """Raise `ValueError` unless train shares no texture file, cup family or tint range with val or test, and val and test share no cup family or tint range."""
-    for held_out in ("val", "test"):
-        if _textures("train") & _textures(held_out):
-            raise ValueError(f"SPLIT_TEXTURE_SHARED: train and {held_out}")
-        if set(SPLIT_POLICY["train"]["cups"]) & set(SPLIT_POLICY[held_out]["cups"]):
-            raise ValueError(f"SPLIT_CUP_SHARED: train and {held_out}")
-    if set(SPLIT_POLICY["val"]["cups"]) & set(SPLIT_POLICY["test"]["cups"]):
-        raise ValueError("SPLIT_CUP_SHARED: val and test")
+def check_split_disjoint(pools: dict | None = None) -> None:
+    """Raise `ValueError` unless the splits share no texture, no cup hue band and no tint range, and every pooled texture suits its surface."""
+    pools = (pools or asset_pools())["pools"]
+    indoor_assets.check_held_out_outside_train(pools)
+    owned ={split: {texture for ids in pools[split].values() for texture in ids} for split in SPLIT_POLICY}
+    for first, second in (("train", "val"), ("train", "test"), ("val", "test")):
+        if owned[first] & owned[second]:
+            raise ValueError(f"SPLIT_TEXTURE_SHARED: {first} and {second}")
+        if set(indoor_assets.hue_bands(first)) & set(indoor_assets.hue_bands(second)):
+            raise ValueError(f"SPLIT_CUP_SHARED: {first} and {second}")
     ranges = sorted(SPLIT_POLICY[split]["tint"] for split in SPLIT_POLICY)
     if any(low_next <= high for (_, high), (low_next, _) in zip(ranges, ranges[1:])):
         raise ValueError("SPLIT_TINT_OVERLAP")
-    for split, policy in SPLIT_POLICY.items():
-        for surface, library in (("wall", scene_variant.WALL_TEXTURES), ("floor", scene_variant.FLOOR_TEXTURES),
-                                 ("table", scene_variant.TABLE_TEXTURES)):
-            if not set(policy[surface]) <= set(library):
+    for split in SPLIT_POLICY:
+        layouts = set(SPLIT_POLICY[split]["layouts"])
+        if (split == "train" and layouts != {"A"}) or (split == "val" and "C" in layouts):
+            raise ValueError(f"SPLIT_LAYOUT_LEAK: {split}")
+        for surface in indoor_assets.SURFACES:
+            if not pools[split][surface]:
+                raise ValueError(f"SPLIT_POOL_EMPTY: {split} {surface}")
+            if not all(indoor_assets.texture_allowed(surface, texture) for texture in pools[split][surface]):
                 raise ValueError(f"SPLIT_TEXTURE_UNKNOWN: {split} {surface}")
 
 
@@ -172,16 +183,22 @@ def _tint(rng: random.Random, band) -> list:
     return [round(rng.uniform(*band), 4) for _ in range(3)] + [1.0]
 
 
-def _cup_rgba(rng: random.Random, family: str) -> list:
-    return [round(min(1.0, max(0.0, channel + rng.uniform(-CUP_JITTER, CUP_JITTER))), 4) for channel in CUP_FAMILIES[family]] + [1.0]
-
-
-def _variant(rng: random.Random, split: str, layout: str, inventory: dict, family: str, name: str) -> dict:
+def _variant(rng: random.Random, split: str, layout: str, inventory: dict, assets: dict, name: str) -> tuple:
+    """`(variant document, cup draw)`: the surfaces first (texture of the split's pool, tint of its band), then a cup colour of the split's hue
+    bands that is clearly different from them; the surfaces are redrawn up to `MATERIAL_REDRAWS` times when no colour is."""
     policy = SPLIT_POLICY[split]
-    fields = {}
-    for surface in ("wall", "floor", "table"):
-        fields[f"{surface}.texture"] = rng.choice(policy[surface])
-        fields[f"{surface}.rgba"] = _tint(rng, policy["tint"])
+    pools, means = assets["pools"][split], assets["means"]
+    for _attempt in range(MATERIAL_REDRAWS + 1):
+        fields, colours = {}, {}
+        for surface in indoor_assets.SURFACES:
+            texture = rng.choice(pools[surface])
+            tint = _tint(rng, policy["tint"])
+            fields[f"{surface}.texture"] = texture
+            fields[f"{surface}.rgba"] = tint
+            colours[surface] = indoor_assets.surface_colour(tint, means.get(texture, (0.5, 0.5, 0.5)))
+        cup = indoor_assets.draw_cup_rgba(rng, split, colours)
+        if cup["satisfied"]:
+            break
     for light, nominal in inventory["lights"].items():
         scale = rng.uniform(*LIGHT_SCALE)
         fields[f"light.{light}.diffuse"] = [round(min(4.0, value * scale * rng.uniform(*LIGHT_TILT)), 5) for value in nominal]
@@ -192,11 +209,12 @@ def _variant(rng: random.Random, split: str, layout: str, inventory: dict, famil
         fields[f"headlight.{attribute}"] = [round(min(1.0, value * scale), 5) for value in inventory["headlight"][attribute]]
     for prop in inventory["props"]:
         fields[f"prop.{prop}.visible"] = 1 if rng.random() < PROP_VISIBLE_PROBABILITY else 0
-    fields["cup_material.rgba"] = _cup_rgba(rng, family)
-    return {"schema_version": scene_variant.SCHEMA_VERSION, "kind": scene_variant.KIND, "name": name, "base": "indoor", "set": fields}
+    fields["cup_material.rgba"] = cup["rgba"]
+    variant = {"schema_version": scene_variant.SCHEMA_VERSION, "kind": scene_variant.KIND, "name": name, "base": "indoor", "set": fields}
+    return variant, cup
 
 
-def draw_sample(master_seed: int, set_name: str, index: int, inventories: dict, attempt: int = 0) -> dict:
+def draw_sample(master_seed: int, set_name: str, index: int, inventories: dict, attempt: int = 0, assets: dict | None = None) -> dict:
     """One plan entry; `attempt` > 0 is a redraw of the same slot after the renderer found the cup hidden."""
     split, directory, kind = EXTRA_SETS.get(set_name, (set_name, set_name, "variant"))
     sample_id = f"{set_name}-{index:05d}"
@@ -212,18 +230,19 @@ def draw_sample(master_seed: int, set_name: str, index: int, inventories: dict, 
     if kind == "nominal":
         return {**entry, "layout": "A", "cup_family": "orange", "variant": None}
     layout = rng.choice(SPLIT_POLICY[split]["layouts"])
-    family = rng.choice(SPLIT_POLICY[split]["cups"])
-    return {**entry, "layout": layout, "cup_family": family,
-            "variant": _variant(rng, split, layout, inventories[layout], family, sample_id)}
+    variant, cup = _variant(rng, split, layout, inventories[layout], assets or asset_pools(), sample_id)
+    return {**entry, "layout": layout, "cup_family": f"hue-band-{cup['band']:02d}",
+            "cup": {key: cup[key] for key in ("band", "hue", "saturation", "value", "satisfied")}, "variant": variant}
 
 
-def build_plan(counts: dict, master_seed: int, inventories: dict) -> list:
-    """The ordered plan: `counts` maps train, val, test and the extra sets (`EXTRA_SETS`) to a number of frames."""
-    check_split_disjoint()
+def build_plan(counts: dict, master_seed: int, inventories: dict, assets: dict | None = None) -> list:
+    """The ordered plan: `counts` maps train, val, test and the extra sets (`EXTRA_SETS`) to a number of frames; `assets` is `asset_pools(...)`."""
+    assets = assets or asset_pools()
+    check_split_disjoint(assets)
     unknown = set(counts) - set(SPLIT_POLICY) - set(EXTRA_SETS)
     if unknown or any(type(value) is not int or value < 0 for value in counts.values()):
         raise ValueError(f"PLAN_COUNTS_INVALID: {sorted(unknown) or counts}")
-    return [draw_sample(master_seed, name, index, inventories) for name, count in counts.items() for index in range(count)]
+    return [draw_sample(master_seed, name, index, inventories, assets=assets) for name, count in counts.items() for index in range(count)]
 
 
 def plan_document(plan: list, counts: dict, master_seed: int) -> dict:

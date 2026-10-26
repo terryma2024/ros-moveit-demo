@@ -108,7 +108,7 @@ def _frozen_teacher_source(frozen, manifest_option, share_dir, scene_id):
     from ..act import appearance_plan, frozen_appearance
 
     return frozen_appearance.scene_entry(frozen, manifest_option, scene_id,
-                                         inventory=lambda: appearance_plan.scene_inventory(Path(share_dir) / "assets/mujoco/act"))
+                                         inventory=lambda: appearance_plan.scene_inventory(Path(share_dir) / "assets/mujoco/act", verify_files=True))
 
 
 def _check_teacher_source_pose(entry, sample, initial):

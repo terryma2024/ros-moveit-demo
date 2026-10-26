@@ -43,6 +43,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree
 
+from so101_demo.act import indoor_assets
+
 SCHEMA_VERSION = 1
 KIND = "ACT_SCENE_VARIANT"
 NOMINAL_SCENE = "scene_side_wrist.xml"
@@ -55,9 +57,11 @@ INDOOR_SCENE = "scene_side_wrist_indoor.xml"
 #: where the indoor textures are, relative to the nominal directory (`assets/mujoco/act`)
 INDOOR_TEXTURE_DIRECTORY = "../textures/indoor"
 #: the texture asset set of each surface (`assets/mujoco/textures/indoor/manifest.json`)
-WALL_TEXTURES = ("wall_white", "wall_grey", "wall_beige")
-FLOOR_TEXTURES = ("floor_wood_light", "floor_tile_grey", "floor_parquet", "floor_carpet")
-TABLE_TEXTURES = ("table_laminate", "cabinet_wood", "floor_wood_light", "floor_parquet", "metal_shelf")
+#: the committed (legacy) textures of P1; the parametric `proc/<family>_<NNN>` and the CC0 `cc0/<surface>_<slug>` pools of `act/indoor_assets.py`
+#: are accepted by name too (`indoor_assets.texture_allowed`), and must exist as files when the variant is realized
+WALL_TEXTURES = indoor_assets.LEGACY["wall"]
+FLOOR_TEXTURES = indoor_assets.LEGACY["floor"]
+TABLE_TEXTURES = indoor_assets.LEGACY["table"]
 #: surface -> (texture element, material element, its texture set)
 _SURFACES = {"wall": ("t_wall", "m_wall", WALL_TEXTURES), "floor": ("t_floor", "m_floor", FLOOR_TEXTURES),
              "table": ("t_table", "m_table", TABLE_TEXTURES)}
@@ -120,8 +124,8 @@ def _normalize_indoor_fields(fields) -> dict:
         if key in _INDOOR_FIXED and surface in _SURFACES:
             if attribute == "rgba":
                 out[key] = _numbers(key, value, 4, 0.0, 1.0)
-            elif not isinstance(value, str) or value not in _SURFACES[surface][2]:
-                raise SceneVariantRefused(f"SCENE_VARIANT_VALUE_INVALID: {key}: one of {_SURFACES[surface][2]}")
+            elif not isinstance(value, str) or not indoor_assets.texture_allowed(surface, value):
+                raise SceneVariantRefused(f"SCENE_VARIANT_VALUE_INVALID: {key}: a {surface} texture of the legacy set or the proc and cc0 pools")
             else:
                 out[key] = value
         elif key in ("headlight.ambient", "headlight.diffuse"):
@@ -290,7 +294,7 @@ def _apply_indoor(root, fields, record) -> dict:
                 texture = _find(root, "texture", texture_name)
                 nominal = Path(texture.get("file")).stem
                 record(key, nominal, value)
-                relative = f"{INDOOR_TEXTURE_DIRECTORY}/{value}.png"
+                relative = f"{INDOOR_TEXTURE_DIRECTORY}/{indoor_assets.texture_file(value)}"
                 texture.set("file", DIRECTORY_TOKEN + "/" + relative)
                 named[value] = relative
             else:
@@ -434,6 +438,10 @@ def realize(nominal_dir, variant_document) -> RealizedScene:
                 "xml_sha256": hashlib.sha256(tokenized.encode("utf-8")).hexdigest()}
     if indoor:
         # the bytes of every texture the variant names are part of what was realized (a texture is an asset with an identity)
+        missing = [name for name, relative in sorted(texture_files.items()) if not (nominal_dir / relative).is_file()]
+        if missing:
+            raise SceneVariantRefused(f"SCENE_VARIANT_TEXTURE_MISSING: {missing} (the procedural pool is written by the mount-tree build or "
+                                      "`scripts/assets/gen_indoor_textures.py --procedural`; the CC0 pack by `--cc0-pack`)")
         identity["textures"] = {name: _sha256_file(nominal_dir / relative) for name, relative in sorted(texture_files.items())}
     realized = hashlib.sha256(canonical(identity)).hexdigest()
     return RealizedScene(name=variant["name"], variant=variant, variant_sha256=digest,

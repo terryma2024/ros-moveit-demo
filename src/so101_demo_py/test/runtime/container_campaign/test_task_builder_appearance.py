@@ -16,7 +16,7 @@ from so101_demo.act import frozen_appearance
 from test_task_builder import TEACHER_SOCKET, FakeInference, builder, make_env, make_task
 
 INVENTORY = ap.scene_inventory(PACKAGE_ROOT / "assets/mujoco/act")
-PLAN = ap.make_plan(seed=710025, nominal_share=0.25, nominal_scene_sha256=INVENTORY["scene_sha256"])
+PLAN = ap.make_plan(seed=710025, nominal_share=0.25, nominal_scene_sha256=INVENTORY["scene_sha256"], pool_identity=INVENTORY["pool_identity"])
 
 
 def planned_env(tmp_path, monkeypatch, scene="scene-a"):
