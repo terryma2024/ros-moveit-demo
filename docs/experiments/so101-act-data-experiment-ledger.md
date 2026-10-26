@@ -69,11 +69,37 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3788
+latest_checkpoint: CP-3789
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a merged (CP-3784), next: wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator. Indoor YOLO fine-tune and the rgb_sync counter split are merged (CP-3785, CP-3786).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3789 - Indoor P3: recorder-queue watermark fix `fc31359fb` (cameras of a sample encoded concurrently, bytes unchanged), phase-2 replay re-check 16/16 VALID; T6 disk prepared
+
+- Executed by a Sonnet 5.5 subagent for the coordinator. Evidence `/data/work/so101-evidence/indoor-scene/p3-20261025/` (`manifest.md`, section "Queue watermark fix").
+- **Cause (OBSERVED).** With the production encoder (`recorder._rgb_png`, zlib 6), the side and wrist PNGs were encoded one after another in the single writer thread: about 31.5 ms per sample on `metal_shelf`, 26.6 to 29.0 ms on the other tables. The writer was close to saturation, and sealed queue peaks in run 2 (EXP-7031) were 12 (`metal_shelf`) and 11 (`cabinet_wood`), against watermark 12 and capacity 16.
+- **Fix** `fc31359fb` (`recorder._encode_pngs`): the cameras of one sample are encoded concurrently on a shared pool (zlib releases the GIL), and the files are written in the same order. Unchanged: PNG bytes, compression level, queue capacity, watermark/hold time and every validity rule. The tests (`test_recorder_png_throughput.py`) cover byte equality with the serial encoder, decoded pixels, concurrency and error propagation. Writer cost per sample on `metal_shelf`, 6 writers at once: 33.5 to 22.5 ms.
+- **Gate** `fc31359fbf2c`:
+  - r1 failed on the 50 GiB disk floor (`CAMPAIGN_DISK_FLOOR_REACHED`; kept as `gates/fc31359fbf2c.r1` with its scratch);
+  - r2 had 1 failure, `test_kept_ros_nodes_inventory` (a foreign `controller_manager` node on the shared ROS graph), classified as a flake;
+  - r3 was green (rc 0, 1639 s), with nothing relaxed.
+
+  Pushed. Mount tree `mount/fc31359fbf2c`, preflight 0 MUST failures.
+- **Re-check (phase-2 replay; the qualification plane only accepts its frozen 40-scene list, and the contract was not changed).**
+  - Method: the exact processor argv (`act_offline_episode`, same bag, inputs, lease, scope, record stats and Teacher manifest of run 2, read only), 6 at once, on the host (no container cpuset).
+  - Scenes: `metal_shelf` indq-04, 05, 17, 23, 25, 26 and `cabinet_wood` indq-00, 01.
+  - New code, two replays: **16/16 VALID**, queue peak 1 to 2 of 16.
+  - Control with the old code (`2d716abb245b`) on the same host: 5/8 INVALID `RECORDER_QUEUE_HIGH_WATERMARK` (04, 05, 23, 25, 26).
+  - Frame PNGs of the three run-2 VALID episodes are byte-identical (3740 files x 2, 0 differences).
+  - Not shown: a live containerised phase 2 on the new commit. The 40-scene re-qualification is that check.
+- **Disk for T6 (human-approved 2026-10-26).**
+  - Deleted: the raw mcap of finished unsealed rollout runs (`act-rollout-parallel-n1-20261023/{valA,valB,abB6,sanity6,testA,extraA}`) and of the P2 pilot `act-w8d-20261025T053604Z/wave-0`; 13 old gate scratch trees, `r35green`, two `demo-run.*` of unsealed gates, and the indoor P1 scratch. Together 107 GiB on the evidence partition.
+  - Root fs: 35 old gate trees, 10 old mount trees and `hf-upload/`, 126 GiB.
+  - Every deletion is logged in `REG/deletions-20261026-t6-prep.log` (215 rows). Sealed roots were not touched.
+  - The four `gate-wt-*` worktrees are kept: 1.6 GiB, not removable from this session.
+  - Evidence partition free space: 48 to 161 GiB.
+- Next: merge antzb goal 13 (asset expansion, bundle sha256 `9f00b5c0...`, its CP-3788 to be renumbered), then one 40-scene qualification on the merged code, then T6 with the human's go-ahead.
 
 ## CP-3788 - Indoor P3 (T1 to T5): per-episode appearance, privileged-pose Teacher, declared and proved model identity; 40-scene qualification EXP-7030/7031 NOT_QUALIFIED (rates measured)
 
