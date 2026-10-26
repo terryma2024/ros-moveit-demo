@@ -69,11 +69,50 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3790
+latest_checkpoint: CP-3791
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a merged (CP-3784), next: wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator. Indoor YOLO fine-tune and the rgb_sync counter split are merged (CP-3785, CP-3786).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3791 - Indoor P3: goal 13 merged (`6d1037983`), frozen-snapshot texture verification fixed (`01e66387b`), 40-scene re-qualification EXP-7035 QUALIFIED (36/40)
+
+- Executed by Sonnet 5.5 subagents for the coordinator. Evidence `/data/work/so101-evidence/indoor-scene/p3-20261025/manifest.md`, sections "goal 13 merge", "goal 13 fix" and the EXP-7033/7034/7035 notes.
+- **Merge `6d1037983`.** Bundle sha256 `9f00b5c0...` verified. Text conflicts were docs only; antzb's entry was renumbered CP-3790.
+  - `appearance_plan` schema 2 draws from the installed train pools. The plan hash carries `pool_identity`: proc manifest `93aef9c8...`, CC0 pack `79fa5d00...`, split seed 20261025, split assignment `51721426...`, cup rule `e49a052f...`. A mismatch is refused (`APPEARANCE_POOL_IDENTITY_MISMATCH`).
+  - The P3 held-out cup families (blue/purple/green/teal) must never reach train. 11 antzb train hue bands touched them and were moved deterministically to val/test, giving bands 15/11/10. Texture splits are wall 401/89/88, floor 477/106/105, table 409/91/90.
+  - Collection (coordinator decision): train pool plus 25 % nominal only. Val/test assets and layouts B/C are evaluation only.
+  - Green-cup sheet: not reproduced. The hue spread over 1200 draws per split is correct, with 0 contrast-rule failures. A real band-edge rounding bug was found and fixed.
+  - Procedural PNGs built twice on ai-station are byte-identical to the manifest.
+  - Gate `6d1037983bd2` was green in fast mode (`full=0`, upstream ros2_control/JTC sets skipped).
+- **EXP-7033 (aborted, defect).** Phase 1 faulted on the first task of all 8 shards in both waves (`dynamic consumer subscription is not ready`; container log `APPEARANCE_PROC_TEXTURE_MISSING: proc/wood_000`). Frozen-run readers verified textures in the frozen execution snapshot, which holds no procedural or CC0 PNGs. No test covered the frozen path with pools2.
+- **Fix `01e66387b`** (`frozen_appearance.frozen_inventory`):
+  - Pool manifests and scene come from the snapshot, checked against the hashes recorded at freeze. The INSTALLED share's files are verified against them (path and sha256), and the frozen pool identity must equal the plan's.
+  - Callers: the Teacher consumer (`_frozen_teacher_source`, `dynamic_runtime`), `episode_open` (offline processor) and `StackSceneSwitch.entry`. No PNG was copied into the snapshot, and no check was relaxed.
+  - Tests: 11 new in `test_frozen_pool_verification.py`; RED on the old code with 11 failures.
+  - Full gate `01e66387b5e6` (`full=1`) green, 1624 s. Mount tree `mount/01e66387b5e6`, preflight 0 MUST failures.
+  - A shard probe with EXP-7033's frozen inputs reproduces the old error and passes with the new reader.
+  - The pools2 templates (`REG/act-templates/*-indoor-staged-mount-pools2`) verify the mount tree's share.
+- **EXP-7034 (aborted, operator error).** The subagent's first-task watcher matched `fault_reason` in a succeeded task's exit file (`WAVE_COMPLETE`). It sent one SIGINT, giving `CAMPAIGN_RUN_INTERRUPT` after wave 0 with nothing faulted.
+  - The exited containers were removed by hand. The admission lease was released under the standing 2026-10-13 authorisation (same preconditions, byte backup, parent CANCELLED). This is an override, not a proof.
+  - The watcher was then fixed to trigger on a FAILED task only.
+- **EXP-7035 (QUALIFIED).** Inputs `REG/act-w8-inputs-20261026T042925Z`, run `REG/act-w8-20261026T042925Z`, list `qualification-40-pools2` (plan seed 710044, plan `a98fa248...`, 10/40 nominal), mount tree `01e66387b5e6`. w8q plane, 8 shards, cap 6, gap 20 s, six processors, no retries.
+  - Stages: phase 1 1165 s, phase 2 733 s, finalize 57 s, all rc 0.
+  - Report sha256 `cb6daa07dc6531decb3f821169ac8fe5efa603bb60f50527e8de5c267801070c`; the verifier passes on 40 tasks.
+  - The Teacher consumer became ready on every task, which is the live proof of `01e66387b`.
+  - Teacher: privileged 30/30, camera 10/10.
+  - VALID and QC: randomised 26/30, nominal 10/10, so **36/40** against the rule's 34/40. Frame continuity and recorder lossless PASS on 36.
+  - INVALID (4, all randomised privileged, all capture or transport losses, none a queue watermark):
+    - indq-10 `proc/tile_034`: source gap and topic loss;
+    - indq-11 `proc/concrete_045`: initial capture invalid, `AUDIT_WINDOW_INVALID`;
+    - indq-14 `cc0/table_polyhaven_fabric_leather_02`: `/joint_states` and `scene_state` loss;
+    - indq-19 `cc0/table_polyhaven_concrete_layers_02`: same.
+  - Recorder queue peak max 2 of 16 (watermark 12), mean 1.68, on every table texture including CC0. The `fc31359fb` fix is confirmed live.
+  - Camera vs truth: nominal 10/10 within 0.010 m (median 0.489 mm, max 0.526 mm); privileged 30/30 detected (median 0.486 mm), never gating.
+  - Stack switches: 32, mean 10.37 s, max 13.9 s.
+  - Disk: 33.4 GB for the run, about 0.42 GB of bags plus 0.41 GB of processing per episode.
+- **Disk for T6.** 200 episodes plus retries need about 187 GB plus the 50 GiB floor; 104 GB were free after EXP-7035. On 2026-10-26 the human authorised cleaning other content of the evidence tree ("授权清理 evidence 目录里的其他内容"). Sealed roots are excluded. The deletions are in `REG/deletions-20261026-t6-evidence.log`.
+- Next: T6 (200 formal, `formal-200-pools2`, w8f pools2 template, mount tree `01e66387b5e6`) once the space is confirmed.
 
 ## CP-3790 — Indoor appearance asset expansion for P3: 832 procedural textures, 180 CC0 textures (separate pack), continuous HSV cup colour with a ΔE rule, identity splits (antzb goal 13, to-do 41)
 
