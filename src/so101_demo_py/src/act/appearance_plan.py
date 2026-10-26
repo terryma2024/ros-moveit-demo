@@ -260,12 +260,16 @@ def _verify_installed_textures(textures: Path, proc_manifest, cc0_manifest) -> N
     _VERIFIED_TEXTURES[key] = True
 
 
-def pool_state(nominal_dir, *, verify_files: bool = False) -> dict:
+def pool_state(nominal_dir, *, verify_files: bool = False, files_dir=None) -> dict:
     """`{"pools": {split: {surface: [texture]}}, "means": {texture: mean sRGB}, "pool_identity": {...}}` of the textures next to `nominal_dir`.
 
     The manifests decide which procedural and CC0 textures exist (an install without `cc0-manifest.json` has no CC0 pool, and a plan made for one
     with it is refused). The CC0 pack must match its manifest: `pack_sha256` is recomputed from the manifest's file hashes. `verify_files` also
-    checks every file of the install (`_verify_installed_textures`): the production readers ask for it, the offline tests of the draw do not."""
+    checks every file of the install (`_verify_installed_textures`): the production readers ask for it, the offline tests of the draw do not.
+
+    `files_dir` (an installed `assets/mujoco/act` directory) is where those files are checked when it is not `nominal_dir`: in a frozen run the
+    manifests and the scene come from the frozen execution snapshot (`nominal_dir`, the authority: the freeze bound its bytes), which holds no
+    generated PNGs, and the installed share's files must be the frozen manifests' files (path plus sha256)."""
 
     textures = Path(nominal_dir) / scene_variant.INDOOR_TEXTURE_DIRECTORY
     proc_manifest, proc_sha = _read_manifest(textures / indoor_assets.PROC_MANIFEST)
@@ -276,7 +280,8 @@ def pool_state(nominal_dir, *, verify_files: bool = False) -> dict:
         if cc0_manifest.get("pack_sha256") != cc0_pack:
             _fail("APPEARANCE_CC0_PACK_MANIFEST_INVALID", "pack_sha256 is not the hash of the manifest's file hashes")
     if verify_files:
-        _verify_installed_textures(textures, proc_manifest, cc0_manifest)
+        installed = textures if files_dir is None else Path(files_dir) / scene_variant.INDOOR_TEXTURE_DIRECTORY
+        _verify_installed_textures(installed, proc_manifest, cc0_manifest)
     pools = indoor_assets.texture_pools(proc_manifest, cc0_manifest)
     means = dict(TEXTURE_MEAN_RGB)
     for manifest in (proc_manifest, cc0_manifest):
@@ -288,14 +293,14 @@ def pool_state(nominal_dir, *, verify_files: bool = False) -> dict:
     return {"pools": pools, "means": means, "pool_identity": identity}
 
 
-def scene_inventory(nominal_dir, *, verify_files: bool = False) -> dict:
+def scene_inventory(nominal_dir, *, verify_files: bool = False, files_dir=None) -> dict:
     """The lights (nominal diffuse and direction), props and headlight of the installed indoor scene, and the scene file's sha256, plus the asset
     pools and their identity (`pool_state`).
 
     `nominal_dir` is the installed `assets/mujoco/act` directory (`scene_variant_run.nominal_dir(share)`). Every reader that draws or verifies
     for a real run passes `verify_files=True`."""
 
-    state = pool_state(nominal_dir, verify_files=verify_files)
+    state = pool_state(nominal_dir, verify_files=verify_files, files_dir=files_dir)
     path = Path(nominal_dir) / scene_variant.INDOOR_SCENE
     data = path.read_bytes()
     root = ElementTree.fromstring(data)

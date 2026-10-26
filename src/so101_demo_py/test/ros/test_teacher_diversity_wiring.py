@@ -2,6 +2,8 @@
 resolves the targets, runs the reachability preflight and builds the execution on them, and records them on the Teacher document.
 A schema 3, 4 or 5 freeze does exactly what it always did (the calls carry no extra argument, the execution holds no values)."""
 
+from pathlib import Path
+
 import pytest
 
 from so101_demo.act import teacher_diversity as td
@@ -31,7 +33,8 @@ class Execution(TeacherExecution):
         self.source_recorded.append((entry, published_truth_gap_m))
 
 
-def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", start_draw=2, simulator_x=-0.03, source_entry=None):
+def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", start_draw=2, simulator_x=-0.03, source_entry=None,
+                  snapshot_share=None, installed_share=None, source_reader=None):
     from so101_demo.act import frozen_runtime_inputs
     from so101_demo.ros import teacher_safety
     from so101_demo.ros.dynamic_runtime import run_dynamic_execute
@@ -40,6 +43,8 @@ def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", st
     runtime = _runtime(events, observations=tuple(_observation(simulator_x=simulator_x, moveit_x=-0.03) for _ in range(3)),
                        scene=RecordingTaskScenePort())
     template = runtime.load_policy(None, backend="mujoco").template
+    if installed_share is not None:
+        runtime.get_package_share_directory = lambda _name, **kwargs: str(installed_share)
 
     def execution(node, run_template, targets, **kwargs):
         built["execution"] = Execution(events, frozenset())
@@ -62,12 +67,15 @@ def diversity_run(tmp_path, monkeypatch, policy_path, *, point_id="act-0001", st
     frozen = {"runtime_policy": {"sha256": "x", "kind": "k"},
               "teacher_execution_policy": {"values": {key: value for key, value in policy.items() if key != "policy_sha256"}}}
     monkeypatch.setattr(frozen_runtime_inputs, "load_teacher_frozen_inputs",
-                        lambda path: (frozen, {"scene_path": "assets/mujoco/act/scene.xml"}, PACKAGE_ROOT))
+                        lambda path: (frozen, {"scene_path": "assets/mujoco/act/scene.xml"}, snapshot_share or PACKAGE_ROOT))
     monkeypatch.setattr(teacher_safety, "load_frozen_safety", lambda path: (_ for _ in ()).throw(RuntimeError("x")))
     monkeypatch.setattr(teacher_safety.PhysicsHazardWatch, "attach", lambda self, node: None)
     if source_entry is not None:
         from so101_demo.ros import dynamic_runtime
         monkeypatch.setattr(dynamic_runtime, "_frozen_teacher_source", lambda *args: source_entry)
+    if source_reader is not None:
+        from so101_demo.ros import dynamic_runtime
+        monkeypatch.setattr(dynamic_runtime, "_frozen_teacher_source", source_reader)
     options = _options(tmp_path)
     options.frozen_inputs_manifest = tmp_path / "inputs-manifest.json"
     if point_id is not None:
@@ -188,3 +196,18 @@ def test_a_scene_list_that_is_not_the_plans_is_refused_before_any_motion(tmp_pat
     code, execution, calls, *_ = diversity_run(tmp_path, monkeypatch, SCHEMA6, source_entry=None)
     assert code == 1 and execution is None and "resolve" not in calls
     assert "APPEARANCE_ROW_NOT_DERIVED" in capsys.readouterr().out
+
+
+def test_the_teacher_consumer_hands_the_frozen_snapshot_and_the_installed_share_to_the_appearance_reader(tmp_path, monkeypatch):
+    """EXP-7033: in a frozen run `share_dir` is the execution snapshot (no generated textures). The entry reader is given it, AND the INSTALLED share
+    (`runtime.get_package_share_directory`) whose texture files it verifies against the frozen manifests."""
+    installed = tmp_path / "installed-share"
+    installed.mkdir()
+    seen = []
+
+    def reader(frozen, manifest, share_dir, scene_id, *rest):
+        seen.append((Path(share_dir), scene_id, [Path(item) for item in rest]))
+        return None
+
+    code, *_ = diversity_run(tmp_path, monkeypatch, SCHEMA6, installed_share=installed, source_reader=reader)
+    assert code == 0 and seen == [(PACKAGE_ROOT, "act-0001", [installed])]

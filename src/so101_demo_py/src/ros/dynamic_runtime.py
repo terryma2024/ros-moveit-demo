@@ -695,6 +695,7 @@ def run_dynamic_execute(
         setup_finished = True
 
     share_dir = Path(runtime.get_package_share_directory("so101_demo_py"))
+    installed_share_dir = share_dir          # a frozen run replaces `share_dir` by its execution snapshot below
     execution_inputs = None
     frozen = None
     manifest_option = getattr(options, "frozen_inputs_manifest", None)
@@ -786,7 +787,7 @@ def run_dynamic_execute(
     try:   # R3-a: a schema 6 freeze derives this episode's values from (campaign seed, scene id); every other schema changes nothing
         episode_diversity, run_template, via_offset = _frozen_run_inputs(
             frozen, lease_values["point_id"], loaded.template, getattr(options, "start_pose_draw", None))
-        teacher_source_entry = _frozen_teacher_source(frozen, manifest_option, share_dir, lease_values["point_id"])   # indoor P3
+        teacher_source_entry = _frozen_teacher_source(frozen, manifest_option, share_dir, lease_values["point_id"], installed_share_dir)   # indoor P3
     except Exception as error:
         failure_code = _failure_code(error)
         finish_setup("rejected", failure_code)

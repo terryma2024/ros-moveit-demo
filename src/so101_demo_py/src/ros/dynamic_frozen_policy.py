@@ -99,16 +99,22 @@ def _execution_state_max_age_s(share_dir, *, teacher_run: bool, file_name: str |
         return None
 
 
-def _frozen_teacher_source(frozen, manifest_option, share_dir, scene_id):
+def _frozen_teacher_source(frozen, manifest_option, share_dir, scene_id, installed_share=None):
     """Indoor P3: the verified appearance entry of this scene (plan, appearance, `teacher_source`) when the frozen scene list carries an
-    appearance plan, else None (every other freeze changes nothing). The inventory is the one of the `share_dir` the Teacher runs from."""
+    appearance plan, else None (every other freeze changes nothing).
+
+    In a frozen run `share_dir` is the frozen EXECUTION SNAPSHOT the Teacher runs from; it has the pool manifests but none of the generated textures,
+    so the entry is verified with `frozen_appearance.frozen_inventory`: the pool identity and splits from the frozen manifests, the texture files
+    from the INSTALLED share (`installed_share`, `get_package_share_directory`), path plus sha256 (EXP-7033). Without `installed_share` the
+    `share_dir` is the installed one."""
 
     if frozen is None or manifest_option is None or scene_id is None or "scene_manifest" not in frozen:
         return None
-    from ..act import appearance_plan, frozen_appearance
+    from ..act import frozen_appearance
 
+    installed = share_dir if installed_share is None else installed_share
     return frozen_appearance.scene_entry(frozen, manifest_option, scene_id,
-                                         inventory=lambda: appearance_plan.scene_inventory(Path(share_dir) / "assets/mujoco/act", verify_files=True))
+                                         inventory=lambda: frozen_appearance.frozen_inventory(frozen, manifest_option, installed))
 
 
 def _check_teacher_source_pose(entry, sample, initial):

@@ -44,7 +44,7 @@ def appearance_arguments(frozen: dict, manifest_path, scene_id: str, teacher_rec
         from ament_index_python.packages import get_package_share_directory
         share = get_package_share_directory("so101_demo_py")
     entry = frozen_appearance.scene_entry(frozen, manifest_path, scene_id,
-                                          inventory=lambda: ap.scene_inventory(scene_variant_run.nominal_dir(share), verify_files=True))
+                                          inventory=lambda: frozen_appearance.frozen_inventory(frozen, manifest_path, share))
     if entry is None:
         return {}
     appearance = entry["appearance"]

@@ -95,7 +95,8 @@ class StackSceneSwitch:
     def entry(self, frozen: dict, manifest_path, scene_id: str):
         """`frozen_appearance.scene_entry` with this host's inventory; None for a list without a plan."""
 
-        return frozen_appearance.scene_entry(frozen, manifest_path, scene_id, inventory=self.inventory)
+        return frozen_appearance.scene_entry(
+            frozen, manifest_path, scene_id, inventory=lambda: frozen_appearance.frozen_inventory(frozen, manifest_path, self.share))
 
     def _nominal_identity(self, expected_model_sha256: str) -> str:
         nominal = self._model_sha256(self.nominal_dir / scene_variant.INDOOR_SCENE)

@@ -206,6 +206,27 @@ def test_the_task_record_names_the_draw_the_source_and_the_switch(env):
         env.switch.record_task("wave-0-w00-" + scene, entry, record)
 
 
+def test_the_entry_of_a_frozen_run_reads_the_snapshot_manifests_and_verifies_the_installed_files(env, tmp_path, monkeypatch):
+    """The shard host's switch is given the INSTALLED share; the frozen snapshot of the inputs has the manifests but no generated textures
+    (EXP-7033). The entry must verify the installed files against the frozen manifests, and fail closed when one is gone."""
+    import test_frozen_appearance as frozen_tests
+    from test_frozen_pool_verification import TEXTURES, World
+
+    world = World(tmp_path / "frozen", SHARE)
+    monkeypatch.setattr(frozen_tests, "SHARE", world.share)
+    monkeypatch.setattr(frozen_tests, "NOMINAL_DIR", world.share / "assets/mujoco/act")
+    frozen, manifest = world.frozen()
+    switch = module.StackSceneSwitch(stack=env.stack, owned_root=env.root, share=world.share, new_ready_probe=lambda launch: None,
+                                     start_timeout_s=10, model_sha256=lambda path: NOMINAL_MODEL)
+    kinds = {switch.entry(frozen, manifest, row["scene_id"])["appearance"]["kind"] for row in frozen_tests.rows()}
+    assert kinds == {"nominal", "randomised"}
+    (world.share / TEXTURES / "proc/wood_000.png").unlink()
+    fresh = module.StackSceneSwitch(stack=env.stack, owned_root=env.root, share=world.share, new_ready_probe=lambda launch: None,
+                                    start_timeout_s=10, model_sha256=lambda path: NOMINAL_MODEL)
+    with pytest.raises(ap.AppearanceInvalid, match="APPEARANCE_PROC_TEXTURE_MISSING: proc/wood_000"):
+        fresh.entry(frozen, manifest, "p3-000")
+
+
 def test_the_switch_needs_a_positive_start_timeout_and_a_probe_factory(env):
     with pytest.raises(ValueError, match="SCENE_SWITCH_CONFIG_INVALID"):
         module.StackSceneSwitch(stack=env.stack, owned_root=env.root, share=SHARE, new_ready_probe=None, start_timeout_s=10)
