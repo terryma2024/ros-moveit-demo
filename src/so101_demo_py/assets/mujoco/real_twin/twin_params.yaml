@@ -1,0 +1,194 @@
+# Parameters of the real-twin MuJoCo scene (the human's real SO-101 table, bed and room).
+#
+# Every dimension of scene_real_twin_cube_bowl.xml, so101_leader_visual.xml and so101_follower_twin.xml comes from this
+# file (scripts/build_real_twin_scene.py regenerates the three XML files from it; a test checks that the committed XML
+# files equal the regenerated ones).
+#
+# Units: lengths in cm, angles in degrees (rest pose) or radians where the key says so, masses in g. z values are
+# heights above the floor. Plan coordinates (x, y) are those of the confirmed table plan: origin = follower
+# shoulder_pan axis on the table surface, +x = the robot's left, +y = forward (the direction the arm points).
+#
+# Keys listed under `estimated` were not measured or given by the human. Each one says how it was estimated and is to be
+# replaced by a measurement (see the report of the scene task).
+
+schema: so101_real_twin_params
+evidence_root: /data/work/so101-evidence/real-robot/prep-20261026   # plan: layout/placement-list.json, photos: photos/
+
+frame:
+  # plan (x, y, z) in cm -> sim world (x, y, z) in m
+  plan_to_world: {x_world: "x_cm / 100", y_world: "-y_cm / 100", z_world: "z_cm / 100"}
+  note: >-
+    The sim robot faces world -y (as in every ACT scene), so plan +y (forward) is world -y and plan +x (the robot's
+    left) is world +x. The follower pan axis is at world (0, 0). The table top is at world z = 0.75 m.
+  follower_pan_axis_plan_cm: [0.0, 0.0]
+  table_top_z_cm: 75.0
+
+follower:
+  source_file: assets/mujoco/act/so101_side_wrist.xml
+  source_sha256: 9e0ec65cc0fbdddf35b7c4dd351696a70a1e77c19c0ebce086620c70c8c17e74
+  # base frame offset of the shoulder_pan axis in the robot file (m), body "shoulder" pos x, y
+  pan_axis_in_base_m: [0.0207909, -0.0230745]
+  # base body z minus underside z in the robot file (m): the base underside is at base z + this value
+  base_underside_above_origin_m: 0.0300814
+  base_origin_z_in_source_m: 0.1899186
+  white_rgba: [0.93, 0.93, 0.91, 1.0]          # the real follower is white; the source model is yellow
+  base_footprint_cm: {rear_behind_axis: 6.98, front_ahead_of_axis: 2.58, half_width: 5.55}
+
+leader:
+  pan_axis_plan_cm: [41.9, 0.0]               # mirrored: follower axis is 6.0 + 5.55 cm from the right edge
+  print_rgba: [0.13, 0.13, 0.14, 1.0]
+  motor_rgba: [0.04, 0.04, 0.045, 1.0]
+  # static folded pose, LeRobot degrees of the follower rest pose measured 2026-10-26 (poses/folded-rest-20261026.txt),
+  # applied as sim radians through the identity map and clamped to the sim joint range. Gripper is 0..100.
+  rest_pose_deg: {pan: 4.8, lift: -104.8, elbow: 94.2, wrist_flex: 75.2, wrist_roll: -5.1, gripper: 13.0}
+  sim_joint_ranges_rad:
+    pan: [-1.91986, 1.91986]
+    lift: [-1.74533, 1.74533]
+    elbow: [-1.69, 1.69]
+    wrist_flex: [-1.65806, 1.65806]
+    wrist_roll: [-2.7438472969992493, 2.841206309382605]
+    gripper: [-0.17453297762778586, 1.7453291995659765]
+
+table:                                          # human: 65 x 45 cm, 30 cm high, on a bed of 45 cm
+  x: [-11.55, 53.45]                            # right edge x = -11.55; plan: layout/placement-list.json
+  y: [-6.98, 38.02]                             # back edge y = -6.98
+  top_thickness: 2.5
+  front_rim_depth: 4.0
+  leg_size: 2.0
+  leg_inset: 3.0
+  top_rgba: [0.88, 0.78, 0.60, 1.0]
+  rim_rgba: [0.93, 0.92, 0.88, 1.0]
+  leg_rgba: [0.85, 0.85, 0.86, 1.0]
+  friction: [0.8, 0.01, 0.001]
+
+bed:                                            # human: 200 x 180 x 45 cm; headboard at the robot's right
+  x: [-11.55, 188.45]                           # 200 cm from the headboard face, extending to the robot's left
+  y: [-10.0, 170.0]                             # 180 cm wide
+  z: [0.0, 45.0]
+  cover_rgba: [0.78, 0.52, 0.52, 1.0]           # pink
+cushion:                                        # headboard cushion, the table's right edge touches its front face
+  x: [-23.55, -11.55]
+  y: [-10.0, 170.0]
+  z: [45.0, 97.0]
+  rgba: [0.93, 0.88, 0.74, 1.0]
+floor_rgba: [0.40, 0.23, 0.14, 1.0]
+wall:
+  x: [-300.0, 300.0]
+  y: [-70.0, -66.0]
+  z: [0.0, 260.0]
+  rgba: [0.93, 0.93, 0.91, 1.0]
+curtain:
+  x: [0.0, 170.0]
+  y: [-65.5, -64.0]
+  z: [20.0, 240.0]
+  rgba: [0.78, 0.66, 0.66, 1.0]
+radiator:
+  x: [33.0, 76.0]
+  y: [-64.0, -57.0]
+  z: [12.0, 70.0]
+  rgba: [0.94, 0.94, 0.94, 1.0]
+desk:
+  top: {x: [-90.0, 22.0], y: [-64.0, -12.0], z: [75.0, 78.0]}
+  leg_size: 4.0
+  drawer: {x: [-20.0, 22.0], y: [-40.0, -12.0], z: [64.0, 75.0]}
+  rgba: [0.78, 0.55, 0.30, 1.0]
+monitor:
+  panel: {x: [-44.0, 12.0], y: [-48.0, -46.0], z: [90.0, 123.0]}
+  neck: {x: [-17.0, -15.0], y: [-48.0, -45.0], z: [79.0, 90.0]}
+  foot: {x: [-24.0, -8.0], y: [-52.0, -40.0], z: [78.0, 79.0]}
+  rgba: [0.05, 0.05, 0.06, 1.0]
+lamp:
+  center: [-30.0, -35.0]
+  radius: 8.0
+  z: [78.0, 98.0]
+  rgba: [1.0, 0.84, 0.82, 1.0]
+
+camera_stand:                                   # human: base diameter 16.5 cm, flush in the front-left corner
+  base: {center: [45.2, 29.77], diameter: 16.5, height: 3.0}
+  pole_radius: 0.9
+  arm_points_cm:                                # polyline of the arm: base, elbow, boom end above the camera
+    - [45.2, 29.77, 78.0]
+    - [40.0, 29.0, 118.0]
+    - [28.0, 28.5, 124.0]
+  rgba: [0.06, 0.06, 0.07, 1.0]
+
+side_camera:                                    # human: 45 cm above the table, looks along the plan diagonal
+  position_plan_cm: [26.0, 28.0]                # estimated
+  height_above_table: 45.0
+  target_plan_cm: [-2.0, 18.0, 75.0]            # workspace centre on the table surface
+  fovy_deg: 70.0                                # placeholder until the intrinsics are calibrated
+  resolution: [640, 480]
+  body_half_size_cm: [3.5, 1.7, 1.75]
+
+wrist_camera:
+  note: the existing sim wrist mount of the robot file is kept unchanged (fovy 90, placeholder)
+
+overview_cameras:                               # for the render check only, placed like the human's three photos
+  fovy_deg: 66.0
+  resolution: [960, 1280]
+  view_back: {position_plan_cm: [14.0, -34.0, 138.0], target_plan_cm: [14.0, 8.0, 75.0]}
+  view_left: {position_plan_cm: [100.0, 8.0, 100.0], target_plan_cm: [20.0, 12.0, 82.0]}
+  view_front: {position_plan_cm: [20.0, 80.0, 135.0], target_plan_cm: [20.0, 12.0, 78.0]}
+
+cubes:                                          # human: 2 cm
+  edge: 2.0
+  mass_g: 6.0
+  friction: [0.9, 0.005, 0.0001]
+  green: {cell: B3, rgba: [0.08, 0.50, 0.14, 1.0]}
+  red: {cell: D1, rgba: [0.78, 0.08, 0.08, 1.0]}
+grid:                                           # confirmed plan: columns x, rows y (cm)
+  columns_x: [4.0, 0.0, -4.0, -8.0]
+  rows_y: [12.0, 16.0, 20.0, 24.0]
+  row_names: [A, B, C, D]
+
+bowl:                                           # human: outer top 12, inner top 10.5, height 4; a truncated cone
+  center_plan_cm: [13.0, 18.0]
+  outer_top_diameter: 12.0
+  inner_top_diameter: 10.5
+  height: 4.0
+  outer_bottom_diameter: 7.5                    # estimated
+  floor_thickness: 0.4                          # estimated
+  wall_segments: 24
+  rgba: [0.90, 0.80, 0.62, 1.0]                 # beige paper
+  friction: [0.6, 0.01, 0.001]
+
+lighting:
+  headlight_ambient: 0.34
+  headlight_diffuse: 0.12
+  key: {pos_plan_cm: [10.0, 20.0, 230.0], diffuse: 0.50}
+  fill: {dir: [0.4, 0.3, -0.8], diffuse: 0.14}
+
+physics:
+  timestep: 0.002
+  integrator: implicitfast
+  noslip_iterations: 10
+  statistic_extent: 0.9045333128287155          # same near plane as the existing indoor scene (wrist camera clip)
+
+estimated:
+  follower.base_footprint_cm: not measured; read from the sim base meshes (the confirmed plan uses the same numbers)
+  follower.white_rgba: colour of the real follower read from the photos
+  leader.rest_pose_deg: the follower's measured rest pose is reused for the leader; LeRobot degrees are mapped to sim radians by identity and clamped (the joint map is not calibrated)
+  leader.print_rgba: black plastic read from the photos
+  table.top_thickness: 2.5 cm, edge of the real table top seen in the photos
+  table.front_rim_depth: 4 cm white front rim, seen in the front photo
+  table.leg_size: thin foldable aluminium legs, simplified to 4 boxes (visual only effect)
+  table.top_rgba: light beige read from the close-up photo
+  bed.y: the bed's back edge 3 cm behind the table back edge (photo, left view); the 180 cm width runs along y
+  cushion: 12 cm thick, 52 cm above the mattress (photo, left view; the top is about 22 cm above the table top)
+  desk: desk top at 78 cm, 112 x 52 cm, front edge 5 cm behind the bed edge, right end at x = 22 (front and left photos)
+  monitor: 56 x 33 cm panel, centre x = -16, 36 cm behind the desk front (front photo)
+  lamp: pink-white cylinder, radius 8 cm, at (-30, -35) (front photo)
+  wall: white wall plane at y = -66 (behind the desk, front photo)
+  curtain: from x = 0 to the left, on the back wall (front photo)
+  radiator: x 33 to 76 under the curtain (front photo)
+  camera_stand.arm_points_cm: arm drawn as 2 capsules from the base to the camera; real arm is a spring parallelogram
+  side_camera.position_plan_cm: on the stand arm; the photos put the camera about 17 cm to the robot-right and 10 cm toward the back of the stand base (about (28, 20)); the human estimated y 28 to 35; (26, 28) takes the edge of that range. The optical axis aims at the workspace centre (-2, 18), 20 degrees off -x, while the table diagonal is 35 degrees
+  side_camera.fovy_deg: placeholder, to be replaced by calibrated intrinsics
+  side_camera.pose: pose is a placeholder, to be replaced by the ArUco measurement
+  overview_cameras: positions chosen by eye to look like the human's photos, render check only
+  cubes.mass_g: 6 g, a 2 cm wooden cube is 4 to 8 g
+  cubes.friction: plausible wood on laminate
+  bowl.outer_bottom_diameter: 7.5 cm, about 7 to 8 cm in the close-up photo
+  bowl.floor_thickness: 0.4 cm paper
+  bowl.rgba: beige paper colour read from the photos
+  lighting: indoor daylight guess
