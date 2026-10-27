@@ -6,6 +6,49 @@ The human said on 2026-10-26: "我已经安装好SO101-ARM，一主一从，一�
 
 Evidence root: `/data/work/so101-evidence/real-robot/` (prep: `prep-20261026/`).
 
+
+## 0. Change of task (human 2026-10-27)
+
+"目标不再是杯子和红圈，而是绿色的小方块和纸碗。没有垫高". The human sent a photo of the setup:
+- The robot is clamped on the table surface with no pedestal, which differs from sim, where the base sits 0.10 m above the table.
+- The new objects are a green cube of about 2.5 cm and a paper bowl, about 12 to 13 cm across the top and about 7 cm deep.
+
+Consequences:
+
+- **The real task is a different task from the sim task** (cube into bowl instead of cup onto ring).
+  - The indoor TRAIN-009 policy is still a plumbing and safety check for the runner, but not a meaningful task baseline.
+  - The main path becomes a **real-only ACT** from teleop demos (D6 (b)).
+- **Co-training (D6 (c)) needs a sim twin of the real task.** That is a new sim scene and rig `real-twin`:
+  - robot at table level, no pedestal;
+  - green cube and paper bowl, with the measured sizes and mass;
+  - the measured side camera pose, the undistorted side camera FOV, and the measured wrist FOV;
+  - a Teacher policy for cube grasp and drop-into-bowl. In sim it uses the privileged pose; no YOLO is needed.
+
+  This is a later phase (R6) and does not block R1 to R5.
+- **D8 changes.** No pedestal; use the cube and bowl. Mark on the table a start region for the cube and a bowl position (fixed for the first round) with a printed mat.
+- **The side camera** still goes to an oblique side view that covers the cube start region, the bowl and the arm, fixed rigidly. Its exact pose is measured in R1 (ArUco) instead of copying the sim pose, because the twin will be built to match the real rig.
+
+### 0.1 Decisions of 2026-10-27 (human)
+
+Human words: "方块变长2cm，碗口外径12cm，内径10.5cm。高4cm。碗先固定。方块换位置。采集量ok。先只用真机遥操作数据训练 ACT。成功以后，尝试先见环境数字孪生，然后仿真+摇操混合数据训练。"
+
+- **Objects:** green cube, 2 cm edge. Paper bowl, 12 cm outer and 10.5 cm inner rim diameter, 4 cm high. The bowl stays at a fixed marked position; the cube start varies over a marked region.
+- **Episodes:** a pilot of 10, then about 50 to 60.
+- **Distractor** (human 2026-10-27: "我想加一个红色的方块做为干扰项，目标是做绿色的方块"): a red cube of the same size is on the table in every episode. The target is always the green cube.
+  - Both cubes' positions change every episode, from a placement list drawn over a grid, with at least 5 cm between the cubes.
+  - Which cube is nearer, and which is to the left, is balanced across episodes. Otherwise the policy learns a position rule instead of the colour.
+  - Because of this, the main round is raised to about 80 to 100 episodes. The pilot stays at 10.
+  - Evaluation adds "wrong object": the red cube is grasped, moved, or ends in the bowl. Success requires the green cube in the bowl and the red cube untouched.
+- **Order:**
+  1. **Real-only ACT first**, with the standard LeRobot pipeline end to end:
+     - recording: `lerobot-record` with the leader, 20 fps, `side` and `wrist` 640x480, LeRobotDataset v3 under `/data/work/so101-datasets/<name>`, with no hub push;
+     - training: `lerobot-train --policy.type=act` on antzb;
+     - evaluation: `lerobot-record --policy.path=…` on the follower with `--robot.max_relative_target` set and the human present.
+
+     In this route the units stay LeRobot's (degrees, 0 to 100), so the joint map and camera calibration of R1 are **not needed**. They move to R6.
+  2. **After real-only succeeds:** the sim twin (R6), then sim + teleop co-training.
+- **Recording environment:** a separate venv `/data/work/venvs/so101-real-lerobot-061` with `lerobot[feetech,viz,dataset,training]==0.6.1` and torch 2.11.0+cu130. The human's `so101_test` venv lacks the `dataset` extra and is left unchanged. The scripts `so101_test/record.sh` and `record_viz.py` use it; the latter throttles rerun images as `teleop_viz.py` does.
+
 ## 1. What exists
 
 ### Real side
@@ -89,6 +132,7 @@ Facts with file citations are in the prep notes. In summary:
 | **R1 mapping and calibration** | (1) Joint map: the folded rest pose (D4a) is the reference. Its readings are taken; the link angles are measured against gravity; then a single-joint sweep by hand, with the torque off, gives each sign; then a held-out pose checks the result. The gripper is read closed, open and on the cup. (2) Intrinsics of both cameras (checkerboard, 20+ views). (3) Side camera pose (ArUco board at a known position relative to the base); compare it with the sim pose and adjust the mount until the images match. (4) Wrist camera field of view. (5) Code: `real/joint_map.py`, `real/camera_model.py` with fixture tests, then the gate. | torque off; the human moves the arm | map verified by a held-out pose (error < 2°); reprojection error < 0.5 px |
 | **R2 runner** | A LeRobot-venv runner: observation (cams 20 Hz to 10 Hz, joints to rad), the policy-service client, execution of the prefix with 50 Hz linear interpolation between the 10 Hz targets, the safety filter, a SIGINT rest, and evidence. Fixture tests with a fake robot and fake cameras. Gate. Then a dry run of a scripted trajectory (no policy) in the air at half speed. | yes, human present | scripted dry run tracks within 3° and no filter trip |
 | **R3 teleop collection** | `lerobot-record` with the leader at 20 Hz. Protocol: the start triangle on the mat, with the 4 standard points plus a grid (about 20 positions), 2 to 3 episodes each. Pilot of 10 episodes, then about 60. A converter turns LeRobotDataset into this project's export format (10 Hz, rad, side image undistorted and re-projected), with hashes and a manifest. QC: frame drops, joint/camera timestamp skew, leader-follower tracking error. | yes, teleop | pilot QC passes |
+| **R6 sim twin (later)** | `real-twin` scene and Teacher for cube to bowl; sim data at the real rig; co-training. | none | after R5 (b) |
 | **R4 training** | On antzb (human 2026-10-26: training on antzb). (b) Real only. (c) Co-training: indoor sim (EXP-7036 plus the supplementary run) together with real, at a sampling ratio such as 1:1 per batch. Same ACT configuration as TRAIN-007A (chunk 50). | none | — |
 | **R5 real rollout** | Policies (a) zero-shot, (b) and (c), on the same protocol: the 4 standard points x 5 trials, then held-out mat positions. Prefix 50 first, then shorter prefixes. Metrics: success (cup inside the ring and upright), grasp success, time, filter trips. | yes, human present | — |
 

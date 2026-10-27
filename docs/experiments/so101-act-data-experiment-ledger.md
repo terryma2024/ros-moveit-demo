@@ -69,11 +69,62 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3792
+latest_checkpoint: CP-3793
 next_experiment: TRAIN-007A at `--execution-prefix 50` is the final rollout policy (CP-3777): standard 20/20, rollout_validation 27/28, rollout_test 20/20 (opened once), extrapolation 9/12. Open: indoor contact re-activation (human approved 2026-10-24) and indoor P2 (CP-3781); R3-a merged (CP-3784), next: wire `refilter_scenes` into `act_scene_sample` before any formal collection with diversity; the mount-tree migration is merged (CP-3782); the rgb_sync counter semantics, T5 (antzb). Do not start training without the coordinator. Indoor YOLO fine-tune and the rgb_sync counter split are merged (CP-3785, CP-3786).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3793 - Indoor P3 T6: formal EXP-7036 184/200 sealed; staged-retry faults fixed (to-do 43); supplement EXP-7037/7038 12/12; merge under a host-orchestration equivalence proof; export `indoor-p3-196` (196 episodes); antzb goal 14
+
+- Executed by Sonnet 5.5 subagents for the coordinator. Evidence: `/data/work/so101-evidence/indoor-scene/p3-20261025/manifest.md` (EXP-7036, 7037, 7038, the merge sections) and `KNOWN-EXCEPTIONS.md` in the EXP-7036 run root.
+
+### EXP-7036 (formal, 200 candidates)
+- **Setup:** `formal-200-pools2` (plan seed 710044, 51 nominal), w8f pools2 template, mount tree and commit `01e66387b5e6`, admitted by EXP-7035.
+- **Template rates:** the projection rates were recalibrated to EXP-7035's measured rates, because the old ones projected 18692 s against the unchanged 14400 s ceiling. Old values: phase 1 40 s, phase 2 31.5 s, after-phase-2 7.56 s per scene. New values: 29.2, 13.75 and 1.425. This was reported to the human after the fact.
+- **Phases:** phase 1 took 5341 s and phase 2 3620 s. 196 scenes were processed: 184 VALID and 12 INVALID.
+  - INVALID: INPUT_STALE 4, topic loss or source gap 5, initial capture 1, scene geometry 2. None was a queue watermark.
+  - 4 Teacher failures, all `DYNAMIC_TARGET_UNREACHABLE`: indf-051 (nominal/camera) and indf-075, 156, 175 (randomised/privileged).
+- **Retry path:** it failed three times in sequence, all on code that had never run end to end before.
+  - (a) `recording_bytes` None for a Teacher-failed scene broke the disk estimate. Fixed in `5ea57ec3a`, with a full gate.
+  - The human ruled "修复后继续重试". The launch checks were pointed at `5ea57ec3a` for the retry and finalize stages, provided the diff was exactly `owner.py` plus 2 tests (fail closed).
+  - (c) A failed stage could not be re-run: once-only files and a single-use command id. The human authorised retiring two store rows ("授权清掉准入库里的这条记录", "再作废一条，重试后收尾"), each with a byte backup and a before/after record. One lease release was made under the standing authorisation.
+  - (b) The staged retry monitor started before the Teacher (`SERVICE_OWNER_NOT_AVAILABLE`), so retry-1 ended ABORTED (`CAMPAIGN_RETRY_DISPATCH_FENCED`).
+- **Finalize:** 184 committed (train 149, validation 17, offline_test 18; nominal 48, randomised 136). The queue peak was at most 2 of 16.
+- **Post-run checks:** 3 items failed, all caused by the aborted retry: `dispatch-fault.json`, the retry-1 cleanup stop_reason, and the missing `retry-1/phase1-durability.json`. The human said "先封存184条" and they are recorded as known exceptions. The check scripts are unchanged.
+- **Seal:** run, inputs, EXP-7035 run and inputs, and gates `01e66387b5e6` and `5ea57ec3ae38`. Manifest `e9f88984…`. Readback 0 problems.
+
+### To-do 43 fixed (`005736a6c`, full gate `005736a6ca0f` green)
+- (b) The monitor starts after the services are up.
+- (c) `close()` never masks the stage error. A failed, provably stopped stage can run again as attempt N: `.aN` names and command id, derived and re-checked at admission. Completed stages, RUN or ABORTED, are refused. At most 5 attempts.
+- The template follow-up is applied in the supp12 templates. It is not yet exercised on a failure.
+
+### Supplement
+- **Admission:** a formal run is bound to its qualification's formal list (`formal_split_manifest_sha256`), so the 12-scene list needed its own qualification. This follows the EXP-670/671 precedent.
+- **EXP-7037** (w8q-sup, `005736a6ca0f`): **QUALIFIED**, report `88e6e148…`. VALID 39/40; the one INVALID is indq-19, ENDPOINT_INITIAL_CAPTURE_INVALID. Teacher 40/40.
+- **EXP-7038** (formal, `formal-supp12-pools2`): 12/12 VALID with no retry. Post-run all PASS. Sealed, manifest `8eef71fd…`. Readback of all sealed roots: 427,865 entries, 0 problems.
+
+### Merge (human: "加严格的允许差异规则后合并")
+- `act_merge_collections` refused with `MERGE_IDENTITY_MISMATCH` (`image_source_install`, `mount_build`).
+- New rule (`4b5497df8`, `d07d43039`; full gate `d07d43039f04` green):
+  - Only those two fields may differ.
+  - A recomputed git-diff proof is required (`act_identity_equivalence`), with a code-constant allow-list `host-orchestration-2026-10-27.1`: 8 host modules, tests and docs.
+  - The sealed mount-tree manifests are compared, with each difference classified; anything unclassified is refused.
+  - Container reach: lazy imports reach 3 changed modules (`collection_qualification_recompute`, `stage_records`, `unified/admission`). These are accepted on the allow-list review and recorded under `relied_on_allow_list`.
+  - The flaky `test_act_recorder_scene` (gw15) was fixed by restamping after scene build.
+- **Output:**
+  - Proof `merge-proof/identity-equivalence-proof-20261027T014000Z.json` (`3d3e20d1…`).
+  - Merge `REG/act-merged-indoor-p3-20261027T014000Z/` (manifest `18bf3480…`): **196 episodes**, train 157, validation 19, offline_test 20.
+  - Export `/data/work/so101-datasets/indoor-p3-196-20261027T014000Z/` (33 GB; export manifest `d5035ecf…`).
+  - Archive `.tar.gz`, 34.3 GB, sha256 `a2c02c1bcb3ecaed8be82221988e41649d3d19bec58dd7bdd9fe9ed3a7f913ef`.
+- **Next:** push to antzb, then TRAIN-009 on antzb (human: "当前采集完成以后，把训练数据推送到antzb，用antzb来做训练").
+
+### antzb goal 14 (human: "antzb上采纳6并行rollout，删除历史证据。然后新素材加入后的 YOLO 再微调（只评估，不部署）")
+- N=6 adopted as antzb's default.
+- antzb evidence cleaned: `/data` free went from 101 to 194 GB.
+- Indoor YOLO re-fine-tune on the pools2 train assets (5480 synthetic frames, from `f9cce63b`): never worse than the deployed weights, mask mAP50-95 +0.4 to +0.7 points.
+- The deployed weights already detect 100 % on the val/test pools and layouts B/C. **Not deployed.**
+- The weights (`ceb0c03d…`) were pulled to ai-station for a later rollout test (to-do 42).
 
 ## CP-3792 - T5: parallel rollout on antzb (goal 12), N=6 adopted for antzb; cross-host check matches ai-station
 
