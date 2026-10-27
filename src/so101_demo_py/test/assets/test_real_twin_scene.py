@@ -71,7 +71,11 @@ def test_follower_copy_records_and_matches_its_source(builder, params):
     end = next(i for i, line in enumerate(lines) if line.endswith("-->"))
     actual = lines[:1] + lines[end + 1 :]  # drop the generated header comment (second line to its closing -->)
     changed = [(a, b) for a, b in zip(expected, actual, strict=True) if a != b]
-    assert len(changed) == 2  # the base body position and the 3d_printed colour
+    assert len(changed) == 3  # the base body position, the 3d_printed colour and the wrist camera intrinsics
+    camera_edit = [(a, b) for a, b in changed if "wrist_camera" in a]
+    assert len(camera_edit) == 1
+    old, new = camera_edit[0]
+    assert old.replace('fovy="90" ', "") == new.replace(builder.camera_intrinsics_attrs(params["wrist_camera"]["intrinsics"]) + " ", "")
 
 
 def test_scene_loads_with_the_arm_and_both_cubes(model):
@@ -225,26 +229,81 @@ def test_the_bowl_and_the_cube_grid_are_within_reach(model, params):
     assert failures == {}
 
 
-def test_side_camera_is_45_cm_above_the_table_and_looks_down_at_the_workspace(model, data, params):
+def _opencv_k(model, camera: int):
+    """OpenCV K (pixel centres at integers) read back from the compiled MuJoCo camera."""
+    width, height = (int(v) for v in model.cam_resolution[camera])
+    fx, fy, px, py = model.cam_intrinsic[camera] / model.cam_sensorsize[camera][[0, 1, 0, 1]] * [width, height, width, height]
+    return np.array([fx, fy, (width - 1) / 2.0 - px, (height - 1) / 2.0 - py])
+
+
+def test_side_camera_pose_is_the_calibrated_one(model, data, params):
+    cam = params["side_camera"]
+    assert cam["status"].startswith("measured (calibrated 2026-10-27)")
+    assert len(cam["source"]["extrinsics_sha256"]) == 64 and len(cam["source"]["intrinsics_sha256"]) == 64
     camera = model.camera("side_camera").id
-    assert abs(data.cam_xpos[camera][2] - (TABLE_TOP + 0.45)) < 1e-3
-    assert tuple(model.cam_resolution[camera]) == (640, 480)
-    assert model.cam_fovy[camera] == 70.0
+    x, y, z = cam["position_plan_cm"]
+    assert np.allclose(data.cam_xpos[camera], [x / 100.0, -y / 100.0, TABLE_TOP + z / 100.0], atol=1e-6)
     forward = -data.cam_xmat[camera].reshape(3, 3)[:, 2]
-    aim = np.array([-0.02, -0.18, TABLE_TOP])
-    to_aim = (aim - data.cam_xpos[camera]) / np.linalg.norm(aim - data.cam_xpos[camera])
-    assert np.dot(forward, to_aim) > 0.9999
-    assert forward[2] < -0.5  # pitched down
+    up = data.cam_xmat[camera].reshape(3, 3)[:, 1]
+    fx, fy, fz = cam["forward_plan"]
+    ux, uy, uz = cam["image_up_plan"]
+    assert np.allclose(forward, [fx, -fy, fz], atol=1e-6)  # the plan y axis is flipped, as for points
+    assert np.allclose(up, [ux, -uy, uz], atol=1e-6)  # roll kept
+    assert abs(np.dot(forward, up)) < 1e-6
+    assert np.isclose(np.linalg.det(data.cam_xmat[camera].reshape(3, 3)), 1.0)
+    assert forward[2] < -0.5  # pitched down (calibrated 43.8 degrees)
 
 
-def test_the_wrist_camera_mount_is_the_existing_one(model):
+def test_side_camera_intrinsics_are_the_calibrated_ones_and_distortion_is_recorded(model, params):
+    intrinsics = params["side_camera"]["intrinsics"]
+    camera = model.camera("side_camera").id
+    assert tuple(model.cam_resolution[camera]) == (640, 480) == tuple(intrinsics["resolution"])
+    assert np.allclose(_opencv_k(model, camera), [intrinsics[k] for k in ("fx", "fy", "cx", "cy")], atol=1e-3)
+    assert set(intrinsics["distortion_not_rendered"]) == {"k1", "k2", "p1", "p2", "k3"}
+    assert intrinsics["distortion_not_rendered"]["k1"] < 0  # barrel
+
+
+def test_the_wrist_camera_has_calibrated_intrinsics_and_the_existing_mount(model, params):
     camera = model.camera("wrist_camera").id
-    assert model.cam_fovy[camera] == 90.0
+    intrinsics = params["wrist_camera"]["intrinsics"]
+    assert params["wrist_camera"]["status_pose"] == "estimated"
     assert tuple(model.cam_resolution[camera]) == (640, 480)
+    assert np.allclose(_opencv_k(model, camera), [intrinsics[k] for k in ("fx", "fy", "cx", "cy")], atol=1e-3)
+    assert not np.isclose(model.cam_fovy[camera], 90.0)
+    assert np.allclose(model.cam_pos[camera], [-0.014, -0.012, 0.050])  # the mount pose of the robot file, unchanged
+
+
+def test_principalpixel_convention_projects_like_opencv():
+    """A sphere rendered through the generated intrinsics lands where OpenCV's pinhole model with the same K puts it."""
+    import os
+
+    os.environ.setdefault("MUJOCO_GL", "egl")
+    builder = _load_builder()
+    intrinsics = {"resolution": [640, 480], "fx": 400.0, "fy": 300.0, "cx": 300.0, "cy": 260.0}
+    xml = (
+        f'<mujoco><worldbody><light pos="0 0 3"/><camera name="c" resolution="640 480" {builder.camera_intrinsics_attrs(intrinsics)}/>'
+        '<geom type="sphere" size="0.05" pos="1.0 0.5 -10" rgba="1 0 0 1"/></worldbody></mujoco>'
+    )
+    model = mujoco.MjModel.from_xml_string(xml)
+    state = mujoco.MjData(model)
+    mujoco.mj_forward(model, state)
+    try:
+        renderer = mujoco.Renderer(model, 480, 640)
+    except Exception as error:  # no GL context on this host
+        pytest.skip(f"no offscreen GL: {error}")
+    try:
+        renderer.update_scene(state, camera="c")
+        image = renderer.render()
+    finally:
+        renderer.close()
+    rows, cols = np.where((image[..., 0] > 150) & (image[..., 1] < 80))
+    # camera frame (OpenCV): x right = 1.0, y down = -0.5, z forward = 10
+    assert abs(cols.mean() - (300.0 + 400.0 * 0.1)) < 0.3
+    assert abs(rows.mean() - (260.0 - 300.0 * 0.05)) < 0.3
 
 
 LEADER_DIR = TWIN_DIR / "leader"
-FOLLOWER_XML_SHA256 = "661f09048f08e66d0e8e9b77f15894cb28b2fc2a97e2ed7b1650e949cba75aec"
+FOLLOWER_XML_SHA256 = "93f41c1b188b12fc51c65f8639e57621dde2e73d32df1ed368341828e7753254"
 
 
 def _leader_geoms(model):

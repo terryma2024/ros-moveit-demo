@@ -153,16 +153,49 @@ camera_stand:                                   # human: base diameter 16.5 cm, 
     - [28.0, 28.5, 124.0]
   rgba: [0.06, 0.06, 0.07, 1.0]
 
-side_camera:                                    # human: 45 cm above the table, looks along the plan diagonal
-  position_plan_cm: [26.0, 28.0]                # estimated
-  height_above_table: 45.0
-  target_plan_cm: [-2.0, 18.0, 75.0]            # workspace centre on the table surface
-  fovy_deg: 70.0                                # placeholder until the intrinsics are calibrated
-  resolution: [640, 480]
+side_camera:                                    # measured (calibrated 2026-10-27)
+  status: measured (calibrated 2026-10-27)
+  source:
+    extrinsics_file: /data/work/so101-evidence/real-robot/calib-20261027/extrinsics-side.json
+    extrinsics_sha256: 716276ec8d9fcb3b184778f2316232253a19891438389535448c09348305431a
+    intrinsics_file: /data/work/so101-evidence/real-robot/calib-20261027/intrinsics-side.json
+    intrinsics_sha256: dc86f83984bd847b1a3f35ea586d2fb87b4b2f239a52f6bd1131771a2a4a5dbf
+    method: solvePnP of an ArUco sheet on the placement mat, 5 frames; extrinsics reprojection about 1 px
+  # pose in the plan frame (cm; z above the table top): position is the mean of the 5 frames, forward is the file value,
+  # image_up is the mean of the per-frame values made orthogonal to forward
+  position_plan_cm: [31.08293320884991, 27.850871942429883, 32.48395000106226]
+  forward_plan: [-0.7080131780868003, -0.1426436133275368, -0.6916430721349655]
+  image_up_plan: [-0.6683278652856505, -0.18107606643626062, 0.7214910412795826]
+  intrinsics:
+    model: standard
+    rms_px: 0.5786032884179276
+    views_used: 25
+    resolution: [640, 480]
+    fx: 412.3338078934652
+    fy: 411.94066050695005
+    cx: 316.9157988862453      # OpenCV pixel convention (pixel centres at integers)
+    cy: 245.1129957314437
+    fovy_deg: 60.450855649108924                 # information only; the camera is built from fx, fy, cx, cy
+    distortion_not_rendered: {k1: -0.357856253327659, k2: 0.18121566226789496, p1: 0.0012202799306712077, p2: 0.000485655026593806, k3: -0.052051153072295464}   # OpenCV order k1 k2 p1 p2 k3; for the co-training step
   body_half_size_cm: [3.5, 1.7, 1.75]
 
 wrist_camera:
-  note: the existing sim wrist mount of the robot file is kept unchanged (fovy 90, placeholder)
+  status_pose: estimated                       # the mount pose on the jaw is the sim robot file's, not calibrated
+  status_intrinsics: measured (calibrated 2026-10-27)
+  source:
+    intrinsics_file: /data/work/so101-evidence/real-robot/calib-20261027/intrinsics-wrist.json
+    intrinsics_sha256: e8b1e9ebe1f2e499725cd79cd6143c643ed326f35803d52025f5eba5e13abe29
+  intrinsics:
+    model: standard
+    rms_px: 0.4891805546531099
+    views_used: 39
+    resolution: [640, 480]
+    fx: 552.8310426445271
+    fy: 552.3610398735387
+    cx: 346.42473570930474      # OpenCV pixel convention (pixel centres at integers)
+    cy: 259.7767775801493
+    fovy_deg: 46.96974040332519                 # information only; the camera is built from fx, fy, cx, cy
+    distortion_not_rendered: {k1: -0.5421335919953998, k2: 0.39973539850385026, p1: -0.003251710557572167, p2: 0.0006502250770171799, k3: -0.18330241796868593}   # OpenCV order k1 k2 p1 p2 k3; for the co-training step
 
 overview_cameras:                               # for the render check only, placed like the human's three photos
   fovy_deg: 66.0
@@ -228,9 +261,8 @@ estimated:
   curtain: from x = 0 to the left, on the back wall (front photo), moved with the wall
   radiator: x 33 to 76 under the curtain (front photo), moved with the wall
   camera_stand.arm_points_cm: arm drawn as 2 capsules from the base to the camera; real arm is a spring parallelogram
-  side_camera.position_plan_cm: on the stand arm; the photos put the camera about 17 cm to the robot-right and 10 cm toward the back of the stand base (about (28, 20)); the human estimated y 28 to 35; (26, 28) takes the edge of that range. The optical axis aims at the workspace centre (-2, 18), 20 degrees off -x, while the table diagonal is 35 degrees
-  side_camera.fovy_deg: placeholder, to be replaced by calibrated intrinsics
-  side_camera.pose: pose is a placeholder, to be replaced by the ArUco measurement
+  wrist_camera.pose: the mount pose on the jaw is the sim robot file's, not calibrated (the intrinsics are measured)
+  side_camera.rendering: lens distortion is not rendered (recorded in side_camera.intrinsics.distortion_not_rendered)
   overview_cameras: positions chosen by eye to look like the human's photos, render check only
   cubes.mass_g: 6 g, a 2 cm wooden cube is 4 to 8 g
   cubes.friction: plausible wood on laminate
