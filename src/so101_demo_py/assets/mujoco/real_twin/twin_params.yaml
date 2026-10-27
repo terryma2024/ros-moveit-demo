@@ -33,13 +33,8 @@ follower:
   base_origin_z_in_source_m: 0.1899186
   white_rgba: [0.93, 0.93, 0.91, 1.0]          # the real follower is white; the source model is yellow
   base_footprint_cm: {rear_behind_axis: 6.98, front_ahead_of_axis: 2.58, half_width: 5.55}
-
-leader:
-  pan_axis_plan_cm: [41.9, 0.0]               # mirrored: follower axis is 6.0 + 5.55 cm from the right edge
-  print_rgba: [0.13, 0.13, 0.14, 1.0]
-  motor_rgba: [0.04, 0.04, 0.045, 1.0]
-  # static folded pose, LeRobot degrees of the follower rest pose measured 2026-10-26 (poses/folded-rest-20261026.txt),
-  # applied as sim radians through the identity map and clamped to the sim joint range. Gripper is 0..100.
+  # static folded pose, LeRobot degrees of the follower rest pose measured 2026-10-26 (poses/folded-rest-20261026.txt, follower
+  # column), applied as sim radians through the identity map and clamped to the sim joint range. Gripper is 0..100.
   rest_pose_deg: {pan: 4.8, lift: -104.8, elbow: 94.2, wrist_flex: 75.2, wrist_roll: -5.1, gripper: 13.0}
   sim_joint_ranges_rad:
     pan: [-1.91986, 1.91986]
@@ -48,6 +43,39 @@ leader:
     wrist_flex: [-1.65806, 1.65806]
     wrist_roll: [-2.7438472969992493, 2.841206309382605]
     gripper: [-0.17453297762778586, 1.7453291995659765]
+
+leader:
+  # Official SO-101 leader model: so101_leader_new_calib.urdf of TheRobotStudio/SO-ARM100 (vendored in leader/, see
+  # leader/SOURCE.md). Arm links are those of the follower; the gripper is a fixed handle plus a trigger joint.
+  pan_axis_plan_cm: [41.9, 0.0]               # mirrored: follower axis is 6.0 + 5.55 cm from the right edge
+  print_rgba: [0.13, 0.13, 0.14, 1.0]
+  motor_rgba: [0.04, 0.04, 0.045, 1.0]
+  urdf: leader/so101_leader_new_calib.urdf
+  urdf_sha256: bc947e2fea65dfc91b0fc40e4cff0c01c6bf426687995937e62e2b0f41122db5
+  # URDF base_link frame in the follower robot file's base frame: the pan axis and the base meshes coincide when the URDF
+  # base_link is rotated by yaw_deg about z and moved by pos_m (derived from base_so101_v2 and the shoulder_pan origin)
+  urdf_base_in_follower_base: {pos_m: [0.0207909, 0.0157608, 0.0324817], yaw_deg: -90.0}
+  # meshes the URDF uses: file in the repository and its sha256 (equal to the upstream file). The first three are not in
+  # the follower model and are vendored in leader/; the others are the follower's own files, reused.
+  meshes:
+    Handle_SO101: {file: leader/Handle_SO101.stl, sha256: a69b004691392cf0130b32ed9da5cc0c5fee49c2c8abee6ca27bf88e2a11347d}
+    Trigger_SO101: {file: leader/Trigger_SO101.stl, sha256: 7122e0c476e69689eaf18441ecd36f5cf5cdca4d7033c15e5238a9b788e9d71a}
+    Wrist_Roll_SO101: {file: leader/Wrist_Roll_SO101.stl, sha256: db20e6ac7c08cf8d75692a38db5a217011c97c0ab5d73c248296535df81e39b7}
+    base_motor_holder_so101_v1: {file: ../assets/base_motor_holder_so101_v1.stl, sha256: 8cd2f241037ea377af1191fffe0dd9d9006beea6dcc48543660ed41647072424}
+    base_so101_v2: {file: ../assets/base_so101_v2.stl, sha256: bb12b7026575e1f70ccc7240051f9d943553bf34e5128537de6cd86fae33924d}
+    motor_holder_so101_base_v1: {file: ../assets/motor_holder_so101_base_v1.stl, sha256: 31242ae6fb59d8b15c66617b88ad8e9bded62d57c35d11c0c43a70d2f4caa95b}
+    motor_holder_so101_wrist_v1: {file: ../assets/motor_holder_so101_wrist_v1.stl, sha256: 887f92e6013cb64ea3a1ab8675e92da1e0beacfd5e001f972523540545e08011}
+    rotation_pitch_so101_v1: {file: ../assets/rotation_pitch_so101_v1.stl, sha256: 9be900cc2a2bf718102841ef82ef8d2873842427648092c8ed2ca1e2ef4ffa34}
+    sts3215_03a_no_horn_v1: {file: ../assets/sts3215_03a_no_horn_v1.stl, sha256: 75ef3781b752e4065891aea855e34dc161a38a549549cd0970cedd07eae6f887}
+    sts3215_03a_v1: {file: ../assets/sts3215_03a_v1.stl, sha256: a37c871fb502483ab96c256baf457d36f2e97afc9205313d9c5ab275ef941cd0}
+    under_arm_so101_v1: {file: ../assets/under_arm_so101_v1.stl, sha256: d01d1f2de365651dcad9d6669e94ff87ff7652b5bb2d10752a66a456a86dbc71}
+    upper_arm_so101_v1: {file: ../assets/upper_arm_so101_v1.stl, sha256: 475056e03a17e71919b82fd88ab9a0b898ab50164f2a7943652a6b2941bb2d4f}
+    waveshare_mounting_plate_so101_v2: {file: ../assets/waveshare_mounting_plate_so101_v2.stl, sha256: e197e24005a07d01bbc06a8c42311664eaeda415bf859f68fa247884d0f1a6e9}
+    wrist_roll_pitch_so101_v2: {file: ../assets/wrist_roll_pitch_so101_v2.stl, sha256: 6c7ec5525b4d8b9e397a30ab4bb0037156a5d5f38a4adf2c7d943d6c56eda5ae}
+  # static folded pose: the leader column of poses/folded-rest-20261026.txt, LeRobot degrees, applied as radians through
+  # the identity map and clamped to the URDF joint limits. The trigger (gripper, 0..100) maps linearly to the URDF
+  # limit 0..45 degrees (positive opens); the URDF says this zero and range are provisional, so the mapping is too.
+  rest_pose_deg: {pan: 4.9, lift: -104.2, elbow: 96.2, wrist_flex: 54.4, wrist_roll: -5.2, gripper: 13.7}
 
 table:                                          # human: 65 x 45 cm, 30 cm high, on a bed of 45 cm
   x: [-11.55, 53.45]                            # right edge x = -11.55; plan: layout/placement-list.json
@@ -72,35 +100,48 @@ cushion:                                        # headboard cushion, the table's
   z: [45.0, 97.0]
   rgba: [0.93, 0.88, 0.74, 1.0]
 floor_rgba: [0.40, 0.23, 0.14, 1.0]
+# Room walls (the back wall behind the desk and the wall behind the bed head). They are lit by emission, not by the lights, so
+# shadows of the monitor and the desk do not change their brightness: every wall pixel is about the brightness of the wall
+# next to the computer (human, 2026-10-27, measured as mean luma 112 of the 8-bit render in view_front before the change).
+# rgba carries the white wall colour at a low level; emission adds `emission` times that colour.
 wall:
   x: [-300.0, 300.0]
-  y: [-70.0, -66.0]
+  y: [-110.0, -106.0]                           # behind the desk (back edge y = -102), not at y = -66 any more
   z: [0.0, 260.0]
-  rgba: [0.93, 0.93, 0.91, 1.0]
+  rgba: [0.0310, 0.0310, 0.0303, 1.0]
+  emission: 13.8
+bed_head_wall:                                  # the wall the bed head leans on, seen above the cushion in the left photo
+  x: [-32.5, -28.5]
+  y: [-110.0, 170.0]
+  z: [0.0, 260.0]
 curtain:
   x: [0.0, 170.0]
-  y: [-65.5, -64.0]
+  y: [-105.5, -104.0]
   z: [20.0, 240.0]
   rgba: [0.78, 0.66, 0.66, 1.0]
 radiator:
   x: [33.0, 76.0]
-  y: [-64.0, -57.0]
+  y: [-104.0, -97.0]
   z: [12.0, 70.0]
   rgba: [0.94, 0.94, 0.94, 1.0]
+# Computer desk, human 2026-10-27: 90 cm wide, 50 cm deep, 75 cm high (top surface 75 cm above the floor, level with the
+# table top); the 90 cm side is parallel to the bed head (plan y), the 50 cm side runs along plan x. The monitor is parallel
+# to the 90 cm side with its screen facing plan +x, towards the foot of the bed (human: 屏幕朝床尾方向), so the orientation
+# of desk and monitor is measured. The xy position of the desk and the monitor is estimated from the photos.
 desk:
-  top: {x: [-90.0, 22.0], y: [-64.0, -12.0], z: [75.0, 78.0]}
+  top: {x: [-28.0, 22.0], y: [-102.0, -12.0], z: [72.0, 75.0]}
   leg_size: 4.0
-  drawer: {x: [-20.0, 22.0], y: [-40.0, -12.0], z: [64.0, 75.0]}
+  drawer: {x: [-6.0, 22.0], y: [-60.0, -16.0], z: [61.0, 72.0]}   # drawer on the +x face, as in the left photo
   rgba: [0.78, 0.55, 0.30, 1.0]
-monitor:
-  panel: {x: [-44.0, 12.0], y: [-48.0, -46.0], z: [90.0, 123.0]}
-  neck: {x: [-17.0, -15.0], y: [-48.0, -45.0], z: [79.0, 90.0]}
-  foot: {x: [-24.0, -8.0], y: [-52.0, -40.0], z: [78.0, 79.0]}
+monitor:                                        # panel plane parallel to y, screen towards +x (the bed's foot): measured
+  panel: {x: [-22.5, -20.5], y: [-76.0, -20.0], z: [87.0, 120.0]}
+  neck: {x: [-22.0, -21.0], y: [-49.5, -46.5], z: [76.0, 87.0]}
+  foot: {x: [-27.0, -11.0], y: [-54.0, -42.0], z: [75.0, 76.0]}
   rgba: [0.05, 0.05, 0.06, 1.0]
 lamp:
-  center: [-30.0, -35.0]
+  center: [-10.0, -22.0]
   radius: 8.0
-  z: [78.0, 98.0]
+  z: [75.0, 95.0]
   rgba: [1.0, 0.84, 0.82, 1.0]
 
 camera_stand:                                   # human: base diameter 16.5 cm, flush in the front-left corner
@@ -167,7 +208,8 @@ physics:
 estimated:
   follower.base_footprint_cm: not measured; read from the sim base meshes (the confirmed plan uses the same numbers)
   follower.white_rgba: colour of the real follower read from the photos
-  leader.rest_pose_deg: the follower's measured rest pose is reused for the leader; LeRobot degrees are mapped to sim radians by identity and clamped (the joint map is not calibrated)
+  follower.rest_pose_deg: LeRobot degrees are mapped to sim radians by identity and clamped (the joint map is not calibrated)
+  leader.rest_pose_deg: measured leader readings, mapped by identity and clamped; the trigger maps 0..100 linearly onto the URDF's provisional 0..45 degrees (the joint map is not calibrated)
   leader.print_rgba: black plastic read from the photos
   table.top_thickness: 2.5 cm, edge of the real table top seen in the photos
   table.front_rim_depth: 4 cm white front rim, seen in the front photo
@@ -175,12 +217,16 @@ estimated:
   table.top_rgba: light beige read from the close-up photo
   bed.y: the bed's back edge 3 cm behind the table back edge (photo, left view); the 180 cm width runs along y
   cushion: 12 cm thick, 52 cm above the mattress (photo, left view; the top is about 22 cm above the table top)
-  desk: desk top at 78 cm, 112 x 52 cm, front edge 5 cm behind the bed edge, right end at x = 22 (front and left photos)
-  monitor: 56 x 33 cm panel, centre x = -16, 36 cm behind the desk front (front photo)
-  lamp: pink-white cylinder, radius 8 cm, at (-30, -35) (front photo)
-  wall: white wall plane at y = -66 (behind the desk, front photo)
-  curtain: from x = 0 to the left, on the back wall (front photo)
-  radiator: x 33 to 76 under the curtain (front photo)
+  desk.top.x: the desk's +x end at x = 22 and its 50 cm depth towards the bed-head wall (front and left photos); the size 90 x 50 x 75 is measured
+  desk.top.y: front edge 5 cm behind the bed edge (y = -12), 90 cm towards the back wall (front and left photos); the size is measured
+  desk.drawer: a drawer on the +x face under the top, position and size by eye (left photo)
+  monitor: 56 x 33 cm panel (front photo); its orientation (parallel to the desk's 90 cm side, screen facing +x) is measured; its y range is read from the left photo (near edge about 15 cm behind the table back edge); neck and foot sizes by eye
+  lamp: pink-white cylinder, radius 8 cm, on the desk between the table and the monitor (left photo)
+  wall: back wall moved to y = -110 so that the 90 cm desk fits in front of it (the earlier y = -66 predates the measured desk length)
+  bed_head_wall: plane 5 cm behind the cushion back (x = -28.5), height and extent by eye (left photo)
+  wall.emission: the wall is lit by emission so that it has the brightness of the wall next to the computer everywhere
+  curtain: from x = 0 to the left, on the back wall (front photo), moved with the wall
+  radiator: x 33 to 76 under the curtain (front photo), moved with the wall
   camera_stand.arm_points_cm: arm drawn as 2 capsules from the base to the camera; real arm is a spring parallelogram
   side_camera.position_plan_cm: on the stand arm; the photos put the camera about 17 cm to the robot-right and 10 cm toward the back of the stand base (about (28, 20)); the human estimated y 28 to 35; (26, 28) takes the edge of that range. The optical axis aims at the workspace centre (-2, 18), 20 degrees off -x, while the table diagonal is 35 degrees
   side_camera.fovy_deg: placeholder, to be replaced by calibrated intrinsics

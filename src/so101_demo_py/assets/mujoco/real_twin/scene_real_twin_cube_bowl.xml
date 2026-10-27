@@ -12,6 +12,7 @@
   <statistic extent="0.9045333128" />
   <asset>
     <texture name="twin_sky" type="skybox" builtin="flat" rgb1="0.86 0.87 0.89" rgb2="0.86 0.87 0.89" width="32" height="32" />
+    <material name="tw_wall" rgba="0.031 0.031 0.0303 1" emission="13.8" specular="0" shininess="0" />
   </asset>
   <visual>
     <headlight active="1" ambient="0.34 0.34 0.34" diffuse="0.12 0.12 0.12" specular="0.1 0.1 0.1" />
@@ -33,21 +34,22 @@
     <light name="twin_key" pos="0.1 -0.2 2.3" dir="0 0 -1" directional="false" castshadow="true" diffuse="0.5 0.5 0.5" specular="0.1 0.1 0.1" cutoff="80" exponent="0.4" />
     <light name="twin_fill" pos="0 0 1.5" dir="0.4 0.3 -0.8" directional="true" castshadow="false" diffuse="0.14 0.14 0.14" specular="0.05 0.05 0.05" />
     <geom name="floor" type="box" class="tw_visual" pos="0.5 0 -0.05" size="4 4 0.05" rgba="0.4 0.23 0.14 1" />
-    <geom name="room_wall" type="box" class="tw_visual" pos="0 0.68 1.3" size="3 0.02 1.3" rgba="0.93 0.93 0.91 1" />
-    <geom name="room_curtain" type="box" class="tw_visual" pos="0.85 0.6475 1.3" size="0.85 0.0075 1.1" rgba="0.78 0.66 0.66 1" />
-    <geom name="room_radiator" type="box" class="tw_visual" pos="0.545 0.605 0.41" size="0.215 0.035 0.29" rgba="0.94 0.94 0.94 1" />
+    <geom name="room_wall" type="box" class="tw_visual" pos="0 1.08 1.3" size="3 0.02 1.3" material="tw_wall" />
+    <geom name="room_bed_head_wall" type="box" class="tw_visual" pos="-0.305 -0.3 1.3" size="0.02 1.4 1.3" material="tw_wall" />
+    <geom name="room_curtain" type="box" class="tw_visual" pos="0.85 1.0475 1.3" size="0.85 0.0075 1.1" rgba="0.78 0.66 0.66 1" />
+    <geom name="room_radiator" type="box" class="tw_visual" pos="0.545 1.005 0.41" size="0.215 0.035 0.29" rgba="0.94 0.94 0.94 1" />
     <geom name="bed" type="box" class="tw_visual" pos="0.8845 -0.8 0.225" size="1 0.9 0.225" rgba="0.78 0.52 0.52 1" />
     <geom name="headboard_cushion" type="box" class="tw_visual" pos="-0.1755 -0.8 0.71" size="0.06 0.9 0.26" rgba="0.93 0.88 0.74 1" />
-    <geom name="desk_top" type="box" class="tw_visual" pos="-0.34 0.38 0.765" size="0.56 0.26 0.015" rgba="0.78 0.55 0.3 1" />
-    <geom name="desk_leg_00" type="box" class="tw_visual" pos="-0.88 0.62 0.375" size="0.02 0.02 0.375" rgba="0.78 0.55 0.3 1" />
-    <geom name="desk_leg_01" type="box" class="tw_visual" pos="-0.88 0.14 0.375" size="0.02 0.02 0.375" rgba="0.78 0.55 0.3 1" />
-    <geom name="desk_leg_10" type="box" class="tw_visual" pos="0.2 0.62 0.375" size="0.02 0.02 0.375" rgba="0.78 0.55 0.3 1" />
-    <geom name="desk_leg_11" type="box" class="tw_visual" pos="0.2 0.14 0.375" size="0.02 0.02 0.375" rgba="0.78 0.55 0.3 1" />
-    <geom name="desk_drawer" type="box" class="tw_visual" pos="0.01 0.26 0.695" size="0.21 0.14 0.055" rgba="0.78 0.55 0.3 1" />
-    <geom name="monitor_panel" type="box" class="tw_visual" pos="-0.16 0.47 1.065" size="0.28 0.01 0.165" rgba="0.05 0.05 0.06 1" />
-    <geom name="monitor_neck" type="box" class="tw_visual" pos="-0.16 0.465 0.845" size="0.01 0.015 0.055" rgba="0.05 0.05 0.06 1" />
-    <geom name="monitor_foot" type="box" class="tw_visual" pos="-0.16 0.46 0.785" size="0.08 0.06 0.005" rgba="0.05 0.05 0.06 1" />
-    <geom name="desk_lamp" type="cylinder" class="tw_visual" pos="-0.3 0.35 0.88" size="0.08 0.1" rgba="1 0.84 0.82 1" />
+    <geom name="desk_top" type="box" class="tw_visual" pos="-0.03 0.57 0.735" size="0.25 0.45 0.015" rgba="0.78 0.55 0.3 1" />
+    <geom name="desk_leg_00" type="box" class="tw_visual" pos="-0.26 1 0.36" size="0.02 0.02 0.36" rgba="0.78 0.55 0.3 1" />
+    <geom name="desk_leg_01" type="box" class="tw_visual" pos="-0.26 0.14 0.36" size="0.02 0.02 0.36" rgba="0.78 0.55 0.3 1" />
+    <geom name="desk_leg_10" type="box" class="tw_visual" pos="0.2 1 0.36" size="0.02 0.02 0.36" rgba="0.78 0.55 0.3 1" />
+    <geom name="desk_leg_11" type="box" class="tw_visual" pos="0.2 0.14 0.36" size="0.02 0.02 0.36" rgba="0.78 0.55 0.3 1" />
+    <geom name="desk_drawer" type="box" class="tw_visual" pos="0.08 0.38 0.665" size="0.14 0.22 0.055" rgba="0.78 0.55 0.3 1" />
+    <geom name="monitor_panel" type="box" class="tw_visual" pos="-0.215 0.48 1.035" size="0.01 0.28 0.165" rgba="0.05 0.05 0.06 1" />
+    <geom name="monitor_neck" type="box" class="tw_visual" pos="-0.215 0.48 0.815" size="0.005 0.015 0.055" rgba="0.05 0.05 0.06 1" />
+    <geom name="monitor_foot" type="box" class="tw_visual" pos="-0.19 0.48 0.755" size="0.08 0.06 0.005" rgba="0.05 0.05 0.06 1" />
+    <geom name="desk_lamp" type="cylinder" class="tw_visual" pos="-0.1 0.22 0.85" size="0.08 0.1" rgba="1 0.84 0.82 1" />
     <geom name="table_collision" type="box" class="tw_collision" pos="0.2095 -0.1552 0.7375" size="0.325 0.225 0.0125" friction="0.8 0.01 0.001" />
     <geom name="table_top_visual" type="box" class="tw_visual" pos="0.2095 -0.1352 0.7375" size="0.325 0.205 0.0125" rgba="0.88 0.78 0.6 1" />
     <geom name="table_rim_visual" type="box" class="tw_visual" pos="0.2095 -0.3602 0.7375" size="0.325 0.02 0.0125" rgba="0.93 0.92 0.88 1" />

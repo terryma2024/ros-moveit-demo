@@ -2,7 +2,7 @@
 """Generate the real-twin MuJoCo scene files from `assets/mujoco/real_twin/twin_params.yaml`.
 
 Writes `so101_follower_twin.xml` (the follower robot file with its base at table level), `so101_leader_visual.xml`
-(a visual-only, static, black copy of the robot at the mirrored position) and `scene_real_twin_cube_bowl.xml`.
+(the visual-only, static, black official SO-101 leader at the mirrored position) and `scene_real_twin_cube_bowl.xml`.
 `--check` compares the files on disk with a fresh generation and exits 1 on a difference, writing nothing.
 
 The existing ACT scenes and robot files are only read, never changed.
@@ -47,10 +47,10 @@ def plan_to_world(x_cm: float, y_cm: float, z_cm: float = 0.0) -> np.ndarray:
 
 
 def rest_pose_rad(params: dict) -> list[float]:
-    """The rest pose in sim radians: LeRobot degrees through the identity map, clamped to the sim range."""
-    leader = params["leader"]
-    degrees = leader["rest_pose_deg"]
-    ranges = leader["sim_joint_ranges_rad"]
+    """The follower rest pose in sim radians: LeRobot degrees through the identity map, clamped to the sim range."""
+    follower = params["follower"]
+    degrees = follower["rest_pose_deg"]
+    ranges = follower["sim_joint_ranges_rad"]
     values = []
     for name in JOINT_ORDER:
         low, high = ranges[name]
@@ -111,59 +111,118 @@ def _quat_mul(a, b):
     )
 
 
-def _body_quat(element) -> tuple[float, float, float, float]:
-    text = element.get("quat")
-    return tuple(float(v) for v in text.split()) if text else (1.0, 0.0, 0.0, 0.0)
+def _rpy_quat(roll: float, pitch: float, yaw: float) -> tuple[float, float, float, float]:
+    """URDF rpy (fixed-axis x, y, z; R = Rz(yaw) Ry(pitch) Rx(roll)) as a quaternion (w, x, y, z)."""
+    qx = (math.cos(roll / 2), math.sin(roll / 2), 0.0, 0.0)
+    qy = (math.cos(pitch / 2), 0.0, math.sin(pitch / 2), 0.0)
+    qz = (math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2))
+    return _quat_mul(qz, _quat_mul(qy, qx))
+
+
+def _floats(text: str | None, default: str) -> list[float]:
+    return [float(v) for v in (text or default).split()]
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _leader_rest_rad(params: dict, limits: dict[str, tuple[float, float]]) -> dict[str, float]:
+    """Leader rest pose per URDF joint name: identity degrees to radians, clamped to the URDF limits; the trigger maps 0..100 onto its limit range."""
+    degrees = params["leader"]["rest_pose_deg"]
+    names = dict(zip(JOINT_ORDER, ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"), strict=True))
+    rest = {}
+    for key, joint in names.items():
+        low, high = limits[joint]
+        value = low + degrees[key] / 100.0 * (high - low) if key == "gripper" else math.radians(degrees[key])
+        rest[joint] = min(max(value, low), high)
+    return rest
 
 
 def build_leader(params: dict) -> str:
-    """A visual-only, static copy of the robot: joints are baked into the body quaternions at the rest pose."""
-    root = ET.fromstring(source_text(params))
-    base = next(b for b in root.find("worldbody").iter("body") if b.get("name") == "base")
-    rest = dict(zip(("1", "2", "3", "4", "5", "6"), rest_pose_rad(params)))
-    origin = base_origin(params, params["leader"]["pan_axis_plan_cm"])
-    material = {"3d_printed": "leader_print", "tpu_95a_adapter": "leader_print", "sts3215": "leader_motor"}
+    """A visual-only, static leader from the official URDF: every joint is baked into its child body at the rest pose.
+
+    The URDF is parsed as XML data only. Its sha256 and those of the meshes it uses are checked against twin_params.yaml.
+    """
+    leader = params["leader"]
+    urdf_path = TWIN_DIR / leader["urdf"]
+    if _file_sha256(urdf_path) != leader["urdf_sha256"]:
+        raise SystemExit(f"{urdf_path} sha256 differs from twin_params.yaml; review and update")
+    for stem, entry in leader["meshes"].items():
+        if _file_sha256(TWIN_DIR / entry["file"]) != entry["sha256"]:
+            raise SystemExit(f"mesh {stem}: {entry['file']} sha256 differs from twin_params.yaml")
+    root = ET.fromstring(urdf_path.read_text(encoding="utf-8"))
+    links = {link.get("name"): link for link in root.findall("link")}
+    children: dict[str, list] = {}
+    limits: dict[str, tuple[float, float]] = {}
+    for joint in root.findall("joint"):
+        children.setdefault(joint.find("parent").get("link"), []).append(joint)
+        if joint.get("type") == "revolute":
+            limit = joint.find("limit")
+            limits[joint.get("name")] = (float(limit.get("lower")), float(limit.get("upper")))
+    rest = _leader_rest_rad(params, limits)
+    material = {"3d_printed": "leader_print", "sts3215": "leader_motor"}
+
+    fb = leader["urdf_base_in_follower_base"]
+    origin = base_origin(params, leader["pan_axis_plan_cm"]) + np.array(fb["pos_m"])
+    half = math.radians(fb["yaw_deg"]) / 2.0
+    base_quat = (math.cos(half), 0.0, 0.0, math.sin(half))
+
+    mesh_names: list[str] = []
     lines: list[str] = []
 
-    def emit(body, depth: int, is_root: bool) -> None:
+    def body_name(link: str) -> str:
+        return "leader_" + (link[: -len("_link")] if link.endswith("_link") else link)
+
+    def emit(link_name: str, depth: int, pos: str, quat) -> None:
         pad = "  " * depth
-        quat = _body_quat(body)
-        joint = body.find("joint")
-        if joint is not None:
-            half = rest[joint.get("name")] / 2.0
-            quat = _quat_mul(quat, (math.cos(half), 0.0, 0.0, math.sin(half)))
-        name = f"leader_{body.get('name')}"
-        position = vec(origin) if is_root else body.get("pos")
-        attributes = f'name="{name}" pos="{position}"'
-        if body.get("quat") or joint is not None:
-            attributes += f' quat="{vec(quat)}"'
-        lines.append(f"{pad}<body {attributes}>")
-        for geom in body.findall("geom"):
-            if geom.get("class") != "robot_visual":
-                continue
-            parts = [f'name="leader_{geom.get("name")}"', 'type="mesh"', f'mesh="{geom.get("mesh")}"']
-            for key in ("pos", "quat"):
-                if geom.get(key):
-                    parts.append(f'{key}="{geom.get(key)}"')
-            parts.append(f'material="{material[geom.get("material")]}"')
-            parts.append('group="0" contype="0" conaffinity="0"')
-            lines.append(f"{pad}  <geom {' '.join(parts)} />")
-        for child in body.findall("body"):
-            emit(child, depth + 1, False)
+        name = body_name(link_name)
+        lines.append(f'{pad}<body name="{name}" pos="{pos}" quat="{vec(quat)}">')
+        for index, visual in enumerate(links[link_name].findall("visual")):
+            stem = Path(visual.find("geometry/mesh").get("filename")).stem
+            if stem not in leader["meshes"]:
+                raise SystemExit(f"URDF mesh {stem} is not listed in twin_params.yaml")
+            if stem not in mesh_names:
+                mesh_names.append(stem)
+            origin_element = visual.find("origin")
+            xyz = _floats(origin_element.get("xyz") if origin_element is not None else None, "0 0 0")
+            rpy = _floats(origin_element.get("rpy") if origin_element is not None else None, "0 0 0")
+            geom_name = f"{name}_{visual.get('name') or f'visual_{index:02d}'}"
+            lines.append(
+                f'{pad}  <geom name="{geom_name}" type="mesh" mesh="leader_mesh_{stem}" pos="{vec(xyz)}" quat="{vec(_rpy_quat(*rpy))}" '
+                f'material="{material[visual.find("material").get("name")]}" group="0" contype="0" conaffinity="0" />'
+            )
+        for joint in children.get(link_name, []):
+            if joint.get("type") != "revolute":
+                continue  # fixed frame links carry no geometry
+            axis = _floats(joint.find("axis").get("xyz"), "0 0 1")
+            if axis != [0.0, 0.0, 1.0]:
+                raise SystemExit(f"joint {joint.get('name')}: only z axes are supported")
+            origin_element = joint.find("origin")
+            xyz = _floats(origin_element.get("xyz"), "0 0 0")
+            q_origin = _rpy_quat(*_floats(origin_element.get("rpy"), "0 0 0"))
+            angle = rest[joint.get("name")] / 2.0
+            child_quat = _quat_mul(q_origin, (math.cos(angle), 0.0, 0.0, math.sin(angle)))
+            emit(joint.find("child").get("link"), depth + 1, vec(xyz), child_quat)
         lines.append(f"{pad}</body>")
 
-    emit(base, 2, True)
-    print_rgba = vec(params["leader"]["print_rgba"])
-    motor_rgba = vec(params["leader"]["motor_rgba"])
+    emit("base_link", 2, vec(origin), base_quat)
+    print_rgba = vec(leader["print_rgba"])
+    motor_rgba = vec(leader["motor_rgba"])
+    mesh_lines = [
+        f'    <mesh name="leader_mesh_{stem}" file="{leader["meshes"][stem]["file"]}" />' for stem in mesh_names
+    ]
     return "\n".join(
         [
             "<mujoco>",
             "  <!-- GENERATED by scripts/build_real_twin_scene.py from twin_params.yaml. Do not edit by hand.",
-            "       The leader arm: a visual-only copy of the robot at the mirrored table position, black, static in the folded rest",
-            "       pose. No joints, no mass, no collision (contype 0, conaffinity 0). Meshes are those of so101_follower_twin.xml. -->",
+            f"       The leader arm: the official SO-101 leader model (leader/so101_leader_new_calib.urdf, sha256 {leader['urdf_sha256']};",
+            "       see leader/SOURCE.md) at the mirrored table position, black, static in the folded rest pose. The gripper is the",
+            "       leader's fixed handle plus its trigger. No joints, no mass, no collision (contype 0, conaffinity 0). -->",
             "  <asset>",
             f'    <material name="leader_print" rgba="{print_rgba}" />',
             f'    <material name="leader_motor" rgba="{motor_rgba}" />',
+            *mesh_lines,
             "  </asset>",
             "  <worldbody>",
             *lines,
@@ -307,7 +366,9 @@ def build_scene(params: dict) -> str:
     )
     # room (visual only)
     s.add(f'<geom name="floor" type="box" class="tw_visual" pos="0.5 0 -0.05" size="4 4 0.05" rgba="{vec(params["floor_rgba"])}" />')
-    s.add(s.box("room_wall", params["wall"]["x"], params["wall"]["y"], params["wall"]["z"], "tw_visual", rgba=params["wall"]["rgba"]))
+    s.add(s.box("room_wall", params["wall"]["x"], params["wall"]["y"], params["wall"]["z"], "tw_visual", material="tw_wall"))
+    bhw = params["bed_head_wall"]
+    s.add(s.box("room_bed_head_wall", bhw["x"], bhw["y"], bhw["z"], "tw_visual", material="tw_wall"))
     s.add(s.box("room_curtain", params["curtain"]["x"], params["curtain"]["y"], params["curtain"]["z"], "tw_visual", rgba=params["curtain"]["rgba"]))
     s.add(s.box("room_radiator", params["radiator"]["x"], params["radiator"]["y"], params["radiator"]["z"], "tw_visual", rgba=params["radiator"]["rgba"]))
     s.add(s.box("bed", params["bed"]["x"], params["bed"]["y"], params["bed"]["z"], "tw_visual", rgba=params["bed"]["cover_rgba"]))
@@ -388,6 +449,7 @@ def build_scene(params: dict) -> str:
         f'  <statistic extent="{num(phys["statistic_extent"])}" />',
         "  <asset>",
         '    <texture name="twin_sky" type="skybox" builtin="flat" rgb1="0.86 0.87 0.89" rgb2="0.86 0.87 0.89" width="32" height="32" />',
+        f'    <material name="tw_wall" rgba="{vec(params["wall"]["rgba"])}" emission="{num(params["wall"]["emission"])}" specular="0" shininess="0" />',
         "  </asset>",
         "  <visual>",
         f'    <headlight active="1" ambient="{vec([ambient] * 3)}" diffuse="{vec([diffuse] * 3)}" specular="0.1 0.1 0.1" />',

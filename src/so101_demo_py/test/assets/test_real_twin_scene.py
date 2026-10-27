@@ -4,6 +4,7 @@ Every assertion reads files of the repository; no test assumes a file outside it
 (x / 100, -y / 100) m, the follower pan axis is world (0, 0) and the table top is at z = 0.75 m.
 """
 
+import copy
 import hashlib
 import importlib.util
 
@@ -242,32 +243,142 @@ def test_the_wrist_camera_mount_is_the_existing_one(model):
     assert tuple(model.cam_resolution[camera]) == (640, 480)
 
 
-def test_leader_is_visual_only_and_mirrored(model, params):
-    leader = [g for g in range(model.ngeom) if model.geom(g).name.startswith("leader_")]
+LEADER_DIR = TWIN_DIR / "leader"
+FOLLOWER_XML_SHA256 = "661f09048f08e66d0e8e9b77f15894cb28b2fc2a97e2ed7b1650e949cba75aec"
+
+
+def _leader_geoms(model):
+    return [g for g in range(model.ngeom) if model.geom(g).name.startswith("leader_")]
+
+
+def _lowest_z(model, data, body: int) -> float:
+    lowest = np.inf
+    for geom in range(model.ngeom):
+        if model.geom_bodyid[geom] == body and model.geom_type[geom] == mujoco.mjtGeom.mjGEOM_MESH:
+            mesh = model.geom_dataid[geom]
+            start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
+            vertices = model.mesh_vert[start : start + count]
+            world = vertices @ data.geom_xmat[geom].reshape(3, 3).T + data.geom_xpos[geom]
+            lowest = min(lowest, world[:, 2].min())
+    return float(lowest)
+
+
+def test_leader_is_visual_only_and_has_no_joints(model):
+    leader = _leader_geoms(model)
     assert leader
     for geom in leader:
         assert model.geom_contype[geom] == 0 and model.geom_conaffinity[geom] == 0
     bodies = [b for b in range(model.nbody) if model.body(b).name.startswith("leader_")]
     assert all(model.body_dofnum[b] == 0 and model.body_mass[b] == 0 for b in bodies)
+    # the six non-free joints are the follower's; the leader adds none
     assert len([n for n in range(model.njnt) if model.jnt_type[n] != mujoco.mjtJoint.mjJNT_FREE]) == 6
 
 
-def test_leader_equals_the_follower_at_the_rest_pose_shifted_to_x_41_9(model, params):
+def test_leader_has_the_official_handle_and_trigger_and_no_follower_jaw(model):
+    names = {model.geom(g).name for g in _leader_geoms(model)}
+    assert {
+        "leader_gripper_Handle_SO101_visual",
+        "leader_gripper_Wrist_Roll_SO101_visual",
+        "leader_trigger_Trigger_SO101_visual",
+    } <= names
+    assert not any("jaw" in n or "fingertip" in n for n in names)
+    for body in (
+        "leader_base",
+        "leader_shoulder",
+        "leader_upper_arm",
+        "leader_lower_arm",
+        "leader_wrist",
+        "leader_gripper",
+        "leader_trigger",
+    ):
+        model.body(body)
+
+
+def test_vendored_leader_files_match_their_recorded_hashes(params):
+    leader = params["leader"]
+    assert hashlib.sha256((TWIN_DIR / leader["urdf"]).read_bytes()).hexdigest() == leader["urdf_sha256"]
+    for stem, entry in leader["meshes"].items():
+        assert hashlib.sha256((TWIN_DIR / entry["file"]).read_bytes()).hexdigest() == entry["sha256"], stem
+    source = (LEADER_DIR / "SOURCE.md").read_text(encoding="utf-8")
+    assert "a758567c3978dfeefe282ede0500085a48fe8f78" in source and "Apache License 2.0" in source
+    assert hashlib.sha256((LEADER_DIR / "LICENSE").read_bytes()).hexdigest() in source
+    for name in ("so101_leader_new_calib.urdf", "Handle_SO101.stl", "Trigger_SO101.stl", "Wrist_Roll_SO101.stl"):
+        assert hashlib.sha256((LEADER_DIR / name).read_bytes()).hexdigest() in source
+
+
+def test_leader_base_sits_on_the_table_top_and_its_pan_axis_is_mirrored(model, data):
+    assert abs(_lowest_z(model, data, model.body("leader_base").id) - TABLE_TOP) < 1e-3
+    shoulder = data.xpos[model.body("leader_shoulder").id]
+    follower = data.xpos[model.body("shoulder").id]
+    assert np.allclose(shoulder[:2] - follower[:2], [0.419, 0.0], atol=1e-6)  # pan axis at plan x = 41.9 cm
+    assert np.allclose(shoulder[2], follower[2], atol=1e-6)  # same height above the table
+
+
+def test_leader_arm_equals_the_follower_when_given_the_follower_pose(model, builder, params):
+    """Leader built with the follower's rest pose: its shared arm geoms are the follower's, shifted by 0.419 m in x."""
+    probe = copy.deepcopy(params)
+    probe["leader"]["rest_pose_deg"] = dict(params["follower"]["rest_pose_deg"])
+    text = builder.build_leader(probe).replace('file="', f'file="{TWIN_DIR}/')
+    leader_model = mujoco.MjModel.from_xml_string(text)
+    leader_data = mujoco.MjData(leader_model)
+    mujoco.mj_forward(leader_model, leader_data)
     state = mujoco.MjData(model)
     mujoco.mj_resetDataKeyframe(model, state, model.key("rest_pose").id)
     mujoco.mj_forward(model, state)
     shift = np.array([0.419, 0.0, 0.0])
-    checked = 0
-    for geom in range(model.ngeom):
-        name = model.geom(geom).name
-        if name.endswith("_visual_00") or name.endswith("_pad_visual") or name.endswith("_visual_01"):
-            twin = model.geom(f"leader_{name}").id if name and f"leader_{name}" in _geom_names(model) else None
-            if twin is None:
-                continue
-            assert np.allclose(state.geom_xpos[twin] - state.geom_xpos[geom], shift, atol=1e-6), name
-            assert np.allclose(state.geom_xmat[twin], state.geom_xmat[geom], atol=1e-6), name
-            checked += 1
-    assert checked >= 8
+    pairs = {
+        "base_visual_01": "leader_base_visual_01",
+        "shoulder_visual_02": "leader_shoulder_visual_02",
+        "upper_arm_visual_01": "leader_upper_arm_visual_01",
+        "lower_arm_visual_00": "leader_lower_arm_visual_00",
+        "wrist_visual_01": "leader_wrist_visual_01",
+    }
+    for follower_name, leader_name in pairs.items():
+        a, b = model.geom(follower_name).id, leader_model.geom(leader_name).id
+        assert np.allclose(leader_data.geom_xpos[b] - state.geom_xpos[a], shift, atol=2e-4), follower_name
+        assert np.allclose(leader_data.geom_xmat[b], state.geom_xmat[a], atol=2e-4), follower_name
+
+
+def test_follower_xml_is_unchanged(builder, params):
+    text = builder.generate(params)["so101_follower_twin.xml"]
+    assert hashlib.sha256(text.encode("utf-8")).hexdigest() == FOLLOWER_XML_SHA256
+
+
+def _box_extent(model, data, name: str):
+    geom = model.geom(name).id
+    centre, half = data.geom_xpos[geom], model.geom_size[geom]
+    return centre - half, centre + half
+
+
+def test_desk_is_90_by_50_by_75_with_the_wide_side_along_plan_y(model, data):
+    low, high = _box_extent(model, data, "desk_top")
+    size = high - low
+    assert np.isclose(high[2], TABLE_TOP, atol=1e-6)  # top surface 75 cm above the floor, level with the table top
+    assert np.isclose(size[1], 0.90, atol=1e-6)  # the 90 cm side runs along y, parallel to the bed head
+    assert np.isclose(size[0], 0.50, atol=1e-6)  # the 50 cm side runs along x
+    # the desk stands behind the table (plan -y is world +y): its front edge is behind the table's back edge
+    table = model.geom("table_collision").id
+    table_back = data.geom_xpos[table][1] + model.geom_size[table][1]
+    assert low[1] >= table_back - 1e-9
+
+
+def test_monitor_is_parallel_to_the_desk_wide_side_and_faces_plus_x(model, data):
+    low, high = _box_extent(model, data, "monitor_panel")
+    size = high - low
+    assert size[1] > 5 * size[0]  # a thin panel whose plane is parallel to y: its normal is plan x
+    desk_low, desk_high = _box_extent(model, data, "desk_top")
+    assert desk_low[0] <= low[0] and high[0] <= desk_high[0] and desk_low[1] <= low[1] and high[1] <= desk_high[1]
+    assert low[2] > desk_high[2]  # above the desk top
+
+
+def test_the_back_wall_clears_the_desk_and_both_walls_are_lit_alike(model, data, params):
+    wall_low, wall_high = _box_extent(model, data, "room_wall")
+    desk_low, desk_high = _box_extent(model, data, "desk_top")
+    assert wall_low[1] > desk_high[1]  # world +y is behind the desk
+    material = model.mat("tw_wall")
+    for name in ("room_wall", "room_bed_head_wall"):
+        assert model.geom_matid[model.geom(name).id] == material.id
+    assert model.mat_emission[material.id] > 1.0  # lit by emission, so shadows do not change the wall brightness
 
 
 def _geom_names(model) -> set[str]:
