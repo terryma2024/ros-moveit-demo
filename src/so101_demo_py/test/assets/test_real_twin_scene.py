@@ -114,9 +114,9 @@ def test_plan_cells_map_to_world(model, data, params):
     green = data.xpos[model.body("green_cube").id]
     red = data.xpos[model.body("red_cube").id]
     bowl = data.xpos[model.body("paper_bowl").id]
-    assert np.allclose(green[:2], [-0.04, -0.20], atol=1e-9)  # cell B3 = plan (-4, 20) cm
-    assert np.allclose(red[:2], [0.04, -0.28], atol=1e-9)  # cell D1 = plan (4, 28) cm
-    assert np.allclose(bowl, [0.13, -0.22, TABLE_TOP], atol=1e-9)  # plan (13, 22) cm
+    assert np.allclose(green[:2], [-0.04, -0.19], atol=1e-9)  # cell B3 = plan (-4, 19) cm
+    assert np.allclose(red[:2], [0.04, -0.27], atol=1e-9)  # cell D1 = plan (4, 27) cm
+    assert np.allclose(bowl, [0.13, -0.21, TABLE_TOP], atol=1e-9)  # plan (13, 21) cm
     table = data.geom_xpos[model.geom("table_collision").id]
     half = model.geom_size[model.geom("table_collision").id]
     assert np.isclose(table[0] - half[0], -0.1155)  # right edge, plan x = -11.55

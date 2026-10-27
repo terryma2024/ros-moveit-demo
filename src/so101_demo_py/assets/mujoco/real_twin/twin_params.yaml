@@ -210,13 +210,13 @@ cubes:                                          # human: 2 cm
   friction: [0.9, 0.005, 0.0001]
   green: {cell: B3, rgba: [0.08, 0.50, 0.14, 1.0]}
   red: {cell: D1, rgba: [0.78, 0.08, 0.08, 1.0]}
-grid:                                           # plan: columns x, rows y (cm); the A4 sheet moved 4 cm forward on 2026-10-27 (near edge 19 cm from the table back edge), rows were 12..24 (layout/placement-list.json, old one kept as placement-list-v1-back15.json)
+grid:                                           # plan: columns x, rows y (cm); the A4 sheet moved 3 cm forward on 2026-10-27 (near edge 18 cm from the table back edge), rows were 12..24 (layout/placement-list.json, old one kept as placement-list-v1-back15.json)
   columns_x: [4.0, 0.0, -4.0, -8.0]
-  rows_y: [16.0, 20.0, 24.0, 28.0]
+  rows_y: [15.0, 19.0, 23.0, 27.0]
   row_names: [A, B, C, D]
 
 bowl:                                           # human: outer top 12, inner top 10.5, height 4; a truncated cone
-  center_plan_cm: [13.0, 22.0]
+  center_plan_cm: [13.0, 21.0]
   outer_top_diameter: 12.0
   inner_top_diameter: 10.5
   height: 4.0
