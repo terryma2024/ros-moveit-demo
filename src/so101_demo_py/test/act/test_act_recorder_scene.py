@@ -158,14 +158,14 @@ class Teacher:
             tamper(payload)
         return payload
 
-    def setup(self, shift_m=0.003, restamp=False, **kwargs):
+    def setup(self, shift_m=0.003, restamp=False, read_scene=None, **kwargs):
         """The SETUP calls. ``restamp`` builds every request and response first and restamps the source clocks right before the first call, so
         the 100 ms source join measures the calls and not the cost of building the scenes (which grows with the load of the host)."""
         from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
         from so101_demo.control.planning_scene.task_scene import make_task_scene
 
         apply_request = ApplyPlanningScene.Request(scene=make_task_scene(self.ctx.expected_world))
-        read_response = GetPlanningScene.Response(scene=self.ctx.world_scene(shift_m))
+        read_response = GetPlanningScene.Response(scene=self.ctx.world_scene(shift_m) if read_scene is None else read_scene)
         if restamp:
             self.ctx.stamp()
         applied = self.call(apply_request, ApplyPlanningScene.Response(success=True), phase="APPLY",
@@ -420,14 +420,9 @@ def test_a_large_setup_pose_delta_is_recorded_not_refused_and_equal_poses_record
 
 
 def test_initial_membership_geometry_and_frame_stay_strict(ctx):
-    from moveit_msgs.srv import GetPlanningScene
-
     def initial_job(scene):
-        ctx.stamp()
         teacher = Teacher(ctx)
-        applied, _ = teacher.setup()
-        read = teacher.call(full_read_request(), GetPlanningScene.Response(scene=scene), phase="READ_BACK",
-                            service="/get_planning_scene", state="SETUP")
+        applied, read = teacher.setup(restamp=True, read_scene=scene)      # the scenes are built before the 100 ms source join is restamped
         job, = jobs_of(SceneOperationTracker(), [applied, read])
         return job
 
