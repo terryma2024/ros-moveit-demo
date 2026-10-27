@@ -67,7 +67,7 @@
     <camera name="view_back" resolution="960 1280" fovy="66" pos="0.14 0.34 1.38" xyaxes="-1 0 0 0 -0.8320502943 0.5547001962" />
     <camera name="view_left" resolution="960 1280" fovy="66" pos="1 -0.08 1" xyaxes="-0.04993761694 0.9987523389 0 -0.2189779401 -0.01094889701 0.9756683778" />
     <camera name="view_front" resolution="960 1280" fovy="66" pos="0.2 -0.8 1.35" xyaxes="1 0 0 0 0.6423988132 0.766370514" />
-    <body name="paper_bowl" pos="0.13 -0.18 0.75">
+    <body name="paper_bowl" pos="0.13 -0.22 0.75">
       <geom name="bowl_wall_00" type="box" class="tw_solid" pos="0.045 0 0.02" xyaxes="0 1 0 -0.8715755371 0 0.4902612396" size="0.007899149855 0.003268408264 0.02294694969" rgba="0.9 0.8 0.62 1" friction="0.6 0.01 0.001" />
       <geom name="bowl_wall_01" type="box" class="tw_solid" pos="0.04346666218 0.01164685703 0.02" xyaxes="-0.2588190451 0.9659258263 0 -0.8418773209 -0.2255803483 0.4902612396" size="0.007899149855 0.003268408264 0.02294694969" rgba="0.9 0.8 0.62 1" friction="0.6 0.01 0.001" />
       <geom name="bowl_wall_02" type="box" class="tw_solid" pos="0.03897114317 0.0225 0.02" xyaxes="-0.5 0.8660254038 0 -0.7548065565 -0.4357877686 0.4902612396" size="0.007899149855 0.003268408264 0.02294694969" rgba="0.9 0.8 0.62 1" friction="0.6 0.01 0.001" />
@@ -94,12 +94,12 @@
       <geom name="bowl_wall_23" type="box" class="tw_solid" pos="0.04346666218 -0.01164685703 0.02" xyaxes="0.2588190451 0.9659258263 0 -0.8418773209 0.2255803483 0.4902612396" size="0.007899149855 0.003268408264 0.02294694969" rgba="0.9 0.8 0.62 1" friction="0.6 0.01 0.001" />
       <geom name="bowl_bottom" type="cylinder" class="tw_solid" pos="0 0 0.002" size="0.03425 0.002" rgba="0.9 0.8 0.62 1" friction="0.6 0.01 0.001" />
     </body>
-    <body name="green_cube" pos="-0.04 -0.16 0.76">
+    <body name="green_cube" pos="-0.04 -0.2 0.76">
       <freejoint name="green_cube_joint" />
       <inertial pos="0 0 0" mass="0.006" diaginertia="4e-07 4e-07 4e-07" />
       <geom name="green_cube_geom" type="box" class="tw_solid" size="0.01 0.01 0.01" friction="0.9 0.005 0.0001" rgba="0.08 0.5 0.14 1" />
     </body>
-    <body name="red_cube" pos="0.04 -0.24 0.76">
+    <body name="red_cube" pos="0.04 -0.28 0.76">
       <freejoint name="red_cube_joint" />
       <inertial pos="0 0 0" mass="0.006" diaginertia="4e-07 4e-07 4e-07" />
       <geom name="red_cube_geom" type="box" class="tw_solid" size="0.01 0.01 0.01" friction="0.9 0.005 0.0001" rgba="0.78 0.08 0.08 1" />
@@ -109,7 +109,7 @@
     <exclude name="exclude_base_shoulder" body1="base" body2="shoulder" />
   </contact>
   <keyframe>
-    <key name="task_start" qpos="0 0 0 0 0 0 -0.04 -0.16 0.76 1 0 0 0 0.04 -0.24 0.76 1 0 0 0" ctrl="0 0 0 0 0 0" />
-    <key name="rest_pose" qpos="0.0837758041 -1.74533 1.644100155 1.312487597 -0.08901179185 0.07504910541 -0.04 -0.16 0.76 1 0 0 0 0.04 -0.24 0.76 1 0 0 0" ctrl="0.0837758041 -1.74533 1.644100155 1.312487597 -0.08901179185 0.07504910541" />
+    <key name="task_start" qpos="0 0 0 0 0 0 -0.04 -0.2 0.76 1 0 0 0 0.04 -0.28 0.76 1 0 0 0" ctrl="0 0 0 0 0 0" />
+    <key name="rest_pose" qpos="0.0837758041 -1.74533 1.644100155 1.312487597 -0.08901179185 0.07504910541 -0.04 -0.2 0.76 1 0 0 0 0.04 -0.28 0.76 1 0 0 0" ctrl="0.0837758041 -1.74533 1.644100155 1.312487597 -0.08901179185 0.07504910541" />
   </keyframe>
 </mujoco>

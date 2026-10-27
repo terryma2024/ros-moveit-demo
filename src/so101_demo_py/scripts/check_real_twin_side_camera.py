@@ -65,8 +65,8 @@ def detect_corners(calib: Path) -> dict:
     return found
 
 
-def reprojection(calib: Path, detections: dict, model, data, dist):
-    layout = json.loads((calib / "aruco-sheet-layout.json").read_text())
+def reprojection(layout_path: Path, detections: dict, model, data, dist):
+    layout = json.loads(layout_path.read_text())
     markers = {k: np.array(v, dtype=float) for k, v in layout["markers"].items()}
     K, position, r_cv = camera_matrices(model, data)
     rows = []
@@ -104,6 +104,8 @@ def main(argv=None) -> int:
     parser.add_argument("out_dir", type=Path)
     parser.add_argument("--detect-only", type=Path, default=None, metavar="JSON", help="write the detected corners to JSON and stop (needs OpenCV with aruco, no MuJoCo)")
     parser.add_argument("--detections", type=Path, default=None, help="corners JSON written by --detect-only (default: detect here)")
+    parser.add_argument("--layout", type=Path, default=None, help="ArUco layout JSON (default: CALIB_ROOT/aruco-sheet-layout.json); use the one the frames were captured with")
+    parser.add_argument("--bowl", nargs=2, type=float, default=None, help="plan x y (cm) of the bowl centre, to match a snapshot taken at another sheet position")
     parser.add_argument("--snapshot", type=Path, default=None, help="real side snapshot (default: newest side_*.png in CALIB_ROOT/snap)")
     parser.add_argument("--cell-green", nargs=2, type=float, default=None, help="plan x y (cm) of the green cube")
     parser.add_argument("--cell-red", nargs=2, type=float, default=None, help="plan x y (cm) of the red cube")
@@ -121,7 +123,7 @@ def main(argv=None) -> int:
     mujoco.mj_resetDataKeyframe(model, data, model.key("task_start").id)
     mujoco.mj_forward(model, data)
     detections = json.loads(args.detections.read_text()) if args.detections else detect_corners(args.calib_root)
-    result = reprojection(args.calib_root, detections, model, data, D)
+    result = reprojection(args.layout or args.calib_root / "aruco-sheet-layout.json", detections, model, data, D)
     result["K_real"] = K_real.tolist()
     (args.out_dir / "reprojection.json").write_text(json.dumps(result, indent=1))
     print(f"reprojection: mean {result['mean_px']:.3f} px, max {result['max_px']:.3f} px")
@@ -132,6 +134,8 @@ def main(argv=None) -> int:
     cv2.imwrite(str(args.out_dir / "real-side-undistorted.png"), cv2.cvtColor(undistorted, cv2.COLOR_RGB2BGR))
     for key in ("task_start", "rest_pose"):
         mujoco.mj_resetDataKeyframe(model, data, model.key(key).id)
+        if args.bowl:
+            model.body_pos[model.body("paper_bowl").id][:2] = [args.bowl[0] / 100.0, -args.bowl[1] / 100.0]
         if args.cell_green:
             place_free_body(model, data, "green_cube_joint", args.cell_green, TABLE_TOP + args.green_z_cm / 100.0)
         if args.cell_red:
