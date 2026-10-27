@@ -153,19 +153,21 @@ camera_stand:                                   # human: base diameter 16.5 cm, 
     - [28.0, 28.5, 124.0]
   rgba: [0.06, 0.06, 0.07, 1.0]
 
-side_camera:                                    # measured (calibrated 2026-10-27)
-  status: measured (calibrated 2026-10-27)
+side_camera:                                    # measured (calibrated 2026-10-27, r3)
+  status: measured (calibrated 2026-10-27, r3)
+  note: "r3: recalibrated after the camera was realigned to the collection view of episodes 41-61; supersedes the morning calibration"
   source:
-    extrinsics_file: /data/work/so101-evidence/real-robot/calib-20261027/extrinsics-side.json
-    extrinsics_sha256: 716276ec8d9fcb3b184778f2316232253a19891438389535448c09348305431a
-    intrinsics_file: /data/work/so101-evidence/real-robot/calib-20261027/intrinsics-side.json
+    extrinsics_file: /data/work/so101-evidence/real-robot/calib-20261027-r3/extrinsics-side.json
+    extrinsics_sha256: 4cab8dc53adcd226a42e80dddc2afaa746a93bb851c8be6037d7f4b0e59a125b
+    intrinsics_file: /data/work/so101-evidence/real-robot/calib-20261027-r3/intrinsics-side.json   # byte-identical to calib-20261027/intrinsics-side.json
     intrinsics_sha256: dc86f83984bd847b1a3f35ea586d2fb87b4b2f239a52f6bd1131771a2a4a5dbf
-    method: solvePnP of an ArUco sheet on the placement mat, 5 frames; extrinsics reprojection about 1 px
+    method: solvePnP of an ArUco sheet on the placement mat (sheet back gap 18 cm), 5 frames; extrinsics reprojection 1.07 to 1.15 px
+    date: 2026-10-27
   # pose in the plan frame (cm; z above the table top): position is the mean of the 5 frames, forward is the file value,
   # image_up is the mean of the per-frame values made orthogonal to forward
-  position_plan_cm: [31.08293320884991, 27.850871942429883, 32.48395000106226]
-  forward_plan: [-0.7080131780868003, -0.1426436133275368, -0.6916430721349655]
-  image_up_plan: [-0.6683278652856505, -0.18107606643626062, 0.7214910412795826]
+  position_plan_cm: [31.044025504691138, 27.78091824767886, 32.70259836621467]
+  forward_plan: [-0.7131615439782686, -0.0913087302293337, -0.6950275735353518]
+  image_up_plan: [-0.6747289653187337, -0.17947492342270321, 0.7159117090970967]
   intrinsics:
     model: standard
     rms_px: 0.5786032884179276

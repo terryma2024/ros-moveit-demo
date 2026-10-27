@@ -238,7 +238,7 @@ def _opencv_k(model, camera: int):
 
 def test_side_camera_pose_is_the_calibrated_one(model, data, params):
     cam = params["side_camera"]
-    assert cam["status"].startswith("measured (calibrated 2026-10-27)")
+    assert cam["status"].startswith("measured (calibrated 2026-10-27, r3)")
     assert len(cam["source"]["extrinsics_sha256"]) == 64 and len(cam["source"]["intrinsics_sha256"]) == 64
     camera = model.camera("side_camera").id
     x, y, z = cam["position_plan_cm"]
@@ -251,7 +251,7 @@ def test_side_camera_pose_is_the_calibrated_one(model, data, params):
     assert np.allclose(up, [ux, -uy, uz], atol=1e-6)  # roll kept
     assert abs(np.dot(forward, up)) < 1e-6
     assert np.isclose(np.linalg.det(data.cam_xmat[camera].reshape(3, 3)), 1.0)
-    assert forward[2] < -0.5  # pitched down (calibrated 43.8 degrees)
+    assert forward[2] < -0.5  # pitched down (r3 calibration 44.0 degrees)
 
 
 def test_side_camera_intrinsics_are_the_calibrated_ones_and_distortion_is_recorded(model, params):

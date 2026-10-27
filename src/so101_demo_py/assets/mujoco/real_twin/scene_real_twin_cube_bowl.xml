@@ -60,7 +60,7 @@
     <geom name="stand_base" type="cylinder" class="tw_visual" pos="0.452 -0.2977 0.765" size="0.0825 0.015" rgba="0.06 0.06 0.07 1" />
     <geom name="stand_arm_0" type="capsule" class="tw_visual" fromto="0.452 -0.2977 0.78 0.4 -0.29 1.18" size="0.009" rgba="0.06 0.06 0.07 1" />
     <geom name="stand_arm_1" type="capsule" class="tw_visual" fromto="0.4 -0.29 1.18 0.28 -0.285 1.24" size="0.009" rgba="0.06 0.06 0.07 1" />
-    <body name="side_camera_mount" pos="0.3108293321 -0.2785087194 1.0748395" xyaxes="0.228156096 0.973069503 -0.03287153968 -0.6683278653 0.1810760664 0.7214910413">
+    <body name="side_camera_mount" pos="0.310440255 -0.2778091825 1.077025984" xyaxes="0.1901090097 0.9795159354 -0.06638596842 -0.6747289653 0.1794749234 0.7159117091">
       <geom name="side_camera_body" type="box" class="tw_visual" pos="0 0 0.0215" size="0.035 0.017 0.0175" rgba="0.06 0.06 0.07 1" />
       <camera name="side_camera" resolution="640 480" sensorsize="0.0064 0.0048" focalpixel="412.3338079 411.9406605" principalpixel="2.584201114 -5.612995731" />
     </body>
