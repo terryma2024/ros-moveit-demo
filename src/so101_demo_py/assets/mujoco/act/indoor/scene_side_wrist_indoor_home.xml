@@ -1,0 +1,134 @@
+<mujoco model="so101_task_scene">
+  <!-- Indoor layout C, warm home with a window: a CANDIDATE and appearance-library member, not the nominal scene (no rig loads it). The robot, table and cup collision geometry, cameras, timestep and keyframes are those of
+       scene_side_wrist.xml. Everything added is visual only (contype=0 conaffinity=0, static, no mass, no joint), so the v2 physics
+       fingerprint (act/physics_fingerprint.py) equals that of scene_side_wrist.xml. Design: docs/superpowers/specs/2026-10-24-so101-indoor-scene-design.md. -->
+  <compiler meshdir=".." />
+  <include file="../so101_side_wrist.xml" />
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" noslip_iterations="10" />
+  <!-- The camera near plane is 0.01 of the model extent. The extent was 0.9045 while the scene carried the tall camera body of the other
+       rig and would shrink to 0.8301 without it, moving the wrist camera's near plane by 0.7 mm so that it clips the jaw a little
+       differently; the extent of the scene the camera poses were confirmed in is kept, so the wrist and side images are those confirmed. -->
+  <statistic extent="0.9045333128287155" />
+  <asset>
+    <texture name="t_wall" type="2d" file="../../textures/indoor/wall_beige.png" />
+    <material name="m_wall" rgba="1 1 1 1" texture="t_wall" texuniform="true" texrepeat="0.4 0.4" />
+    <texture name="t_floor" type="2d" file="../../textures/indoor/floor_parquet.png" />
+    <material name="m_floor" rgba="1 1 1 1" texture="t_floor" texuniform="true" texrepeat="0.6 0.6" specular="0.2" shininess="0.3" />
+    <texture name="t_rug" type="2d" file="../../textures/indoor/floor_carpet.png" />
+    <material name="m_rug" rgba="1 1 1 1" texture="t_rug" texuniform="true" texrepeat="1 1" />
+    <texture name="t_ceiling" type="2d" file="../../textures/indoor/ceiling_white.png" />
+    <material name="m_ceiling" rgba="1 1 1 1" texture="t_ceiling" texuniform="true" texrepeat="0.5 0.5" />
+    <texture name="t_table" type="2d" file="../../textures/indoor/table_laminate.png" />
+    <material name="m_table" rgba="1 1 1 1" texture="t_table" texuniform="true" texrepeat="2 2" specular="0.2" shininess="0.4" />
+    <material name="m_lamp" rgba="1 0.92 0.75 1" emission="1.0" />
+    <texture name="t_outside" type="2d" file="../../textures/indoor/outside_warm.png" />
+    <material name="m_outside" rgba="1 1 1 1" texture="t_outside" emission="0.85" />
+    <texture name="t_poster" type="2d" file="../../textures/indoor/poster.png" />
+    <material name="m_poster" rgba="1 1 1 1" texture="t_poster" />
+    <texture name="t_cab" type="2d" file="../../textures/indoor/cabinet_wood.png" />
+    <material name="m_cab" rgba="1 1 1 1" texture="t_cab" texuniform="true" texrepeat="1 1" />
+    <material name="cup_orange" rgba="1.0 0.55 0.12 1" />
+    <material name="target_landing_red" rgba="1 0 0 1" />
+    <mesh name="target_landing_tolerance_ring" file="../assets/target_landing_tolerance_ring.obj" />
+  </asset>
+  <default>
+    <default class="cup_visual">
+      <geom group="0" contype="0" conaffinity="0" material="cup_orange" />
+    </default>
+    <default class="cup_collision">
+      <geom group="2" contype="1" conaffinity="1" friction="1.2 0.01 0.001" rgba="0 0 0 0" />
+    </default>
+  </default>
+  <visual>
+    <global azimuth="135" elevation="-20" />
+  </visual>
+  <visual>
+    <headlight active="1" ambient="0.139 0.125 0.106" diffuse="0.112 0.102 0.086" specular="0.1 0.1 0.1" />
+    <quality shadowsize="4096" />
+  </visual>
+  <worldbody>
+    <light name="ind_main" pos="0 -0.2 1.95" dir="0 0 -1" directional="false" castshadow="true" diffuse="0.167 0.140 0.103" specular="0.1 0.1 0.1" cutoff="70" exponent="0.5" />
+    <light name="ind_fill0" pos="-0.8 -0.8 1.95" dir="0 0 -1" directional="false" castshadow="false" diffuse="0.113 0.092 0.065" specular="0.1 0.1 0.1" cutoff="80" exponent="1" />
+    <light name="ind_fill1" pos="0.8 -0.8 1.95" dir="0 0 -1" directional="false" castshadow="false" diffuse="0.113 0.092 0.065" specular="0.1 0.1 0.1" cutoff="80" exponent="1" />
+    <light name="ind_fill2" pos="0 0.8 1.95" dir="0 0 -1" directional="false" castshadow="false" diffuse="0.113 0.092 0.065" specular="0.1 0.1 0.1" cutoff="80" exponent="1" />
+    <light name="ind_dirfill0" pos="0 -0.2 1.5" dir="-0.5 0.5 -0.45" directional="true" castshadow="false" diffuse="0.129 0.117 0.098" specular="0.05 0.05 0.05" />
+    <light name="ind_dirfill1" pos="0 -0.2 1.5" dir="0.5 0.45 -0.5" directional="true" castshadow="false" diffuse="0.129 0.117 0.098" specular="0.05 0.05 0.05" />
+    <geom name="ind_wall_xneg" type="box" pos="-2.05 -0.05 0.7" size="0.05 2.15 1.3" contype="0" conaffinity="0" group="0" material="m_wall" />
+    <geom name="ind_wall_xpos" type="box" pos="2.05 -0.05 0.7" size="0.05 2.15 1.3" contype="0" conaffinity="0" group="0" material="m_wall" />
+    <geom name="ind_wall_yneg" type="box" pos="0 -2.15 0.7" size="2 0.05 1.3" contype="0" conaffinity="0" group="0" material="m_wall" />
+    <geom name="ind_wall_ypos" type="box" pos="0 2.05 0.7" size="2 0.05 1.3" contype="0" conaffinity="0" group="0" material="m_wall" />
+    <geom name="ind_floor" type="box" pos="0 -0.05 -0.65" size="2.1 2.15 0.05" contype="0" conaffinity="0" group="0" material="m_floor" />
+    <geom name="ind_ceiling" type="box" pos="0 -0.05 2.05" size="2.1 2.15 0.05" contype="0" conaffinity="0" group="0" material="m_ceiling" />
+    <geom name="ind_desk_top" type="box" pos="0 -0.2 0.062" size="0.75 0.45 0.016" contype="0" conaffinity="0" group="0" material="m_table" />
+    <geom name="ind_desk_leg_-1_-1" type="box" pos="-0.72 -0.62 -0.277" size="0.02 0.02 0.323" contype="0" conaffinity="0" group="0" rgba="0.75 0.75 0.78 1" />
+    <geom name="ind_desk_leg_-1_1" type="box" pos="-0.72 0.22 -0.277" size="0.02 0.02 0.323" contype="0" conaffinity="0" group="0" rgba="0.75 0.75 0.78 1" />
+    <geom name="ind_desk_leg_1_-1" type="box" pos="0.72 -0.62 -0.277" size="0.02 0.02 0.323" contype="0" conaffinity="0" group="0" rgba="0.75 0.75 0.78 1" />
+    <geom name="ind_desk_leg_1_1" type="box" pos="0.72 0.22 -0.277" size="0.02 0.02 0.323" contype="0" conaffinity="0" group="0" rgba="0.75 0.75 0.78 1" />
+    <geom name="ind_ceil_light_0" type="box" pos="-0.6 -0.8 1.99" size="0.18 0.18 0.01" contype="0" conaffinity="0" group="0" material="m_lamp" />
+    <geom name="ind_ceil_light_1" type="box" pos="0.6 -0.8 1.99" size="0.18 0.18 0.01" contype="0" conaffinity="0" group="0" material="m_lamp" />
+    <geom name="ind_ceil_light_2" type="box" pos="0 0.5 1.99" size="0.18 0.18 0.01" contype="0" conaffinity="0" group="0" material="m_lamp" />
+    <geom name="ind_window_frame" type="box" pos="1.98 -0.2 0.45" size="0.02 0.75 0.75" contype="0" conaffinity="0" group="0" rgba="0.95 0.93 0.88 1" />
+    <geom name="ind_window_outside" type="box" pos="1.955 -0.2 0.45" size="0.005 0.68 0.68" contype="0" conaffinity="0" group="0" material="m_outside" />
+    <geom name="ind_window_mullion_v" type="box" pos="1.95 -0.2 0.45" size="0.006 0.02 0.68" contype="0" conaffinity="0" group="0" rgba="0.95 0.93 0.88 1" />
+    <geom name="ind_window_mullion_h" type="box" pos="1.95 -0.2 0.45" size="0.006 0.68 0.02" contype="0" conaffinity="0" group="0" rgba="0.95 0.93 0.88 1" />
+    <geom name="ind_curtain_l" type="box" pos="1.94 -1.1 0.5" size="0.03 0.15 0.85" contype="0" conaffinity="0" group="0" rgba="0.75 0.45 0.35 1" />
+    <geom name="ind_curtain_r" type="box" pos="1.94 0.7 0.5" size="0.03 0.15 0.85" contype="0" conaffinity="0" group="0" rgba="0.75 0.45 0.35 1" />
+    <geom name="ind_rug" type="box" pos="0 -0.2 -0.594" size="1.2 0.9 0.006" contype="0" conaffinity="0" group="0" material="m_rug" />
+    <geom name="ind_sofa_seat" type="box" pos="-1.5 0.2 -0.38" size="0.45 0.9 0.22" contype="0" conaffinity="0" group="0" rgba="0.55 0.40 0.32 1" />
+    <geom name="ind_sofa_back" type="box" pos="-1.88 0.2 -0.05" size="0.12 0.9 0.3" contype="0" conaffinity="0" group="0" rgba="0.50 0.36 0.29 1" />
+    <body name="ind_plant" pos="1.4 -1.7 -0.6"><geom name="ind_plant_pot" type="cylinder" pos="0 0 0.15" size="0.17 0.15" contype="0" conaffinity="0" group="0" rgba="0.55 0.35 0.25 1" /><geom name="ind_plant_stem" type="cylinder" pos="0 0 0.55" size="0.015 0.3" contype="0" conaffinity="0" group="0" rgba="0.35 0.25 0.15 1" /><geom name="ind_plant_leaf_0" type="ellipsoid" pos="0 0 0.95" size="0.22 0.22 0.176" contype="0" conaffinity="0" group="0" rgba="0.22 0.5 0.2 1" /><geom name="ind_plant_leaf_1" type="ellipsoid" pos="0.14 0.05 0.75" size="0.16 0.16 0.128" contype="0" conaffinity="0" group="0" rgba="0.22 0.5 0.2 1" /><geom name="ind_plant_leaf_2" type="ellipsoid" pos="-0.13 -0.06 0.8" size="0.17 0.17 0.136" contype="0" conaffinity="0" group="0" rgba="0.22 0.5 0.2 1" /><geom name="ind_plant_leaf_3" type="ellipsoid" pos="0.02 0.15 0.65" size="0.14 0.14 0.112" contype="0" conaffinity="0" group="0" rgba="0.22 0.5 0.2 1" /><geom name="ind_plant_leaf_4" type="ellipsoid" pos="-0.05 -0.15 0.7" size="0.15 0.15 0.12" contype="0" conaffinity="0" group="0" rgba="0.22 0.5 0.2 1" /></body>
+    <geom name="ind_poster" type="box" pos="-0.5 1.99 0.5" size="0.4 0.005 0.55" contype="0" conaffinity="0" group="0" material="m_poster" />
+    <geom name="ind_sideboard" type="box" pos="-0.6 -1.88 -0.25" size="0.8 0.22 0.35" contype="0" conaffinity="0" group="0" material="m_cab" />
+    <light name="key_light" pos="0 -0.5 1.2" dir="0 0.4 -1" castshadow="false" diffuse="0.122 0.122 0.122" />
+    <camera name="task_camera" resolution="640 480" pos="0.65 -0.65 0.55" xyaxes="0.7 0.7 0 -0.35 0.35 0.87" />
+    <camera name="side_camera" resolution="640 480" fovy="62" pos="-0.50 -0.32 0.42" quat="0.5969 0.472 -0.4024 -0.509" />
+    <body name="base_pedestal" pos="0 0 0.17">
+      <geom name="base_pedestal_visual" type="box" size="0.09 0.09 0.05" group="0" contype="0" conaffinity="0" rgba="0.30 0.30 0.32 1" />
+      <geom name="base_pedestal_collision" type="box" size="0.09 0.09 0.05" group="2" contype="1" conaffinity="1" rgba="0 0 0 0" />
+    </body>
+    <body name="table" pos="0 -0.20 0.10">
+      <geom name="table_visual" type="box" size="0.25 0.30 0.02" group="0" contype="0" conaffinity="0" material="m_table" />
+      <geom name="table_collision" type="box" size="0.25 0.30 0.02" group="2" contype="1" conaffinity="1" friction="0.8 0.01 0.001" rgba="0 0 0 0" />
+      <geom name="target_landing_tolerance_ring" type="mesh" mesh="target_landing_tolerance_ring" material="target_landing_red" pos="-0.08 -0.05 0.0201" group="0" contype="0" conaffinity="0" />
+    </body>
+    <body name="plastic_cup" pos="0.02 -0.28 0.165">
+      <joint name="cup_free_joint" type="free" damping="0.01" frictionloss="0" armature="0" />
+      <inertial pos="0 0 0" mass="0.020" diaginertia="0.0000295 0.0000295 0.0000320" />
+      <geom name="wall_near_visual" class="cup_visual" type="box" pos="0 0.039 0.001" euler="0 0 0" size="0.010352762 0.001 0.044" />
+      <geom name="wall_near_collision" class="cup_collision" type="box" pos="0 0.039 0.001" euler="0 0 0" size="0.010352762 0.001 0.044" />
+      <geom name="wall_01_visual" class="cup_visual" type="box" pos="0.0195 0.033775 0.001" euler="0 0 -0.523598776" size="0.010352762 0.001 0.044" />
+      <geom name="wall_01_collision" class="cup_collision" type="box" pos="0.0195 0.033775 0.001" euler="0 0 -0.523598776" size="0.010352762 0.001 0.044" />
+      <geom name="wall_02_visual" class="cup_visual" type="box" pos="0.033775 0.0195 0.001" euler="0 0 -1.047197551" size="0.010352762 0.001 0.044" />
+      <geom name="wall_02_collision" class="cup_collision" type="box" pos="0.033775 0.0195 0.001" euler="0 0 -1.047197551" size="0.010352762 0.001 0.044" />
+      <geom name="wall_03_visual" class="cup_visual" type="box" pos="0.039 0 0.001" euler="0 0 -1.570796327" size="0.010352762 0.001 0.044" />
+      <geom name="wall_03_collision" class="cup_collision" type="box" pos="0.039 0 0.001" euler="0 0 -1.570796327" size="0.010352762 0.001 0.044" />
+      <geom name="wall_04_visual" class="cup_visual" type="box" pos="0.033775 -0.0195 0.001" euler="0 0 -2.094395102" size="0.010352762 0.001 0.044" />
+      <geom name="wall_04_collision" class="cup_collision" type="box" pos="0.033775 -0.0195 0.001" euler="0 0 -2.094395102" size="0.010352762 0.001 0.044" />
+      <geom name="wall_05_visual" class="cup_visual" type="box" pos="0.0195 -0.033775 0.001" euler="0 0 -2.617993878" size="0.010352762 0.001 0.044" />
+      <geom name="wall_05_collision" class="cup_collision" type="box" pos="0.0195 -0.033775 0.001" euler="0 0 -2.617993878" size="0.010352762 0.001 0.044" />
+      <geom name="wall_opposite_visual" class="cup_visual" type="box" pos="0 -0.039 0.001" euler="0 0 3.141592654" size="0.010352762 0.001 0.044" />
+      <geom name="wall_opposite_collision" class="cup_collision" type="box" pos="0 -0.039 0.001" euler="0 0 3.141592654" size="0.010352762 0.001 0.044" />
+      <geom name="wall_07_visual" class="cup_visual" type="box" pos="-0.0195 -0.033775 0.001" euler="0 0 2.617993878" size="0.010352762 0.001 0.044" />
+      <geom name="wall_07_collision" class="cup_collision" type="box" pos="-0.0195 -0.033775 0.001" euler="0 0 2.617993878" size="0.010352762 0.001 0.044" />
+      <geom name="wall_08_visual" class="cup_visual" type="box" pos="-0.033775 -0.0195 0.001" euler="0 0 2.094395102" size="0.010352762 0.001 0.044" />
+      <geom name="wall_08_collision" class="cup_collision" type="box" pos="-0.033775 -0.0195 0.001" euler="0 0 2.094395102" size="0.010352762 0.001 0.044" />
+      <geom name="wall_09_visual" class="cup_visual" type="box" pos="-0.039 0 0.001" euler="0 0 1.570796327" size="0.010352762 0.001 0.044" />
+      <geom name="wall_09_collision" class="cup_collision" type="box" pos="-0.039 0 0.001" euler="0 0 1.570796327" size="0.010352762 0.001 0.044" />
+      <geom name="wall_10_visual" class="cup_visual" type="box" pos="-0.033775 0.0195 0.001" euler="0 0 1.047197551" size="0.010352762 0.001 0.044" />
+      <geom name="wall_10_collision" class="cup_collision" type="box" pos="-0.033775 0.0195 0.001" euler="0 0 1.047197551" size="0.010352762 0.001 0.044" />
+      <geom name="wall_11_visual" class="cup_visual" type="box" pos="-0.0195 0.033775 0.001" euler="0 0 0.523598776" size="0.010352762 0.001 0.044" />
+      <geom name="wall_11_collision" class="cup_collision" type="box" pos="-0.0195 0.033775 0.001" euler="0 0 0.523598776" size="0.010352762 0.001 0.044" />
+      <geom name="bottom_visual" class="cup_visual" type="cylinder" pos="0 0 -0.044" size="0.040 0.001" />
+      <geom name="bottom_collision" class="cup_collision" type="cylinder" pos="0 0 -0.044" size="0.040 0.001" />
+    </body>
+  </worldbody>
+  <contact>
+    <exclude name="exclude_base_shoulder" body1="base" body2="shoulder" />
+  </contact>
+  <keyframe>
+    <key name="task_start" qpos="0.0 0.0 0.0 0.0 0.0 0.0 0.02 -0.28 0.165 1.0 0.0 0.0 0.0" ctrl="0.0 0.0 0.0 0.0 0.0 0.0" />
+    <key name="cup_test_forward_5cm" qpos="0.0 0.0 0.0 0.0 0.0 0.0 0.02 -0.33 0.165 1.0 0.0 0.0 0.0" ctrl="0.0 0.0 0.0 0.0 0.0 0.0" />
+    <key name="cup_test_left_5cm" qpos="0.0 0.0 0.0 0.0 0.0 0.0 -0.03 -0.28 0.165 1.0 0.0 0.0 0.0" ctrl="0.0 0.0 0.0 0.0 0.0 0.0" />
+    <key name="cup_test_right_5cm" qpos="0.0 0.0 0.0 0.0 0.0 0.0 0.07 -0.28 0.165 1.0 0.0 0.0 0.0" ctrl="0.0 0.0 0.0 0.0 0.0 0.0" />
+  </keyframe>
+</mujoco>

@@ -125,42 +125,13 @@ def test_processor_slots_need_the_admitted_context_and_an_active_campaign(tmp_pa
         store.close()
 
 
-# ---- native single worker: one processor beside the (already stopped) native shard --------------------------------------------
-
-
-def native_spec(spec):
-    return replace(spec, payload=dict(spec.payload, instance_launcher='native'))
-
-
-def test_a_native_campaign_admits_exactly_one_processor_slot_and_nothing_else_changes(tmp_path):
-    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
-    try:
-        context = workload.start(native_spec(spec), allow_existing=False)
-        processor = processor_slot(slot)
-        assert workload.admit_processor_slots(context, (processor,)) == (processor,)
-        assert workload.slot_registry.slots() == (processor, slot)
-        with pytest.raises(ValueError, match='PROCESSOR_SLOT_INVALID|NATIVE_INSTANCE_SINGLE_WORKER_ONLY|DUPLICATE_WORKER_SLOT|PROCESSOR_SLOT_NATIVE_SINGLE_ONLY'):
-            workload.admit_processor_slots(context, (processor_slot(slot, 1),))
-        assert workload.slot_registry.native_campaign_ids() == {slot.campaign_id}
-    finally:
-        store.close()
-
-
-def test_two_processor_slots_are_refused_for_a_native_campaign_before_any_reservation(tmp_path):
-    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
-    try:
-        context = workload.start(native_spec(spec), allow_existing=False)
-        with pytest.raises(ValueError, match='PROCESSOR_SLOT_NATIVE_SINGLE_ONLY'):
-            workload.admit_processor_slots(context, (processor_slot(slot, 0), processor_slot(slot, 1)))
-        assert workload.slot_registry.slots() == (slot,)
-    finally:
-        store.close()
+# ---- a native processor record left by a campaign started before the retirement of native collection ----------------------------
 
 
 def test_finish_does_not_settle_a_native_processor_whose_stop_is_unproven(tmp_path):
     paths, slot, spec, store, workload, inspect = fixture(tmp_path)
     try:
-        context = workload.start(native_spec(spec), allow_existing=False)
+        context = workload.start(spec, allow_existing=False)
         workload.admit_processor_slots(context, (processor_slot(slot),))
         terminated_services(paths, inspect)
         root = paths['run']/'processing'/'p00'/'g1'

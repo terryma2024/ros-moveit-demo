@@ -112,7 +112,7 @@ def cross_domain_report(
             "note": "one of the two manifests carries no scene_group_id, so only the world-state seeds "
             "could be compared",
         }
-    from so101_demo.act.head_search_training import validate_scene_group_partition
+    from so101_demo.act.head_search.training import validate_scene_group_partition
 
     merged = validate_scene_group_partition(head=head_groups, task=task_groups)
     return {

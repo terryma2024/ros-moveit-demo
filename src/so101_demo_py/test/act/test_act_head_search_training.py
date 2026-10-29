@@ -10,7 +10,7 @@ so no document here carries a Grounded-SAM field.
 from __future__ import annotations
 
 import pytest
-from so101_demo.act.head_search_training import (
+from so101_demo.act.head_search.training import (
     CANDIDATE_IDENTITY_KEYS,
     CandidateIdentity,
     HeadSearchSplitSeal,

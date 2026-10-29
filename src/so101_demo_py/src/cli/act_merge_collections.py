@@ -2,12 +2,14 @@
 
     act_merge_collections --out-dir NEW --formal-list LIST [--stamp YYYYmmddTHHMMSSZ] [--readback-workers N] \\
         --index A/collection-index.json --qualification-report A-report.json --host ai-station [--run-root A] \\
-        --index B/collection-index.json --qualification-report B-report.json --host antzb
+        --index B/collection-index.json --qualification-report B-report.json --host antzb \\
+        [--identity-equivalence PROOF --repo REPO --mount-inputs A-inputs-root (after each --index)]
 
 The options that follow an `--index` belong to it. Each source is a sealed run root (default: the directory of its index) whose seal is
 read back in full; its QUALIFIED report supplies the controlled identity (compared without `gpu_uuid`) and the GPU it ran on. The merge
 refuses (exit 2, nothing written) when a source is unsealed or fails readback, an identity differs, scene sets overlap, or the union is
-not the formal list; the codes are listed in `so101_demo.act.collection_merge`. Writes `collection-index.json` and `manifest.json` into
+not the formal list. The identities may differ only in `mount_build` and `image_source_install`, and only with a proof that the two builds differ
+in host-orchestration files alone (`act_identity_equivalence`; re-verified here, see `so101_demo.act.identity_equivalence`); the codes are listed in `so101_demo.act.collection_merge`. Writes `collection-index.json` and `manifest.json` into
 the new directory, each once. Nothing in the sources is changed.
 """
 
@@ -23,7 +25,7 @@ from pathlib import Path
 
 from so101_demo.act.collection_merge import MergeRefused, MergeSource, merge_collections
 
-_SOURCE_OPTIONS = {"--index": "index", "--qualification-report": "qualification_report", "--host": "host", "--run-root": "run_root"}
+_SOURCE_OPTIONS = {"--index": "index", "--qualification-report": "qualification_report", "--host": "host", "--run-root": "run_root", "--mount-inputs": "mount_inputs"}
 
 
 def _sources(argv):
@@ -54,7 +56,8 @@ def _sources(argv):
             if required not in fields:
                 raise MergeRefused(f"MERGE_SOURCE_INVALID: source {number} has no --{required.replace('_', '-')}")
         result.append(MergeSource(index=Path(fields["index"]), qualification_report=Path(fields["qualification_report"]),
-                                  host=fields["host"], run_root=Path(fields["run_root"]) if "run_root" in fields else None))
+                                  host=fields["host"], run_root=Path(fields["run_root"]) if "run_root" in fields else None,
+                                  mount_inputs=Path(fields["mount_inputs"]) if "mount_inputs" in fields else None))
     return result
 
 
@@ -76,6 +79,10 @@ def main(argv=None) -> int:
     parser.add_argument("--qualification-report", action="append")
     parser.add_argument("--host", action="append")
     parser.add_argument("--run-root", action="append")
+    parser.add_argument("--mount-inputs", action="append", help="the sealed inputs root of the source (its mount-inputs/ directory)")
+    parser.add_argument("--identity-equivalence", type=Path, default=None,
+                        help="proof from act_identity_equivalence; required, and re-verified, only when the sources differ in mount_build / image_source_install")
+    parser.add_argument("--repo", type=Path, default=Path("."), help="git repository the proof is recomputed in (default: the current directory)")
     args = parser.parse_args(argv)
     try:
         stamp = args.stamp or datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -84,7 +91,8 @@ def main(argv=None) -> int:
         sources = _sources(argv)
         if args.out_dir.exists():
             raise MergeRefused(f"MERGE_OUTPUT_EXISTS: {args.out_dir}")
-        index, manifest = merge_collections(sources, args.formal_list, stamp, readback_workers=args.readback_workers)
+        index, manifest = merge_collections(sources, args.formal_list, stamp, readback_workers=args.readback_workers,
+                                          identity_equivalence=args.identity_equivalence, repo=args.repo)
         os.mkdir(args.out_dir)
     except MergeRefused as error:
         print(f"REFUSED: {error}", file=sys.stderr)

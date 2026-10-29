@@ -210,9 +210,9 @@ def test_worker_kwargs_carry_no_lifecycle_acknowledgements():
 def test_no_teacher_lifecycle_in_the_reset_path_sources():
     root = PACKAGE_ROOT / "src"
     relatives = ["backends/mujoco/reset.py", "backends/mujoco/client.py", "backends/mujoco/teleop_runtime.py",
-                 "cli/teleop_reset.py", "runtime/parallel_ros_runtime.py", "cli/mujoco_parallel_batch.py"]
-    # the ports and the batch command live in these packages now
-    for package in ("runtime/parallel_ros_ports", "cli/mujoco_batch"):
+                 "cli/teleop_reset.py", "runtime/parallel_ros_runtime.py"]
+    # the ports live in this package
+    for package in ("runtime/parallel_ros_ports",):
         relatives += sorted(path.relative_to(root).as_posix() for path in (root / package).glob("*.py"))
     for relative in relatives:
         text = (root / relative).read_text()

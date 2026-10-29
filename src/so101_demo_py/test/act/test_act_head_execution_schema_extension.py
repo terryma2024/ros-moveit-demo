@@ -26,7 +26,7 @@ def inputs_module():
 
 
 def binding_module():
-    return importlib.import_module('so101_demo.act.head_search_binding')
+    return importlib.import_module('so101_demo.act.head_search.binding')
 
 
 NEW_REFS = ('binding', 'report')

@@ -85,7 +85,6 @@ def unified_app_for(service=None, *, static_dir=None, capture_dir=None, task_ser
         UnifiedServices(
             teleop=service,
             tasks=task_service,
-            validation=None,
             arbiter=arbiter,
             instances=instances,
             safety=safety,
@@ -177,24 +176,8 @@ def test_health_and_snapshot_remain_available_without_web_assets():
     health = client.get("/health").json()
     assert health["ok"] is True
     assert health["teleop"]["ok"] is True
-    assert set(health["domains"]) == {"teleop", "tasks", "validation"}
+    assert set(health["domains"]) == {"teleop", "tasks"}
     assert client.get("/snapshot").json()["simulation_session_id"] == "sim-a"
-
-
-def test_validation_capabilities_report_the_exact_n_view_without_a_validation_service():
-    """Superseded contract, kept as a test rather than deleted.
-
-    The old flat `{"available": False, "reason": "VALIDATION_SERVER_REQUIRED"}` body was the
-    standalone-server placeholder. The unified route answers with the read-only per-N qualification
-    view instead, and the plan requires every exact N to be visible there, so the assertion follows
-    the new contract.
-    """
-    client = TestClient(unified_app_for(Service()))
-    body = client.get("/expert-validation/capabilities").json()
-    assert body["available"] is False
-    assert body["reason"] == "VALIDATION_SERVER_REQUIRED"
-    assert [view["selected_n"] for view in body["worker_qualifications"]] == list(range(2, 9))
-    assert all(view["status"] == "UNKNOWN" for view in body["worker_qualifications"])
 
 
 def test_missing_web_assets_return_machine_readable_service_unavailable():
@@ -317,7 +300,7 @@ def test_the_stub_service_satisfies_the_unified_read_only_port():
     from so101_teleop.unified.ports import UnifiedServices
 
     app = create_unified_app(
-        UnifiedServices(teleop=Service(), tasks=None, validation=None),
+        UnifiedServices(teleop=Service(), tasks=None),
         bind_address="127.0.0.1",
     )
     with TestClient(app) as client:

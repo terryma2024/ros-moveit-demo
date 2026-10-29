@@ -120,8 +120,12 @@ def check_task_reachability(
     planner: ReachabilityPlannerPort,
     *,
     scene_revision: int | None = None,
+    carry_via_offset_m: tuple[float, float, float] | None = None,
 ) -> ReachabilityReport:
-    """Plan all seven dynamic motion states without executing any trajectory."""
+    """Plan all seven dynamic motion states without executing any trajectory.
+
+    ``carry_via_offset_m`` (R3-a) is the episode's offset of the MOVE_ABOVE_PLACE via-point; the targets are then resolved with it, so
+    the check runs against the sampled per-episode targets. None (every earlier schema) resolves exactly the targets it always did."""
 
     if start_state is None:
         return _report(
@@ -143,7 +147,8 @@ def check_task_reachability(
         pose_world=Pose7((*point.cup_position_world_m, 0.0, 0.0, 0.0, 1.0)),
     )
     try:
-        targets = resolve_motion_targets(sample, template)
+        targets = resolve_motion_targets(
+            sample, template, **({} if carry_via_offset_m is None else {"carry_via_offset_m": carry_via_offset_m}))
     except DynamicPickError:
         return _report(
             point,

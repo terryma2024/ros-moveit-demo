@@ -78,8 +78,8 @@ def _measure_coarse_step(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_coarse_step_measurement.measurement import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.coarse_step_measurement.measurement import (
         measure_coarse_step_val_sweep,
     )
 
@@ -172,8 +172,8 @@ def _measure_mujoco(arguments: list[str]) -> int:
         )
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_mujoco_measurements import write_mujoco_measurements
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.mujoco_measurements import write_mujoco_measurements
 
     try:
         result = write_mujoco_measurements(
@@ -242,8 +242,8 @@ def _measure_workspace_projection(arguments: list[str]) -> int:
         print(refused, file=sys.stderr)
         return 2
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_workspace_projection.writer import (
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.workspace_projection.writer import (
         write_head_search_workspace_projection,
     )
 

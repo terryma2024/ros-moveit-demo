@@ -179,8 +179,6 @@ def test_no_active_path_imports_the_retired_budget_chain():
         "            raise AssertionError('retired module imported: ' + name)\n"
         "        return None\n"
         "sys.meta_path.insert(0, Trap())\n"
-        "import so101_demo.cli.mujoco_parallel_batch as cli\n"
-        "import so101_demo.parallel_batch.resources as resources\n"
         "import so101_demo.parallel_batch.adaptive_pool as adaptive\n"
         "from so101_demo.parallel_batch.contracts.linux_cuda import load_parallel_runtime_config_linux_cuda\n"
         "from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard\n"

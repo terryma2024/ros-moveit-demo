@@ -69,10 +69,17 @@ OPEN_DURATION_FIELD = "open_gripper_duration_s"
 DESCEND_FIELDS = frozenset((*DESCEND_SCALING_FIELDS, DESCEND_DISTANCE_FIELD, OPEN_DURATION_FIELD))
 #: the open range (low, high] of the final distance (m)
 DESCEND_FINAL_DISTANCE_RANGE_M = (0.005, 0.05)
+#: Schema 6 (R3-a, human approval 2026-10-24) is schema 5 plus one closed `diversity` block: the distributions of the per-episode
+#: parameters and the campaign seed (`act/teacher_diversity.py`). The block is frozen with the policy and part of its hash; the actual
+#: values of an episode derive from (campaign seed, scene id). Schema 3, 4 and 5 documents are closed without the key and load and hash
+#: exactly as before.
+EXECUTION_SCHEMA_DIVERSITY = 6
+DIVERSITY_FIELD = "diversity"
 TEACHER_EXECUTION_FIELDS_BY_SCHEMA = {
     EXECUTION_SCHEMA: TEACHER_EXECUTION_FIELDS,
     EXECUTION_SCHEMA_SPEED: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS,
     EXECUTION_SCHEMA_DESCEND: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS | DESCEND_FIELDS,
+    EXECUTION_SCHEMA_DIVERSITY: TEACHER_EXECUTION_FIELDS | SPEED_FIELDS | DESCEND_FIELDS | frozenset({DIVERSITY_FIELD}),
 }
 QUATERNION_NORM_TOLERANCE = 1e-6
 WORLD_FRAME = "world"
@@ -110,6 +117,9 @@ def speed_policy_value(policy, key: str, default: float, *, since_schema: int = 
         return float(policy[key])
     if (policy is not None and policy.get("kind") == EXECUTION_KIND
             and type(policy.get("schema_version")) is int and policy["schema_version"] >= since_schema):
+        # schema 6 is a base plus the diversity block: the schema 5 keys are optional there, and absent they mean "as in schema 4"
+        if policy["schema_version"] == EXECUTION_SCHEMA_DIVERSITY and since_schema == EXECUTION_SCHEMA_DESCEND:
+            return default
         raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + key)
     return default
 
@@ -139,7 +149,7 @@ def load_teacher_endpoint_policy(source) -> dict:
 
 
 def load_teacher_execution_policy(source) -> dict:
-    """Load and validate the Teacher execution policy (schema 3: tilt-compensated place height; schema 4: plus the speed keys; schema 5: plus the DESCEND stage and OPEN_GRIPPER keys)
+    """Load and validate the Teacher execution policy (schema 3: tilt-compensated place height; schema 4: plus the speed keys; schema 5: plus the DESCEND stage and OPEN_GRIPPER keys; schema 6: plus the closed diversity block)
     from YAML bytes or a path, with its sha256. An unknown schema, an unknown place height mode, a missing or extra field is
     refused (``TEACHER_EXECUTION_POLICY_INVALID``)."""
 
@@ -151,8 +161,19 @@ def load_teacher_execution_policy(source) -> dict:
     if (document.get("kind") != EXECUTION_KIND or type(version) is not int
             or version not in TEACHER_EXECUTION_FIELDS_BY_SCHEMA):
         raise ValueError(f"{code}: unknown kind or schema version")
-    if set(document) != TEACHER_EXECUTION_FIELDS_BY_SCHEMA[version]:
+    if version == EXECUTION_SCHEMA_DIVERSITY:
+        # a base schema (the schema 4 keys) plus `diversity`; the schema 5 DESCEND group (all three keys or none) and the OPEN_GRIPPER
+        # duration are optional, and absent they leave DESCEND and the gripper exactly as in schema 4
+        required = TEACHER_EXECUTION_FIELDS | SPEED_FIELDS | {DIVERSITY_FIELD}
+        group = set(DESCEND_SCALING_FIELDS) | {DESCEND_DISTANCE_FIELD}
+        extra = set(document) - required
+        if (not required <= set(document) or not extra <= group | {OPEN_DURATION_FIELD}
+                or (extra & group and not group <= extra)):
+            raise ValueError(f"{code}: not the closed policy document")
+    elif set(document) != TEACHER_EXECUTION_FIELDS_BY_SCHEMA[version]:
         raise ValueError(f"{code}: not the closed policy document")
+    has_descend = version == EXECUTION_SCHEMA_DESCEND or (version == EXECUTION_SCHEMA_DIVERSITY and DESCEND_DISTANCE_FIELD in document)
+    has_open = version == EXECUTION_SCHEMA_DESCEND or (version == EXECUTION_SCHEMA_DIVERSITY and OPEN_DURATION_FIELD in document)
     policy = {"kind": EXECUTION_KIND, "schema_version": version}
     for key in EXECUTION_VALUES:
         policy[key] = _real(document[key], key, code, allow_zero=False)
@@ -164,7 +185,7 @@ def load_teacher_execution_policy(source) -> dict:
     scaling_keys = ("carry_max_velocity_scaling", "carry_max_acceleration_scaling")
     if version >= EXECUTION_SCHEMA_SPEED:
         scaling_keys += SPEED_SCALING_FIELDS
-    if version >= EXECUTION_SCHEMA_DESCEND:
+    if has_descend:
         scaling_keys += DESCEND_SCALING_FIELDS
     for key in scaling_keys:
         value = document[key]
@@ -175,7 +196,7 @@ def load_teacher_execution_policy(source) -> dict:
     duration_keys = ()
     if version >= EXECUTION_SCHEMA_SPEED:
         duration_keys += (SPEED_DURATION_FIELD,)
-    if version >= EXECUTION_SCHEMA_DESCEND:
+    if has_open:
         duration_keys += (OPEN_DURATION_FIELD,)
     for key in duration_keys:
         duration = document[key]
@@ -184,13 +205,20 @@ def load_teacher_execution_policy(source) -> dict:
                 or not low <= duration <= high):
             raise ValueError(f"{code}: {key} is not a finite duration within {low} to {high} s")
         policy[key] = float(duration)
-    if version >= EXECUTION_SCHEMA_DESCEND:
+    if has_descend:
         distance = document[DESCEND_DISTANCE_FIELD]
         low, high = DESCEND_FINAL_DISTANCE_RANGE_M
         if (isinstance(distance, bool) or not isinstance(distance, (int, float)) or not math.isfinite(distance)
                 or not low < distance <= high):
             raise ValueError(f"{code}: {DESCEND_DISTANCE_FIELD} is not a finite distance above {low} m through {high} m")
         policy[DESCEND_DISTANCE_FIELD] = float(distance)
+    if version >= EXECUTION_SCHEMA_DIVERSITY:
+        from .teacher_diversity import parse_diversity
+
+        try:
+            policy[DIVERSITY_FIELD] = parse_diversity(document[DIVERSITY_FIELD])
+        except ValueError as error:
+            raise ValueError(f"{code}: {error}") from error
     from ..core.place_height import MODE, PlaceHeightPolicy
 
     if document["place_height_mode"] != MODE:

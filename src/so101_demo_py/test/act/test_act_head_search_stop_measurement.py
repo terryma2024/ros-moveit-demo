@@ -14,12 +14,12 @@ import math
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_stop_measurement import contracts as stop_contracts
-from so101_demo.act.head_search_stop_measurement import declarations as stop_declarations
-from so101_demo.act.head_search_stop_measurement import documents as stop_documents
-from so101_demo.act.head_search_stop_measurement import flights as stop_flights
-from so101_demo.act.head_search_stop_measurement import writers as stop_writers
-from so101_demo.act.head_search_timing_params import (
+from so101_demo.act.head_search.stop_measurement import contracts as stop_contracts
+from so101_demo.act.head_search.stop_measurement import declarations as stop_declarations
+from so101_demo.act.head_search.stop_measurement import documents as stop_documents
+from so101_demo.act.head_search.stop_measurement import flights as stop_flights
+from so101_demo.act.head_search.stop_measurement import writers as stop_writers
+from so101_demo.act.head_search.timing_params import (
     CAL_STOP_LATENCY_EXCEEDED,
     CAL_SUBMIT_LEAD_UNVERIFIED,
     compute_stop_latency_s,

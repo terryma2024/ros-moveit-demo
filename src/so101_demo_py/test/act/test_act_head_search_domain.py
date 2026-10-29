@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from so101_demo.act.head_search_domain import (
+from so101_demo.act.head_search.domain import (
     TARGET_LOCKED,
     TARGET_NOT_FOUND,
     TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL,
@@ -188,7 +188,7 @@ def test_the_controller_walks_the_bounded_plan_instead_of_a_full_revolution() ->
 
 
 def test_the_independent_sweep_checker_agrees_only_with_a_real_coverage_proof() -> None:
-    from so101_demo.act.head_search_domain import independent_sweep_check
+    from so101_demo.act.head_search.domain import independent_sweep_check
 
     plan = bounded_search_stops(
         anchor_rad=0.1,
@@ -296,7 +296,7 @@ def test_the_smoke_refuses_when_no_sealed_step_exists(tmp_path) -> None:
 
 
 def test_only_the_three_statuses_are_search_outcomes() -> None:
-    from so101_demo.act.head_search_domain import (
+    from so101_demo.act.head_search.domain import (
         QUALIFICATION_STATUSES,
         qualification_status_of,
     )

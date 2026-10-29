@@ -12,10 +12,10 @@ import json
 import math
 
 import pytest
-from so101_demo.act.head_search_deadband_measurement import contracts as module_contracts
-from so101_demo.act.head_search_deadband_measurement import writer as module_writer
-from so101_demo.act.head_search_search_params import LOCK_FRAMES
-from so101_demo.act.head_search_deadband_measurement.contracts import (
+from so101_demo.act.head_search.deadband_measurement import contracts as module_contracts
+from so101_demo.act.head_search.deadband_measurement import writer as module_writer
+from so101_demo.act.head_search.search_params import LOCK_FRAMES
+from so101_demo.act.head_search.deadband_measurement.contracts import (
     CAL_DEADBAND_CUP_LOST,
     CAL_DEADBAND_OUT_OF_CORRIDOR,
     CalibrationDeadbandMeasurementRefused,
@@ -23,7 +23,7 @@ from so101_demo.act.head_search_deadband_measurement.contracts import (
     RECORD_KEYS,
     REFUSAL_CODES,
 )
-from so101_demo.act.head_search_deadband_measurement.lock_trial import (
+from so101_demo.act.head_search.deadband_measurement.lock_trial import (
     build_deadband_candidates,
     candidate_record,
     declared_candidates,
@@ -32,10 +32,10 @@ from so101_demo.act.head_search_deadband_measurement.lock_trial import (
     motion_corridor_rad,
     run_lock_trial,
 )
-from so101_demo.act.head_search_deadband_measurement.writer import (
+from so101_demo.act.head_search.deadband_measurement.writer import (
     write_head_search_deadband_measurement,
 )
-from so101_demo.act.head_search_timing_measurement.contracts import (
+from so101_demo.act.head_search.timing_measurement.contracts import (
     FRAME_RATE_HZ,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
 from so101_demo.cli.head_search_calibration import main
 
 
@@ -43,8 +43,7 @@ def _arguments(inputs: dict, *, device: str = "cuda") -> list[str]:
 
 
 def test_measure_bundle_inputs_hands_the_declaration_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
-    from so101_demo.act import head_search_calibration_bundle_inputs as producer
-
+    from so101_demo.act.head_search import calibration_bundle_inputs as producer
     inputs = _inputs(tmp_path)
     measurements = _write_json(tmp_path / "operating-point-measurements.json", {"frames": []})
     web = tmp_path / "web"
@@ -117,8 +116,7 @@ def test_measure_bundle_inputs_refuses_an_existing_output_directory(tmp_path: Pa
 def test_measure_bundle_inputs_prints_the_librarys_refusal_and_returns_two(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
-    from so101_demo.act import head_search_calibration_bundle_inputs as producer
-
+    from so101_demo.act.head_search import calibration_bundle_inputs as producer
     def refusing(**request):
         raise CalibrationInputsRefused(
             producer.CAL_BUNDLE_INPUTS_INCOMPLETE, "the frozen candidate seals another file"

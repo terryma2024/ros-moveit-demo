@@ -196,13 +196,20 @@ def inspect_document(owner):
         Running=False, Restarting=False, Pid=0, Status='exited', ExitCode=0, FinishedAt='2026-10-12T01:09:09.123456789Z'))
 
 
-def provenance_document(owner, image):
-    return dict(container_id=owner.container_id, docker_started_at=owner.docker_started_at, image_digest=owner.image_digest,
+def provenance_document(owner, image, mount_build=None):
+    """The readback a container reports: the mounted install of `mount_build` when the run is mounted, else the image's own."""
+    install = f'{mount_build.install}' if mount_build is not None else '/act/install'
+    document = dict(container_id=owner.container_id, docker_started_at=owner.docker_started_at, image_digest=owner.image_digest,
         provenance=dict(schema_version=1, kind='ACT_CONTAINER_IMAGE_READBACK',
             package_source_sha256=image['package_source_sha256'], install_sha256=image['install_sha256'],
-            git_commit='1'*40, submodules={}, runtime=dict(interpreter='/act/venv/bin/python',
-                dependencies={'numpy': '1.26.4'}, module_origins={'so101_demo': '/act/install/lib/so101_demo/__init__.py'},
-                package_prefixes={'so101_demo_py': '/act/install'})))
+            git_commit=mount_build.commit if mount_build is not None else '1'*40, submodules={}, runtime=dict(
+                interpreter='/act/venv/bin/python', dependencies={'numpy': '1.26.4'},
+                module_origins={'so101_demo': (f'{install}/so101_demo_py/x.py' if mount_build is not None
+                                               else '/act/install/lib/so101_demo/__init__.py')},
+                package_prefixes={'so101_demo_py': (f'{install}/so101_demo_py' if mount_build is not None else '/act/install')})))
+    if mount_build is not None:
+        document['mount_build'] = mount_build.document()
+    return document
 
 
 class World(SimpleNamespace):
@@ -236,7 +243,8 @@ class World(SimpleNamespace):
 
 def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEACHER_FAILED, qc_failed=QC_FAILED,
                 loss_failed=(), reassign=None, surplus_early=(), evidence_root=None, images=None, source_bytes=None,
-                runtime_bytes=None, collection_bytes=None, fingerprint='1'*64, formal_scenes=None, identity_version=1, campaign_extra=None):
+                runtime_bytes=None, collection_bytes=None, fingerprint='1'*64, formal_scenes=None, identity_version=1, campaign_extra=None,
+                mount_build=None):
     """Build the whole run under `base`; `install_controlled_qc` must already be active.
 
     The tuples are scene indexes of the controlled business outcomes (0-39): `no_pose` seals the manifest-free perception
@@ -249,7 +257,8 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
     A caller whose formal campaign must share this run's evidence root and controlled identity passes: `evidence_root` (an
     existing registered root to build the run under instead of `base/'evidence'`), `images` (the inference and shard image
     documents), the bytes of the source, runtime and collection files, the contact policy `fingerprint`, and `formal_scenes`
-    (an existing scene list file used as the gate's formal split manifest, so the formal campaign's own list hashes equal)."""
+    (an existing scene list file used as the gate's formal split manifest, so the formal campaign's own list hashes equal). A mounted
+    campaign passes its `mount_build` so the controlled identity names the same trees."""
     scene_count = 40
     base = Path(base).resolve()
     inference_image, shard_image = images if images is not None else (INFERENCE_IMAGE, SHARD_IMAGE)
@@ -277,7 +286,8 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
     source.write_bytes(source_bytes if source_bytes is not None else b'source: controlled\n')
     proposal = write_json(inputs/'contact-proposal.json', dict(policy_fingerprint=fingerprint))
     identity = dict(source_sha256=sha(source), runtime_config_sha256=sha(runtime), collection_config_sha256=sha(collection),
-        contact_policy_fingerprint=fingerprint, image_source_install=dict(inference=inference_image, shard=shard_image))
+        contact_policy_fingerprint=fingerprint, image_source_install=dict(inference=inference_image, shard=shard_image),
+        **(dict(mount_build=mount_build.document()) if mount_build is not None else {}))
     if identity_version == 1:
         identity['gpu_uuid'] = GPU                       # version 2 leaves the GPU out of the identity (the environment)
     rule_refs = rules if rules is not None else write_synthetic_rules(inputs)
@@ -293,7 +303,8 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
         inference_timeout_s=1.25)
     campaign_path = write_json(inputs/'campaign.json', dict(schema_version=identity_version, kind='ACT_CONTAINER_CAMPAIGN',
         evidence_root=str(root), controlled_runtime=ref(runtime), head_service=service, teacher_service=service,
-        shard_image=dict(shard_image), gpu_uuid=GPU, qualification_contract=ref(contract_path), **(campaign_extra or {})))
+        shard_image=dict(shard_image), gpu_uuid=GPU, qualification_contract=ref(contract_path),
+        **(dict(mount_build=mount_build.document()) if mount_build is not None else {}), **(campaign_extra or {})))
     config = load_campaign_config(campaign_path, roles=('teacher',))
     contract = validate_qualification_contract(json.loads(contract_raw), check_rules=rules is None)
     # ---- frozen inputs and per-scene scopes (controlled; see the module docstring) -----------------------------------------
@@ -333,7 +344,12 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
         package_source_sha256=inference_image['package_source_sha256'], model_id='teacher-model',
         weights_sha256=service['model']['weights']['sha256'], service_config_sha256=hashlib.sha256(canonical_json(service)).hexdigest(),
         gpu_uuid=GPU, configured_instances=3, loaded_instances=3, ready=True))
-    _write(run/'host'/'teacher-provenance.json', provenance_document(teacher_owner, inference_image))
+    _write(run/'host'/'teacher-provenance.json', provenance_document(teacher_owner, inference_image, mount_build))
+    if mount_build is not None:
+        from so101_demo.runtime.container_campaign.mount_build import PREFLIGHT_COPY
+        _write(run/'host'/PREFLIGHT_COPY, {'schema_version': 1, 'kind': 'MOUNT_PREFLIGHT', 'result': 'PASS', 'commit': mount_build.commit,
+            'base_image_id': shard_image['digest'], 'base_manifest_sha256': '9'*64, 'install_record_sha256': shard_image['install_sha256'],
+            'must_failures': 0, 'warnings': 0, 'exceptions': {}, 'host': 'synthetic'})
     # ---- the plan, the shards and the forty tasks --------------------------------------------------------------------------
     waves = partition_waves(tuple(scenes), max_wave_size=20)
     plans = [dict(wave_index=index, scene_ids=list(wave), assignment=reserve_qualification_scenes(wave, WORKERS))
@@ -415,7 +431,7 @@ def build_world(base, *, rules=None, tag='run-1', no_pose=(), teacher_failed=TEA
             registry.bind_container(launch.launch_id, owner)
             registry.bind_child(launch.launch_id, ContainerChildBinding(owner, process, pid_namespace_inode(),
                                                                          str(owned/'control/normal.sock')))
-            _write(owned/'actual-container-provenance.json', provenance_document(owner, shard_image))
+            _write(owned/'actual-container-provenance.json', provenance_document(owner, shard_image, mount_build))
             _write(owned/'runtime-ready.json', dict(schema_version=2, kind='ACT_SHARD_RUNTIME_READY', generation=generation,
                 process_owner=asdict(process), readiness_sha256='0'*64))
             stop_evidence(spec, owner, process)

@@ -9,6 +9,82 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def diversity_arguments(frozen: dict, scene_id: str, start_draw) -> dict:
+    """R3-a: the `open_point_episode` arguments that put a frozen schema 6 policy's derived values, with the start pose draw the reset
+    applied, into the episode identity (episode.json); {} for a freeze without a diversity block. A schema 6 freeze without the draw
+    is refused: the identity would otherwise claim draw 0 for an episode that started from another pose."""
+
+    from .teacher_diversity import values_for_policy
+
+    binding = frozen.get("teacher_execution_policy")
+    policy_values = None if not isinstance(binding, dict) else binding.get("values")
+    if not isinstance(policy_values, dict) or policy_values.get("diversity") is None:
+        return {}
+    if start_draw is None:
+        raise ValueError("TEACHER_DIVERSITY_START_DRAW_REQUIRED")
+    return {"diversity": values_for_policy(policy_values, scene_id, start_draw), "diversity_policy": policy_values}
+
+
+def appearance_arguments(frozen: dict, manifest_path, scene_id: str, teacher_record, *, share=None, declared_expected=None) -> dict:
+    """Indoor P3: the `open_point_episode` arguments that put the scene's appearance and Teacher source into the episode identity
+    (episode.json); {} for a freeze whose scene list has no appearance plan.
+
+    The row of the frozen scene list is re-derived from its plan (`frozen_appearance.scene_entry`), the Teacher manifest's own record of the
+    source and draw must be that row's (the Teacher read the same list), and a variant is realized again here, on this host's install, so the
+    identity carries the realized hash and the stripped physics fingerprint that this host computes (equal to the nominal one, or refused)."""
+
+    import tempfile
+
+    from . import appearance_plan as ap
+    from . import frozen_appearance, scene_variant_run
+
+    if "scene_manifest" not in frozen:
+        return {}
+    if share is None:
+        from ament_index_python.packages import get_package_share_directory
+        share = get_package_share_directory("so101_demo_py")
+    entry = frozen_appearance.scene_entry(frozen, manifest_path, scene_id,
+                                          inventory=lambda: frozen_appearance.frozen_inventory(frozen, manifest_path, share))
+    if entry is None:
+        return {}
+    appearance = entry["appearance"]
+    if (not isinstance(teacher_record, dict) or teacher_record.get("source") != entry["teacher_source"]
+            or teacher_record.get("draw_sha256") != appearance["draw_sha256"] or teacher_record.get("plan_sha256") != appearance["plan_sha256"]):
+        raise ValueError("APPEARANCE_TEACHER_MANIFEST_MISMATCH")
+    realized = None
+    if appearance["variant"] is not None:
+        with tempfile.TemporaryDirectory(prefix="so101-appearance-") as scratch:
+            realized = scene_variant_run.realize_into(scratch + "/variant", share, appearance["variant"])
+    record = frozen_appearance.identity_record(entry, realized=realized)
+    equivalence = teacher_record.get("model_equivalence")
+    if realized is None:
+        if equivalence is not None:
+            raise ValueError("APPEARANCE_MODEL_EQUIVALENCE_UNEXPECTED")
+    else:
+        record["model_equivalence"] = verified_equivalence(equivalence, realized, appearance, declared_expected)
+    return {"scene_appearance": record, "teacher_source": entry["teacher_source"]}
+
+
+def verified_equivalence(equivalence, realized: dict, appearance: dict, declared_expected) -> dict:
+    """D1: the proof the Teacher recorded, checked again against what this host realizes (the realized hash and the stripped physics fingerprints
+    do not depend on where the variant is written) and against the frozen model identity; returns the three facts the identity records."""
+
+    from . import model_equivalence as me
+
+    try:
+        proof = me.verify_proof(equivalence["proof"], declared_expected=declared_expected)
+        if me.proof_sha256(proof) != equivalence["proof_sha256"] or (proof["declared_model_sha256"], proof["loaded_model_sha256"]) != (
+                equivalence["declared_model_sha256"], equivalence["loaded_model_sha256"]):
+            raise ValueError("record")
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("APPEARANCE_MODEL_EQUIVALENCE_INVALID") from error
+    if (proof["realized_sha256"], proof["variant_sha256"], proof["variant_physics_fingerprint"], proof["nominal_physics_fingerprint"]) != (
+            realized["realized_sha256"], appearance["variant_sha256"], realized["physics_fingerprint"], realized["nominal_physics_fingerprint"]):
+        raise ValueError("APPEARANCE_MODEL_EQUIVALENCE_NOT_THIS_VARIANT")
+    return {"declared_model_sha256": proof["declared_model_sha256"], "loaded_model_sha256": proof["loaded_model_sha256"],
+            "proof_sha256": equivalence["proof_sha256"]}
+
+
 def open_recorder_episode(options, *, offline: bool = False):
     """Bind the actual frozen bytes and full issued lease before opening the Recorder's episode.
 
@@ -105,7 +181,11 @@ def open_recorder_episode(options, *, offline: bool = False):
             or any(path.is_symlink() for path in (episode_root, *episode_root.parents))):
         raise ValueError("EPISODE_LOCATION_MISMATCH")
     evidence_root.mkdir(parents=True, exist_ok=True)
+    # R3-a: a frozen schema 6 Teacher policy derives this scene's values; they enter the episode identity (episode.json)
     episode = open_point_episode(
+        **diversity_arguments(frozen, document["scene_id"], getattr(options, "start_pose_draw", None)),
+        **appearance_arguments(frozen, manifest_path, document["scene_id"], getattr(options, "teacher_source_record", None),
+                              declared_expected=snapshot["model_sha256"]),
         episode_root=episode_root, session_id=options.session_id, attempt_id=lease.attempt_id,
         reset_epoch=options.expected_reset_epoch, release_epoch=0, lease=asdict(lease),
         scene_id=document["scene_id"], seed=document["seed"], mode=document["mode"],

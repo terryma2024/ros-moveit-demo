@@ -27,10 +27,16 @@ _MODEL_SHA256 = "17c415d9541be3c13ce43d8650a0879b5b2d7f62177cca7601500fd94d3d878
 # side-wrist: scene_side_wrist.xml and the model compiled from it (no head body, neck joint or neck actuator)
 _SIDE_WRIST_SCENE_SHA256 = "611ed1e4645248d6fa3620ad95194993fd09915351fbe34fae30074ddf35c383"
 _SIDE_WRIST_MODEL_SHA256 = "9f16f382839c80fc2a0a26a59bf7723e6d920b730febd864f13a391d3179350c"
+# side-wrist-indoor: scene_side_wrist_indoor.xml and the model compiled from it. The visual-only room changes both hashes; the
+# stripped physics fingerprint equals the side-wrist one, so the side-wrist calibration is re-bound to these pins by a derived
+# activation (`contact_derivation.py`), not re-measured.
+_INDOOR_SCENE_SHA256 = "44330705e39470f0cf1229b4f37223884b732b8d48392ce4fdeca58ae647563c"
+_INDOOR_MODEL_SHA256 = "f49d0e06eaba6bf641f8dc454c0183f9c623ac06c29f8f868dc1144c157d5ab4"
 #: rig name -> (scene sha256, compiled model sha256); the head-wrist pins are the long-standing constants above
 RIG_IDENTITIES = {
     "head-wrist": (_SCENE_SHA256, _MODEL_SHA256),
     "side-wrist": (_SIDE_WRIST_SCENE_SHA256, _SIDE_WRIST_MODEL_SHA256),
+    "side-wrist-indoor": (_INDOOR_SCENE_SHA256, _INDOOR_MODEL_SHA256),
 }
 _MOTION_SHA256 = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 _MAX_FORCE_N = 11.6

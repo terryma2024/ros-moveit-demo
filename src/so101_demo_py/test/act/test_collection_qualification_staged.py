@@ -25,11 +25,11 @@ def patched(monkeypatch):
     return monkeypatch
 
 
-def staged(tmp_path, **conversion):
+def staged(tmp_path, attempts=None, receipted_failures=(), **conversion):
     (tmp_path/'world').mkdir(parents=True)
     world = build_world(tmp_path/'world')
     world.combined = convert(world, **conversion)
-    to_staged(world.run)
+    to_staged(world.run, attempts=attempts, receipted_failures=receipted_failures)
     return world
 
 
@@ -145,4 +145,45 @@ def test_the_all_in_one_run_keeps_its_single_combined_record(tmp_path, patched):
     world.combined = convert(world)
     assert not list(host(world).glob('*-complete.json')) and run(world)['reasons'] == []
     edit(host(world)/'campaign-cleanup.json', lambda document: document.pop('processors'))
+    assert 'CLEANUP_UNCONFIRMED' in run(world)['reasons']
+
+
+def test_a_stage_completed_by_its_second_attempt_is_qualified_from_the_cleanup_record_of_that_attempt(tmp_path, patched):
+    world = staged(tmp_path, attempts=dict(phase2=2))
+    assert sorted(path.name for path in host(world).glob('campaign-cleanup*.json')) == [
+        'campaign-cleanup-finalize.json', 'campaign-cleanup-phase2.a2.json', 'campaign-cleanup-phase2.json', 'campaign-cleanup.json']
+    report = run(world)
+    assert report['reasons'] == [] and report['status'] == 'QUALIFIED'
+
+
+@pytest.mark.parametrize('damage', ['missing', 'not terminated', 'other key set'])
+def test_the_cleanup_record_of_the_attempt_that_completed_the_stage_is_the_one_that_counts(tmp_path, patched, damage):
+    world = staged(tmp_path, attempts=dict(phase2=2))
+    path = host(world)/'campaign-cleanup-phase2.a2.json'
+    if damage == 'missing':
+        path.unlink()
+    elif damage == 'not terminated':
+        edit(path, lambda document: document.update(terminated=False))
+    else:
+        edit(path, lambda document: document.update(extra=1))
+    assert 'CLEANUP_UNCONFIRMED' in run(world)['reasons']
+
+
+def test_a_failed_attempt_with_its_own_receipt_is_part_of_the_cleanup_proof(tmp_path, patched):
+    world = staged(tmp_path, attempts=dict(finalize=2), receipted_failures=('finalize',))
+    assert (host(world)/'containers-receipt-03-finalize-a1.json').is_file()
+    report = run(world)
+    assert report['reasons'] == [] and report['status'] == 'QUALIFIED'
+
+
+@pytest.mark.parametrize('damage', ['record missing', 'not terminated', 'names another receipt'])
+def test_a_failed_attempt_whose_record_does_not_prove_its_receipt_is_unconfirmed(tmp_path, patched, damage):
+    world = staged(tmp_path, attempts=dict(finalize=2), receipted_failures=('finalize',))
+    path = host(world)/'campaign-cleanup-finalize.json'
+    if damage == 'record missing':
+        path.unlink()
+    elif damage == 'not terminated':
+        edit(path, lambda document: document.update(terminated=False))
+    else:
+        edit(path, lambda document: document.update(container_receipt='containers-receipt-01-phase1.json'))
     assert 'CLEANUP_UNCONFIRMED' in run(world)['reasons']

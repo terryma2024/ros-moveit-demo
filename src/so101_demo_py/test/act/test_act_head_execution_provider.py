@@ -163,7 +163,7 @@ def test_resource_plan_refuses_a_foreign_object_and_a_promoted_scope(tmp_path):
 def test_resource_plan_refuses_a_missing_installed_constructor(tmp_path):
     inputs, _ = build_inputs(tmp_path)
     broken = dict(provider_module().RESOURCE_MODULES)
-    broken['stack'] = ('so101_demo.act.head_search_restarts', 'NoSuchStack')
+    broken['stack'] = ('so101_demo.act.head_search.restarts', 'NoSuchStack')
     with pytest.raises(provider_module().HeadExecutionProviderRefused) as refusal:
         provider_module().resource_plan(inputs, modules=broken)
     assert refusal.value.code == 'EXECUTION_PROVIDER_RESOURCE_ABSENT'

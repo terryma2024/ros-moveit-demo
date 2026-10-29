@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_ownership import (
+from so101_demo.act.head_search.ownership import (
     EXCLUSIVE_OWNERSHIP_OK,
     EXCLUSIVE_OWNERSHIP_REFUSED,
     RECEIPT_NAME,

@@ -1,5 +1,7 @@
 # macOS SO-101 服务化验证运行指南
 
+> 2026-10-24 注：感知 broker 与 Expert Validation 已退役（挂载树迁移 M5，提交 P3b）。启动这个 campaign 的 Expert Validation 服务和 `/expert-validation/*` 接口已删除；`so101_macos_service_campaign` 命令本身保留，但不再有服务启动器，下面关于 `expert_validation/*`、`cli/mujoco_parallel_batch.py` 的描述只作历史记录。
+
 这份指南给在 Mac mini 上跑 SO-101 仿真验证的人看。它讲清楚三件事：怎么选 profile、启动前需要什么、出问题后从哪里读证据。
 
 状态截至 2026-09-23：静态门禁在 `t8-gate10` 跑出 `verdict=PASS`——demo 3917 个用例 0 失败 0 错误，teleop 904 个 0 失败，copied install 37 个 0 失败，`colcon test-result` 1074 个 0 失败 0 错误，web 的 tsc/vitest/build 全 0。（对照：这一轮开始前同一套门禁是 demo 176 失败、teleop 27 失败、colcon 39 失败。）失败数比上次少不算理由，上面每一层的真实退出码和 JUnit 计数都在证据根里，逐层读就能核。

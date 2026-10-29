@@ -81,7 +81,7 @@ def test_the_measurement_entry_refuses_a_descriptor_the_binding_would_refuse(tmp
 def test_the_binding_entry_refuses_the_same_descriptor(tmp_path, name, mutate):
     """And the production binding refuses it too - the same rule, not a second opinion."""
 
-    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.head_search.binding import validate_head_search_binding
 
     runtime, calibration, _weights, _sample = _inputs(tmp_path)
     mutated = copy.deepcopy(runtime)

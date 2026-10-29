@@ -13,7 +13,7 @@ from paths import PACKAGE_ROOT
 
 
 def _module():
-    return importlib.import_module('so101_demo.act.head_search_campaign_scene')
+    return importlib.import_module('so101_demo.act.head_search.campaign_scene')
 
 
 def _ref(path):
@@ -49,7 +49,7 @@ def _baseline(tmp_path):
 
 
 def _case(index):
-    from so101_demo.act.head_search_campaign import load_cases
+    from so101_demo.act.head_search.campaign import load_cases
     path=PACKAGE_ROOT/'config/act/head-search-scenario-partitions.json'
     return load_cases(json.loads(path.read_text()))[index]
 

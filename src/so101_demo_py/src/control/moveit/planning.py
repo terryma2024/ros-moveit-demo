@@ -45,8 +45,12 @@ class JointPlanRequest:
     tcp_link: str = "so101_tcp"
     start_state_joint_names: tuple[str, ...] | None = None
     start_state_positions: tuple[float, ...] | None = None
+    #: OMPL planning attempts of the request (R3-a). The default 1 is what every request was; MoveIt's request has no seed field.
+    num_planning_attempts: int = 1
 
     def __post_init__(self) -> None:
+        if type(self.num_planning_attempts) is not int or not 1 <= self.num_planning_attempts <= 10:
+            raise ValueError("joint request planning attempts must be an integer within 1 to 10")
         if not self.joint_names or len(self.joint_names) != len(self.current_positions):
             raise ValueError("joint request current state is incomplete")
         if len(self.joint_names) != len(self.target_positions):
@@ -181,7 +185,7 @@ def make_get_motion_plan_request(request: JointPlanRequest) -> Any:
     wire = GetMotionPlan.Request()
     motion = wire.motion_plan_request
     motion.group_name = request.planning_group
-    motion.num_planning_attempts = 1
+    motion.num_planning_attempts = request.num_planning_attempts
     motion.allowed_planning_time = request.planning_time_s
     motion.max_velocity_scaling_factor = request.velocity_scaling
     motion.max_acceleration_scaling_factor = request.acceleration_scaling

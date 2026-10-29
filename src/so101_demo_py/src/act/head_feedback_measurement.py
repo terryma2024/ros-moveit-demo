@@ -8,7 +8,7 @@ import math
 import time
 
 from .head_feedback import FeedbackPolicy, nanoseconds
-from .head_search_timing_params import nearest_rank_percentile
+from .head_search.timing_params import nearest_rank_percentile
 
 
 def _paced(values):

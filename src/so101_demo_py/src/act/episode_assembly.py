@@ -535,7 +535,9 @@ def open_point_episode(*, episode_root, session_id: str, attempt_id: str, reset_
                        scene_id: str, seed: int, mode: str, scope, scope_path: str,
                        inputs: dict, provenance: dict, guard=None, monotonic=None, max_age_s: float = 0.1,
                        max_skew_s: float = 0.1, lease: dict | None = None,
-                       recorder_policy=None) -> PointEpisode:
+                       recorder_policy=None, diversity: dict | None = None,
+                       diversity_policy: dict | None = None, scene_appearance: dict | None = None,
+                       teacher_source: str | None = None) -> PointEpisode:
     """Open the episode a run records into, with the row supplied by the process that owns the facts.
 
     The circularity this exists to break: the capture asks its `physical_audit` for a row, and that callable has to be
@@ -544,6 +546,15 @@ def open_point_episode(*, episode_root, session_id: str, attempt_id: str, reset_
     `set_physical_audit` writes it, and reading it before anything has been published is a refusal by name rather than a
     row of nulls.
     """
+    if diversity is not None:
+        # R3-a: the derived values of the episode are part of its identity; they must be this scene's, and (given the frozen policy)
+        # the very derivation of (campaign seed, scene id) within the declared ranges
+        if diversity.get("scene_id") != scene_id:
+            raise ValueError("TEACHER_DIVERSITY_INVALID: the values name another scene")
+        if diversity_policy is not None:
+            from .teacher_diversity import validate_episode_values
+
+            validate_episode_values(diversity_policy["diversity"], diversity, expect_derived=True)
     holder: dict = {}
 
     def physical_audit(_at_s):
@@ -557,7 +568,10 @@ def open_point_episode(*, episode_root, session_id: str, attempt_id: str, reset_
         # arguments rather than something read back out of the scope document
         identity={"session_id": session_id, "attempt_id": attempt_id, "reset_epoch": int(reset_epoch),
                   "release_epoch": int(release_epoch), "scene_id": str(scene_id), "seed": int(seed),
-                  "mode": str(mode), **({} if lease is None else {"lease": dict(lease)})},
+                  "mode": str(mode), **({} if lease is None else {"lease": dict(lease)}),
+                  **({} if diversity is None else {"teacher_diversity": dict(diversity)}),
+                  # indoor P3: the appearance the episode was recorded under and the source of the Teacher's cup pose
+                  **({} if scene_appearance is None else {"scene_appearance": dict(scene_appearance), "teacher_source": teacher_source})},
         provenance=provenance, inputs=inputs, episode_root=episode_root, scope=scope, scope_path=scope_path,
         physical_audit=physical_audit, guard=guard, monotonic=monotonic, max_age_s=max_age_s,
         max_skew_s=max_skew_s, recorder_policy=recorder_policy)

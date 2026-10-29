@@ -4,9 +4,9 @@
 # The apt versions are those of the build host (apt-pins.txt: scripts/env/apt_pins.py generate, from `image_env.py capture-host` and the
 # package set of the previous image); a version the mirrors no longer offer is not pinned and apt takes the candidate (listed in
 # progress-mount-images.md). Built once and pinned by ID. It reaches the network for apt (Tsinghua mirrors, current versions) and pip (Tsinghua PyPI, the PyTorch
-# index for the CUDA wheels). Nothing under /act, /opt/venv or any site-packages is named so101_*: a test and a manifest check enforce it.
+# index for the CUDA wheels). Nothing under /act, /opt/venv or any site-packages is named so101_*: a test enforces it.
 # No .pyc of our own: PIP_NO_COMPILE, PYTHONDONTWRITEBYTECODE, the ones apt's package scripts compile and the ones `python3 -m venv` (ensurepip)
-# compiles for each venv's pip are removed in the same layer. The pyc of the upstream ROS image stay (check-no-pyc --base).
+# compiles for each venv's pip are removed in the same layer. The pyc of the upstream ROS image stay.
 FROM docker.m.daocloud.io/library/ros:jazzy-ros-base-noble@sha256:2589a8fba5257307857890173c069852c2abf913a0be7970f172478baecb09e4
 
 LABEL org.opencontainers.image.title="SO-101 mount base" \

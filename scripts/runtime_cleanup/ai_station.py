@@ -20,8 +20,7 @@ import sys
 HOST = 'AI-STATION-001'
 SESSIONS = frozenset(('so101-expert-validation', 'so101-mujoco', 'so101-teleop'))
 ENTRIES = frozenset((
-    'so101_teleop_server.py', 'so101_expert_validation_server.py',
-    'run_so101_adaptive_batch.zsh', 'run_so101_adaptive_worker_scaling.zsh',
+    'so101_teleop_server.py',
 ))
 ROS_LIBRARIES = re.compile(r'/(?:librcl|librmw|libroscpp|libmoveit|libgazebo|libgz-sim)[^ /]*\.so')
 PACKAGE_ENTRY = re.compile(r'/(?:so101_[^/]+|mujoco_[^/]+)/lib/[^/]+/')

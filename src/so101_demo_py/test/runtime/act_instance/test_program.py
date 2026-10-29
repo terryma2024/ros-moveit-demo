@@ -150,7 +150,10 @@ def test_the_collection_builder_gets_the_layouts_output_and_teacher_socket(tmp_p
     builder = program().shard_builder(spec, stack=stack, layout=layout, ready_check=check)
 
     assert builder.keywords == dict(stack=stack, shard_spec=spec, output_root=layout.output_root,
-        teacher_socket=layout.teacher_socket, ready_check=check)
+        teacher_socket=layout.teacher_socket, ready_check=check, scene_switch=None)
+    # indoor P3: the switch that gives the stack the scene of each task is handed on to the task builder
+    switch = object()
+    assert program().shard_builder(spec, stack=stack, layout=layout, ready_check=check, scene_switch=switch).keywords['scene_switch'] is switch
 
 
 def test_a_layout_is_absolute_without_traversal_and_distinct_from_the_owned_root(tmp_path):
@@ -238,6 +241,59 @@ def test_run_instance_marks_the_layouts_directories_and_runs_the_stack_and_serve
     assert launch.evidence_root == root/'stack' and (root/'stack').is_dir()
     assert json.loads((root/'gpu-driver.json').read_text())['gpu_uuid'] == spec['gpu_uuid']
     assert retire.calls == 1
+
+
+@LAYOUTS
+def test_run_instance_launches_the_stack_with_the_scene_variant_its_spec_names_and_only_then(tmp_path, monkeypatch, make_layout):
+    from so101_demo.act import scene_variant_run
+    from so101_demo.runtime.container_campaign import gpu_driver, retirement
+    spec, runtime, layout = parts(tmp_path, make_layout)
+    install_prefix(layout)
+    instance_process(monkeypatch, spec, layout.install_prefix)
+    monkeypatch.setattr(gpu_driver, 'verify_selected_gpu',
+        lambda gpu: dict(schema_version=1, kind='ACT_SHARD_CUDA_DRIVER', gpu_uuid=gpu, cuda_device_count=1))
+    monkeypatch.setattr(retirement, 'NativeShardRetirement', lambda **arguments: RetirementDouble())
+    root = Path(spec['owned_root'])
+    prepared = []
+
+    def prepare(given, share):
+        prepared.append((given.get('scene_variant'), Path(share)))
+        if given.get('scene_variant') is None:
+            return None, None
+        scene = root/'scene-variant'/'scene_variant.xml'
+        scene.parent.mkdir()
+        scene.write_text('<mujoco/>')
+        return scene, {'realized_sha256': '1'*64}
+    monkeypatch.setattr(scene_variant_run, 'prepare_shard_scene', prepare)
+    seen = []
+
+    def compose(launch, observer):
+        seen.append(launch)
+        return ReadyDouble(), (lambda: True), StackDouble()
+    monkeypatch.setattr(program(), 'compose_stack', compose)
+
+    async def stop_when_ready():
+        await wait_for(lambda: (root/'stack-readiness.json').exists())
+        return await control_call(layout, 'terminate', dict(reason='finished'))
+    holder = {}
+    thread = threading.Thread(target=lambda: holder.update(reply=asyncio.run(stop_when_ready())))
+    thread.start()
+    varied = dict(spec, scene_variant={'file': {'path': '/x', 'sha256': '2'*64}, 'realized_sha256': '1'*64,
+                                       'physics_fingerprint': '3'*64})
+    assert asyncio.run(program().run_instance(varied, runtime, layout)) == 0
+    thread.join(5)
+    assert seen[0].mujoco_scene == root/'scene-variant'/'scene_variant.xml'
+    assert prepared[0][0] == varied['scene_variant'] and prepared[0][1] == layout.install_prefix/'share'/'so101_demo_py'
+    assert f'mujoco_scene:={seen[0].mujoco_scene}' in seen[0].argv()
+
+
+@LAYOUTS
+def test_instance_stack_launch_has_no_scene_unless_one_is_given(tmp_path, make_layout):
+    spec, _runtime, layout = parts(tmp_path, make_layout)
+    (tmp_path/'stack-plain').mkdir()
+    plain = program().instance_stack_launch(spec, ros2=Path('/usr/bin/true'), stack_root=tmp_path/'stack-plain',
+                                            environment={})
+    assert plain.mujoco_scene is None
 
 
 @LAYOUTS

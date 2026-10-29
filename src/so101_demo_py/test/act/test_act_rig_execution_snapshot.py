@@ -11,10 +11,11 @@ from so101_demo.act import execution_snapshot
 from so101_demo.act.diagnostic_episode_inputs import execution_snapshot_binding, profile_config_identity
 from so101_demo.act.diagnostic_episode_inspection import _compiled_model_identity, _scene_file
 from so101_demo.act.rig_files import foreign_files, rig_model_files
-from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_RIG, rig_from_profile_sha256
+from so101_demo.act.rig_profile import HEAD_WRIST_RIG, SIDE_WRIST_INDOOR_RIG, SIDE_WRIST_RIG, rig_from_profile_sha256
 
 SIDE = rig_model_files(SIDE_WRIST_RIG)
 HEAD = rig_model_files(HEAD_WRIST_RIG)
+INDOOR = rig_model_files(SIDE_WRIST_INDOOR_RIG)
 
 
 @pytest.fixture(scope="module")
@@ -98,20 +99,32 @@ def test_inspection_reads_the_scene_of_the_named_rig():
 
 
 def test_the_profile_identity_of_a_rig_leaves_out_the_files_of_the_other_rig():
-    """Adding the side+wrist files changed no head+wrist identity: the head+wrist digest covers exactly what it always did."""
+    """Adding the side+wrist and the indoor files changed no head+wrist and no side+wrist identity: each digest covers what it always did."""
     package = REPOSITORY / "src/so101_demo_py"
     roots = (package / "assets/mujoco/act", package / "config/mujoco/act")
     everything = {str(path.relative_to(package)) for root in roots for path in root.rglob("*") if path.is_file()}
-    assert SIDE.exclusive <= everything and HEAD.exclusive <= everything
-    head_files = {path: hashlib.sha256((package / path).read_bytes()).hexdigest() for path in sorted(everything - SIDE.exclusive)}
+    indoor_only = INDOOR.exclusive - SIDE.exclusive
+    assert SIDE.exclusive <= everything and HEAD.exclusive <= everything and INDOOR.exclusive <= everything
+    assert indoor_only and indoor_only <= everything and not indoor_only & (HEAD.exclusive | SIDE.exclusive)
+    head_files = {path: hashlib.sha256((package / path).read_bytes()).hexdigest()
+                  for path in sorted(everything - SIDE.exclusive - indoor_only)}
     expected = hashlib.sha256(json.dumps(head_files, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                                          allow_nan=False).encode()).hexdigest()
     assert profile_config_identity(REPOSITORY) == profile_config_identity(REPOSITORY, HEAD_WRIST_RIG) == expected
-    side_files = {path: hashlib.sha256((package / path).read_bytes()).hexdigest() for path in sorted(everything - HEAD.exclusive)}
-    assert profile_config_identity(REPOSITORY, SIDE_WRIST_RIG) == hashlib.sha256(json.dumps(
-        side_files, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
-    assert profile_config_identity(REPOSITORY, SIDE_WRIST_RIG) != expected
-    assert foreign_files(HEAD_WRIST_RIG) == SIDE.exclusive
+    side_files = {path: hashlib.sha256((package / path).read_bytes()).hexdigest()
+                  for path in sorted(everything - HEAD.exclusive - indoor_only)}
+    side_expected = hashlib.sha256(json.dumps(side_files, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                                              allow_nan=False).encode()).hexdigest()
+    assert profile_config_identity(REPOSITORY, SIDE_WRIST_RIG) == side_expected != expected
+    # the indoor rig's digest covers the shared side+wrist robot files and its own scenes, and not the side+wrist scene
+    indoor_files = {path: hashlib.sha256((package / path).read_bytes()).hexdigest()
+                    for path in sorted(everything - HEAD.exclusive - {SIDE.scene})}
+    assert profile_config_identity(REPOSITORY, SIDE_WRIST_INDOOR_RIG) == hashlib.sha256(json.dumps(
+        indoor_files, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    assert profile_config_identity(REPOSITORY, SIDE_WRIST_INDOOR_RIG) not in (expected, side_expected)
+    assert foreign_files(HEAD_WRIST_RIG) == SIDE.exclusive | INDOOR.exclusive
+    assert foreign_files(SIDE_WRIST_RIG) == HEAD.exclusive | indoor_only
+    assert foreign_files(SIDE_WRIST_INDOOR_RIG) == HEAD.exclusive | {SIDE.scene}
 
 
 def test_a_campaign_config_names_its_rig_by_the_profile_digest():

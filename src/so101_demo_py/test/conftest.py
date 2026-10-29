@@ -120,3 +120,22 @@ def _fresh_export_verification_state(monkeypatch):
     clear_verification_memo()
     yield
     clear_verification_memo()
+
+
+@pytest.fixture(scope="session")
+def indoor_pool_act(tmp_path_factory):
+    """`assets/mujoco/act` of a copy of the assets in which every procedural indoor texture is written (about 45 s once per worker)."""
+    pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    from indoor_pool_tree import build_pool_tree
+
+    return build_pool_tree(tmp_path_factory.mktemp("indoor-pool"))
+
+
+@pytest.fixture(scope="session")
+def indoor_pool_share(indoor_pool_act, tmp_path_factory):
+    """A package share directory (`<share>/assets/mujoco/act`) over `indoor_pool_act`, for `scene_variant_run.realize_into` and the episode readers."""
+    share = tmp_path_factory.mktemp("indoor-pool-share")
+    (share / "assets").mkdir()
+    (share / "assets/mujoco").symlink_to(indoor_pool_act.parent)
+    return share

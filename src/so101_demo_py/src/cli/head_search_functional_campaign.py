@@ -10,7 +10,7 @@ import struct
 import subprocess
 import time
 
-from so101_demo.act.head_search_functional_acceptance import (
+from so101_demo.act.head_search.functional_acceptance import (
     calculate_final_yaw, classify_functional_case)
 
 
@@ -205,7 +205,7 @@ def launch_installed(inputs_path, *, python, executable, output, signal_after_sd
 
 
 def prepare_attempt(case, baseline, output, *, identity, domain, interrupt=False):
-    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    from so101_demo.act.head_search.campaign_scene import prepare_case_fixture
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     inputs = deepcopy(baseline)
@@ -423,7 +423,7 @@ def run_case(case, baseline, *, output, prefix, python, executable, domain,
 def main(argv=None):
     import argparse
     from collections import Counter
-    from so101_demo.act.head_search_campaign import load_cases
+    from so101_demo.act.head_search.campaign import load_cases
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', required=True)
     parser.add_argument('--matrix', required=True)

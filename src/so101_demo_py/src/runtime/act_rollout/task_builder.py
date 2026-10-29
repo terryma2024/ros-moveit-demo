@@ -42,7 +42,7 @@ _FIELDS = {"schema_version", "kind", "task_id", "worker_id", "launch_generation"
            "trial", "attempt_number", "attempt_id", "run_id", "run_identity_sha256", "inputs", "execution", "policy",
            "preconditions"}
 _REFS = ("inputs_manifest", "runtime_config", "rollout_config", "scenes", "bundle_json")
-_OPTIONAL_REFS = ("contact_activation_receipt", "contact_proposal")
+_OPTIONAL_REFS = ("contact_activation_receipt", "contact_proposal", "scene_variant")
 #: besides the file references: where the bundle directory is and which installed prefix the run is bound to
 _PLAIN_INPUTS = ("bundle_dir", "install_prefix")
 _POLICY = {"socket_path", "service_generation", "client_id", "max_frame_bytes", "bundle_sha256", "policy_sha256"}
@@ -146,7 +146,8 @@ def load_rollout_task(task, shard_spec, *, policy_socket, install_prefix, clock=
     arguments = SimpleNamespace(
         inputs_manifest=files["inputs_manifest"], rollout_config=files["rollout_config"], runtime_config=files["runtime_config"],
         scenes=files["scenes"], bundle_dir=bundle_dir, contact_activation_receipt=optional["contact_activation_receipt"],
-        contact_proposal=optional["contact_proposal"], install_prefix=document["inputs"]["install_prefix"],
+        contact_proposal=optional["contact_proposal"], scene_variant=optional["scene_variant"],
+        install_prefix=document["inputs"]["install_prefix"],
         execution_prefix=execution["execution_prefix"], temporal_ensembling=execution["temporal_ensembling"])
     return arguments, document, root
 

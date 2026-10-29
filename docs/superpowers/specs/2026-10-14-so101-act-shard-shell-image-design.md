@@ -1,5 +1,7 @@
 # SO-101 ACT shard 容器外壳化设计
 
+> Superseded by mount mode, 2026-10-23: the shard shell now runs in `so101-mount-base` with the mounted install; the image-baked shard layout and `/act/install` readback are retired (migration P1). Kept as history.
+
 日期：2026-10-14
 状态：用户已确认方向和下列裁定。本文只定义方案，不授权实施。是否执行，等
 [固定容器内标识修订](2026-10-13-so101-act-fixed-instance-identity-amendment.md) 的剩余任务全部完成后由用户另行决定。

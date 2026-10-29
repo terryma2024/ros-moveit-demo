@@ -10,7 +10,7 @@ from head_search_qualification_fixtures import ANCHORS, build_fixture
 from head_search_qualification_fixtures import digest as fixture_digest
 import pytest
 
-from so101_demo.act.head_search_aggregate.contracts import GATES
+from so101_demo.act.head_search.aggregate.contracts import GATES
 from so101_demo.cli.head_search.flags import (
     HEAD_SEARCH_RUN_INPUTS_INCOMPLETE,
 )

@@ -94,7 +94,7 @@ def test_bound_teleop_http_mutation_reaches_production_admission(
         service_epoch="e1",
     )
     app = create_unified_app(
-        UnifiedServices(teleop=service, tasks=None, validation=None, arbiter=arbiter,
+        UnifiedServices(teleop=service, tasks=None, arbiter=arbiter,
                         instances=registry, safety=lane),
         bind_address="127.0.0.1",
     )

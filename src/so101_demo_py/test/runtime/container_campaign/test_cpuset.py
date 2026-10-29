@@ -1,9 +1,13 @@
 """Opt-in CPU partition of the campaign's containers (`shard_cpuset`, default off): each recording shard gets its own `docker --cpuset-cpus`
 range and the other roles (Teacher, Head, processors) the CPUs below the first shard's. Pure functions and argv: no Docker."""
 
+from pathlib import Path
+import tempfile
 import json
 
 import pytest
+
+from mount_trees import make_mount_trees
 
 from so101_demo.runtime.container_campaign import cpuset
 from so101_demo.runtime.inference import config as config_module
@@ -53,11 +57,12 @@ def test_the_worker_index_is_the_slot_number_of_the_worker_id():
 @pytest.mark.parametrize("role", ["head", "teacher", "shard"])
 def test_the_argv_has_no_cpu_option_by_default_and_one_docker_option_when_given(tmp_path, role):
     module, images, paths = fixture(tmp_path, role)
-    assert "--cpuset-cpus" not in build(module, images, paths, role)
-    argv = build(module, images, paths, role, cpuset_cpus="6-8")
+    mount = make_mount_trees(Path(tempfile.mkdtemp()))
+    assert "--cpuset-cpus" not in build(module, images, paths, role, mount_build=mount)
+    argv = build(module, images, paths, role, cpuset_cpus="6-8", mount_build=mount)
     assert argv.count("--cpuset-cpus") == 1 and argv[argv.index("--cpuset-cpus")+1] == "6-8"
     assert argv.index("--cpuset-cpus") < argv.index(images["shard" if role == "processor" else role]["digest"])   # a docker option
-    assert [value for value in argv if value != "--cpuset-cpus" and value != "6-8"] == build(module, images, paths, role)
+    assert [value for value in argv if value != "--cpuset-cpus" and value != "6-8"] == build(module, images, paths, role, mount_build=mount)
 
 
 @pytest.mark.parametrize("bad", ["", "a", "6-", "8-6", "6,", " 6", "6-8;x", 6])

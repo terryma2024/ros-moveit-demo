@@ -15,11 +15,11 @@ from head_search_scenarios_support import (
 )
 import pytest
 
-from so101_demo.act.head_search_scenarios import contracts as module_contracts
-from so101_demo.act.head_search_scenarios import journal as module_journal
-from so101_demo.act.head_search_scenarios import plan as module_plan
-from so101_demo.act.head_search_scenarios import writer as module_writer
-from so101_demo.act.head_search_scenarios.contracts import (
+from so101_demo.act.head_search.scenarios import contracts as module_contracts
+from so101_demo.act.head_search.scenarios import journal as module_journal
+from so101_demo.act.head_search.scenarios import plan as module_plan
+from so101_demo.act.head_search.scenarios import writer as module_writer
+from so101_demo.act.head_search.scenarios.contracts import (
     CAL_SCENARIO_CUP_NOT_FOUND,
     CAL_SCENARIO_OWNERSHIP_REFUSED,
     CAL_SCENARIO_RUN_ROOT_EXISTS,
@@ -27,7 +27,7 @@ from so101_demo.act.head_search_scenarios.contracts import (
     CAL_SCENARIO_SPLIT_LEAK,
     CalibrationScenarioRefused,
 )
-from so101_demo.act.head_search_timing_measurement.contracts import (
+from so101_demo.act.head_search.timing_measurement.contracts import (
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
 )
@@ -193,7 +193,7 @@ def _class_aware_detector(plant, request, *, blind=()):
 def _patch_flight(monkeypatch, *, ownership_status="EXCLUSIVE_OWNERSHIP_OK", cuda=True):
     """Stub the four heavy seams: the ownership gate, CUDA, the scene preparation and the plant."""
 
-    from so101_demo.act.head_search_scenarios import writer as scenarios_module
+    from so101_demo.act.head_search.scenarios import writer as scenarios_module
 
     monkeypatch.setattr(scenarios_module, "_cuda_available", lambda: cuda)
     monkeypatch.setattr(

@@ -48,8 +48,6 @@ def test_the_migrated_teleop_surface_is_served_by_the_unified_app():
         ("POST", "/tasks/runs"),
         ("GET", "/tasks/runs"),
         ("GET", "/tasks/artifacts/{artifact_id}"),
-        ("GET", "/expert-validation/capabilities"),
-        ("POST", "/expert-validation/campaigns"),
     ]:
         assert pair in unified, pair
 

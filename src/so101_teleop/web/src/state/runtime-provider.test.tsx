@@ -30,7 +30,7 @@ function Page({ name }: { name: string }) {
       <span data-testid="page">{page}</span>
       <span data-testid="runtime">{runtime.domain}</span>
       <span data-testid="name">{name}</span>
-      <button type="button" onClick={() => navigate("/expert-validation")}>
+      <button type="button" onClick={() => navigate("/archives")}>
         go
       </button>
       <button type="button" onClick={() => navigate("/tasks")}>
@@ -43,7 +43,7 @@ function Page({ name }: { name: string }) {
 test("page paths map to the three page names", () => {
   expect(pageFromPath("/")).toBe("teleop");
   expect(pageFromPath("/tasks")).toBe("tasks");
-  expect(pageFromPath("/expert-validation")).toBe("validation");
+  expect(pageFromPath("/archives")).toBe("archives");
   expect(pageFromPath("/anything-else")).toBe("teleop");
 });
 
@@ -58,7 +58,7 @@ test("navigation inside one provider keeps the same runtime and never re-registe
   expect(screen.getByTestId("runtime").textContent).toBe("teleop");
   expect(teleopTransport.register).toHaveBeenCalledTimes(1);
   await userEvent.click(screen.getByRole("button", { name: "go" }));
-  expect(screen.getByTestId("page").textContent).toBe("validation");
+  expect(screen.getByTestId("page").textContent).toBe("archives");
   // Same provider, same runtime: a page switch is not a new document.
   expect(screen.getByTestId("runtime").textContent).toBe("teleop");
   expect(teleopTransport.register).toHaveBeenCalledTimes(1);
@@ -112,9 +112,9 @@ test("browser back and forward update the page without remounting the provider",
 
   // The browser changes the URL outside React and fires popstate; the shell must follow it
   // without re-registering the document or dropping the runtime.
-  globalThis.history.pushState({}, "", "/expert-validation");
+  globalThis.history.pushState({}, "", "/archives");
   globalThis.dispatchEvent(new PopStateEvent("popstate"));
-  expect(await screen.findByText("validation")).toBeTruthy();
+  expect(await screen.findByText("archives")).toBeTruthy();
   expect(teleopTransport.register).toHaveBeenCalledTimes(1);
   expect(teleopTransport.close).not.toHaveBeenCalled();
 

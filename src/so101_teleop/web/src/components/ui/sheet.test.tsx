@@ -27,7 +27,7 @@ describe("Sheet token port", () => {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Navigation</SheetTitle>
-            <SheetDescription>Teleop and Expert Validation</SheetDescription>
+            <SheetDescription>Teleop and Archives</SheetDescription>
           </SheetHeader>
         </SheetContent>
       </Sheet>,

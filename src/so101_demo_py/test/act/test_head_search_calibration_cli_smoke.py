@@ -72,9 +72,9 @@ def _production_smoke_arguments(inputs: dict, run_root: Path, *extra: str) -> li
 def _patch_production_smoke_flight(monkeypatch, *, terminal="TARGET_LOCKED", teardown=None):
     """Stub the two heavy seams: the runtime readback and the one smoke flight itself."""
 
-    from so101_demo.act.head_search_production_smoke import aggregate as smoke_aggregate
-    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
-    from so101_demo.act.head_search_restarts import observation as restarts_observation
+    from so101_demo.act.head_search.production_smoke import aggregate as smoke_aggregate
+    from so101_demo.act.head_search.restarts import contracts as restarts_contracts
+    from so101_demo.act.head_search.restarts import observation as restarts_observation
 
     seen: dict = {}
 
@@ -208,11 +208,11 @@ def test_measure_production_smoke_refuses_missing_inputs_and_an_existing_root(
 def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act.head_search_aggregate import contracts as aggregate_contracts
-    from so101_demo.act.head_search_aggregate import (
+    from so101_demo.act.head_search.aggregate import contracts as aggregate_contracts
+    from so101_demo.act.head_search.aggregate import (
         measurement_gates as aggregate_measurement_gates,
     )
-    from so101_demo.act.head_search_production_smoke import journal as smoke_journal
+    from so101_demo.act.head_search.production_smoke import journal as smoke_journal
 
     inputs = _production_smoke_inputs(tmp_path)
     seen = _patch_production_smoke_flight(monkeypatch)
@@ -264,7 +264,7 @@ def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
 def test_measure_production_smoke_returns_two_when_the_cup_is_not_locked(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act.head_search_production_smoke import journal as smoke_journal
+    from so101_demo.act.head_search.production_smoke import journal as smoke_journal
 
     inputs = _production_smoke_inputs(tmp_path)
     _patch_production_smoke_flight(monkeypatch, terminal="TARGET_AMBIGUOUS")
@@ -281,8 +281,8 @@ def test_measure_production_smoke_returns_two_when_the_cup_is_not_locked(
 def test_measure_production_smoke_reports_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act.head_search_production_smoke import aggregate as smoke_aggregate
-    from so101_demo.act.head_search_production_smoke import journal as smoke_journal
+    from so101_demo.act.head_search.production_smoke import aggregate as smoke_aggregate
+    from so101_demo.act.head_search.production_smoke import journal as smoke_journal
 
     inputs = _production_smoke_inputs(tmp_path)
     _patch_production_smoke_flight(monkeypatch)

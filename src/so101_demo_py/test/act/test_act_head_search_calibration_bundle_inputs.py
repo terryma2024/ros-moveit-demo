@@ -16,13 +16,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from so101_demo.act.head_search_calibration_bundle import (
+from so101_demo.act.head_search.calibration_bundle import (
     ALSO_RECORDED_ITEMS,
     ALSO_RECORDED_KEYS,
     PARAMETER_EVIDENCE_KEYS,
     RUNTIME_IDENTITY_FIELDS,
 )
-from so101_demo.act.head_search_calibration_bundle_inputs import (
+from so101_demo.act.head_search.calibration_bundle_inputs import (
     ALSO_RECORDED_DECLARED,
     BUNDLE_INPUTS_NAME,
     CAL_BUNDLE_INPUTS_INCOMPLETE,
@@ -35,7 +35,7 @@ from so101_demo.act.head_search_calibration_bundle_inputs import (
     record_bundle_inputs,
     runtime_identity,
 )
-from so101_demo.act.head_search_calibration_readback import readback_selected_perception_values
+from so101_demo.act.head_search.calibration_readback import readback_selected_perception_values
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 FOVY_RAD = 1.0471975511965976

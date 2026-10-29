@@ -12,7 +12,6 @@ PACKAGE = PACKAGE_ROOT
 UNIFIED_SCRIPT = PACKAGE / "scripts/so101_unified_web_server.py"
 LEGACY_SCRIPTS = (
     PACKAGE / "scripts/so101_teleop_server.py",
-    PACKAGE / "scripts/so101_expert_validation_server.py",
 )
 
 
@@ -34,7 +33,7 @@ def test_unified_entry_module_and_script_exist_and_delegate_to_the_same_module()
 
 
 def test_legacy_scripts_no_longer_start_a_web_listener_of_their_own():
-    forbidden = {"so101_teleop.main", "so101_teleop.expert_validation.main"}
+    forbidden = {"so101_teleop.main"}
     for script in LEGACY_SCRIPTS:
         modules = imported_modules(script)
         assert not (modules & forbidden), (script.name, sorted(modules & forbidden))
@@ -77,7 +76,6 @@ def test_install_manifest_registers_the_unified_launcher():
         "test_unified_api",
         "test_unified_lifecycle",
         "test_unified_budget_adapter",
-        "test_unified_live_fixture",
         "test_unified_launch",
     ):
         assert f"so101_add_pytest_test({name} " in cmake, name
@@ -86,7 +84,6 @@ def test_install_manifest_registers_the_unified_launcher():
 def test_legacy_entry_modules_are_not_reachable_from_the_unified_module():
     unified_source = (PACKAGE / "so101_teleop/unified/main.py").read_text()
     assert "so101_teleop.main" not in unified_source
-    assert "expert_validation.main" not in unified_source
 
 
 def test_every_unified_test_module_is_registered_and_every_registration_exists():

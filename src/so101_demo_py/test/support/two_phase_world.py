@@ -204,13 +204,19 @@ def convert(world, *, processors=2, missing=(), faults=(), exhausted=(), task_fa
     return combined
 
 
-def to_staged(run):
+def to_staged(run, attempts=None, receipted_failures=()):
     """Turns the finished two-phase run `convert` left into the form a run collected stage by stage leaves (CONTROLLED edit).
 
     REAL producers: `stage_records.write_record` for phase1, phase2 and finalize, `container_receipts.container_entry` and
     `write_receipt` (the hash chain), the owner's `_write`. CONTROLLED: the saved logs (one small file per container), the stage record
     bodies (only the logic document ref) and the split of the single cleanup record into the three per-stage records the owner writes
-    (`campaign-cleanup.json` for phase 1, `campaign-cleanup-phase2.json`, `campaign-cleanup-finalize.json`, each naming its receipt)."""
+    (`campaign-cleanup.json` for phase 1, `campaign-cleanup-phase2.json`, `campaign-cleanup-finalize.json`, each naming its receipt).
+
+    `attempts` maps a stage to the attempt that completed it (default 1). For an attempt above 1 the stage record carries `attempt`, the
+    cleanup record has the `.aN` name, and the failed attempts before it leave their own cleanup record (a stage that launched nothing).
+    A stage in `receipted_failures` also leaves, for each failed attempt, an empty receipt `<stage>-a<N>` (what the owner writes for a
+    failed attempt that started a Teacher; here the receipt has no container) that the failed attempt's cleanup record names."""
+    attempts = attempts or {}
     host = Path(run)/'host'
     registry = ContainerLaunchRegistry(host/'launches.sqlite3', create=False, read_only=True)
     try:
@@ -227,8 +233,9 @@ def to_staged(run):
         finalize=dict(services=empty, shards=[]))
     previous = None
     for number, stage in enumerate(('phase1', 'phase2', 'finalize'), start=1):
+        attempt = attempts.get(stage, 1)
         previous = stage_records.write_record(host, stage, dict(campaign_config=dict(path='campaign-config.json', sha256='c'*64)),
-                                              previous=previous)
+                                              previous=previous, attempt=attempt)
         entries = []
         for item in groups[stage]:
             name = item['launch']['container_name']
@@ -239,10 +246,20 @@ def to_staged(run):
             entries.append(dict(container_receipts.container_entry(item, item['exit_inspect']),
                                 logs_path=f'{container_receipts.LOG_DIRECTORY}/{stage}/{name}.log',
                                 logs_sha256=hashlib.sha256(raw).hexdigest(), removed=True, absent_after_removal=True))
+        failed_receipts = {}
+        if stage in receipted_failures:
+            for failed in range(1, attempt):
+                failed_receipts[failed] = container_receipts.write_receipt(host, stage=f'{stage}-a{failed}', stage_record_sha256=None,
+                                                                           containers=[])
         receipt = container_receipts.write_receipt(host, stage=stage, stage_record_sha256=previous['sha256'], containers=entries)
         document = dict(documents[stage], terminated=True, stop_reason='CAMPAIGN_CLOSING',
                         container_receipt=f'containers-receipt-{receipt["seq"]:02d}-{stage}.json')
-        path = host/('campaign-cleanup.json' if stage == 'phase1' else f'campaign-cleanup-{stage}.json')
+        path = host/('campaign-cleanup.json' if stage == 'phase1' else stage_records.cleanup_path(host, stage, attempt).name)
         if path.exists():
             path.unlink()
         _write(path, document)
+        for failed in range(1, attempt):
+            body = dict(terminated=True, services=empty, shards=[], stop_reason='CAMPAIGN_CLOSING')
+            if failed in failed_receipts:
+                body['container_receipt'] = f'containers-receipt-{failed_receipts[failed]["seq"]:02d}-{stage}-a{failed}.json'
+            _write(stage_records.cleanup_path(host, stage, failed), body)

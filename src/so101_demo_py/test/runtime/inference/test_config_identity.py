@@ -17,7 +17,9 @@ def file_ref(path, content):
     return {"path": str(path), "sha256": hashlib.sha256(content).hexdigest()}
 
 
-def campaign_fixture(tmp_path):
+def campaign_fixture(tmp_path, mounted=True):
+    """A campaign config. Every run starts from a mount tree, so by default the config names one (`mount_build`) and one base image
+    runs every role, with the image records the trees' BUILD-COMMIT records imply (`mounted=False` only for the legacy readers)."""
     controlled = file_ref(tmp_path / "controlled.json", b'{"sampling_hz":10,"cup_geometry_filter":"current"}\n')
     head_weights = file_ref(tmp_path / "head.pt", b"head-weights")
     teacher_weights = file_ref(tmp_path / "teacher.pt", b"teacher-weights")
@@ -30,11 +32,21 @@ def campaign_fixture(tmp_path):
             "torch_interop_threads": 1, "max_inflight_requests": 8,
             "max_frame_bytes": 2**20, "max_image_height": 480, "max_image_width": 640,
             "queue_timeout_s": 0.5, "inference_timeout_s": 0.5}
-    return {"schema_version": 1, "kind": "ACT_CONTAINER_CAMPAIGN", "evidence_root": str(tmp_path),
+    document = {"schema_version": 1, "kind": "ACT_CONTAINER_CAMPAIGN", "evidence_root": str(tmp_path),
             "controlled_runtime": controlled, "head_service": service("head-model", head_weights),
             "teacher_service": service("teacher-model", teacher_weights),
             "shard_image": image | {"digest": "sha256:" + "d" * 64},
             "gpu_uuid": "GPU-selected", "qualification_contract": None}
+    if mounted:
+        from mount_trees import make_mount_trees
+        from so101_demo.runtime.container_campaign.mount_build import verify_records
+        mount = make_mount_trees(tmp_path)
+        base = {"digest": "sha256:" + "a" * 64, **verify_records(mount)}
+        for service_name in ("head_service", "teacher_service"):
+            document[service_name]["image"] = dict(base)
+        document["shard_image"] = dict(base)
+        document["mount_build"] = mount.document()
+    return document
 
 
 def write_config(tmp_path, document):

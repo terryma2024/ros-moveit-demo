@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_calibration_admission_document import (
+from so101_demo.act.head_search.calibration_admission_document import (
     ADMISSION_FIELDS,
     ADMISSION_NAME,
     CAL_ADMISSION_INCOMPLETE,
@@ -25,11 +25,11 @@ from so101_demo.act.head_search_calibration_admission_document import (
     derive_measurement_plan,
     record_admission_document,
 )
-from so101_demo.act.head_search_calibration_geometry import (
+from so101_demo.act.head_search.calibration_geometry import (
     GEOMETRY_INPUT_NAME,
     load_sealed_geometry,
 )
-from so101_demo.act.head_search_calibration_inputs import (
+from so101_demo.act.head_search.calibration_inputs import (
     CAL_ADMISSION_REFUSED,
     CAL_BINDING_REBOUND,
     CAL_INPUT_UNSEALED,
@@ -341,7 +341,7 @@ def test_the_producer_refuses_a_sealed_input_whose_bytes_moved(tmp_path: Path) -
 def test_the_producer_refuses_a_plan_the_installed_controller_cannot_build(tmp_path: Path) -> None:
     """A step above half the field of view is refused by the run's own precondition, and by name."""
 
-    from so101_demo.act.head_search_calibration_run import (
+    from so101_demo.act.head_search.calibration_run import (
         CAL_TRAJECTORY_CONTRACT_UNSATISFIED as RUN_CODE,
     )
 

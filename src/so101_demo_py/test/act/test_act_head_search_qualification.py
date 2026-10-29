@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_qualification import (
+from so101_demo.act.head_search.qualification import (
     HEAD_SEARCH_QUALIFIED,
     qualification_parser,
     qualify_head_search,
@@ -105,8 +105,8 @@ def test_the_qualification_parser_accepts_only_the_four_subcommands() -> None:
 
 
 def test_the_binding_accepts_only_restricted_head_only_admission() -> None:
-    from so101_demo.act.head_search_binding import validate_head_only_admission
-    from so101_demo.act.head_search_qualification import restricted_admission
+    from so101_demo.act.head_search.binding import validate_head_only_admission
+    from so101_demo.act.head_search.qualification import restricted_admission
 
     for operation in ("GEOMETRY_SMOKE", "CALIBRATION_RUN", "QUALIFICATION_RUN"):
         accepted = validate_head_only_admission(restricted_admission(operation=operation))
@@ -142,7 +142,7 @@ def test_serve_teleop_owns_teardown_and_cannot_resume(tmp_path: Path) -> None:
     import signal
     import time
 
-    from so101_demo.act.head_search_qualification import serve_teleop as _serve
+    from so101_demo.act.head_search.qualification import serve_teleop as _serve
 
     run_root = tmp_path / "fresh-run"
     report = _qualified_report(run_root)
@@ -178,7 +178,7 @@ def test_serve_teleop_owns_teardown_and_cannot_resume(tmp_path: Path) -> None:
 def test_teardown_is_reported_as_observed_not_assumed(tmp_path: Path) -> None:
     """Without a teardown that actually observed anything, the receipt must not claim success."""
 
-    from so101_demo.act.head_search_qualification import serve_teleop as _serve
+    from so101_demo.act.head_search.qualification import serve_teleop as _serve
 
     run_root = tmp_path / "probe"
     report = _qualified_report(run_root)
@@ -215,7 +215,7 @@ def test_teardown_is_reported_as_observed_not_assumed(tmp_path: Path) -> None:
 def test_the_owner_records_the_kernel_start_ticks_and_the_probe_reports_them(
     tmp_path: Path,
 ) -> None:
-    from so101_demo.act.head_search_qualification import process_start_ticks, serve_teleop
+    from so101_demo.act.head_search.qualification import process_start_ticks, serve_teleop
 
     assert process_start_ticks() > 0
     run_root = tmp_path / "probe"

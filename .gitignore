@@ -75,3 +75,5 @@ assets/captures
 **/blob-report/
 
 .envrc
+src/so101_demo_py/assets/mujoco/textures/indoor/proc/
+src/so101_demo_py/assets/mujoco/textures/indoor/cc0/*.png

@@ -25,7 +25,7 @@ def _inputs(tmp_path):
 
 
 def _call(frames,detections):
-    module=importlib.import_module('so101_demo.act.head_search_campaign_truth')
+    module=importlib.import_module('so101_demo.act.head_search.campaign_truth')
     return module.attribute_locked_frames(frames,detections)
 
 

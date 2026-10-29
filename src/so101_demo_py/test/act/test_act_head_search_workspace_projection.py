@@ -34,10 +34,10 @@ from collections.abc import Callable
 import pytest
 from so101_demo.act.head_camera_geometry.contract import HeadCameraGeometryContract, project_point
 from so101_demo.act.head_camera_geometry.validation import camera_pose_from_seal
-from so101_demo.act.head_search_calibration_geometry import SELECTION_RULE
-from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_search_params import compute_vertical_bounds_px
-from so101_demo.act.head_search_workspace_projection.projection import (
+from so101_demo.act.head_search.calibration_geometry import SELECTION_RULE
+from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search.search_params import compute_vertical_bounds_px
+from so101_demo.act.head_search.workspace_projection.projection import (
     CAL_PROJECTION_EMPTY,
     CAL_PROJECTION_EVIDENCE_CONTRADICTORY,
     CAL_PROJECTION_EVIDENCE_MISSING,
@@ -52,7 +52,7 @@ from so101_demo.act.head_search_workspace_projection.projection import (
     sealed_bearing_rad,
     workspace_sample_points,
 )
-from so101_demo.act.head_search_workspace_projection.writer import (
+from so101_demo.act.head_search.workspace_projection.writer import (
     build_head_search_workspace_projection,
     write_head_search_workspace_projection,
 )

@@ -14,7 +14,7 @@ feedback and an empty detection list.
 
 from __future__ import annotations
 
-from so101_demo.act.head_search_domain import TARGET_NOT_FOUND
+from so101_demo.act.head_search.domain import TARGET_NOT_FOUND
 from so101_demo.act.search import HeadSearchController
 
 #: the seal tolerance: a stop that reaches an endpoint may be a rounding error away from it

@@ -153,6 +153,8 @@ class RosMoveGroupReachabilityPlanner:
         self._ik = ik
         self._prepared_steps: dict[State, tuple[HorizonStep, ...]] = {}
         self._prepared_receipts: tuple[dict[str, object], ...] = ()
+        #: R3-a: the carry via-point of the targets being checked (a waypoint of MOVE_ABOVE_PLACE), or None
+        self._carry_via: PoseEvidence | None = None
         if action_client is None:
             from moveit_msgs.action import MoveGroup
             from rclpy.action import ActionClient
@@ -205,8 +207,13 @@ class RosMoveGroupReachabilityPlanner:
         norm = math.sqrt(sum(value * value for value in quaternion))
         return PoseEvidence(position, tuple(value / norm for value in quaternion))
 
+    def _remember_carry_via(self, targets: ResolvedMotionTargets) -> None:
+        self._carry_via = getattr(targets, "carry_via", None)
+
     def prepare_horizon(self, targets: ResolvedMotionTargets, start: JointStateEvidence) -> None:
         """Prove the full pick prefix before the first plan-only request."""
+
+        self._remember_carry_via(targets)
 
         # Opt in only the project solver; injected/stateful implementations keep their semantics.
         from ..control.moveit.pose_ik import cacheable_pose_ik
@@ -256,10 +263,19 @@ class RosMoveGroupReachabilityPlanner:
         if prepared:
             return prepared, self._prepared_receipts
         start_positions = self._arm_positions(start)
+        waypoints = (HorizonWaypoint(state, 0, target),)
+        if state is State.MOVE_ABOVE_PLACE and self._carry_via is not None:
+            # R3-a: the executed MOVE_ABOVE_PLACE runs two straight legs through the via-point, three waypoints each, from the pose of
+            # the start state (the end of LIFT); all six are solved here, exactly the waypoints `_motion_waypoints` plans
+            from_pose = self._ik.forward(start_positions)
+            via = self._carry_via
+            poses = ([self._interpolate_pose(from_pose, via, step / 3.0) for step in (1, 2, 3)]
+                     + [self._interpolate_pose(via, target, step / 3.0) for step in (1, 2, 3)])
+            waypoints = tuple(HorizonWaypoint(state, index, pose) for index, pose in enumerate(poses))
         result = _compute_while_progressing(
             lambda: solve_horizon(
                 self._ik,
-                (HorizonWaypoint(state, 0, target),),
+                waypoints,
                 start_positions,
                 position_tolerance_m=self._template.position_tolerance_m,
                 orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),

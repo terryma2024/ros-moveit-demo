@@ -9,8 +9,8 @@ import json
 from pathlib import Path
 import sys
 
-from so101_demo.act import head_search_ownership as ownership
-from so101_demo.act.head_search_ownership import process_ancestry
+from so101_demo.act.head_search import ownership as ownership
+from so101_demo.act.head_search.ownership import process_ancestry
 from so101_demo.cli.head_search.common import _command_line
 from so101_demo.cli.head_search.flags import (
     HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
@@ -21,7 +21,7 @@ from so101_demo.cli.head_search.flags import (
 def _restart_parser() -> argparse.ArgumentParser:
     """The `measure-restarts` entry: one restart per declared anchor, each with its own teardown proof."""
 
-    from so101_demo.act.head_search_restarts.contracts import ANCHORS as RESTART_ANCHORS
+    from so101_demo.act.head_search.restarts.contracts import ANCHORS as RESTART_ANCHORS
 
     parser = argparse.ArgumentParser(
         prog="so101_head_search_calibration measure-restarts",
@@ -105,10 +105,10 @@ def _measure_restarts(arguments: list[str]) -> int:
         return 2
     anchors = [name for name in str(parsed.anchors).split(",") if name]
 
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_restarts.observation import read_runtime_of_record
-    from so101_demo.act.head_search_restarts.restart_run import run_anchor_restart
-    from so101_demo.act.head_search_restarts.writer import write_head_search_restarts
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.restarts.observation import read_runtime_of_record
+    from so101_demo.act.head_search.restarts.restart_run import run_anchor_restart
+    from so101_demo.act.head_search.restarts.writer import write_head_search_restarts
 
     production = json.loads(parsed.production_config.read_text(encoding="utf-8"))
     values = production.get("values") if isinstance(production.get("values"), Mapping) else {}

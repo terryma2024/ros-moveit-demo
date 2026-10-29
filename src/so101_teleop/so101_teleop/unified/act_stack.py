@@ -24,6 +24,10 @@ from .bridge import (
 from .contracts import MutationError, OwnerKey
 
 
+#: the variable the simulator's evidence plugin reads for a declared model identity (`ActStackLaunch.declared_model_sha256`); a stack that
+#: is not launched with one never inherits one from its caller
+DECLARED_MODEL_ENV = "SO101_DECLARED_MODEL_SHA256"
+PROOF_SHA256_ENV = "SO101_MODEL_EQUIVALENCE_PROOF_SHA256"
 #: the camera rig of a stack that names none (a stack launched before rigs existed): head and wrist cameras with a neck
 DEFAULT_RIG = "head-wrist"
 
@@ -40,6 +44,16 @@ class ActStackLaunch:
     #: launch command and readiness command stay exactly what they were before rigs existed.
     rig: str = DEFAULT_RIG
     rig_profile: Path | None = None
+    #: an evaluation-only scene variant (goal 35-R0): the MJCF the simulator loads instead of the rig's scene, an absolute file the
+    #: shard wrote into its own owned root. None (every collection and every nominal rollout) adds nothing to the launch command.
+    mujoco_scene: Path | None = None
+    #: the compiled-model hash a scene-variant stack declares in its scene-state evidence (the nominal scene's, as the frozen inputs bind it)
+    #: instead of the hash of the variant it loaded; given to the simulator in `SO101_DECLARED_MODEL_SHA256`. Only valid together with a
+    #: `mujoco_scene` whose physics the Host has proved equal to the nominal one (`scene_variant_run.realize_into`).
+    declared_model_sha256: str | None = None
+    #: the sha256 of the equivalence proof (`act/model_equivalence.py`) of the declared identity: an override without one is refused here, in the
+    #: simulator and at every consumer (`SO101_MODEL_EQUIVALENCE_PROOF_SHA256`)
+    equivalence_proof_sha256: str | None = None
 
     def __post_init__(self) -> None:
         binary, root = Path(self.ros2_executable), Path(self.evidence_root)
@@ -53,6 +67,17 @@ class ActStackLaunch:
                 or any(not isinstance(key, str) or not isinstance(value, str)
                        for key, value in self.environment.items())):
             raise ValueError("ACT_STACK_LAUNCH_INVALID")
+        if self.mujoco_scene is not None:
+            scene = Path(self.mujoco_scene)
+            if (not scene.is_absolute() or ".." in scene.parts or scene.is_symlink() or not scene.is_file()):
+                raise ValueError("ACT_STACK_SCENE_INVALID")
+        if (self.declared_model_sha256 is None) != (self.equivalence_proof_sha256 is None):
+            raise ValueError("ACT_STACK_DECLARED_MODEL_NEEDS_PROOF")
+        if self.declared_model_sha256 is not None and (
+                self.mujoco_scene is None
+                or any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                       for value in (self.declared_model_sha256, self.equivalence_proof_sha256))):
+            raise ValueError("ACT_STACK_DECLARED_MODEL_INVALID")
         if self.rig == DEFAULT_RIG:
             if self.rig_profile is not None:
                 raise ValueError("ACT_STACK_RIG_INVALID")
@@ -70,6 +95,7 @@ class ActStackLaunch:
             "headless:=true", "sensor_rendering:=true", "act_profile:=true",
             f"session_id:={self.session_id}", f"task_evidence_root:={self.evidence_root}",
             *(() if self.rig == DEFAULT_RIG else (f"rig:={self.rig}",)),
+            *(() if self.mujoco_scene is None else (f"mujoco_scene:={self.mujoco_scene}",)),
         ]
 
     def readiness_arguments(self) -> list[str]:
@@ -77,11 +103,14 @@ class ActStackLaunch:
         return [] if self.rig_profile is None else ["--rig-profile", str(self.rig_profile)]
 
     def process_environment(self) -> dict[str, str]:
+        environment = {key: value for key, value in self.environment.items() if key not in (DECLARED_MODEL_ENV, PROOF_SHA256_ENV)}
         return {
-            **self.environment,
+            **environment,
             "ROS_DOMAIN_ID": str(self.ros_domain_id),
             "SO101_SIMULATION_SESSION_ID": self.session_id,
             "SO101_TASK_EVIDENCE_ROOT": str(self.evidence_root),
+            **({} if self.declared_model_sha256 is None else
+               {DECLARED_MODEL_ENV: self.declared_model_sha256, PROOF_SHA256_ENV: self.equivalence_proof_sha256}),
         }
 
 
@@ -105,6 +134,22 @@ class ActStackProcessOwner:
         self.process: subprocess.Popen | None = None
         self.owner: OwnerKey | None = None
         self.stop_timeout_s = 15.0
+        self._stop_confirmed = False
+
+    def relaunch_with(self, launch: ActStackLaunch, *, ready_probe: Callable[[], bool]) -> None:
+        """Change what the next `start` launches (another scene), on a stack that is stopped: `launch` must be this stack's own, apart
+        from the scene and the declared model identity, and `ready_probe` is the new single-use readiness probe. The stop, graph and
+        owner state are those of the stack; nothing else of it changes."""
+
+        if self.process is not None or self.owner is not None:
+            raise MutationError("ACT_STACK_RELAUNCH_WHILE_RUNNING")
+        if not isinstance(launch, ActStackLaunch) or not callable(ready_probe):
+            raise ValueError("ACT_STACK_OWNER_CONFIG_INVALID")
+        same = ("ros2_executable", "session_id", "evidence_root", "ros_domain_id", "environment", "rig", "rig_profile")
+        if any(getattr(launch, name) != getattr(self.launch, name) for name in same):
+            raise MutationError("ACT_STACK_RELAUNCH_IDENTITY_CHANGED")
+        self.launch = launch
+        self.ready_probe = ready_probe
         self._stop_confirmed = False
 
     async def start(self, *, timeout_s: float = 90.0) -> OwnerKey:

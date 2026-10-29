@@ -10,21 +10,21 @@ from head_search_scenarios_support import (
 )
 import pytest
 
-from so101_demo.act.head_search_scenarios import plan as module_plan
-from so101_demo.act.head_search_scenarios.contracts import (
+from so101_demo.act.head_search.scenarios import plan as module_plan
+from so101_demo.act.head_search.scenarios.contracts import (
     CAL_SCENARIO_SPLIT_LEAK,
     CalibrationScenarioRefused,
 )
-from so101_demo.act.head_search_scenarios.plan import (
+from so101_demo.act.head_search.scenarios.plan import (
     check_frame_cadence,
     expected_terminals,
     qualification_scenarios,
 )
-from so101_demo.act.head_search_scenarios.scenario_run import (
+from so101_demo.act.head_search.scenarios.scenario_run import (
     hold_stop_samples,
 )
-from so101_demo.act.head_search_scenarios.stop_proof import settle_proof, stop_proof
-from so101_demo.act.head_search_timing_measurement.contracts import (
+from so101_demo.act.head_search.scenarios.stop_proof import settle_proof, stop_proof
+from so101_demo.act.head_search.timing_measurement.contracts import (
     CAL_TIMING_EVIDENCE_MISSING,
 )
 

@@ -67,5 +67,5 @@ def test_every_allowed_module_has_a_reason():
 def test_the_scan_sees_the_split_modules():
     counts = _line_counts()
 
-    assert "src/so101_demo_py/src/cli/mujoco_parallel_batch.py" in counts
+    assert "src/so101_demo_py/src/runtime/parallel_perception_runtime.py" in counts
     assert "src/so101_mujoco_support/src/simulation_evidence_plugin.cpp" in counts

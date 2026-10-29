@@ -22,6 +22,8 @@ _COLLECTION_FIELDS={'business_identity','parallel_runtime','campaign_config','wa
 #: a rollout shard carries no campaign config (it has no Teacher): its frozen inputs travel in each task document and are bound
 #: here by the run identity
 _ROLLOUT_FIELDS={'rollout_identity','rig_profile_sha256','parallel_runtime','wave_id','deadline_monotonic_s'}
+#: a rollout spec may also carry the evaluation-only scene variant (`act/scene_variant_run.py spec_entry`); a spec without one is unchanged
+_ROLLOUT_OPTIONAL_FIELDS={'scene_variant'}
 ROLLOUT_IDENTITY_FIELDS={'run_identity_sha256','scenes_sha256','policy_sha256','bundle_sha256'}
 _BUSINESS_FIELDS={'manifest_sha256','runtime_config_sha256','collection_config_sha256','contact_policy_fingerprint'}
 
@@ -44,7 +46,7 @@ def instance_rig(spec):
 
 
 def load_spec(path):
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 
     try:
         with _open_regular(path) as stream:
@@ -57,6 +59,8 @@ def load_spec(path):
         collection=document.get('workload_kind')=='act_collection'
         rollout=document.get('workload_kind')=='act_rollout'
         expected=_FIELDS|_COLLECTION_FIELDS if collection else _FIELDS|_ROLLOUT_FIELDS if rollout else _FIELDS
+        if rollout:
+            expected=expected|(_ROLLOUT_OPTIONAL_FIELDS&set(document))
         if (set(document) != expected
                 or type(document["schema_version"]) is not int or document["schema_version"] != SPEC_SCHEMA_VERSION
                 or document["kind"] != "ACT_CONTAINER_SHARD"
@@ -106,6 +110,11 @@ def load_spec(path):
                     or document['deadline_monotonic_s']<=time.monotonic()):
                 raise ValueError('rollout identity')
             instance_rig(document)           # a profile hash that names no known rig is refused here
+            if 'scene_variant' in document:
+                from so101_demo.act.scene_variant_run import valid_spec_entry
+                if not valid_spec_entry(document['scene_variant']):
+                    raise ValueError('scene variant')
+                validate_file_ref(document['scene_variant']['file'])
             runtime = _load_runtime_config(validate_file_ref(document['parallel_runtime']))
         else:
             runtime = _load_runtime_config(runtime_path)

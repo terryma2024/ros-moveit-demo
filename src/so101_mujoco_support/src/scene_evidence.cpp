@@ -18,11 +18,27 @@
 
 namespace so101_mujoco_support
 {
-bool SceneStateBuilder::configure(const mjModel * model)
+namespace
+{
+bool lower_hex64(const std::string & text)
+{
+  return text.size() == 64 &&
+         std::all_of(text.begin(), text.end(), [](const char c) {return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');});
+}
+}  // namespace
+
+bool SceneStateBuilder::configure(
+  const mjModel * model, const std::string & declared_sha256, const std::string & proof_sha256)
 {
   model_ = nullptr;
   model_sha256_.clear();
+  computed_model_sha256_.clear();
+  declared_sha256_.clear();
+  proof_sha256_.clear();
   if (!model || mj_version() != mjVERSION_HEADER) {return false;}
+  // an override is a declared identity AND the hash of its proof, or nothing
+  if (declared_sha256.empty() != proof_sha256.empty()) {return false;}
+  if (!declared_sha256.empty() && (!lower_hex64(declared_sha256) || !lower_hex64(proof_sha256))) {return false;}
   const auto size = mj_sizeModel(model);
   if (size <= 0) {return false;}
   std::vector<uint8_t> bytes(static_cast<std::size_t>(size));
@@ -36,6 +52,12 @@ bool SceneStateBuilder::configure(const mjModel * model)
   for (const auto value : digest) {
     model_sha256_ += hex[value >> 4];
     model_sha256_ += hex[value & 15];
+  }
+  computed_model_sha256_ = model_sha256_;
+  if (!declared_sha256.empty()) {
+    model_sha256_ = declared_sha256;
+    declared_sha256_ = declared_sha256;
+    proof_sha256_ = proof_sha256;
   }
   model_ = model;
   return true;
@@ -56,6 +78,9 @@ msg::SceneStateEvidence SceneStateBuilder::build(
   output.simulation_step = step;
   output.paused = paused;
   output.model_sha256 = model_sha256_;
+  output.loaded_model_sha256 = computed_model_sha256_;
+  output.declared_model_sha256 = declared_sha256_;
+  output.equivalence_proof_sha256 = proof_sha256_;
   const auto nanoseconds = static_cast<int64_t>(std::llround(data->time * 1.0e9));
   output.header.stamp.sec = static_cast<int32_t>(nanoseconds / 1000000000LL);
   output.header.stamp.nanosec = static_cast<uint32_t>(nanoseconds % 1000000000LL);

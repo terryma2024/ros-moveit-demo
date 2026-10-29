@@ -11,6 +11,8 @@ are listed in the manifest (`non_committed_attempts`) and claim nothing:
   MERGE_SOURCES_TOO_FEW, MERGE_SOURCE_INVALID, MERGE_FORMAL_LIST_INVALID, MERGE_OUTPUT_EXISTS,
   MERGE_INDEX_INVALID, MERGE_INDEX_NOT_FROZEN, MERGE_SOURCE_UNSEALED, MERGE_SOURCE_READBACK_FAILED, MERGE_INDEX_NOT_SEALED,
   MERGE_QUALIFICATION_INVALID, MERGE_QUALIFICATION_NOT_QUALIFIED, MERGE_IDENTITY_MISMATCH,
+  MERGE_IDENTITY_EQUIVALENCE_{MISSING, PROOF_INVALID, PROOF_TAMPERED, FILE_NOT_ALLOWED, COMMIT_MISMATCH, INPUTS_MISSING, TREE_MISMATCH,
+  CONTAINER_REACH, GIT_FAILED} (the rule that lets `mount_build` and `image_source_install` differ: `so101_demo.act.identity_equivalence`),
   MERGE_SCENE_OVERLAP, MERGE_SCENE_NOT_IN_FORMAL_LIST, MERGE_UNION_NOT_FORMAL_LIST, MERGE_EPISODE_DUPLICATE.
 
 The controlled identity compared is the one the qualification report records, without the environment class: `gpu_uuid` (the GPU is
@@ -30,6 +32,8 @@ INDEX_KIND = "act_collection_frozen_index"
 REPORT_KIND = "ACT_PARALLEL_COLLECTION_QUALIFICATION"
 #: the controlled-identity keys that are the environment of a host and so never compared between sources
 ENVIRONMENT_IDENTITY_KEYS = frozenset({"gpu_uuid"})
+#: the only keys that may differ when a verified identity-equivalence proof is given (`so101_demo.act.identity_equivalence`)
+EQUIVALENCE_FIELDS = frozenset({"image_source_install", "mount_build"})
 SEAL_FILE = "SEALED.json"
 _CHUNK = 8 << 20
 
@@ -44,6 +48,7 @@ class MergeSource:
     qualification_report: Path
     host: str
     run_root: Path | None = None            # default: the directory that holds the index
+    mount_inputs: Path | None = None        # the sealed inputs root of the run (`mount-inputs/`); only read when the mounted builds differ
 
 
 def _read_json(path, code):
@@ -202,13 +207,15 @@ def environment_of(report: dict) -> dict:
 
 
 def _mount_preflights(parsed, reference):
+    # each source is checked against its own identity (they differ only when an identity-equivalence proof admits it)
     """Mount mode (the identity names a mounted build): every source's run holds a passing environment check of that commit against that
     base image, and all of them checked the same base image manifest. Image mode: None, and no source may hold one."""
     from so101_demo.runtime.container_campaign.mount_build import PREFLIGHT_COPY, preflight_problem
 
-    mount = reference.get("mount_build")
     found = {}
     for item in parsed:
+        identity = item.get("identity", reference)
+        mount = identity.get("mount_build")
         path = Path(item["run_root"]) / "host" / PREFLIGHT_COPY
         if mount is None:
             if path.exists():
@@ -218,12 +225,12 @@ def _mount_preflights(parsed, reference):
             record = json.loads(path.read_text())
         except (OSError, ValueError) as error:
             raise MergeRefused(f"MERGE_MOUNT_PREFLIGHT_MISSING: {item['name']}: {path}") from error
-        problem = preflight_problem(record, mount, reference["image_source_install"]["shard"])
+        problem = preflight_problem(record, mount, identity["image_source_install"]["shard"])
         if problem is not None:
             raise MergeRefused(f"MERGE_MOUNT_PREFLIGHT_REFUSED: {item['name']}: {problem}")
         found[item["name"]] = dict(host_label=record["host"], base_manifest_sha256=record["base_manifest_sha256"],
                                    warnings=record["warnings"], exceptions=record["exceptions"], record_sha256=sha256_file(path))
-    if mount is None:
+    if not found:
         return None
     manifests = {entry["base_manifest_sha256"] for entry in found.values()}
     if len(manifests) != 1:
@@ -233,8 +240,11 @@ def _mount_preflights(parsed, reference):
 
 # ---- the merge ---------------------------------------------------------------------------------------------------------------
 
-def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4):
-    """`(merged index, manifest)` of the sources, or a `MergeRefused`. Reads every source in full; writes nothing."""
+def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4, identity_equivalence=None, repo=None):
+    """`(merged index, manifest)` of the sources, or a `MergeRefused`. Reads every source in full; writes nothing.
+
+    `identity_equivalence` (a proof document, `act_identity_equivalence`) and `repo` (the git repository it is recomputed in) are read only
+    when the identities differ, and then only in `mount_build` and `image_source_install`; see `so101_demo.act.identity_equivalence`."""
     sources = list(sources)
     if len(sources) < 2:
         raise MergeRefused("MERGE_SOURCES_TOO_FEW: at least two sources are required")
@@ -263,14 +273,26 @@ def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4)
         scenes = owned_scenes(committed)
         if not scenes:
             raise MergeRefused(f"MERGE_INDEX_INVALID: {name} committed no scene")
-        parsed.append(dict(source=source, name=name, document=document, committed=committed, scenes=scenes, report=report,
+        parsed.append(dict(source=source, name=name, identity=identities[-1], mount_inputs=source.mount_inputs,
+                           document=document, committed=committed, scenes=scenes, report=report,
                            handled=len(covered_scenes(document, committed)), attempts=non_committed_attempts(document, committed),
                            run_root=run_root, seal=record, entries=len(entries)))
     reference = identities[0]
+    equivalence_needed = False
     for number, identity in enumerate(identities[1:], start=1):
         if identity != reference:
             different = sorted(key for key in set(identity) | set(reference) if identity.get(key) != reference.get(key))
-            raise MergeRefused(f"MERGE_IDENTITY_MISMATCH: source {number} differs from source 0 in {different}")
+            if not set(different) <= EQUIVALENCE_FIELDS:
+                raise MergeRefused(f"MERGE_IDENTITY_MISMATCH: source {number} differs from source 0 in {different}")
+            if identity_equivalence is None:
+                raise MergeRefused(f"MERGE_IDENTITY_MISMATCH: source {number} differs from source 0 in {different}; "
+                                   "MERGE_IDENTITY_EQUIVALENCE_MISSING: no --identity-equivalence proof was given")
+            equivalence_needed = True
+    equivalence = None
+    if equivalence_needed:
+        from so101_demo.act.identity_equivalence import verify_equivalence
+
+        equivalence = verify_equivalence(identity_equivalence, repo, parsed, workers=readback_workers)
     preflights = _mount_preflights(parsed, reference)
     owner = {}
     for item in parsed:
@@ -300,11 +322,15 @@ def merge_collections(sources, formal_list, stamp, *, readback_workers: int = 4)
             host=source.host, **environment_of(item["report"]),
             qualification_report=str(report_path.resolve()), qualification_report_sha256=sha256_file(report_path),
             scenes=item["handled"], committed=len(item["committed"]),
-            **({} if preflights is None else dict(mount_preflight=preflights[item["name"]]))))
+            **({} if preflights is None else dict(mount_preflight=preflights[item["name"]])),
+            **({} if equivalence is None else dict(controlled_identity_sha256=hashlib.sha256(canonical(item["identity"])).hexdigest()))))
     index = dict(kind=INDEX_KIND, qualification=False, schema_version=max(versions), campaign_id="merged-" + stamp,
                  scene_count=len(formal), committed_episodes=merged,
                  provenance=dict(created=stamp, formal_list=str(Path(formal_list).resolve()),
                                  formal_list_sha256=sha256_file(formal_list),
-                                 controlled_identity_sha256=hashlib.sha256(canonical(reference)).hexdigest(), sources=records))
+                                 controlled_identity_sha256=hashlib.sha256(canonical(reference)).hexdigest(), sources=records,
+                                 **({} if equivalence is None else dict(identity_equivalence=dict(
+                                     proof_sha256=equivalence["proof_sha256"], allow_list_version=equivalence["allow_list_version"])))))
     skipped = [dict(host=item["source"].host, index_sha256=sha256_file(item["source"].index), attempts=item["attempts"]) for item in parsed]
-    return index, {"episodes": manifest, "non_committed_attempts": skipped}
+    return index, {"episodes": manifest, "non_committed_attempts": skipped,
+                   **({} if equivalence is None else {"identity_equivalence": equivalence})}

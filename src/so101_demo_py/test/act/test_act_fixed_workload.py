@@ -188,3 +188,112 @@ def test_generic_admission_return_cannot_replace_act_pose_before_teacher(tmp_pat
     result = ParallelWorker(ports).run_one()
     assert result.terminal_status is AttemptStatus.INVALID
     assert "ACT_COLLECTION_ADMITTED_POSE_CHANGED" in result.failure_message
+
+
+def test_a_pose_source_replaces_the_pose_before_admission_and_the_teacher_gets_the_replaced_chain(tmp_path):
+    import dataclasses
+
+    from test_act_ros_runtime import build_case, run
+    from so101_demo.core.task_geometry import Pose7
+    h = build_case(tmp_path, identity=dict(batch_id="batch-a", coordinator_epoch=1,
+        worker_id="w1", worker_generation=1, point_id="p1", attempt_id="p1-lease-1", lease_generation=1),
+        reset_epoch="reset-1")
+    admitted = run(h)
+    replaced = dataclasses.replace(admitted, pose_world=Pose7((0.5, 0.25, 0.1, 0.0, 0.0, 0.0, 1.0)))
+    seen = []
+
+    def pose_source(lease, chain):
+        seen.append((lease, chain))
+        return replaced
+
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: admitted
+    fake.runtime.admit_pose = lambda lease, chain: chain
+    teacher_calls = []
+    fake.runtime.execute_expert = lambda lease, pose: teacher_calls.append(pose) or NS(
+        status=AttemptStatus.FAILED, reason="TEACHER_GRASP_FAILED", physical_action_proven_absent=False)
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=pose_source)
+    ParallelWorker(ports).run_one()
+    assert len(seen) == 1 and seen[0][1] is admitted and seen[0][0].point_id == "p1"
+    assert teacher_calls == [replaced] and teacher_calls[0].pose_world.values[:3] == (0.5, 0.25, 0.1)
+
+
+def test_a_pose_source_is_never_asked_for_a_perception_terminal_and_must_be_callable(tmp_path):
+    _h, terminal = terminal_case(tmp_path, "NOT_DETECTED")
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: terminal
+    fake.runtime.execute_expert = lambda *_args: pytest.fail("Teacher motion started for a perception terminal")
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=lambda *_args: pytest.fail("pose source asked"))
+    assert ParallelWorker(ports).run_one().terminal_status is AttemptStatus.FAILED
+    with pytest.raises(ValueError, match="ACT_COLLECTION_POSE_SOURCE_INVALID"):
+        ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=5)
+
+
+# --- indoor P3 / D2: the camera perception is recorded and never gates a privileged-pose episode ---------------------------------------
+def privileged_source(tmp_path, *, evidence_epoch=1, kind="randomised", source="privileged_pose", rig="side-wrist-indoor"):
+    from so101_demo.runtime.container_campaign.privileged_pose import PoseSource
+
+    truth = (0.0301, -0.2502, 0.16485)
+    evidence = lambda session: NS(simulation_session_id=session, reset_epoch=evidence_epoch, paused=True, simulation_time_s=2.5,   # noqa: E731
+                                  object_state=NS(position_world=truth))
+    return PoseSource(source=source, kind=kind, rig=rig, evidence=evidence, session_id="s1", tolerance_m=0.010,
+                      record_directory=tmp_path / "records", task_id="task-9"), truth
+
+
+@pytest.mark.parametrize("outcome, geometry_rejected", [("NOT_DETECTED", False), ("DETECTED", True), ("MODEL_ERROR", False), ("QUEUE_TIMEOUT", False)])
+def test_a_forced_perception_miss_or_ambiguity_does_not_lose_a_privileged_episode_and_is_recorded(tmp_path, outcome, geometry_rejected):
+    from so101_demo.runtime.container_campaign.privileged_pose import PrivilegedAdmittedPose
+
+    _h, terminal = terminal_case(tmp_path, outcome, geometry_rejected=geometry_rejected)
+    source, truth = privileged_source(tmp_path)
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: terminal
+    fake.runtime.snapshot = NS(source_stamp_ns=7_000_000_000)
+    given = []
+    fake.runtime.execute_expert = lambda lease, pose: given.append(pose) or NS(
+        status=AttemptStatus.FAILED, reason="TEACHER_GRASP_FAILED", physical_action_proven_absent=False)
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=source)
+    ParallelWorker(ports).run_one()
+    # the Teacher got the simulator's pose; the episode was not sealed as a perception terminal
+    assert len(given) == 1 and type(given[0]) is PrivilegedAdmittedPose and given[0].localized is None
+    assert given[0].pose_world.values == (*truth, 0.0, 0.0, 0.0, 1.0) and given[0].source_stamp_ns == 7_000_000_000
+    assert given[0].reset_epoch == "reset-1" and fake.runtime.chain is given[0]
+    assert "PERCEPTION" not in fake.results.calls[0][2]
+    record = json.loads((tmp_path / "records" / "task-9.teacher-source.json").read_text())
+    assert record["camera_detected"] is False and record["camera_outcome"] == terminal.wire_outcome and record["camera_reason"] == terminal.reason
+    assert record["camera_rejection_reason"] == terminal.rejection_reason and record["camera_position_m"] is None
+    assert record["applied"] is True and record["teacher_source"] == "privileged_pose" and record["published_position_m"] == list(truth)
+
+
+def test_a_camera_terminal_still_ends_a_nominal_episode_as_a_perception_result(tmp_path):
+    _h, terminal = terminal_case(tmp_path, "NOT_DETECTED")
+    source, _ = privileged_source(tmp_path, kind="nominal", source="camera_rgbd")
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: terminal
+    fake.runtime.execute_expert = lambda *_args: pytest.fail("Teacher motion started for a perception terminal")
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=source)
+    assert ParallelWorker(ports).run_one().terminal_status is AttemptStatus.FAILED
+    assert not (tmp_path / "records").exists()
+
+
+def test_a_detected_privileged_episode_records_the_detection_and_is_given_the_truth(tmp_path):
+    from test_act_ros_runtime import build_case, run
+    h = build_case(tmp_path, identity=dict(batch_id="batch-a", coordinator_epoch=1, worker_id="w1", worker_generation=1, point_id="p1",
+                                           attempt_id="p1-lease-1", lease_generation=1), reset_epoch="reset-1")
+    admitted = run(h)
+    source, truth = privileged_source(tmp_path / "d")
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: admitted
+    given = []
+    fake.runtime.execute_expert = lambda lease, pose: given.append(pose) or NS(
+        status=AttemptStatus.FAILED, reason="TEACHER_GRASP_FAILED", physical_action_proven_absent=False)
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",), pose_source=source)
+    ParallelWorker(ports).run_one()
+    assert given[0].pose_world.values[:3] == truth and given[0].localized is admitted.localized
+    record = json.loads((tmp_path / "d" / "records" / "task-9.teacher-source.json").read_text())
+    assert record["camera_detected"] is True and record["camera_outcome"] == "DETECTED" and record["applied"] is True

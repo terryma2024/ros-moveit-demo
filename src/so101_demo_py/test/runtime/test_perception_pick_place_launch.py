@@ -22,6 +22,7 @@ from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
+from so101_demo.runtime import perception_launch
 from so101_demo.runtime.launch_composition import perception as launch_composition_perception
 from so101_demo.runtime.launch_composition import perception as launch_composition_perception
 from so101_demo.runtime.launch_composition import supervisor as launch_composition_supervisor
@@ -672,8 +673,12 @@ def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts
     evidence_root = tmp_path / "launch-run.d/session-123/perception"
     assert f"type=bind,src={evidence_root},dst=/evidence" in command
     assert "registry.example/so101-yolo:locked" in command
-    assert "PYTHONPATH=/workspace/so101-source" not in command
-    assert not any("dst=/workspace/so101-source" in part for part in command)
+    package_root = Path(perception_launch.__file__).resolve().parents[1]
+    assert "PYTHONPATH=/workspace/so101-source" in command
+    assert (
+        f"type=bind,src={package_root},"
+        "dst=/workspace/so101-source/so101_demo,readonly" in command
+    )
     image_index = command.index("registry.example/so101-yolo:locked")
     assert command[image_index + 1 :] == [
         "--startup-timeout-s",
@@ -753,7 +758,7 @@ def test_yolo_docker_forwards_workflow_and_unbuffered_event_stream(
         allow_cpu_fallback=False,
         runtime="docker",
         container_image="example/yolo:verified",
-        source_root=None,
+        source_root=tmp_path / "so101_demo",
         grounded_thresholds=None,
     )
 
@@ -772,7 +777,7 @@ def test_yolo_docker_forwards_workflow_and_unbuffered_event_stream(
     assert "--emit-workflow-events" in child_command
 
 
-def test_linux_docker_dev_mounts_only_the_explicit_python_source(
+def test_linux_docker_mounts_only_the_explicit_python_source(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Linux")
@@ -787,7 +792,7 @@ def test_linux_docker_dev_mounts_only_the_explicit_python_source(
         perception_backend="yolo_seg",
         perception_weights=weights,
         perception_weights_sha256=digest,
-        perception_runtime="docker_dev",
+        perception_runtime="docker",
         perception_source_root=source_root,
     )
 
@@ -801,8 +806,64 @@ def test_linux_docker_dev_mounts_only_the_explicit_python_source(
     )
 
 
-@pytest.mark.parametrize("source_root", ["", "relative/source"])
-def test_linux_docker_dev_rejects_missing_or_relative_source(
+def test_docker_runtime_defaults_to_the_launching_package_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="yolo_seg",
+        perception_weights=weights,
+        perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+        perception_runtime="docker",
+    )
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    command = _plain_process_command(_plain_process(_eventual_actions(started)), context)
+    package_root = Path(perception_launch.__file__).resolve().parents[1]
+    assert (
+        f"type=bind,src={package_root},"
+        "dst=/workspace/so101-source/so101_demo,readonly" in command
+    )
+
+
+def test_docker_dev_runtime_is_retired(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+
+    with pytest.raises(Exception, match="docker_dev"):
+        _materialize(
+            evidence_file=tmp_path / "launch-run.json",
+            perception_backend="yolo_seg",
+            perception_weights=weights,
+            perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+            perception_runtime="docker_dev",
+        )
+
+
+def test_perception_source_root_is_refused_on_the_host_runtime(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    source_root = tmp_path / "python-source"
+    (source_root / "runtime").mkdir(parents=True)
+    (source_root / "__init__.py").write_text("", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="perception_source_root"):
+        _materialize(
+            evidence_file=tmp_path / "launch-run.json",
+            perception_backend="color_geometry",
+            perception_runtime="host",
+            perception_source_root=source_root,
+        )
+
+
+@pytest.mark.parametrize("source_root", ["relative/source"])
+def test_linux_docker_rejects_relative_source(
     tmp_path: Path, monkeypatch, source_root: str
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Linux")
@@ -815,7 +876,7 @@ def test_linux_docker_dev_rejects_missing_or_relative_source(
             perception_backend="yolo_seg",
             perception_weights=weights,
             perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
-            perception_runtime="docker_dev",
+            perception_runtime="docker",
             perception_source_root=source_root,
         )
 

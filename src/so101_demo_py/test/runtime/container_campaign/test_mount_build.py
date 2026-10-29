@@ -1,4 +1,4 @@
-"""Mount mode: the config key, the trees' commit records, the launch argv and the container readback. Default off, image mode unchanged."""
+"""Mount mode (the only mode): the config key, the trees' commit records, the launch argv and the container readback."""
 
 import copy
 import hashlib
@@ -33,8 +33,9 @@ def mounted_config(tmp_path, mount):
             "mount_build": mount.document()}
 
 
-def test_the_key_is_absent_by_default_and_names_a_commit_and_a_root(tmp_path):
-    assert mb.mount_from_config({}) is None
+def test_the_key_is_required_and_names_a_commit_and_a_root(tmp_path):
+    with pytest.raises(ValueError, match="MOUNT_BUILD_REQUIRED"):
+        mb.mount_from_config({})
     mount = make_trees(tmp_path)
     assert mb.mount_from_config({"mount_build": mount.document()}) == mount
     for bad in (dict(commit="abc", root=str(mount.root)), dict(commit=COMMIT, root="relative"),
@@ -87,12 +88,17 @@ def test_the_campaign_config_accepts_the_key_only_with_one_base_image(tmp_path):
     path = tmp_path / "campaign.json"
     path.write_text(json.dumps(document | {"mount_build": mount.document()}))
     assert config_module.load_campaign_config(path)["mount_build"] == mount.document()
-    different = campaign_config(tmp_path, mount_build=mount.document())      # the fixture's shard image differs from its services'
+    different = campaign_config(tmp_path, mount_build=mount.document())
+    different["shard_image"] = dict(different["shard_image"], digest="sha256:" + "d" * 64)     # a second image: one base runs every role
     path.write_text(json.dumps(different))
     with pytest.raises(ValueError, match="CAMPAIGN_CONFIG_INVALID"):
         config_module.load_campaign_config(path)
-    path.write_text(json.dumps(document))
+    # a config without the key still loads (sealed image-mode configs are read by the verifiers) but no run can start from it
+    legacy = {name: value for name, value in document.items() if name != "mount_build"}
+    path.write_text(json.dumps(legacy))
     assert "mount_build" not in config_module.load_campaign_config(path)
+    with pytest.raises(ValueError, match="MOUNT_BUILD_REQUIRED"):
+        mb.mount_from_config(config_module.load_campaign_config(path))
 
 
 def argv_fixture(tmp_path, mount):
@@ -117,10 +123,9 @@ def launch(tmp_path, mount, **changes):
         container_name="so101-campaign-w00-g1", uid=os.getuid(), gid=os.getgid(), **changes)
 
 
-def test_image_mode_has_no_mount_and_is_unchanged(tmp_path):
-    images, argv = launch(tmp_path, None)
-    assert not [value for value in argv if "SO101_MOUNT" in value or "SO101_EXPECTED" in value or "so101-build" in value]
-    assert argv[argv.index(images["shard"]["digest"]) + 1:] == ["campaign_shard", "--spec", argv[-1]]
+def test_a_launch_without_a_mount_tree_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="CONTAINER_LAUNCH_INVALID"):
+        launch(tmp_path, None, mount_build=None)
 
 
 def test_mount_mode_adds_the_two_read_only_trees_and_runs_the_bootstrap_through_the_base_interpreter(tmp_path):
@@ -177,7 +182,7 @@ def test_the_mounted_readback_reports_the_commit_and_the_record_hashes(tmp_path,
     monkeypatch.setenv("SO101_EXPECTED_COMMIT", COMMIT)
     seen = {}
 
-    def fake_readback(contract, install_root="/act/install"):
+    def fake_readback(contract, install_root):
         seen.update(contract=contract, install_root=install_root)
         return dict(interpreter="/act/venv/bin/python", dependencies={"torch": "1"},
                     module_origins={name: str(mount.install / "so101_demo_py" / "x.py") for name in contract["module_origins"]},
@@ -308,11 +313,10 @@ def test_the_shard_shell_takes_the_mounted_package_prefix_and_the_base_ros2(tmp_
 
     spec = {"owned_root": str(tmp_path)}
     monkeypatch.delenv("SO101_MOUNT_INSTALL", raising=False)
-    image_layout = campaign_shard.container_layout(spec)
-    assert (image_layout.install_prefix, image_layout.ros2_executable) == (Path("/act/install"), Path("/act/install/bin/ros2"))
+    with pytest.raises(ValueError, match="CAMPAIGN_SHARD_MOUNT_REQUIRED"):
+        campaign_shard.container_layout(spec)
     mount = make_trees(tmp_path)
     monkeypatch.setenv("SO101_MOUNT_INSTALL", str(mount.install))
     layout = campaign_shard.container_layout(spec)
     assert layout.install_prefix == mount.install / "so101_demo_py" and layout.ros2_executable == Path("/opt/ros/jazzy/bin/ros2")
-    assert layout.output_root == image_layout.output_root and layout.control_root == image_layout.control_root
-
+    assert layout.output_root == Path("/act/output") and layout.control_root == Path("/act/control")

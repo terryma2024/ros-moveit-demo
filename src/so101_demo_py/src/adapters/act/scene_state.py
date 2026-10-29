@@ -173,6 +173,9 @@ class RosSceneStateAdapter:
         self.observer,self.on_hazard,self.record_port=observer,on_hazard,record_port
         self.pending_reset_port=pending_reset_port;self.on_state=on_state;self._lock=threading.RLock()
         self._pending=None;self._stopped=False
+        # indoor P3 (D1): a scene-variant stack declares the nominal model identity; the proof of that is bound to the process or there is none
+        from so101_demo.act import model_equivalence
+        self._model_equivalence=model_equivalence;self._bound_proof=model_equivalence.bound()
         self.subscription=node.create_subscription(SceneStateEvidence,'/so101/simulation/scene_state',
             self.accept_message,qos)
 
@@ -208,6 +211,7 @@ class RosSceneStateAdapter:
                 with self.observer._lock:self.observer.hazard='SCENE_STATE_RECORD_FAILED'
             try:
                 accepted=False
+                self._model_equivalence.check_message(message,self.observer.model_sha256,self._bound_proof)
                 self.observer.validate(frame)
                 identity=(frame['simulation_session_id'],frame['reset_epoch'])
                 if self.observer.hazard:pass

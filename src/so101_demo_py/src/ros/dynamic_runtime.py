@@ -37,7 +37,10 @@ from .dynamic_frozen_policy import (
     _execution_state_max_age_s,
     _frozen_descend_final_distance_m,
     _frozen_policy_file,
+    _check_teacher_source_pose,
+    _frozen_run_inputs,
     _frozen_teacher_schema,
+    _frozen_teacher_source,
     _load_safety_inputs,
 )
 from .dynamic_planner import RosDynamicPlanner
@@ -453,7 +456,8 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
     from .dynamic_mujoco_execution import RosDynamicMujocoExecution
     from .task_reachability import RosJointStateReader, RosMoveGroupReachabilityPlanner
 
-    def reachability_preflight(node, sample, template, scene_revision, progress=None, descend_final_distance_m=None):
+    def reachability_preflight(node, sample, template, scene_revision, progress=None, descend_final_distance_m=None,
+                               carry_via_offset_m=None):
         point = TaskPoint(
             id="perceived_cup",
             label="Perceived cup",
@@ -479,6 +483,7 @@ def _dynamic_execute_runtime(ik_backend: str | None = None):
                     start,
                     planner,
                     scene_revision=scene_revision,
+                    **({} if carry_via_offset_m is None else {"carry_via_offset_m": carry_via_offset_m}),
                 )
             finally:
                 _mark_active_phase("check_task_reachability.end")
@@ -690,6 +695,7 @@ def run_dynamic_execute(
         setup_finished = True
 
     share_dir = Path(runtime.get_package_share_directory("so101_demo_py"))
+    installed_share_dir = share_dir          # a frozen run replaces `share_dir` by its execution snapshot below
     execution_inputs = None
     frozen = None
     manifest_option = getattr(options, "frozen_inputs_manifest", None)
@@ -778,6 +784,17 @@ def run_dynamic_execute(
         parallel_lease_identity = lease_values
     else:
         parallel_lease_identity = None
+    try:   # R3-a: a schema 6 freeze derives this episode's values from (campaign seed, scene id); every other schema changes nothing
+        episode_diversity, run_template, via_offset = _frozen_run_inputs(
+            frozen, lease_values["point_id"], loaded.template, getattr(options, "start_pose_draw", None))
+        teacher_source_entry = _frozen_teacher_source(frozen, manifest_option, share_dir, lease_values["point_id"], installed_share_dir)   # indoor P3
+    except Exception as error:
+        failure_code = _failure_code(error)
+        finish_setup("rejected", failure_code)
+        emit_failure(failure_code)
+        print(status_line("ERROR", failure=failure_code, message=error), file=status_stream)
+        return 1
+    via_arguments = {} if via_offset is None else {"carry_via_offset_m": via_offset}
     phase_timer = _PhaseTimer()
     _ACTIVE_PHASE_TIMER = phase_timer
     mark = phase_timer.mark
@@ -901,6 +918,7 @@ def run_dynamic_execute(
             from ..act.scene_operation import make_scene_operation_hook
             task_scene.on_service_call = make_scene_operation_hook(event_stream, state=lambda: "SETUP")
         mark("task_scene_port.end")
+        gap = _check_teacher_source_pose(teacher_source_entry, sample, initial)   # indoor P3: a privileged pose is the simulator's
         mark("prepare_dynamic_cup_scene.begin")
         perception_error = None
         perception_error_failed = False
@@ -933,7 +951,7 @@ def run_dynamic_execute(
         validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if teacher_run else {}))
         mark("validate_cup_scene.2.check.end")
         mark("resolve_motion_targets.begin")
-        targets = runtime.resolve_motion_targets(sample, loaded.template)
+        targets = runtime.resolve_motion_targets(sample, run_template, **via_arguments)
         mark("resolve_motion_targets.end")
         mark("reachability_preflight.begin")
         # schema 5 Teacher: the preflight checks the two-stage DESCEND the execution will run (None for schema 3 and 4: no extra argument)
@@ -941,9 +959,10 @@ def run_dynamic_execute(
         reachability = runtime.reachability_preflight(
             node,
             sample,
-            loaded.template,
+            run_template,
             getattr(initial, "reset_epoch", None),
             **({} if descend_distance is None else {"descend_final_distance_m": descend_distance}),
+            **via_arguments,
         )
         mark("reachability_preflight.end")
         stop_flags.raise_if_stopped()
@@ -963,7 +982,7 @@ def run_dynamic_execute(
         execution = runtime.execution(
 
             node,
-            loaded.template,
+            run_template,
             targets,
             session_id=options.session_id,
             expected_reset_epoch=options.expected_reset_epoch,
@@ -979,6 +998,10 @@ def run_dynamic_execute(
         )
         mark("execution.construct.end")
         execution._task_geometry = geometry
+        if episode_diversity is not None:
+            execution._record_episode_diversity(episode_diversity)
+        if teacher_source_entry is not None:
+            execution._record_teacher_source(teacher_source_entry, published_truth_gap_m=gap)
         if getattr(options, "final_stop_proof", False) is True:
             execution.final_stop_proof_enabled = True
         if inject_failure_at is not None:

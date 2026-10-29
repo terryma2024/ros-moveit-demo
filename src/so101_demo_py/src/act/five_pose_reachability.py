@@ -13,6 +13,7 @@ The planner itself is reached through an injected ``call(points_document) -> {po
 from __future__ import annotations
 
 import json
+import os
 import queue
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -185,8 +186,13 @@ class CommandReachabilityCall:
     session_prefix: str = "boundary"
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run
     _count: int = 0
+    #: R3-a: True for the re-filter keyed by final scene ids, the only call that may carry a Teacher execution policy. The sampling
+    #: filter's point ids (`p00012`) are not scene ids, and a schema 6 policy derives its per-episode values from the scene id.
+    per_scene_ids: bool = False
 
     def __call__(self, document: dict) -> Mapping[str, Verdict]:
+        if not self.per_scene_ids and ("--teacher-execution-policy" in self.command or os.environ.get("REACH_TEACHER_POLICY")):
+            raise ValueError("TEACHER_POLICY_NOT_ALLOWED_IN_FIVE_POSE_FILTER: its point ids are not the final scene ids")
         for attempt in (1, 2):
             self._count += 1
             base = f"{self.session_prefix}-c{self._count:04d}-a{attempt}"
@@ -203,3 +209,24 @@ class CommandReachabilityCall:
             if rc in (0, 2) and set(reports) == wanted and all(r["status"] != "UNKNOWN" for r in reports.values()):
                 return {pid: (r["status"], r["first_failure_code"]) for pid, r in reports.items()}
         raise ReachabilityUnknownError(f"REACH_CALL_UNKNOWN: {base}")
+
+
+def refilter_scenes(rows: Sequence[Mapping], call: ReachCall) -> tuple[list, list[dict]]:
+    """R3-a: check the assigned scenes against their own per-episode targets, one point per scene with the final scene id as point id.
+
+    ``call`` runs `task_reachability` with a schema 6 Teacher execution policy (`CommandReachabilityCall(..., per_scene_ids=True)`), which
+    derives each point's diversity values from that id. Returns ``(kept rows, rejected)``; an UNKNOWN verdict or a missing report raises
+    `ReachabilityUnknownError` and is never counted as a rejection."""
+
+    ids = [row["scene_id"] for row in rows]
+    if len(set(ids)) != len(ids):
+        raise ValueError("SCENE_ID_DUPLICATE")
+    document = {"schema_version": 1, "points": [
+        {"id": row["scene_id"], "label": "reach-refilter", "cup_position_world_m": list(row["cup_position_world_m"])} for row in rows]}
+    verdicts = call(document)
+    if set(verdicts) != set(ids) or any(status == "UNKNOWN" for status, _ in verdicts.values()):
+        raise ReachabilityUnknownError("REACH_CALL_UNKNOWN: refilter")
+    kept = [row for row in rows if verdicts[row["scene_id"]][0] == REACHABLE]
+    rejected = [{"scene_id": scene, "status": verdicts[scene][0], "first_failure_code": verdicts[scene][1]}
+                for scene in ids if verdicts[scene][0] != REACHABLE]
+    return kept, rejected

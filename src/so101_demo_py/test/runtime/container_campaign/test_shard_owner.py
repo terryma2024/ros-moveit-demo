@@ -1,5 +1,8 @@
 """Production shard owner persists intents before external Docker effects."""
 
+import tempfile
+
+from mount_trees import make_mount_trees
 import asyncio
 from dataclasses import asdict
 import importlib
@@ -55,7 +58,7 @@ def fixture(tmp_path, response, *, generation=1):
             assert (root/'launch-argv.json').is_file()
             return SimpleNamespace(returncode=response[0],stdout=response[1],stderr='diagnostic')
         raise AssertionError(argv)
-    owner = module.ContainerShardOwner(admitted_context=context,launch=launch,entry=entry,
+    owner = module.ContainerShardOwner(admitted_context=context,launch=launch,entry=entry,mount_build=make_mount_trees(Path(tempfile.mkdtemp())),
         images={role:image for role in ('head','teacher','shard')},paths=paths,registry=registry,
         approved_inputs=(),config_paths=(spec,),service_token='e'*64,startup_timeout_s=.1,
         status_timeout_s=5.,max_frame_bytes=8388608,stop_timeout_s=.1,docker_runner=docker)

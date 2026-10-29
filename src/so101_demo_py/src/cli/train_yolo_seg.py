@@ -77,7 +77,7 @@ def main(arguments: list[str] | None = None) -> int:
             import hashlib
             import json
 
-            from so101_demo.act.head_search_training import build_candidate_plan
+            from so101_demo.act.head_search.training import build_candidate_plan
             from so101_demo.adapters.perception.yolo_training import prepare_candidate_run
 
             plan = build_candidate_plan(

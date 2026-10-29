@@ -20,8 +20,8 @@ from head_search_qualification_fixtures import (
     build_fixture,
     digest,
 )
-from so101_demo.act.head_search_aggregate.aggregate import aggregate_qualification
-from so101_demo.act.head_search_aggregate.contracts import (
+from so101_demo.act.head_search.aggregate.aggregate import aggregate_qualification
+from so101_demo.act.head_search.aggregate.contracts import (
     ACCEPTANCE_GATES,
     CLOSED_REPORT_ARTIFACT,
     GATES,
@@ -31,10 +31,10 @@ from so101_demo.act.head_search_aggregate.contracts import (
     REFUSED,
     VERDICT_ARTIFACT,
 )
-from so101_demo.act.head_search_aggregate.run_gates import classify_qualification_terminal
-from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
-from so101_demo.act.head_search_scenarios.contracts import ARTIFACT, EVIDENCE_DIR, JOURNAL_ARTIFACT
-from so101_demo.act.head_search_scenarios.journal import aggregate_scenarios, scenario_journal_entry
+from so101_demo.act.head_search.aggregate.run_gates import classify_qualification_terminal
+from so101_demo.act.head_search.binding import _CAMERA_MEASURED, _MEASURED
+from so101_demo.act.head_search.scenarios.contracts import ARTIFACT, EVIDENCE_DIR, JOURNAL_ARTIFACT
+from so101_demo.act.head_search.scenarios.journal import aggregate_scenarios, scenario_journal_entry
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 
@@ -160,7 +160,7 @@ def test_a_complete_fixture_set_qualifies_and_publishes_the_plan_documents(tmp_p
     report = json.loads((fixture.run_root / CLOSED_REPORT_ARTIFACT).read_text())
     assert report["status"] == "HEAD_SEARCH_QUALIFIED"
     assert report["bundle_sha256"] == digest(fixture.paths["approved_bundle"])
-    from so101_demo.act.head_search_qualification import require_gate
+    from so101_demo.act.head_search.qualification import require_gate
 
     with pytest.raises(ValueError, match="PICK_PLACE_LIVE_GATE_REFUSED"):
         require_gate(report, "pick_place_live")

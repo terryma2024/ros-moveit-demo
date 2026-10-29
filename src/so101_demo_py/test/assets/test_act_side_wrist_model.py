@@ -43,8 +43,11 @@ def test_every_rig_file_exists_and_the_two_rigs_share_none():
         for relative in files.exclusive:
             assert (PACKAGE_ROOT / relative).is_file(), relative
     assert not (SIDE.exclusive & HEAD.exclusive)
-    assert foreign_files(HEAD_WRIST_RIG) == SIDE.exclusive
-    assert foreign_files(SIDE_WRIST_RIG) == HEAD.exclusive
+    # the side+wrist indoor rig shares the side+wrist robot, URDF, plugin and controller files and has scenes of its own
+    indoor = RIG_MODEL_FILES["side-wrist-indoor"]
+    assert not (indoor.exclusive & HEAD.exclusive)
+    assert foreign_files(HEAD_WRIST_RIG) == SIDE.exclusive | indoor.exclusive
+    assert foreign_files(SIDE_WRIST_RIG) == HEAD.exclusive | (indoor.exclusive - SIDE.exclusive)
     assert rig_for_scene(SIDE.scene) is SIDE and rig_for_scene(HEAD.scene) is HEAD
 
 

@@ -56,7 +56,7 @@ from so101_demo.runtime.act_rollout.policy_service import PolicyServiceOwner
 from so101_demo.runtime.act_rollout.shard_launcher import WORKLOAD_KIND, RolloutShardLauncher
 from so101_demo.runtime.act_rollout.task_builder import identity_sha256
 from so101_demo.runtime.container_campaign.mount_build import mount_from_config
-from so101_demo.runtime.container_campaign.paths import CONTAINER_INSTALL_PREFIX, CONTAINER_POLICY_SOCKET, make_campaign_paths
+from so101_demo.runtime.container_campaign.paths import CONTAINER_POLICY_SOCKET, make_campaign_paths
 from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
 from so101_demo.runtime.container_campaign.task_control import ContainerTaskControl
 from so101_demo.runtime.container_campaign.service_owner import _docker
@@ -117,6 +117,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rollout-config", type=Path, required=True, help="config/act/rollout.yaml")
     parser.add_argument("--contact-activation-receipt", type=Path)
     parser.add_argument("--contact-proposal", type=Path)
+    parser.add_argument("--scene-variant", type=Path, default=None,
+                        help="an evaluation-only scene variant (a whitelisted visual edit of the nominal scene, "
+                             "`act/scene_variant.py`); bound into the run identity, run.json and every episode.json")
     parser.add_argument("--unified-state-root", type=Path, required=True)
     parser.add_argument("--execution-prefix", type=int, default=None, metavar="N")
     parser.add_argument("--temporal-ensembling", type=float, nargs="?", const=DEFAULT_ENSEMBLING_M, default=None, metavar="M")
@@ -227,6 +230,10 @@ def check_arguments(args):
             raise Refused(f"ROLLOUT_PATH_NOT_ABSOLUTE: --{name.replace('_', '-')}")
     if not args.evidence_root.is_dir() or args.evidence_root.is_symlink():
         raise Refused("ROLLOUT_EVIDENCE_ROOT_INVALID")
+    variant = getattr(args, "scene_variant", None)
+    if variant is not None and (not Path(variant).is_absolute() or ".." in Path(variant).parts or not Path(variant).is_file()
+                                or Path(variant).is_symlink()):
+        raise Refused("ROLLOUT_SCENE_VARIANT_INVALID")
     if args.shards < 1 or args.trials < 1 or args.max_invalid_retries < 0:
         raise Refused("ROLLOUT_COUNTS_INVALID")
     for name in ("max_concurrent_episodes", "max_tasks_in_flight", "limit", "policy_max_inflight", "policy_max_consecutive_errors"):
@@ -246,12 +253,12 @@ def approved_inputs(args, config, mount, parallel_runtime_path):
     """The read-only inputs the shards need at their host paths, without anything the mounted build already shows."""
     wanted = [Path(args.inputs_manifest).parent, Path(args.bundle_dir), Path(args.scenes), Path(args.runtime_config),
               Path(args.rollout_config), Path(parallel_runtime_path), Path(config["controlled_runtime"]["path"])]
-    for name in ("contact_activation_receipt", "contact_proposal"):
-        if getattr(args, name) is not None:
+    for name in ("contact_activation_receipt", "contact_proposal", "scene_variant"):
+        if getattr(args, name, None) is not None:
             wanted.append(Path(getattr(args, name)))
     kept = []
     for path in dict.fromkeys(item.resolve(strict=True) for item in wanted):
-        if mount is not None and (path.is_relative_to(mount.root) or mount.root.is_relative_to(path)):
+        if path.is_relative_to(mount.root) or mount.root.is_relative_to(path):
             continue
         kept.append(path)
     return tuple(path for path in kept if not any(other != path and path.is_relative_to(other) and other.is_dir() for other in kept))
@@ -262,8 +269,8 @@ def rollout_description(args, inputs, *, run_id, install_prefix, preconditions, 
     refs = {"inputs_manifest": _ref(args.inputs_manifest), "runtime_config": _ref(args.runtime_config),
             "rollout_config": _ref(args.rollout_config), "scenes": _ref(args.scenes),
             "bundle_json": _ref(Path(args.bundle_dir) / "bundle.json")}
-    for name in ("contact_activation_receipt", "contact_proposal"):
-        if getattr(args, name) is not None:
+    for name in ("contact_activation_receipt", "contact_proposal", "scene_variant"):
+        if getattr(args, name, None) is not None:
             refs[name] = _ref(getattr(args, name))
     return {"run_id": run_id, "run_identity_sha256": identity_sha256(inputs.identity),
             "inputs": dict(refs, bundle_dir=str(args.bundle_dir), install_prefix=str(install_prefix)),
@@ -281,12 +288,12 @@ def prepare(args, edges):
     check_arguments(args)
     config = load_campaign_config(args.campaign_config, roles=("teacher",), expected_sha256=_sha256(args.campaign_config))
     mount = mount_from_config(config)
-    install_prefix = mount.package_prefix if mount is not None else CONTAINER_INSTALL_PREFIX
+    install_prefix = mount.package_prefix
     if not _GPU.fullmatch(config["gpu_uuid"]):
         raise Refused("ROLLOUT_GPU_UUID_INVALID")
     arguments = SimpleNamespace(**{name: getattr(args, name) for name in (
         "inputs_manifest", "rollout_config", "runtime_config", "scenes", "bundle_dir", "contact_activation_receipt",
-        "contact_proposal", "execution_prefix", "temporal_ensembling")}, install_prefix=install_prefix)
+        "contact_proposal", "execution_prefix", "temporal_ensembling", "scene_variant")}, install_prefix=install_prefix)
     try:
         inputs = (edges.inputs_loader or load_inputs)(arguments)
         units = build_units(inputs.scenes, group=args.group, scene_ids=args.scene_ids, trials=args.trials, limit=args.limit,
@@ -296,9 +303,7 @@ def prepare(args, edges):
     if calibration_runtime_hash(config["controlled_runtime"]["path"]) != config["controlled_runtime"]["sha256"]:
         raise Refused("ROLLOUT_CONTROLLED_RUNTIME_DRIFT")
     rig = rig_from_observation(inputs.observation["cameras"], inputs.observation["state_dim"])
-    pythonpath = args.policy_pythonpath or (None if mount is None else mount.package_prefix / "lib/python3.12/site-packages")
-    if pythonpath is None:
-        raise Refused("ROLLOUT_POLICY_PYTHONPATH_REQUIRED")
+    pythonpath = args.policy_pythonpath or mount.package_prefix / "lib/python3.12/site-packages"
     if not Path(args.policy_python).is_file():
         raise Refused("ROLLOUT_POLICY_PYTHON_MISSING")
     return config, mount, install_prefix, inputs, units, rig, pythonpath
@@ -366,7 +371,7 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
     group_root = run_root / args.group
     group_root.mkdir(mode=0o700)
     parallel_runtime = _ref(args.parallel_runtime_config)
-    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
     from so101_demo.runtime.inference.config import validate_file_ref
 
     runtime = _load_runtime_config(validate_file_ref(parallel_runtime))
@@ -394,8 +399,10 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
     header = {"identity": dict(inputs.identity), "runtime_settings": runtime_settings, "run_identity_sha256": description["run_identity_sha256"],
               "execution": inputs.execution.document() if inputs.execution is not None else None,
               "runtime": runtime_values, "preconditions": preconditions, "install_prefix": str(install_prefix),
-              "mount_build": None if mount is None else mount.document(), "rig_profile_sha256": rig.profile_sha256,
+              "mount_build": mount.document(), "rig_profile_sha256": rig.profile_sha256,
               "gpu_uuid": config["gpu_uuid"], "campaign_config_sha256": config_sha}
+    if inputs.scene_variant is not None:       # only a variant run has the key: a nominal run.json is unchanged
+        header["scene_variant"] = dict(inputs.scene_variant)
     (run_root / "run.json").write_text(json.dumps(dict(header, schema_version=1, kind="ACT_ROLLOUT_PARALLEL_RUN",
                                                        run_id=args.run_id, group=args.group,
                                                        units=[unit.unit_id for unit in units]), sort_keys=True, indent=1) + "\n")
@@ -411,6 +418,9 @@ def _run_started(args, edges, log, config, mount, install_prefix, inputs, units,
             rig_profile_sha256=rig.profile_sha256,
             approved_inputs=approved_inputs(args, config, mount, args.parallel_runtime_config), config_paths=(),
             docker_runner=docker, namespace_reader=edges.namespace_reader or read_container_namespace)
+        if inputs.scene_variant is not None:
+            from so101_demo.act.scene_variant_run import spec_entry
+            launcher_arguments["scene_variant"] = spec_entry(inputs.scene_variant)
         launcher = (edges.launcher_factory or RolloutShardLauncher)(**launcher_arguments)
         from so101_demo.runtime.act_policy.client import PolicyClient
         from so101_demo.runtime.act_rollout.policy_service import service_health_probe

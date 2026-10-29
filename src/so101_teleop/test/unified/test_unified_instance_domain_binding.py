@@ -32,7 +32,7 @@ def composed(tmp_path):
     arbiter = GlobalMutationArbiter(store, clock_ns=lambda: 1)
     registry = InstanceRegistry(arbiter, service_epoch="e1", origin=ORIGIN, clock_ns=lambda: 1)
     services = UnifiedServices(
-        teleop=None, tasks=None, validation=None, arbiter=arbiter, instances=registry
+        teleop=None, tasks=None, arbiter=arbiter, instances=registry
     )
     return create_unified_app(services, bind_address="127.0.0.1"), registry
 

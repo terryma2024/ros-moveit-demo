@@ -57,6 +57,7 @@ def test_plan_request_shape_is_frozen() -> None:
         "tcp_link",
         "start_state_joint_names",
         "start_state_positions",
+        "num_planning_attempts",    # R3-a: appended, default 1 (the request every earlier caller sent)
     )
 
 

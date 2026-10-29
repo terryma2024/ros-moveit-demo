@@ -7,7 +7,6 @@
  * fetches an authoritative snapshot and never replays a mutation.
  */
 import type { TelemetrySnapshot } from "@/api/types";
-import type { CampaignProjection } from "@/api/expert-validation-types";
 import type { ChannelBinding, ControllerAuthority, DomainName, InstanceProof } from "@/api/instance-client";
 
 /** The lease identity a domain holds. Mirrors the server's `LeaseIdentity` field for field. */
@@ -22,7 +21,7 @@ export type RuntimeSnapshot = {
   sequence: number;
   serviceEpoch: string;
   executionGeneration: number;
-  payload: TelemetrySnapshot | CampaignProjection | null;
+  payload: TelemetrySnapshot | null;
 };
 
 export type DomainTransport = {
@@ -156,7 +155,7 @@ export class DomainRuntime {
   /**
    * Observe accepted snapshots.
    *
-   * Telemetry and campaign projections belong to the runtime, so a page subscribes here for its
+   * Telemetry projections belong to the runtime, so a page subscribes here for its
    * view instead of opening its own poll or WebSocket - which is what stops a page switch from
    * dropping a subscription.
    */

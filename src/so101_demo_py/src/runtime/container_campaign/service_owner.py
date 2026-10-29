@@ -70,7 +70,7 @@ class ContainerServiceOwner:
     def __init__(self, *, admitted_context, config, paths, roles, registry,
                  startup_timeout_s, receive_budget_s, stop_timeout_s, head_descriptor=None,
                  head_descriptor_sha256=None, docker_runner=_docker, query=_query,
-                 monotonic_ns=time.monotonic_ns, stage=None):
+                 monotonic_ns=time.monotonic_ns, stage=None, attempt=1):
         # Measurement launches Head only, a validation kind Head and Teacher, and collection Teacher only (CP-3608 ruling 2:
         # collection does not run Head Search). The Head descriptor exists only for a launched Head.
         kind = getattr(admitted_context, 'workload_kind', None)
@@ -81,6 +81,7 @@ class ContainerServiceOwner:
         if (type(admitted_context) is not AdmittedCampaignContext
                 or admitted_context.workload_kind not in allowed or roles != required_roles
                 or type(registry) is not ContainerLaunchRegistry or (stage is None and registry.records())
+                or type(attempt) is not int or attempt < 1 or (stage is None and attempt != 1)
                 or any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
                        for value in (startup_timeout_s, receive_budget_s, stop_timeout_s))):
             raise ValueError('SERVICE_OWNER_CONFIG_INVALID')
@@ -115,7 +116,10 @@ class ContainerServiceOwner:
         # A later stage of a run collected stage by stage starts its own Teacher: every name it owns carries the stage, so it
         # collides with nothing the earlier stages left (the first process keeps the plain names).
         self.stage = stage
-        self._tail = '' if stage is None else '-'+stage
+        #: the attempt of the stage (1 unless an earlier attempt of it failed after admission and proved its stop): every name of a
+        #: later attempt carries `-aN`, so it collides with nothing the failed attempt left
+        self.attempt = attempt
+        self._tail = '' if stage is None else '-'+stage+('' if attempt == 1 else f'-a{attempt}')
         self._launch_ids, self._endpoints = [], {}
         self._start_task = self._close_task = None
         self._startup_done = asyncio.Event()
@@ -149,15 +153,14 @@ class ContainerServiceOwner:
                            int(self.context.deadline_monotonic_s*1e9))
             prepared = []
             mount_build = mount_from_config(self.config)
-            if mount_build is not None:
-                verify_images(self.config, mount_build)
-                payload, _record = read_preflight(self.config['evidence_root'], mount_build, self.config)
-                copy_path = self.paths['host']/PREFLIGHT_COPY
-                if copy_path.exists():
-                    if copy_path.read_bytes() != payload:
-                        raise ValueError('MOUNT_PREFLIGHT_CHANGED')
-                else:
-                    copy_path.write_bytes(payload)
+            verify_images(self.config, mount_build)
+            payload, _record = read_preflight(self.config['evidence_root'], mount_build, self.config)
+            copy_path = self.paths['host']/PREFLIGHT_COPY
+            if copy_path.exists():
+                if copy_path.read_bytes() != payload:
+                    raise ValueError('MOUNT_PREFLIGHT_CHANGED')
+            else:
+                copy_path.write_bytes(payload)
             for role in self.roles:
                 settings = self.config[role+'_service']
                 config_path = self.paths['run']/(role+'-service'+self._tail+'.json')
@@ -172,10 +175,9 @@ class ContainerServiceOwner:
                     if socket.exists() or socket.is_symlink():
                         socket.rename(socket.with_name('inference.sock-before'+self._tail))
                 (owned/'tmp').mkdir(mode=0o700)
-                if mount_build is not None:
-                    # the dependency-only base has no /tmp/Ultralytics (the image path got one by accident); Ultralytics falls back to the working
-                    # directory of the read-only root when YOLO_CONFIG_DIR does not exist
-                    (owned/'tmp'/'ultralytics').mkdir(mode=0o700)
+                # the dependency-only base has no /tmp/Ultralytics; Ultralytics falls back to the working directory of the read-only
+                # root when YOLO_CONFIG_DIR does not exist
+                (owned/'tmp'/'ultralytics').mkdir(mode=0o700)
                 generation = self.paths['run'].name+'-'+role+'-g1'+self._tail
                 entry = InferenceLaunchArgs(config=config_path, generation=generation,
                     startup_deadline_monotonic_ns=deadline, receive_budget_s=self.receive_budget_s,
@@ -246,14 +248,13 @@ class ContainerServiceOwner:
                         break
                     await asyncio.sleep(.05)
                 actual = await asyncio.to_thread(functools.partial(read_container_provenance, cid, docker_runner=self.docker_runner,
-                    **({} if mount_build is None else dict(mount_role='inference', install_root=str(mount_build.install)))))
+                    mount_role='inference', install_root=str(mount_build.install)))
                 if (actual['image_digest'] != settings['image']['digest'] or any(
                         actual['provenance'][name] != settings['image'][name]
                         for name in ('package_source_sha256','install_sha256'))
-                        or (mount_build is not None and actual['provenance']['git_commit'] != mount_build.commit)):
+                        or actual['provenance']['git_commit'] != mount_build.commit):
                     raise ValueError('SERVICE_IMAGE_PROVENANCE_MISMATCH')
-                if mount_build is not None:
-                    actual = dict(actual, mount_build=mount_build.document())
+                actual = dict(actual, mount_build=mount_build.document())
                 _write(self.paths['host']/(role+'-ready'+self._tail+'.json'), ready)
                 _write(self.paths['host']/(role+'-provenance'+self._tail+'.json'), actual)
                 self._endpoints[role] = endpoint

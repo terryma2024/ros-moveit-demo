@@ -40,6 +40,85 @@
 - **杯–桌摩擦桶暂缓**：按 D1，动力学变化需要重新校准接触策略，R0 首版只做视觉。这一项记入待办。
 - **磁盘**：每桶的 bag 在提取完指标后删除（已预授权，并记日志），只保留 json 和 jsonl。
 
+## R3 示教多样性：设计（2026-10-24，状态：R3-a 已获授权并实现于分支 `r3a-teacher-diversity`（待 live 冒烟）；R3-b、R3-c 仍是设计稿，未授权实施）
+
+**R3-a 实现记录（2026-10-24）**
+- 代码：`act/teacher_diversity.py`（分布块解析、派生、范围检查、起始姿态抽样与碰撞检查）、`act/teacher_endpoint.py`（schema 6）、`config/act/teacher_execution_policy_side_wrist_fast_carry_b_diversity.yaml`（采集策略：carry_b 加 `diversity` 块）。schema 6 是“基础 schema 加 diversity”：schema 5 的 DESCEND 两段键（三个键同有或同无）和 OPEN_GRIPPER 时长是可选的，缺省时 DESCEND 与 schema 4 完全一样（六个插值位姿）。`..._experimental_two_leg_diversity.yaml` 基于已在 EXP-635 上因杯子过载失败的两段 DESCEND，只作实验和测试用。
+- 搬运中间点实现为 MOVE_ABOVE_PLACE 内部的一个 waypoint（两段直线，各 3 个 waypoint），不是新状态。状态轨迹、`TEACHER_WORKFLOW`、审计的 `TEACHER_STATES` 和 `DYNAMIC_REACHABILITY_STATES` 都不变。
+- OMPL（修订，2026-10-24 评审）：OMPL 种子不适用，`MotionPlanRequest` 没有种子字段，所以多样性来自 OMPL 自身的随机性，并在每次被接受的规划记录里写 `trajectory_sha256`。种子仍按规则派生并记录（`seed_applied: false`）。`num_planning_attempts` 的示例策略值是 1：MoveIt 会并行跑多次尝试并保留最短的一条，多于 1 会降低多样性。
+- 速度比例只乘策略里的比例键（LIFT、MOVE_ABOVE_PLACE 的 carry，MOVE_ABOVE_OBJECT、RETREAT、DESCEND 接近段），上限 1。接触敏感的阶段不乘：DESCEND 最后一段、MICRO_LIFT，以及 DESCEND_TO_PLACE（放置高度是在模板速度下标定的）。
+- 搬运中间点的 z 偏移是单侧的，0 到 +0.03 m，不会低于“抬升点–放置上方”连线；x、y 仍是 ±0.03 m。并且沿两段路径，被夹持杯子的底部离桌面至少 0.03 m（杯底高度 = TCP 高度减去抓取时的 TCP 高度），不满足时目标被拒绝（`CARRY_VIA_CLEARANCE`）。
+- 起始姿态：实际使用的是第 k 次抽样，k 随选择记录（`start-pose-<attempt>.json`）通过 `--start-pose-draw` 传给 Teacher，Teacher 要求测得的姿态恰好是第 k 次抽样；episode.json 和 Teacher manifest 里的 `start_pose` 是第 k 次的姿态；case inputs 列出全部候选。碰撞检查的基线取 reset 关键帧，记录里写模型的 scene sha256、编译模型 sha256 和两种物理指纹，并与冻结输入的场景核对。
+- 合并身份：Teacher 执行策略的 sha256 进入受控身份（`teacher_execution_policy_sha256`），schema 6 必须被固定；导出清单的每个 episode 带上实际取值。五姿态采样过滤器的点 id 不是最终场景 id，所以它拒绝 Teacher 策略；分配场景 id 之后用 `refilter_scenes` 按最终场景 id 重新过滤。
+- 每个 episode 的取值记录在四处：`inputs/diversity/<scene>.json`（case inputs，读回时重新派生比对）、Teacher manifest 的 `teacher_diversity`、审计 `episode.json` 的 `teacher_diversity`、任务目录下的 `start-pose-<attempt>.json`（抽样过程与被拒绝的抽样）。
+- 起始姿态的碰撞检查只在 reset 前用 MuJoCo 的 `mj_forward` 接触表，不单步仿真；超出关节限位 0.02 rad 余量或出现基线之外的接触就重抽，最多 `max_redraws` 次，全部被拒绝则该 episode 在任何动作之前失败（不回退到未变化的姿态）。
+
+### 现状核对（只读，均有代码出处）
+
+- **运动阶段**：Teacher 的流程是固定状态机：开爪 → 移到杯子上方 → 下探 → 闭合 → 微抬 → 核验抓取 → 抬升 → 移到放置点上方 → 下放 → 张爪 → 撤离（`core/workflow.py:155-190`）。失败一律进入 ERROR，没有 RECOVER 状态。
+- **规划方式**：所有途经点都由 `core/dynamic_pick.py:257-281` 的 `resolve_motion_targets` 生成。输入只有两个：感知到的杯子位姿，和模板 `config/policies/dynamic_cup_pick/mujoco.yaml`。规划分三层：
+  1. 笛卡尔插值点；
+  2. 确定性 IK 束搜索，种子固定；
+  3. 每段向 MoveIt 发一个关节空间目标（OMPL RRTConnect）。
+
+  之后再过笛卡尔走廊检查：DESCEND/LIFT 偏差不超过 0.008 m，其他段不超过 0.050 m。
+- **各参数现在能不能配置**
+
+  | 参数 | 现状 |
+  |---|---|
+  | 起始关节姿态 | 写死为关键帧 `task_start`（全 0）。`MujocoReset.reset(joint_overrides=…)` 已经存在，但采集流程没有用它 |
+  | 接近方向、yaw、roll | 由模板 `cup_to_tcp_grasp` 固定。感知到的杯子朝向恒为单位四元数，所以抓取 yaw 在世界坐标下是常数。**每个 episode 无法单独设置** |
+  | 预抓取、抬升、放置接近、撤离高度 | 模板里各有一个固定值（0.059、0.060、0.046、0.060） |
+  | 搬运中间点 | **没有这个概念**：抬升后直接去放置点上方 |
+  | 速度和加速度 | 执行策略里有比例键（取值 (0,1]），但每个 campaign 只有一组值 |
+  | 夹爪闭合目标 | 有配置键，但接触校准就是在这个值下拟合的 |
+  | 规划器和种子 | 只有 RRTConnect；不传种子，所以每次结果不可复现；IK 种子是固定常量 |
+
+- **从中间状态续做**：每一段都从实测关节状态开始规划，这一点满足要求。但流程只能从 IDLE 进入，**不支持“杯子已在手里”这样的入口**。runner 本身有 checkpoint/resume 机制，Teacher 没有使用。
+- **扰动入口**：Teacher 和执行适配器里都没有命令偏移的钩子。仿真插件里有 `ExternalWrenchPlugin`（`~/apply_wrench`，可指定力、力矩、时长和斜坡），但 side-wrist 配置**没有加载它**。另有 `~/set_free_joint_state` 可以直接把杯子挪到指定位置。
+- **真值来源**：`/so101/simulation/evidence` 和 `scene_state` 都有杯子真值。现在 Teacher 用感知（broker 的 RGB-D/YOLO 结果）规划，真值只用于场景检查和端点判定。
+- **会受影响的检查**：
+  - 端点目标等于放置位姿乘以 `cup_to_tcp_grasp` 的逆，**改抓取变换会同时改变终点目标**；
+  - 放置高度校准带 k 和 tilt 绑定了当前的抓取方式；
+  - `ORACLE_COLLISION`：新的接近方向可能碰到桌面；
+  - 可达性过滤和 Teacher 成功边界都是在当前策略下测出来的。
+- **身份**：执行策略按 sha 冻结，**每个 campaign 只有一份**；字段集合是封闭的。每个 episode 的随机参数必须新增字段，也就是要升 schema 版本，并且要在冻结策略之外写进运行身份。
+
+### 设计
+
+**R3-a 参数化 Teacher（第一步）**
+- **新增 schema 6**：执行策略里新增一个 `diversity` 块。它不是单一取值，而是**分布**：每个参数给出范围和分布类型，并附一个 campaign 种子，整块参与冻结。
+- **每个 episode 的实际取值**：由“campaign 种子 + 场景 id”按确定方式派生出来。写进 case inputs 和 `episode.json`，并进入运行身份。按“runtime vs logic 参数”的规则，这些属于逻辑参数。
+- **首版只随机化不碰终点和校准的维度**：
+  1. **起始姿态**：在 `task_start` 附近随机，各关节 ±0.15 rad，超出限位或发生碰撞的样本直接拒绝。经由 `joint_overrides` 接入。
+  2. **预抓取高度和放置接近高度**：各 ±0.015 m。
+  3. **新增搬运中间点**：抬升后，在“抬升点–放置上方”连线中点附近 ±0.03 m 的盒子里采一个点，同样要过走廊和可达性检查。
+  4. **速度比例**：在现有键的 0.7–1.3 倍之间取，上限不超过 1。
+  5. **OMPL 种子**：传入种子，`num_planning_attempts` 允许大于 1，让规划结果可复现，同时又有多样性。
+- **暂缓的维度**：接近 yaw 和 roll、抓取高度、夹爪闭合目标。改这几项会移动端点目标、放置高度校准带和接触校准。等 R3-a 有数据以后再单独设计，届时需要重新标定。
+- **成功判定**：每条示教照常走端点判定、oracle 和 QC，失败照常记录。可达性过滤要在**实际采样到的参数**下重新计算。
+
+**R3-b 扰动后重规划（第二步）**
+- **Teacher 新增“续做”入口**：从当前实测状态和真值杯位出发，判断自己处在哪个阶段：杯子在桌上，或者杯子已在爪中，后者用 attach 状态和真值核验。然后从合适的状态继续执行。这同时也补上了 Teacher 现在缺少的恢复能力。
+- **扰动注入**：在 side-wrist 配置里加载 `ExternalWrenchPlugin`，在随机时刻对机械臂末端施加一个有界脉冲，使它偏离 1–3 cm。插件是仿真侧的“外界扰动”，不进入物理指纹的冻结字段，但脉冲的取值要记录。检测到偏离超出走廊后，转入续做入口重新规划。
+- **标签**：ACT 的动作标签取控制接口上被接受的 reference，不取外力本身。扰动段的标签就是 Teacher 重规划后的纠正指令，与 DART 方法一致。外力造成的偏离只出现在状态和观测里。
+- **数据标记**：每条示教记 `perturbation: {t, body, wrench, duration}`。训练时可以按是否扰动分组做对照。
+
+**R3-c DAgger（第三步，依赖 R3-b 的续做入口）**
+- 用当前模型在并行 rollout（N=8）中运行，记录它到达的状态，重点是偏离和失败点。
+- 在这些状态上调用 Teacher 的续做入口，得到纠正轨迹，加入下一轮训练。迭代 2–3 轮。
+
+### 评估
+- **数据量**：多样化示教和单一轨迹示教用等量数据训练对比。
+- **评估集**：标准点、held-out、外推组，以及 R0 的视觉分桶（每个点 2 次，配对比较）。
+- **闭环纠错能力**：比较 prefix 10/25/50 下的成功率差值，用来量化闭环纠错能力。
+- **抗扰测试**：评估时用 `apply_wrench` 施加同分布的扰动，统计恢复成功率。
+
+### 风险
+- **多模态平均**：示教的多样性范围从小往大开；按每个场景的轨迹聚类，观察 ACT 是否把几种轨迹平均成一条。
+- **Teacher 成功率下降**：采集产出率会降低。成功边界要在新分布下复测。
+- **改动面**：schema 6 和续做入口都会动到冻结的执行策略和状态机，每一步都要跑 gate，并单独请人工确认。
+
 ## 1. 自原草案以来改变的事实
 
 | 变化 | 依据 | 对随机化设计的影响 |

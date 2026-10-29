@@ -6,7 +6,7 @@ import time
 
 from so101_demo.act.collection_scope import read_collection_scope
 from so101_demo.act.parallel_collection_contracts import read_document
-from so101_demo.cli.mujoco_batch.worker_process import _ArtifactResults
+from so101_demo.cli.mujoco_batch.artifact_results import _ArtifactResults
 from so101_demo.parallel_batch.contracts.common import RunMode,_require_id,_require_sha256,_require_positive_int
 from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
 from so101_demo.runtime.inference.config import validate_file_ref

@@ -524,7 +524,7 @@ def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path
 
 
     from so101_demo.act.calibration import require_gate
-    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.head_search.binding import validate_head_search_binding
     from so101_demo.act.pick_place_calibration_aggregator import aggregate_pick_place_calibration
     from so101_demo.act.pick_place_calibration_measurement_contract import bind_measurement_contract
 
@@ -546,7 +546,7 @@ def test_a_runtime_that_does_not_match_the_measured_descriptor_is_refused(tmp_pa
     """Boundary IV item 5, negative direction: a report measured under one configuration cannot bind another."""
 
 
-    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.head_search.binding import validate_head_search_binding
     from so101_demo.act.pick_place_calibration_aggregator import aggregate_pick_place_calibration
     from so101_demo.act.pick_place_calibration_measurement_contract import bind_measurement_contract
 
@@ -687,7 +687,7 @@ def test_a_batch_that_does_not_index_the_descriptor_cannot_bind(tmp_path):
     """Item 3: no sealed descriptor means nothing to bind to, so the report cannot satisfy the runtime binding."""
 
 
-    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.head_search.binding import validate_head_search_binding
     from so101_demo.act.pick_place_calibration_aggregator import aggregate_pick_place_calibration
     from so101_demo.act.pick_place_calibration_measurement_contract import bind_measurement_contract
 

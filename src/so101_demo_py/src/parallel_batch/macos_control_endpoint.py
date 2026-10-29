@@ -6,8 +6,7 @@ campaign is a v4-native composition with no such journal, so it needs its own en
 own *wire*. Everything that defines the contract is reused from ``web_control``: the request field
 set, the identifier and token patterns, the unsigned-field list the request hash is taken over, the
 frame codec, the peer-credential read and the bind rule. Two implementations of one wire is a real
-drift risk, so a teleop-side parity test pins this module's fields and refusals against
-``expert_validation.control``; what is genuinely new here is only *what the reply reports*.
+drift risk, so the fields and refusals follow ``web_control``; what is genuinely new here is only *what the reply reports*.
 
 That reply stays as modest as the Linux server's, for the same reason: an acknowledgement of a durable
 stop transition is not a cleanup receipt. ``state``, ``batch_terminal`` and ``batch_cleanup_complete``

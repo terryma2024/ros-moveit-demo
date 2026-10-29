@@ -25,9 +25,33 @@ def _frozen_descend_final_distance_m(frozen):
     from ..act.teacher_endpoint import DESCEND_DISTANCE_FIELD
 
     try:
-        return float(frozen["teacher_execution_policy"]["values"][DESCEND_DISTANCE_FIELD])
+        values = frozen["teacher_execution_policy"]["values"]
+        if DESCEND_DISTANCE_FIELD not in values and _frozen_teacher_schema(frozen) > 5:
+            return None            # schema 6 without the optional DESCEND group: the preflight checks the six interpolated segments
+        return float(values[DESCEND_DISTANCE_FIELD])
     except (KeyError, TypeError, ValueError):
         raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: " + DESCEND_DISTANCE_FIELD) from None
+
+
+def _frozen_run_inputs(frozen, point_id, template, start_draw=None):
+    """R3-a: (episode values, template of the run, carry via offset) of a schema 6 freeze, derived from the frozen diversity block, the
+    scene id (the lease point id) and the start pose draw the reset applied; (None, ``template``, None) for a freeze that is not
+    schema 6, which changes nothing (and ignores the draw).
+
+    A schema 6 freeze without a scene id or without the applied draw, or whose block does not re-parse, is refused before any motion."""
+
+    if _frozen_teacher_schema(frozen) < 6:
+        return None, template, None
+    from ..act.teacher_diversity import episode_template, parse_diversity, values_for_policy
+
+    if not isinstance(point_id, str) or not point_id:
+        raise RuntimeError("TEACHER_DIVERSITY_SCENE_ID_REQUIRED")
+    if start_draw is None:
+        raise RuntimeError("TEACHER_DIVERSITY_START_DRAW_REQUIRED")
+    policy = dict(frozen["teacher_execution_policy"]["values"])
+    policy["diversity"] = parse_diversity(policy.get("diversity"))
+    values = values_for_policy(policy, point_id, start_draw)
+    return values, episode_template(template, values), tuple(values["carry_via_offset_m"])
 
 
 def _frozen_policy_file(frozen, snapshot) -> str:
@@ -73,3 +97,48 @@ def _execution_state_max_age_s(share_dir, *, teacher_run: bool, file_name: str |
         return loader(Path(share_dir) / "config/act" / file_name)["state_max_age_s"]
     except (OSError, ValueError):
         return None
+
+
+def _frozen_teacher_source(frozen, manifest_option, share_dir, scene_id, installed_share=None):
+    """Indoor P3: the verified appearance entry of this scene (plan, appearance, `teacher_source`) when the frozen scene list carries an
+    appearance plan, else None (every other freeze changes nothing).
+
+    In a frozen run `share_dir` is the frozen EXECUTION SNAPSHOT the Teacher runs from; it has the pool manifests but none of the generated textures,
+    so the entry is verified with `frozen_appearance.frozen_inventory`: the pool identity and splits from the frozen manifests, the texture files
+    from the INSTALLED share (`installed_share`, `get_package_share_directory`), path plus sha256 (EXP-7033). Without `installed_share` the
+    `share_dir` is the installed one."""
+
+    if frozen is None or manifest_option is None or scene_id is None or "scene_manifest" not in frozen:
+        return None
+    from ..act import frozen_appearance
+
+    installed = share_dir if installed_share is None else installed_share
+    return frozen_appearance.scene_entry(frozen, manifest_option, scene_id,
+                                         inventory=lambda: frozen_appearance.frozen_inventory(frozen, manifest_option, installed))
+
+
+def _check_teacher_source_pose(entry, sample, initial):
+    """Before any motion: the distance (m) between the pose that arrived on `/cup_pose` and the simulator's cup position at the start
+    (None without a Teacher source). A privileged episode's pose IS the simulator's: more than `PRIVILEGED_PUBLISHED_TOLERANCE_M` apart is
+    refused (`TEACHER_SOURCE_PRIVILEGED_POSE_MISMATCH`), whatever the camera chain said."""
+
+    if entry is None:
+        return None
+    import math
+
+    from ..act import model_equivalence
+    from ..act.appearance_plan import KIND_RANDOMISED, PRIVILEGED_PUBLISHED_TOLERANCE_M, TEACHER_SOURCE_PRIVILEGED
+
+    # D1: a randomised episode runs on a variant stack that declares the nominal model identity, and the proof of that is bound to this process;
+    # a nominal episode runs on the nominal stack with none. Anything else is refused before any motion.
+    bound = model_equivalence.bound()
+    randomised = entry["appearance"]["kind"] == KIND_RANDOMISED
+    if randomised != (bound is not None):
+        raise RuntimeError("TEACHER_SOURCE_MODEL_EQUIVALENCE_" + ("MISSING" if randomised else "UNEXPECTED"))
+    entry["model_equivalence"] = None if bound is None else {
+        "proof_sha256": bound["sha256"], "declared_model_sha256": bound["declared"], "loaded_model_sha256": bound["loaded"], "proof": bound["proof"]}
+
+    gap = math.dist(sample.pose_world.values[:3], initial.simulator_pose_world.position_m)
+    if entry["teacher_source"] == TEACHER_SOURCE_PRIVILEGED and not gap <= PRIVILEGED_PUBLISHED_TOLERANCE_M:
+        raise RuntimeError("TEACHER_SOURCE_PRIVILEGED_POSE_MISMATCH")
+    return gap

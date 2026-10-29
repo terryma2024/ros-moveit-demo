@@ -23,9 +23,9 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_calibration_bundle import assemble_calibration_bundle
-from so101_demo.act.head_search_calibration_inputs import SEALED_INPUT_NAMES
-from so101_demo.act.head_search_calibration_readback import (
+from so101_demo.act.head_search.calibration_bundle import assemble_calibration_bundle
+from so101_demo.act.head_search.calibration_inputs import SEALED_INPUT_NAMES
+from so101_demo.act.head_search.calibration_readback import (
     CAL_SELECTION_MISMATCH,
     CAL_VALUE_MUTATED,
     DEFAULT_DOMAIN,
@@ -39,8 +39,8 @@ from so101_demo.act.head_search_calibration_readback import (
     readback_selected_perception_values,
     verify_selected_candidate_identity,
 )
-from so101_demo.act.head_search_candidate_freeze import freeze_candidate
-from so101_demo.act.head_search_operating_point import (
+from so101_demo.act.head_search.candidate_freeze import freeze_candidate
+from so101_demo.act.head_search.operating_point import (
     record_selection_rule,
     validate_head_search_calibration_operating_point,
 )

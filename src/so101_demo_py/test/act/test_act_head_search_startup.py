@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_binding import validate_head_search_binding
+from so101_demo.act.head_search.binding import validate_head_search_binding
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
@@ -75,7 +75,7 @@ def test_startup_refuses_an_unconsumed_value() -> None:
 
 
 def test_the_loader_validates_the_pair_before_anything_is_constructed(tmp_path: Path) -> None:
-    from so101_demo.act.head_search_binding import load_promoted_head_search
+    from so101_demo.act.head_search.binding import load_promoted_head_search
 
     config = _config()
     config_path = tmp_path / "config.json"

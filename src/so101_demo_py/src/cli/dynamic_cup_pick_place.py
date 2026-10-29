@@ -33,6 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--final-stop-proof", action="store_true")
     # Diagnostic only: inject one execution failure at the execute boundary of this state (policy v3 only; default off)
     parser.add_argument("--inject-failure-at", default=None)
+    # R3-a: the start pose draw the reset applied (schema 6 Teacher execution policy); the Teacher requires exactly that draw
+    parser.add_argument("--start-pose-draw", type=int, default=None)
     parser.add_argument("--batch-id")
     parser.add_argument("--coordinator-epoch", type=int)
     parser.add_argument("--worker-id")

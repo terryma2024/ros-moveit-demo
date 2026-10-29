@@ -59,7 +59,8 @@ def fixture(tmp_path):
     campaign = dict(schema_version=1, kind='ACT_CONTAINER_CAMPAIGN', evidence_root=str(tmp_path),
         controlled_runtime=dict(path=str(runtime), sha256=runtime_sha),
         head_service=service, teacher_service=service, shard_image=image, gpu_uuid=GPU, qualification_contract=None,
-        max_concurrent_recordings=4, min_assignment_gap_s=60)
+        max_concurrent_recordings=4, min_assignment_gap_s=60,
+        mount_build=dict(commit='a'*40, root=str(tmp_path/'mount'/('a'*12))))
     config_path = root/'campaign.json'
     config_path.write_text(json.dumps(campaign))
     slot = ActWorkerSlot(campaign_id=base.payload['campaign_id'], worker_id='w00',
@@ -76,7 +77,7 @@ def fixture(tmp_path):
                                                  for i in range(8)]}))
     controlled = {name:payload[name] for name in ('source_sha256','runtime_config_sha256',
                   'collection_config_sha256','contact_policy_fingerprint')}
-    controlled.update(gpu_uuid=GPU,image_source_install=dict(inference=image,shard=image))
+    controlled.update(gpu_uuid=GPU,image_source_install=dict(inference=image,shard=image),mount_build=campaign['mount_build'])
     functional_path = root/'functional-run.json'
     functional_path.write_text(json.dumps(dict(schema_version=1,kind='ACT_COLLECTION_FUNCTIONAL_RUN',
         run_id='functional-run',worker_count=1,controlled_identity=controlled,
@@ -264,6 +265,21 @@ def test_eight_worker_functional_start_refuses_a_campaign_config_naming_a_contra
         store.close()
 
 
+def test_a_start_whose_campaign_config_has_no_mount_build_is_refused_before_any_slot(tmp_path):
+    paths, slot, spec, store, workload, inspect = fixture(tmp_path)
+    try:
+        config_path = Path(spec.payload['campaign_config_path'])
+        config = json.loads(config_path.read_text())
+        del config['mount_build']
+        config_path.write_text(json.dumps(config))
+        payload = dict(spec.payload, campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
+        with pytest.raises(ValueError, match='MOUNT_BUILD_REQUIRED'):
+            workload.start(replace(spec, payload=payload), allow_existing=False)
+        assert workload.slot_registry.slots() == ()
+    finally:
+        store.close()
+
+
 @pytest.mark.parametrize('scenes',[10,40])
 def test_eight_worker_functional_start_refuses_scene_counts_outside_the_closed_set(tmp_path, scenes):
     paths, slot, spec, store, workload, inspect = fixture(tmp_path)
@@ -443,15 +459,21 @@ def test_qualification_mode_carrying_a_report_hash_or_path_is_refused(tmp_path):
 REPORT_RUNS = itertools.count()
 
 
+def _mount_build():
+    """A container collection start names a mounted build (image mode is retired)."""
+    from so101_demo.runtime.container_campaign.mount_build import MountBuild
+    return MountBuild(commit='a' * 40, root=Path('/mount') / ('a' * 12))
+
+
 @pytest.fixture(scope='module')
 def qualified_world(tmp_path_factory):
-    from collection_qualification_world import build_world, install_controlled_world
+    from collection_qualification_world import INFERENCE_IMAGE, build_world, install_controlled_world
     from so101_demo.act.parallel_qualification_verifier import build_collection_qualification_report
 
     patch = pytest.MonkeyPatch()
     install_controlled_world(patch)
     try:
-        world = build_world(tmp_path_factory.mktemp('qualification-world'))
+        world = build_world(tmp_path_factory.mktemp('qualification-world'), mount_build=_mount_build(), images=(INFERENCE_IMAGE, INFERENCE_IMAGE))
         build_collection_qualification_report(world.run, contract=world.contract_path)
     finally:
         patch.undo()
@@ -461,13 +483,13 @@ def qualified_world(tmp_path_factory):
 @pytest.fixture(scope='module')
 def qualified_world_environment(tmp_path_factory):
     """The same world under identity version 2: no GPU in the controlled identity, campaign config version 2."""
-    from collection_qualification_world import build_world, install_controlled_world
+    from collection_qualification_world import INFERENCE_IMAGE, build_world, install_controlled_world
     from so101_demo.act.parallel_qualification_verifier import build_collection_qualification_report
 
     patch = pytest.MonkeyPatch()
     install_controlled_world(patch)
     try:
-        world = build_world(tmp_path_factory.mktemp('qualification-world-v2'), identity_version=2)
+        world = build_world(tmp_path_factory.mktemp('qualification-world-v2'), identity_version=2, mount_build=_mount_build(), images=(INFERENCE_IMAGE, INFERENCE_IMAGE))
         build_collection_qualification_report(world.run, contract=world.contract_path)
     finally:
         patch.undo()
@@ -477,14 +499,15 @@ def qualified_world_environment(tmp_path_factory):
 @pytest.fixture(scope='module')
 def qualified_world_capped(tmp_path_factory):
     """Identity version 2 qualified under a cap of 4 recordings, 6 tasks in flight and a 1.0 s assignment gap."""
-    from collection_qualification_world import build_world, install_controlled_world
+    from collection_qualification_world import INFERENCE_IMAGE, build_world, install_controlled_world
     from so101_demo.act.parallel_qualification_verifier import build_collection_qualification_report
 
     patch = pytest.MonkeyPatch()
     install_controlled_world(patch)
     try:
         world = build_world(tmp_path_factory.mktemp('qualification-world-capped'), identity_version=2,
-                            campaign_extra=dict(max_concurrent_recordings=4, max_tasks_in_flight=6, min_assignment_gap_s=1.0))
+                            campaign_extra=dict(max_concurrent_recordings=4, max_tasks_in_flight=6, min_assignment_gap_s=1.0),
+                            mount_build=_mount_build(), images=(INFERENCE_IMAGE, INFERENCE_IMAGE))
         build_collection_qualification_report(world.run, contract=world.contract_path)
     finally:
         patch.undo()
@@ -669,7 +692,7 @@ def test_identity_that_differs_from_the_qualified_one_is_refused(qualified_world
         config_edit = lambda campaign, inputs: [campaign[role]['image'].update(install_sha256='9'*64)
                                                 for role in ('head_service', 'teacher_service')]
     elif key == 'shard_image':
-        config_edit = lambda campaign, inputs: campaign['shard_image'].update(digest='sha256:'+'9'*64)
+        config_edit = lambda campaign, inputs: campaign['shard_image'].update(install_sha256='9'*64)     # the digest is the one base image's
     else:
         config_edit = lambda campaign, inputs: campaign.update(gpu_uuid='GPU-00000000-0000-0000-0000-000000000000')
     paths, spec, store, workload = formal_start(qualified_world, tmp_path, monkeypatch, config_edit=config_edit,

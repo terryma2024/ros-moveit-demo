@@ -1,5 +1,8 @@
 """The processor owner: durable intent before Docker, readiness from the program's ready file, stop proof from the container exit."""
 
+import tempfile
+
+from mount_trees import make_mount_trees
 import asyncio
 from dataclasses import asdict
 import hashlib
@@ -75,7 +78,7 @@ class Fixture:
             images={role: self.image for role in ("head", "teacher", "shard")}, paths=self.paths, registry=self.registry,
             approved_inputs=(), config_paths=(self.spec_path,), phase1_attempts=(self.attempt,), service_token=TOKEN,
             startup_timeout_s=2., status_timeout_s=5., max_frame_bytes=8388608, stop_timeout_s=.2, docker_runner=self.docker,
-            namespace_reader=lambda pid: 4026531999)
+            namespace_reader=lambda pid: 4026531999, mount_build=make_mount_trees(Path(tempfile.mkdtemp())))
         kwargs.update(overrides)
         return owner_module.ContainerProcessorOwner(**kwargs)
 
@@ -98,7 +101,7 @@ def test_owner_builds_the_processor_argv_from_the_admitted_launch(tmp_path):
     owner = fixture.owner()
     argv = owner.argv
     assert "--gpus" not in argv and argv[-3:] == ["campaign_processor", "--spec", str(fixture.spec_path)]
-    assert argv[-4] == fixture.image["digest"] and owner.teacher_socket is None
+    assert argv[-9] == fixture.image["digest"] and argv[-8] == "/act/venv/bin/python" and owner.teacher_socket is None
     assert f"type=bind,src={fixture.attempt},dst={fixture.attempt},readonly" in [argv[i + 1] for i, v in enumerate(argv) if v == "--mount"]
     fixture.registry.close()
 
@@ -164,8 +167,10 @@ def test_spec_drift_is_refused_before_intent_or_docker(tmp_path):
 
 
 def provenance(image, *, digest=None):
-    return lambda cid, docker_runner: dict(container_id=cid, docker_started_at=STARTED, image_digest=digest or image["digest"],
-        provenance={name: image[name] for name in ("package_source_sha256", "install_sha256")})
+    return lambda cid, docker_runner, mount_role=None, install_root=None: dict(
+        container_id=cid, docker_started_at=STARTED, image_digest=digest or image["digest"],
+        provenance={**{name: image[name] for name in ("package_source_sha256", "install_sha256")},
+                    "git_commit": "0123456789abcdef0123456789abcdef01234567"})
 
 
 def test_ready_file_provenance_and_exit_proof(tmp_path, monkeypatch):

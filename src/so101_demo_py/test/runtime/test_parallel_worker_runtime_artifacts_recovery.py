@@ -538,3 +538,34 @@ def test_recover_does_not_continue_after_shutdown_crosses_deadline(tmp_path: Pat
     assert runtime.recover("worker-1", 1, 10.0) is False
     assert recovery_calls == []
     assert [spec.role for spec in processes.specs] == ["task-station"]
+
+
+def test_a_pose_without_a_camera_localization_is_admitted_without_numeric_evidence_and_still_executes(tmp_path: Path) -> None:
+    """Indoor P3 (D2): a privileged-pose episode whose camera detection missed has no localization; its pose is admitted, no camera numeric
+    evidence is captured, and the Teacher is started on it."""
+    from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt, RuntimeDecision
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    lease = _lease()
+    admitted = SimpleNamespace(reset_epoch="reset-7", perception_chain_complete=True, localized=None)
+    numeric_calls = []
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.EXECUTE,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(reset_epoch="reset-7", reset_completed_monotonic_s=10.0),
+        initial_gate=lambda _lease, receipt: receipt,
+        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+        localize=lambda _lease, _result: pytest.fail("the camera chain is complete"),
+        capture_numeric_evidence=lambda *args: numeric_calls.append(args),
+        admit_pose=lambda _lease, value: pytest.fail("the chain admitted itself"),
+        consumer_ready=lambda _child: True,
+        publish_pose=lambda _value: True,
+        execute_result=lambda *_args: ExecutionCompletionReceipt(
+            RuntimeDecision(AttemptStatus.FAILED, reason="MOTION_FAILED", physical_action_proven_absent=False), 30.0),
+    )
+    runtime.start_physical_runtime()
+    runtime.reset_and_validate_point(lease)
+    assert runtime.localize_and_admit_pose(lease, admitted) is admitted
+    assert numeric_calls == []
+    assert runtime.execute_expert(lease, admitted).status is AttemptStatus.FAILED

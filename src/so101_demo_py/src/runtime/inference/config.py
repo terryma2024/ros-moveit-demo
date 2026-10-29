@@ -138,6 +138,11 @@ RETRY_INVALID_MAX_ROUNDS_LIMITS = (0, 3)
 # (`unified.admission._collection_identity`, present only when named here), and the frozen inputs of the campaign must bind the same
 # profile (`case_inputs.campaign_binding`), so data of different rigs cannot be mixed under one qualification.
 _RIG_PROFILE_SHA256 = "rig_profile_sha256"
+# The Teacher execution policy the campaign runs under, as the sha256 of the loaded policy (`policy_sha256`; R3-a: a schema 6 policy holds the
+# diversity distributions and the campaign seed). Absent for every campaign that does not pin one. Like the rig it IS part of the controlled
+# identity when named (`unified.admission._collection_identity`), which is what `collection_qualification_recompute` requires of a schema 6 freeze,
+# and the frozen inputs must bind the same policy (`case_inputs.campaign_binding`).
+_TEACHER_POLICY_SHA256 = "teacher_execution_policy_sha256"
 # The GPU model the campaign declares (environment class: recorded in the qualification report, not part of the identity).
 _GPU_MODEL = "gpu_model"
 # Mount mode (design 2026-10-21, mount-build images; default off = absent): the containers run one dependency-only base image and get
@@ -148,7 +153,7 @@ _MOUNT_BUILD = "mount_build"
 # CPU partition mode (default off = absent): `container_campaign.cpuset`.
 _SHARD_CPUSET = "shard_cpuset"
 _OPTIONAL_LIMITS = (_GPU_MODEL, _MOUNT_BUILD, _SHARD_CPUSET, _RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _BATCH_HARD_TIMEOUT_S, _RETRY_INVALID_MAX_ROUNDS,
-                    _RIG_PROFILE_SHA256, *_INT_LIMITS)
+                    _RIG_PROFILE_SHA256, _TEACHER_POLICY_SHA256, *_INT_LIMITS)
 
 
 # The keys a campaign run takes from its runtime document (design 2026-10-19, class R): none of them changes what the data is.
@@ -168,7 +173,7 @@ def _check_limit(name, value):
     elif name == _RETRY_INVALID_MAX_ROUNDS:
         low, high = RETRY_INVALID_MAX_ROUNDS_LIMITS
         _require(type(value) is int and low <= value <= high)
-    elif name == _RIG_PROFILE_SHA256:
+    elif name in (_RIG_PROFILE_SHA256, _TEACHER_POLICY_SHA256):
         _sha(value)
     else:
         low, high = _INT_LIMITS[name]
@@ -219,7 +224,7 @@ def load_campaign_config(path, *, roles=("head", "teacher"), expected_sha256=Non
               ("schema_version", "kind", "evidence_root", "controlled_runtime",
                "head_service", "teacher_service", "shard_image", "gpu_uuid",
                "qualification_contract"))
-        for name in (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _RIG_PROFILE_SHA256, *RUNTIME_DOCUMENT_KEYS):
+        for name in (_RECORDING_CAP, _TASKS_IN_FLIGHT, _ASSIGNMENT_GAP, _RIG_PROFILE_SHA256, _TEACHER_POLICY_SHA256, *RUNTIME_DOCUMENT_KEYS):
             if name in document:
                 _check_limit(name, document[name])
         # version 2 moved the runtime-class keys out of this file into the runtime document (`load_runtime_document`): the file

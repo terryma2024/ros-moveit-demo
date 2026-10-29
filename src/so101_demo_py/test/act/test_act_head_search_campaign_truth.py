@@ -9,7 +9,7 @@ import pytest
 
 
 def _module():
-    return importlib.import_module('so101_demo.act.head_search_campaign_truth')
+    return importlib.import_module('so101_demo.act.head_search.campaign_truth')
 
 
 def _ref(path):

@@ -1,0 +1,158 @@
+{
+ "command": "python scripts/assets/gen_indoor_textures.py --out src/so101_demo_py/assets/mujoco/textures/indoor",
+ "generated_with": {
+  "numpy": "1.26.4",
+  "pillow": "10.2.0"
+ },
+ "generator": "scripts/assets/gen_indoor_textures.py",
+ "kind": "SO101_INDOOR_TEXTURE_MANIFEST",
+ "licence": "original work, repository licence",
+ "schema_version": 1,
+ "source": "procedural (numpy + PIL, fixed seeds); no downloaded image",
+ "textures": [
+  {
+   "bytes": 127192,
+   "file": "floor_wood_light.png",
+   "generator": "wood",
+   "height": 512,
+   "seed": 1,
+   "sha256": "a99429b334fa06a75c4f52c920f5b6df8bffa4f1dda64e028dc2d55a017cc90d",
+   "width": 512
+  },
+  {
+   "bytes": 116942,
+   "file": "cabinet_wood.png",
+   "generator": "wood",
+   "height": 512,
+   "seed": 2,
+   "sha256": "6a0fc4903e83e0c929cf2713800f1da749b6534ea1384b1d6124b2d29f277ae9",
+   "width": 512
+  },
+  {
+   "bytes": 91371,
+   "file": "floor_tile_grey.png",
+   "generator": "tile",
+   "height": 512,
+   "seed": 3,
+   "sha256": "0276a0f8fd4f85718060982697c629a38b514c7348dd7ee01de7b2f184e939e9",
+   "width": 512
+  },
+  {
+   "bytes": 10588,
+   "file": "floor_parquet.png",
+   "generator": "parquet",
+   "height": 512,
+   "seed": 4,
+   "sha256": "b4208d1cb776b638af8b602894fb22b3a25ccacfc571b5c3b19bf8768cbf1d89",
+   "width": 512
+  },
+  {
+   "bytes": 273530,
+   "file": "floor_carpet.png",
+   "generator": "carpet",
+   "height": 512,
+   "seed": 5,
+   "sha256": "39c0d50960aa3bb235f19f942551b9fb46be70365e8f511b9cb58469cb22302f",
+   "width": 512
+  },
+  {
+   "bytes": 167954,
+   "file": "wall_white.png",
+   "generator": "plaster",
+   "height": 512,
+   "seed": 6,
+   "sha256": "2ed75357cf4797266b1753ea83772d599598b22bb11080e7557a563cd33912b5",
+   "width": 512
+  },
+  {
+   "bytes": 182766,
+   "file": "wall_grey.png",
+   "generator": "plaster",
+   "height": 512,
+   "seed": 7,
+   "sha256": "b896392aa5ed6c75e817636517f2f0dcd2f2e89f390cd5695457b6535f1448e7",
+   "width": 512
+  },
+  {
+   "bytes": 182525,
+   "file": "wall_beige.png",
+   "generator": "plaster",
+   "height": 512,
+   "seed": 8,
+   "sha256": "7de942881f41f1fe37b817b6d4d12225ae23e5fd6e46cd83b3462b8316091f3e",
+   "width": 512
+  },
+  {
+   "bytes": 134148,
+   "file": "ceiling_white.png",
+   "generator": "plaster",
+   "height": 512,
+   "seed": 9,
+   "sha256": "f56fe4e6c85da41bcb81ef666e7d5f9a3b79d0b96948145a12a0b15230b6d04e",
+   "width": 512
+  },
+  {
+   "bytes": 74924,
+   "file": "table_laminate.png",
+   "generator": "laminate",
+   "height": 512,
+   "seed": 10,
+   "sha256": "60dd2aebe917fa750b9d84d7cbd9924548b0a8a2a1b00f95666f285ff0bdf1b2",
+   "width": 512
+  },
+  {
+   "bytes": 20824,
+   "file": "whiteboard.png",
+   "generator": "whiteboard",
+   "height": 512,
+   "seed": 11,
+   "sha256": "3bfd0bcebc7c136cebf4133f46e0e4f59adfa0c7e89a24f81b3aa88094c7e85e",
+   "width": 512
+  },
+  {
+   "bytes": 3062,
+   "file": "poster.png",
+   "generator": "poster",
+   "height": 512,
+   "seed": 12,
+   "sha256": "e59ab3cf7f98417115bc6ef052073ab31380f1e3796ced16e4f2178f88b46d46",
+   "width": 512
+  },
+  {
+   "bytes": 6190,
+   "file": "outside_cool.png",
+   "generator": "sky",
+   "height": 512,
+   "seed": 13,
+   "sha256": "bd017cba2b1119db70e2a34eb956d3fd375c17d180e906bf9934c05e366268de",
+   "width": 512
+  },
+  {
+   "bytes": 6750,
+   "file": "outside_warm.png",
+   "generator": "sky",
+   "height": 512,
+   "seed": 14,
+   "sha256": "11606c4452294a963486019ae779df0cd60d4fb820f3110acb82cf38764bbdfb",
+   "width": 512
+  },
+  {
+   "bytes": 43379,
+   "file": "metal_shelf.png",
+   "generator": "metal",
+   "height": 512,
+   "seed": 15,
+   "sha256": "723953c424da9e2cf9bca1dd2e4a6a03731e68fe619e7f168773188556992374",
+   "width": 512
+  },
+  {
+   "bytes": 108130,
+   "file": "cardboard.png",
+   "generator": "cardboard",
+   "height": 512,
+   "seed": 16,
+   "sha256": "39d1cebb1eefe22d1b0e19337cb232df8135357fce5a9070efed1ca1cc662b8f",
+   "width": 512
+  }
+ ]
+}

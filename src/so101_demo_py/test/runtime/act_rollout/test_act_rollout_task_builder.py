@@ -166,6 +166,37 @@ def test_a_valid_task_runs_one_episode_and_leaves_the_native_episode_files(world
     assert json.dumps(result)           # the journal stores it
 
 
+def test_a_scene_variant_ref_reaches_the_inputs_loader_and_the_episode_names_the_variant(world, tmp_path):
+    variant_file = tmp_path / "inputs" / "variant.json"
+    variant_file.write_text("{}")
+    record = {"name": "dark", "variant_sha256": "1" * 64, "realized_sha256": "2" * 64, "physics_fingerprint": "3" * 64}
+    world.identity = dict(world.identity, scene_variant=record)
+    world.spec["rollout_identity"]["run_identity_sha256"] = identity_sha256(world.identity)
+    document = world.document()
+    document["inputs"]["scene_variant"] = ref(variant_file)
+    seen = []
+
+    def loader(args):
+        seen.append(args)
+        return RolloutInputs(**{**world.inputs(args).__dict__, "scene_variant": dict(record, applied={"key_light.diffuse": 0.35})})
+    result = world.build(task=world.task(document), edges=world.edges(inputs_loader=loader)).run()
+    assert result["verdict"] == "DONE" and seen[0].scene_variant == variant_file
+    episode = json.loads((episode_dir(world) / "episode.json").read_text())
+    assert episode["scene_variant"]["name"] == "dark" and episode["identity"]["scene_variant"] == record
+
+
+def test_a_task_without_a_scene_variant_has_none_and_its_episode_has_no_variant_key(world):
+    seen = []
+
+    def loader(args):
+        seen.append(args)
+        return world.inputs(args)
+    world.build(edges=world.edges(inputs_loader=loader)).run()
+    assert seen[0].scene_variant is None
+    episode = json.loads((episode_dir(world) / "episode.json").read_text())
+    assert "scene_variant" not in episode and "scene_variant" not in episode["identity"]
+
+
 def shape(value):
     """The structure of a document: keys, nested keys, and the type of every leaf."""
     if isinstance(value, dict):

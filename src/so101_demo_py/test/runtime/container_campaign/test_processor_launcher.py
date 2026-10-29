@@ -1,5 +1,8 @@
 """The production processor factory: private directories, spec, launch record, and the amended mounts (A1)."""
 
+import tempfile
+
+from mount_trees import make_mount_trees
 import json
 from pathlib import Path
 
@@ -27,7 +30,8 @@ def launcher_world(tmp_path):
     runtime = json.loads(fixture.spec_path.read_text())["parallel_runtime"]
     launcher = ContainerProcessorLauncher(context=fixture.context, images={role: fixture.image for role in ("head", "teacher", "shard")}, paths=fixture.paths,
         registry=fixture.registry, parallel_runtime=runtime, approved_inputs=(), config_paths=(),
-        docker_runner=fixture.docker, namespace_reader=lambda pid: 1)
+        docker_runner=fixture.docker, namespace_reader=lambda pid: 1,
+        mount_build=make_mount_trees(Path(tempfile.mkdtemp())))
     return fixture, launcher
 
 

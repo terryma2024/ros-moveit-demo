@@ -269,14 +269,3 @@ def test_batch_summary_without_started_attempts_has_no_rate():
     assert summary.teacher_attempts_started == 0 and summary.teacher_success_rate is None
     assert summary.act_data_pass_rate is None and summary.committable_episodes == 0
 
-
-def test_the_outcome_document_reports_teacher_and_data_rates_separately():
-    from so101_demo.cli.mujoco_batch.outcome import outcome_document
-    from so101_demo.parallel_batch.contracts.common import PointStatus
-    from so101_demo.parallel_batch.contracts.identity import BatchSummary
-    summary = BatchSummary(RunMode.EXECUTE, {"a": PointStatus.PASSED, "b": PointStatus.FAILED}, batch_terminal=True,
-        act_results={"a": dict(act_data_qc="FAIL", export_eligible=False)})
-    _, document = outcome_document(summary)
-    assert document["teacher_attempts_started"] == 2 and document["teacher_passed"] == 1
-    assert document["teacher_success_rate"] == 0.5
-    assert document["act_data_qc_passed"] == 0 and document["committable_episodes"] == 0

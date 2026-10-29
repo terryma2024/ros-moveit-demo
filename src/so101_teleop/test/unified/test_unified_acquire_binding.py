@@ -49,7 +49,7 @@ def composed(tmp_path):
     registry = InstanceRegistry(arbiter, service_epoch="e1", origin=ORIGIN, clock_ns=lambda: 1)
     service = StubLeaseService()
     services = UnifiedServices(
-        teleop=service, tasks=None, validation=None, arbiter=arbiter, instances=registry
+        teleop=service, tasks=None, arbiter=arbiter, instances=registry
     )
     app = create_unified_app(services, bind_address="127.0.0.1")
     return app, registry, service

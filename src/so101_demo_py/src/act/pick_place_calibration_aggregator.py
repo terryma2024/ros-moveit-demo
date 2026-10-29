@@ -152,7 +152,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
         # the sample's shape is the binding's own vocabulary, taken from it rather than restated: the head-search
         # fields, the camera fields, an integer lock-frame count (the binding refuses a mapping) and the commit and
         # config the binding compares against the report
-        from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
+        from so101_demo.act.head_search.binding import _CAMERA_MEASURED, _MEASURED
 
         def _lock_frames(value):
             if isinstance(value, dict) and value:
@@ -181,7 +181,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
             # the payload records the INNER head-search block while the seal is the WHOLE
             # {schema_version, head_search} document, so the two are compared at ONE layer - and every sealed
             # descriptor is validated by the same complete production rule the binding uses.
-            from so101_demo.act.head_search_binding import validate_head_search_shape
+            from so101_demo.act.head_search.binding import validate_head_search_shape
 
             validated = validate_head_search_shape(sealed_descriptor)
             claimed = readings.get("head_search")

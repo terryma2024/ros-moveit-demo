@@ -149,7 +149,7 @@ class OwnedHeadScene:
         self.node, self.inputs, self.safety, self.emit = node, inputs, safety, emit
         self.fixture = None
         if 'scenario_fixture' in getattr(inputs,'refs',{}):
-            from so101_demo.act.head_search_campaign_scene import load_case_fixture
+            from so101_demo.act.head_search.campaign_scene import load_case_fixture
             self.fixture = load_case_fixture(inputs,safety)
         self.startup_ready = startup_ready
         #: called as ``neck_activation(deadline=...)`` at the activation step: the neck owner activates the neck

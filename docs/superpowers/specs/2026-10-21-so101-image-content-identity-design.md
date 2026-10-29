@@ -1,5 +1,7 @@
 # SO-101 ACT: build images on each host and prove they are equivalent — design and plan
 
+> Superseded by mount mode, 2026-10-23: campaigns run from `so101-mount-base` with host-built mounted trees, so the per-commit image build, the deps records and the image content manifest were removed (migration P2). Kept as history.
+
 Status: CONFIRMED by the human on 2026-10-21 ("可以，按推荐执行。 Q4 pyc不生成").
 - Q1–Q3 and Q5 are as recommended.
 - **Q4 is changed: no `.pyc` is generated.** The builds use `PIP_NO_COMPILE=1`, setuptools `--no-compile` and no `compileall`. A test asserts that the manifest holds no `*.pyc` under `/act` or `/act/venv`, and none in site-packages added by our builds.

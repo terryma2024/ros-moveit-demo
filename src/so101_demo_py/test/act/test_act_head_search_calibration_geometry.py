@@ -69,8 +69,7 @@ def _seal(body: dict) -> dict:
 
 
 def _module():
-    from so101_demo.act import head_search_calibration_geometry
-
+    from so101_demo.act.head_search import calibration_geometry as head_search_calibration_geometry
     return head_search_calibration_geometry
 
 
@@ -117,8 +116,7 @@ def _coverage_of(targets, *, required_domain_rad, horizontal_fov_rad) -> tuple[f
 
 def test_the_three_refusal_codes_are_exactly_the_planned_codes():
     module = _module()
-    from so101_demo.act import head_search_calibration_inputs
-
+    from so101_demo.act.head_search import calibration_inputs as head_search_calibration_inputs
     assert module.REFUSAL_CODES == (
         "CAL_INPUT_UNSEALED",
         "CAL_DOMAIN_UNCOVERED",
@@ -294,8 +292,7 @@ def test_a_receipt_whose_check_did_not_pass_cannot_vouch_for_its_target(tmp_path
 
 def test_an_absent_sealed_geometry_is_refused_with_phase_ones_code(tmp_path):
     module = _module()
-    from so101_demo.act import head_search_calibration_inputs
-
+    from so101_demo.act.head_search import calibration_inputs as head_search_calibration_inputs
     declared = _sealed_files(tmp_path, _seal(GEOMETRY_BODY))
     (tmp_path / "geometry_seal.json").unlink()
 

@@ -73,12 +73,13 @@ SIDE_WRIST_SCENE = PACKAGE / "assets/mujoco/act/scene_side_wrist.xml"
 SIDE_WRIST_PROFILE = PACKAGE / "config/act/rig-v2.yaml"
 
 
-@pytest.mark.parametrize("rig,scene", [("head-wrist", SCENE), ("side-wrist", SIDE_WRIST_SCENE)])
+@pytest.mark.parametrize("rig,scene", [("head-wrist", SCENE), ("side-wrist", SIDE_WRIST_SCENE),
+                                       ("side-wrist-indoor", SIDE_WRIST_SCENE.with_name("scene_side_wrist_indoor.xml"))])
 def test_every_rig_pin_is_the_recompiled_identity(rig, scene):
     mujoco = pytest.importorskip("mujoco")
     from so101_demo.act.contact_collector import RIG_IDENTITIES, rig_identity
     from so101_demo.adapters.act.physics import model_sha256
-    assert set(RIG_IDENTITIES) == {"head-wrist", "side-wrist"}
+    assert set(RIG_IDENTITIES) == {"head-wrist", "side-wrist", "side-wrist-indoor"}
     assert rig_identity(rig) == (hashlib.sha256(scene.read_bytes()).hexdigest(),
                                  model_sha256(mujoco.MjModel.from_xml_path(str(scene))))
 

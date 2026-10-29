@@ -204,7 +204,8 @@ class PointProtocol:
             if getattr(broker_result, "perception_terminal", False) is True:
                 return broker_result
             localized = getattr(broker_result, "localized", None)
-            numeric = self._capture_numeric(lease, localized, boundary)
+            # indoor P3 (D2): a privileged-pose episode whose camera detection missed has no localization and so no camera numeric evidence
+            numeric = None if localized is None else self._capture_numeric(lease, localized, boundary)
             self._accepted_poses[key] = broker_result
             self._numeric_receipts[key] = numeric
             if self.run_mode is RunMode.PLAN_ONLY:
@@ -321,4 +322,10 @@ class PointProtocol:
         if self._collection is not None and getattr(self._collection, "inject_failure_at", None) is not None:
             # Diagnostic only (validated when the request was made): the Teacher injects one execution failure there
             argv = argv + ("--inject-failure-at", self._collection.inject_failure_at)
+        from so101_demo.act.teacher_diversity import read_start_pose_selection
+
+        # R3-a: the start pose draw the reset applied (written beside the task before the reset); the Teacher requires exactly that draw
+        selection = read_start_pose_selection(self.resources.worker_root, lease.attempt_id)
+        if selection is not None:
+            argv = argv + ("--start-pose-draw", str(selection["draw_index"]))
         return argv

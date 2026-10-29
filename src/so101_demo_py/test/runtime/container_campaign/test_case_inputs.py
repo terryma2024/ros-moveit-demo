@@ -24,7 +24,7 @@ import pytest
 from so101_demo.act.collection_scope import build_collection_scope, read_collection_scope
 from so101_demo.act.contact_policy import policy_fingerprint
 from so101_demo.act.diagnostic_episode_inputs import _canonical, verify_frozen_inputs
-from so101_demo.cli.mujoco_batch.request import _load_runtime_config
+from so101_demo.parallel_batch.two_worker_composition import load_execution_config as _load_runtime_config
 from so101_demo.runtime.container_campaign import case_inputs
 from so101_demo.runtime.container_campaign.case_artifacts import CollectionCaseArtifacts
 from so101_demo.runtime.container_campaign.paths import build_role_mounts, make_campaign_paths
@@ -568,3 +568,55 @@ def test_a_spot_check_freeze_refuses_more_than_one_scene_and_the_formal_freeze_s
             plane='other', scene_manifest=one, **policies())
     refused('INPUT_NOT_APPROVED', case_inputs.freeze_campaign_inputs, run, candidates=spot_world['candidates'],
             scene_manifest=one, **policies())
+
+
+INDOOR_TEACHER_SHA = 'f9cce63b17b1a3d2a32cd6d841c25a7482f1db87b8f96cd31bd4e03149dfcfee'
+
+
+def test_the_indoor_teacher_weights_are_refused_for_a_campaign_of_another_rig(side_world, tmp_path, monkeypatch):
+    """The indoor fine-tuned YOLO belongs to the side-wrist-indoor rig only: the side+wrist campaign (old weights) refuses it."""
+    import copy
+
+    from so101_demo.runtime.container_campaign import task_builder
+
+    config = copy.deepcopy(side_world['args']['campaign_config'])
+    config['teacher_service']['model']['weights']['sha256'] = INDOOR_TEACHER_SHA
+    refused('CASE_INPUTS_TEACHER_MODEL_MISMATCH', case_inputs.campaign_binding, side_world['manifest'],
+            **dict(side_world['args'], campaign_config=config))
+    # the loader reads the weights file back, so the task-builder half uses a real file whose hash the override table is pointed at
+    from so101_demo.act import teacher_model
+
+    weights = tmp_path / 'indoor-best.pt'
+    weights.write_bytes(b'indoor weights stand-in')
+    digest = hashlib.sha256(weights.read_bytes()).hexdigest()
+    monkeypatch.setattr(teacher_model, 'TEACHER_MODEL_OVERRIDES',
+                        {'side-wrist-indoor': teacher_model.TeacherModel(digest)})
+    campaign = copy.deepcopy(side_world['campaign'])
+    for role in ('head_service', 'teacher_service'):
+        campaign[role]['model']['weights'] = dict(path=str(weights), sha256=digest)
+    path = write_config(tmp_path, campaign)
+    task_input = dict(side_world, campaign=campaign, campaign_path=path)
+    task, spec = task_for(task_input, tmp_path / 'indoor-weights', monkeypatch, 'scene-a')
+    refused('COLLECTION_CASE_TEACHER_MODEL_MISMATCH', task_builder.load_task_input, task, spec, teacher_socket=TEACHER_SOCKET)
+    # a rig whose override IS that model loads the same task: the model id is the runtime's, so only the weights hash differs
+    monkeypatch.setattr(teacher_model, 'TEACHER_MODEL_OVERRIDES', {'side-wrist': teacher_model.TeacherModel(digest)})
+    loaded = task_builder.load_task_input(task, spec, teacher_socket=TEACHER_SOCKET)
+    assert loaded.rig.rig == 'side-wrist'
+
+
+# ---- R3-a: the Teacher execution policy a campaign pins is part of its controlled identity and of what the frozen set must bind ----------
+
+def test_the_campaign_config_may_pin_the_teacher_policy_and_only_by_a_sha256(world, tmp_path):
+    campaign = dict(world['campaign'], teacher_execution_policy_sha256='f' * 64)
+    assert load_campaign_config(write_config(tmp_path, campaign))['teacher_execution_policy_sha256'] == 'f' * 64
+    for bad in ('F' * 64, 'f' * 63, 5):
+        with pytest.raises(ValueError, match='CAMPAIGN_CONFIG_INVALID'):
+            load_campaign_config(write_config(tmp_path, dict(world['campaign'], teacher_execution_policy_sha256=bad)))
+
+
+def test_a_pinned_teacher_policy_must_be_the_policy_the_frozen_set_binds(world):
+    bound = verify_frozen_inputs(Path(world['manifest']['path']))['teacher_execution_policy']['policy_sha256']
+    pinned = dict(world['args']['campaign_config'], teacher_execution_policy_sha256=bound)
+    assert case_inputs.campaign_binding(world['manifest'], **dict(world['args'], campaign_config=pinned)) == world['binding']
+    other = dict(world['args']['campaign_config'], teacher_execution_policy_sha256='e' * 64)
+    refused('CASE_INPUTS_TEACHER_POLICY_MISMATCH', case_inputs.campaign_binding, world['manifest'], **dict(world['args'], campaign_config=other))

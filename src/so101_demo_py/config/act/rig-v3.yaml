@@ -1,0 +1,15 @@
+# SO-101 ACT camera rig profile, version 3 (indoor scene design 2026-10-24-so101-indoor-scene-design.md): the rig-v2 robot, side
+# and wrist cameras, topics and six-joint state, in the bright indoor scene (`assets/mujoco/act/scene_side_wrist_indoor.xml`). Only
+# the rig name differs from rig-v2.yaml; the scene file is named in `act/rig_files.py`.
+kind: act_rig_profile
+schema_version: 1
+rig: side-wrist-indoor
+cameras:
+  - {name: side, image_topic: /side_camera/color, info_topic: /side_camera/camera_info, frame_key: side_png}
+  - {name: wrist, image_topic: /wrist_camera/color, info_topic: /wrist_camera/camera_info, frame_key: wrist_png}
+has_head: false
+has_neck: false
+state:
+  arm_joints: ["1", "2", "3", "4", "5", "6"]
+  neck_features: []
+  state_dim: 6

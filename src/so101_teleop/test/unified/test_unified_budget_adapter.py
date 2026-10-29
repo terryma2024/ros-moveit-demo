@@ -122,7 +122,7 @@ def test_lifecycle_start_gate_uses_the_adapter_without_a_cached_view():
     from so101_teleop.unified.ports import UnifiedServices
 
     composition = UnifiedServices(
-        teleop=None, tasks=None, validation=None, budget_source=unavailable_source()
+        teleop=None, tasks=None, budget_source=unavailable_source()
     )
     lifecycle = UnifiedLifecycle(composition)
     with pytest.raises(MutationError, match="BUDGET_PROVIDER_NOT_READY"):

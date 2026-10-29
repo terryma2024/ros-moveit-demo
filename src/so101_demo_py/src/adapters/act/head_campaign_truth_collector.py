@@ -21,8 +21,8 @@ def create_campaign_truth_collector(*,node,inputs,writer):
     import copy
     import json
     import yaml
-    from so101_demo.act.head_search_campaign_scene import load_case_fixture
-    from so101_demo.act.head_search_campaign_truth import _read_ref
+    from so101_demo.act.head_search.campaign_scene import load_case_fixture
+    from so101_demo.act.head_search.campaign_truth import _read_ref
     from .head_execution_scene import load_scene_safety
     safety=load_scene_safety(inputs)
     fixture=load_case_fixture(inputs,safety)
@@ -231,7 +231,7 @@ class FrameOriginalRecorder:
                 received_utc_ns,received_monotonic_ns)
             if self.failure:
                 raise ValueError(self.failure)
-            from so101_demo.act.head_search_campaign_truth import validate_native_reference
+            from so101_demo.act.head_search.campaign_truth import validate_native_reference
             try:validate_native_reference(original,self.expected_reference)
             except ValueError as error:self._fail(str(error))
             if frame.schema_version != 1 or any(getattr(frame,k) != v for k,v in self.expected.items()):

@@ -96,7 +96,7 @@ def _scenario_arguments(inputs: dict, output: Path, *extra: str) -> list:
 def _patch_scenario_flight(monkeypatch, *, status="PASSED"):
     """Stub the flight's heavy seams, so the CLI case needs no MuJoCo, detector, GPU or gate."""
 
-    from so101_demo.act.head_search_scenarios import writer as scenarios_writer
+    from so101_demo.act.head_search.scenarios import writer as scenarios_writer
 
     seen: dict = {}
 
@@ -175,9 +175,9 @@ def test_measure_scenarios_hands_the_flight_to_the_library(tmp_path: Path, monke
 def test_measure_scenarios_reports_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_scenarios import contracts as scenarios_contracts
-    from so101_demo.act.head_search_scenarios import writer as scenarios_writer
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.scenarios import contracts as scenarios_contracts
+    from so101_demo.act.head_search.scenarios import writer as scenarios_writer
 
     inputs = _scenario_inputs(tmp_path)
 
@@ -240,9 +240,9 @@ def _restart_arguments(inputs: dict, output: Path, *extra: str) -> list:
 def _patch_restart_flight(monkeypatch, *, status="PASS"):
     """Stub the two heavy seams: the runtime readback and the per-anchor flight itself."""
 
-    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
-    from so101_demo.act.head_search_restarts import observation as restarts_observation
-    from so101_demo.act.head_search_restarts import restart_run as restarts_restart_run
+    from so101_demo.act.head_search.restarts import contracts as restarts_contracts
+    from so101_demo.act.head_search.restarts import observation as restarts_observation
+    from so101_demo.act.head_search.restarts import restart_run as restarts_restart_run
 
     seen: dict = {}
 
@@ -366,7 +366,7 @@ def test_measure_restarts_runs_the_three_anchors_and_writes_three_receipts(
     printed = capsys.readouterr().out
     assert "HEAD_SEARCH_RESTARTS_MEASURED" in printed
     assert "status=PASS" in printed
-    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
+    from so101_demo.act.head_search.restarts import contracts as restarts_contracts
 
     for anchor in restarts_contracts.ANCHORS:
         document = json.loads(
@@ -404,9 +404,9 @@ def test_measure_restarts_returns_two_when_an_anchor_refuses(
 def test_measure_restarts_reports_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
-    from so101_demo.act.head_search_restarts import writer as restarts_writer
+    from so101_demo.act.head_search.calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search.restarts import contracts as restarts_contracts
+    from so101_demo.act.head_search.restarts import writer as restarts_writer
 
     inputs = _restart_inputs(tmp_path)
     _patch_restart_flight(monkeypatch)
@@ -431,7 +431,7 @@ def test_serve_teleop_runs_the_owned_acceptance_with_the_plans_declarations(
     without starting, probing or tearing anything down.
     """
 
-    from so101_demo.act.head_search_teleop_acceptance import acceptance as acceptance_acceptance
+    from so101_demo.act.head_search.teleop_acceptance import acceptance as acceptance_acceptance
 
     recorded: dict = {}
 
@@ -494,9 +494,9 @@ def test_serve_teleop_refuses_without_the_acceptance_declarations(tmp_path: Path
 
 
 def test_serve_teleop_reports_a_library_refusal_by_name(tmp_path: Path, monkeypatch, capsys) -> None:
-    from so101_demo.act.head_search_teleop_acceptance import acceptance as acceptance_acceptance
-    from so101_demo.act.head_search_teleop_acceptance import receipts as acceptance_receipts
-    from so101_demo.act.head_search_teleop_acceptance import runners as acceptance_runners
+    from so101_demo.act.head_search.teleop_acceptance import acceptance as acceptance_acceptance
+    from so101_demo.act.head_search.teleop_acceptance import receipts as acceptance_receipts
+    from so101_demo.act.head_search.teleop_acceptance import runners as acceptance_runners
 
     def refuse(**kwargs):
         raise acceptance_runners.TeleopAcceptanceRefused(

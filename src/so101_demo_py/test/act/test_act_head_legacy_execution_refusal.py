@@ -3,8 +3,8 @@ import inspect
 
 import pytest
 
-from so101_demo.act.head_search_restarts import contracts as restarts_contracts
-from so101_demo.act.head_search_restarts import restart_run, search_flight
+from so101_demo.act.head_search.restarts import contracts as restarts_contracts
+from so101_demo.act.head_search.restarts import restart_run, search_flight
 
 
 @pytest.mark.parametrize('entry', ['run_anchor_restart', 'measure_and_search'])

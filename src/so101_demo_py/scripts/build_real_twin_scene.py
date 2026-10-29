@@ -1,0 +1,553 @@
+#!/usr/bin/env python3
+"""Generate the real-twin MuJoCo scene files from `assets/mujoco/real_twin/twin_params.yaml`.
+
+Writes `so101_follower_twin.xml` (the follower robot file with its base at table level), `so101_leader_visual.xml`
+(the visual-only, static, black official SO-101 leader at the mirrored position) and `scene_real_twin_cube_bowl.xml`.
+`--check` compares the files on disk with a fresh generation and exits 1 on a difference, writing nothing.
+
+The existing ACT scenes and robot files are only read, never changed.
+"""
+
+import argparse
+import hashlib
+import math
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+import numpy as np
+import yaml
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+TWIN_DIR = PACKAGE_ROOT / "assets/mujoco/real_twin"
+PARAMS_FILE = TWIN_DIR / "twin_params.yaml"
+FOLLOWER_FILE = "so101_follower_twin.xml"
+LEADER_FILE = "so101_leader_visual.xml"
+SCENE_FILE = "scene_real_twin_cube_bowl.xml"
+JOINT_ORDER = ("pan", "lift", "elbow", "wrist_flex", "wrist_roll", "gripper")
+_FOLLOWER_BASE_LINE = '<body name="base" pos="0 0 0.1899186">'
+
+
+def load_params(path: Path = PARAMS_FILE) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def num(value: float) -> str:
+    text = f"{value:.10g}"
+    return "0" if text in ("-0", "-0.0") else text
+
+
+def vec(values) -> str:
+    return " ".join(num(float(v)) for v in values)
+
+
+def plan_to_world(x_cm: float, y_cm: float, z_cm: float = 0.0) -> np.ndarray:
+    """Plan (x, y, z) cm to world (x, y, z) m: world x = x / 100, world y = -y / 100, world z = z / 100."""
+    return np.array([x_cm / 100.0, -y_cm / 100.0, z_cm / 100.0])
+
+
+def camera_intrinsics_attrs(intrinsics: dict) -> str:
+    """MJCF pinhole attributes for calibrated OpenCV intrinsics (pixel centres at integers).
+
+    MuJoCo's principalpixel is the shift of the principal point from the image centre, positive towards the top left, in
+    continuous pixel coordinates; the image centre is (W / 2, H / 2) there and (W / 2 - 0.5, H / 2 - 0.5) in OpenCV's
+    convention (checked by rendering a sphere). So principalpixel = (W / 2 - 0.5 - cx, H / 2 - 0.5 - cy). The sensor size
+    only fixes the frustum and uses a 10 micrometre pixel pitch. Lens distortion is not rendered.
+    """
+    width, height = intrinsics["resolution"]
+    shift = (width / 2.0 - 0.5 - intrinsics["cx"], height / 2.0 - 0.5 - intrinsics["cy"])
+    return (
+        f'sensorsize="{vec([width * 1e-5, height * 1e-5])}" focalpixel="{vec([intrinsics["fx"], intrinsics["fy"]])}" '
+        f'principalpixel="{vec(shift)}"'
+    )
+
+
+def side_camera_world_axes(cam: dict) -> tuple[np.ndarray, np.ndarray]:
+    """MJCF camera x axis and y axis (world) of the calibrated side camera.
+
+    The plan direction vectors map like points: (x, y, z) -> (x, -y, z). A MuJoCo camera looks along -z with +y up, so its
+    axes are x = forward x up, y = up, z = -forward (roll is kept, not assumed zero).
+    """
+    forward = plan_to_world(*cam["forward_plan"])
+    up = plan_to_world(*cam["image_up_plan"])
+    forward = forward / np.linalg.norm(forward)
+    up = up - np.dot(up, forward) * forward
+    up = up / np.linalg.norm(up)
+    return np.cross(forward, up), up
+
+
+def rest_pose_rad(params: dict) -> list[float]:
+    """The follower rest pose in sim radians: LeRobot degrees through the identity map, clamped to the sim range."""
+    follower = params["follower"]
+    degrees = follower["rest_pose_deg"]
+    ranges = follower["sim_joint_ranges_rad"]
+    values = []
+    for name in JOINT_ORDER:
+        low, high = ranges[name]
+        if name == "gripper":
+            value = low + degrees[name] / 100.0 * (high - low)
+        else:
+            value = math.radians(degrees[name])
+        values.append(min(max(value, low), high))
+    return values
+
+
+def base_origin(params: dict, pan_axis_plan_cm) -> np.ndarray:
+    """World position of the robot file's base body so that the pan axis is at the plan point and the underside is on the table."""
+    follower = params["follower"]
+    axis = plan_to_world(pan_axis_plan_cm[0], pan_axis_plan_cm[1])
+    offset = follower["pan_axis_in_base_m"]
+    z_top = params["frame"]["table_top_z_cm"] / 100.0
+    return np.array([axis[0] - offset[0], axis[1] - offset[1], z_top - follower["base_underside_above_origin_m"]])
+
+
+def source_text(params: dict) -> str:
+    return (PACKAGE_ROOT / params["follower"]["source_file"]).read_text(encoding="utf-8")
+
+
+def build_follower(params: dict) -> str:
+    follower = params["follower"]
+    text = source_text(params)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if digest != follower["source_sha256"]:
+        raise SystemExit(f"{follower['source_file']} sha256 {digest} differs from twin_params.yaml; review and update")
+    origin = base_origin(params, params["frame"]["follower_pan_axis_plan_cm"])
+    if text.count(_FOLLOWER_BASE_LINE) != 1:
+        raise SystemExit("base body line not found in the robot source file")
+    text = text.replace(_FOLLOWER_BASE_LINE, f'<body name="base" pos="{vec(origin)}">')
+    old_material = 'material name="3d_printed" rgba="1.0 0.82 0.12 1.0"'
+    if text.count(old_material) != 1:
+        raise SystemExit("3d_printed material not found in the robot source file")
+    text = text.replace(old_material, f'material name="3d_printed" rgba="{vec(follower["white_rgba"])}"')
+    old_camera = '<camera name="wrist_camera" resolution="640 480" fovy="90" '
+    if text.count(old_camera) != 1:
+        raise SystemExit("wrist camera line not found in the robot source file")
+    wrist = params["wrist_camera"]["intrinsics"]
+    if list(wrist["resolution"]) != [640, 480]:
+        raise SystemExit("wrist camera resolution differs from the robot source file")
+    text = text.replace(old_camera, f'<camera name="wrist_camera" resolution="640 480" {camera_intrinsics_attrs(wrist)} ')
+    header = (
+        "<!-- GENERATED by scripts/build_real_twin_scene.py from twin_params.yaml. Do not edit by hand.\n"
+        f"     Copy of {follower['source_file']} (sha256 {digest}) with three edits only:\n"
+        "     1. the base body is at table level: the pan axis is at world (0, 0) and the base underside is on the table top\n"
+        "        (the source puts the base 0.1899186 m above the floor, on a pedestal);\n"
+        "     2. material 3d_printed is white (the real follower is white; the source is yellow);\n"
+        "     3. the wrist camera uses the calibrated pinhole intrinsics (the mount pose is unchanged and estimated). -->\n"
+    )
+    first_newline = text.index("\n") + 1
+    return text[:first_newline] + header + text[first_newline:]
+
+
+def _quat_mul(a, b):
+    w1, x1, y1, z1 = a
+    w2, x2, y2, z2 = b
+    return (
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+    )
+
+
+def _rpy_quat(roll: float, pitch: float, yaw: float) -> tuple[float, float, float, float]:
+    """URDF rpy (fixed-axis x, y, z; R = Rz(yaw) Ry(pitch) Rx(roll)) as a quaternion (w, x, y, z)."""
+    qx = (math.cos(roll / 2), math.sin(roll / 2), 0.0, 0.0)
+    qy = (math.cos(pitch / 2), 0.0, math.sin(pitch / 2), 0.0)
+    qz = (math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2))
+    return _quat_mul(qz, _quat_mul(qy, qx))
+
+
+def _floats(text: str | None, default: str) -> list[float]:
+    return [float(v) for v in (text or default).split()]
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _leader_rest_rad(params: dict, limits: dict[str, tuple[float, float]]) -> dict[str, float]:
+    """Leader rest pose per URDF joint name: identity degrees to radians, clamped to the URDF limits; the trigger maps 0..100 onto its limit range."""
+    degrees = params["leader"]["rest_pose_deg"]
+    names = dict(zip(JOINT_ORDER, ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"), strict=True))
+    rest = {}
+    for key, joint in names.items():
+        low, high = limits[joint]
+        value = low + degrees[key] / 100.0 * (high - low) if key == "gripper" else math.radians(degrees[key])
+        rest[joint] = min(max(value, low), high)
+    return rest
+
+
+def build_leader(params: dict) -> str:
+    """A visual-only, static leader from the official URDF: every joint is baked into its child body at the rest pose.
+
+    The URDF is parsed as XML data only. Its sha256 and those of the meshes it uses are checked against twin_params.yaml.
+    """
+    leader = params["leader"]
+    urdf_path = TWIN_DIR / leader["urdf"]
+    if _file_sha256(urdf_path) != leader["urdf_sha256"]:
+        raise SystemExit(f"{urdf_path} sha256 differs from twin_params.yaml; review and update")
+    for stem, entry in leader["meshes"].items():
+        if _file_sha256(TWIN_DIR / entry["file"]) != entry["sha256"]:
+            raise SystemExit(f"mesh {stem}: {entry['file']} sha256 differs from twin_params.yaml")
+    root = ET.fromstring(urdf_path.read_text(encoding="utf-8"))
+    links = {link.get("name"): link for link in root.findall("link")}
+    children: dict[str, list] = {}
+    limits: dict[str, tuple[float, float]] = {}
+    for joint in root.findall("joint"):
+        children.setdefault(joint.find("parent").get("link"), []).append(joint)
+        if joint.get("type") == "revolute":
+            limit = joint.find("limit")
+            limits[joint.get("name")] = (float(limit.get("lower")), float(limit.get("upper")))
+    rest = _leader_rest_rad(params, limits)
+    material = {"3d_printed": "leader_print", "sts3215": "leader_motor"}
+
+    fb = leader["urdf_base_in_follower_base"]
+    origin = base_origin(params, leader["pan_axis_plan_cm"]) + np.array(fb["pos_m"])
+    half = math.radians(fb["yaw_deg"]) / 2.0
+    base_quat = (math.cos(half), 0.0, 0.0, math.sin(half))
+
+    mesh_names: list[str] = []
+    lines: list[str] = []
+
+    def body_name(link: str) -> str:
+        return "leader_" + (link[: -len("_link")] if link.endswith("_link") else link)
+
+    def emit(link_name: str, depth: int, pos: str, quat) -> None:
+        pad = "  " * depth
+        name = body_name(link_name)
+        lines.append(f'{pad}<body name="{name}" pos="{pos}" quat="{vec(quat)}">')
+        for index, visual in enumerate(links[link_name].findall("visual")):
+            stem = Path(visual.find("geometry/mesh").get("filename")).stem
+            if stem not in leader["meshes"]:
+                raise SystemExit(f"URDF mesh {stem} is not listed in twin_params.yaml")
+            if stem not in mesh_names:
+                mesh_names.append(stem)
+            origin_element = visual.find("origin")
+            xyz = _floats(origin_element.get("xyz") if origin_element is not None else None, "0 0 0")
+            rpy = _floats(origin_element.get("rpy") if origin_element is not None else None, "0 0 0")
+            geom_name = f"{name}_{visual.get('name') or f'visual_{index:02d}'}"
+            lines.append(
+                f'{pad}  <geom name="{geom_name}" type="mesh" mesh="leader_mesh_{stem}" pos="{vec(xyz)}" quat="{vec(_rpy_quat(*rpy))}" '
+                f'material="{material[visual.find("material").get("name")]}" group="0" contype="0" conaffinity="0" />'
+            )
+        for joint in children.get(link_name, []):
+            if joint.get("type") != "revolute":
+                continue  # fixed frame links carry no geometry
+            axis = _floats(joint.find("axis").get("xyz"), "0 0 1")
+            if axis != [0.0, 0.0, 1.0]:
+                raise SystemExit(f"joint {joint.get('name')}: only z axes are supported")
+            origin_element = joint.find("origin")
+            xyz = _floats(origin_element.get("xyz"), "0 0 0")
+            q_origin = _rpy_quat(*_floats(origin_element.get("rpy"), "0 0 0"))
+            angle = rest[joint.get("name")] / 2.0
+            child_quat = _quat_mul(q_origin, (math.cos(angle), 0.0, 0.0, math.sin(angle)))
+            emit(joint.find("child").get("link"), depth + 1, vec(xyz), child_quat)
+        lines.append(f"{pad}</body>")
+
+    emit("base_link", 2, vec(origin), base_quat)
+    print_rgba = vec(leader["print_rgba"])
+    motor_rgba = vec(leader["motor_rgba"])
+    mesh_lines = [
+        f'    <mesh name="leader_mesh_{stem}" file="{leader["meshes"][stem]["file"]}" />' for stem in mesh_names
+    ]
+    return "\n".join(
+        [
+            "<mujoco>",
+            "  <!-- GENERATED by scripts/build_real_twin_scene.py from twin_params.yaml. Do not edit by hand.",
+            f"       The leader arm: the official SO-101 leader model (leader/so101_leader_new_calib.urdf, sha256 {leader['urdf_sha256']};",
+            "       see leader/SOURCE.md) at the mirrored table position, black, static in the folded rest pose. The gripper is the",
+            "       leader's fixed handle plus its trigger. No joints, no mass, no collision (contype 0, conaffinity 0). -->",
+            "  <asset>",
+            f'    <material name="leader_print" rgba="{print_rgba}" />',
+            f'    <material name="leader_motor" rgba="{motor_rgba}" />',
+            *mesh_lines,
+            "  </asset>",
+            "  <worldbody>",
+            *lines,
+            "  </worldbody>",
+            "</mujoco>",
+            "",
+        ]
+    )
+
+
+def look_at_axes(position: np.ndarray, target: np.ndarray) -> str:
+    """MJCF xyaxes of a camera at `position` looking at `target` (a camera looks along its -z axis)."""
+    back = position - target
+    back = back / np.linalg.norm(back)
+    right = np.cross([0.0, 0.0, 1.0], back)
+    right = right / np.linalg.norm(right)
+    up = np.cross(back, right)
+    return vec(np.concatenate([right, up]))
+
+
+class _Scene:
+    def __init__(self, params: dict) -> None:
+        self.p = params
+        self.worldbody: list[str] = []
+
+    def box(self, name: str, x, y, z, cls: str, material: str | None = None, rgba=None, extra: str = "") -> str:
+        low = plan_to_world(x[0], y[1], z[0])
+        high = plan_to_world(x[1], y[0], z[1])
+        centre = (low + high) / 2.0
+        half = (high - low) / 2.0
+        fill = f' material="{material}"' if material else (f' rgba="{vec(rgba)}"' if rgba else "")
+        return (
+            f'<geom name="{name}" type="box" class="{cls}" pos="{vec(centre)}" size="{vec(half)}"{fill}{extra} />'
+        )
+
+    def cylinder(self, name: str, centre, radius: float, z, cls: str, rgba) -> str:
+        position = plan_to_world(centre[0], centre[1], (z[0] + z[1]) / 2.0)
+        return (
+            f'<geom name="{name}" type="cylinder" class="{cls}" pos="{vec(position)}" '
+            f'size="{num(radius / 100.0)} {num((z[1] - z[0]) / 200.0)}" rgba="{vec(rgba)}" />'
+        )
+
+    def capsule(self, name: str, a, b, radius: float, rgba) -> str:
+        start = plan_to_world(*a)
+        end = plan_to_world(*b)
+        return (
+            f'<geom name="{name}" type="capsule" class="tw_visual" fromto="{vec(start)} {vec(end)}" '
+            f'size="{num(radius / 100.0)}" rgba="{vec(rgba)}" />'
+        )
+
+    def add(self, *lines: str, indent: int = 2) -> None:
+        pad = "  " * indent
+        self.worldbody.extend(pad + line for line in lines)
+
+
+def _cell_world(grid: dict, cell: str) -> tuple[float, float]:
+    row = grid["row_names"].index(cell[0])
+    column = int(cell[1:]) - 1
+    return grid["columns_x"][column], grid["rows_y"][row]
+
+
+def _bowl_lines(params: dict) -> list[str]:
+    bowl = params["bowl"]
+    top_outer = bowl["outer_top_diameter"] / 2.0
+    top_inner = bowl["inner_top_diameter"] / 2.0
+    bottom_outer = bowl["outer_bottom_diameter"] / 2.0
+    height = bowl["height"]
+    wall_h = top_outer - top_inner                       # horizontal wall thickness
+    top_mid = (top_outer + top_inner) / 2.0              # wall centre line radius at the rim
+    bottom_mid = bottom_outer - wall_h / 2.0              # and at the bottom
+    slope = math.atan2(top_mid - bottom_mid, height)      # wall tilt from vertical
+    slant = math.hypot(height, top_mid - bottom_mid)
+    thickness = wall_h * math.cos(slope)
+    count = bowl["wall_segments"]
+    half_width = top_outer * math.tan(math.pi / count)
+    mid_radius = (top_mid + bottom_mid) / 2.0
+    centre = plan_to_world(*bowl["center_plan_cm"], params["frame"]["table_top_z_cm"])
+    lines = [f'<body name="paper_bowl" pos="{vec(centre)}">']
+    for k in range(count):
+        a = 2.0 * math.pi * k / count
+        radial = np.array([math.cos(a), math.sin(a), 0.0])
+        tangent = np.array([-math.sin(a), math.cos(a), 0.0])
+        up = np.array([0.0, 0.0, 1.0])
+        normal = math.cos(slope) * radial - math.sin(slope) * up
+        position = radial * (mid_radius / 100.0) + up * (height / 200.0)
+        lines.append(
+            f'  <geom name="bowl_wall_{k:02d}" type="box" class="tw_solid" pos="{vec(position)}" '
+            f'xyaxes="{vec(tangent)} {vec(-normal)}" '
+            f'size="{num(half_width / 100.0)} {num(thickness / 200.0)} {num(slant / 200.0)}" '
+            f'rgba="{vec(bowl["rgba"])}" friction="{vec(bowl["friction"])}" />'
+        )
+    floor = bowl["floor_thickness"]
+    lines.append(
+        f'  <geom name="bowl_bottom" type="cylinder" class="tw_solid" pos="0 0 {num(floor / 200.0)}" '
+        f'size="{num((bottom_mid + 0.05) / 100.0)} {num(floor / 200.0)}" rgba="{vec(bowl["rgba"])}" '
+        f'friction="{vec(bowl["friction"])}" />'
+    )
+    lines.append("</body>")
+    return lines
+
+
+def _cube_lines(params: dict, name: str, spec: dict) -> list[str]:
+    cubes = params["cubes"]
+    x_cm, y_cm = _cell_world_cm(params, spec["cell"])
+    z_cm = params["frame"]["table_top_z_cm"] + cubes["edge"] / 2.0
+    position = plan_to_world(x_cm, y_cm, z_cm)
+    half = cubes["edge"] / 200.0
+    mass = cubes["mass_g"] / 1000.0
+    inertia = mass * (cubes["edge"] / 100.0) ** 2 / 6.0     # solid cube
+    return [
+        f'<body name="{name}_cube" pos="{vec(position)}">',
+        f'  <freejoint name="{name}_cube_joint" />',
+        f'  <inertial pos="0 0 0" mass="{num(mass)}" diaginertia="{vec([inertia] * 3)}" />',
+        f'  <geom name="{name}_cube_geom" type="box" class="tw_solid" size="{num(half)} {num(half)} {num(half)}" '
+        f'friction="{vec(cubes["friction"])}" rgba="{vec(spec["rgba"])}" />',
+        "</body>",
+    ]
+
+
+def _cell_world_cm(params: dict, cell: str) -> tuple[float, float]:
+    return _cell_world(params["grid"], cell)
+
+
+def build_scene(params: dict) -> str:
+    s = _Scene(params)
+    table, frame = params["table"], params["frame"]
+    top = frame["table_top_z_cm"]
+    thick = table["top_thickness"]
+    x_range, y_range = table["x"], table["y"]
+    z_top = [top - thick, top]
+    desk, monitor = params["desk"], params["monitor"]
+    stand = params["camera_stand"]
+    cam = params["side_camera"]
+    light = params["lighting"]
+
+    s.add(
+        f'<light name="twin_key" pos="{vec(plan_to_world(*light["key"]["pos_plan_cm"]))}" dir="0 0 -1" directional="false" '
+        f'castshadow="true" diffuse="{vec([light["key"]["diffuse"]] * 3)}" specular="0.1 0.1 0.1" cutoff="80" exponent="0.4" />',
+        f'<light name="twin_fill" pos="0 0 1.5" dir="{vec(light["fill"]["dir"])}" directional="true" castshadow="false" '
+        f'diffuse="{vec([light["fill"]["diffuse"]] * 3)}" specular="0.05 0.05 0.05" />',
+    )
+    # room (visual only)
+    s.add(f'<geom name="floor" type="box" class="tw_visual" pos="0.5 0 -0.05" size="4 4 0.05" rgba="{vec(params["floor_rgba"])}" />')
+    s.add(s.box("room_wall", params["wall"]["x"], params["wall"]["y"], params["wall"]["z"], "tw_visual", material="tw_wall"))
+    bhw = params["bed_head_wall"]
+    s.add(s.box("room_bed_head_wall", bhw["x"], bhw["y"], bhw["z"], "tw_visual", material="tw_wall"))
+    s.add(s.box("room_curtain", params["curtain"]["x"], params["curtain"]["y"], params["curtain"]["z"], "tw_visual", rgba=params["curtain"]["rgba"]))
+    s.add(s.box("room_radiator", params["radiator"]["x"], params["radiator"]["y"], params["radiator"]["z"], "tw_visual", rgba=params["radiator"]["rgba"]))
+    s.add(s.box("bed", params["bed"]["x"], params["bed"]["y"], params["bed"]["z"], "tw_visual", rgba=params["bed"]["cover_rgba"]))
+    s.add(s.box("headboard_cushion", params["cushion"]["x"], params["cushion"]["y"], params["cushion"]["z"], "tw_visual", rgba=params["cushion"]["rgba"]))
+    # desk, monitor, lamp
+    d_top = desk["top"]
+    s.add(s.box("desk_top", d_top["x"], d_top["y"], d_top["z"], "tw_visual", rgba=desk["rgba"]))
+    leg = desk["leg_size"]
+    for ix, x0 in enumerate((d_top["x"][0], d_top["x"][1] - leg)):
+        for iy, y0 in enumerate((d_top["y"][0], d_top["y"][1] - leg)):
+            s.add(s.box(f"desk_leg_{ix}{iy}", [x0, x0 + leg], [y0, y0 + leg], [0.0, d_top["z"][0]], "tw_visual", rgba=desk["rgba"]))
+    drawer = desk["drawer"]
+    s.add(s.box("desk_drawer", drawer["x"], drawer["y"], drawer["z"], "tw_visual", rgba=desk["rgba"]))
+    for key in ("panel", "neck", "foot"):
+        part = monitor[key]
+        s.add(s.box(f"monitor_{key}", part["x"], part["y"], part["z"], "tw_visual", rgba=monitor["rgba"]))
+    lamp = params["lamp"]
+    s.add(s.cylinder("desk_lamp", lamp["center"], lamp["radius"], lamp["z"], "tw_visual", lamp["rgba"]))
+    # table: one collision box over the whole top, visual pieces
+    s.add(s.box("table_collision", x_range, y_range, z_top, "tw_collision", extra=f' friction="{vec(table["friction"])}"'))
+    rim_edge = y_range[1] - table["front_rim_depth"]
+    s.add(s.box("table_top_visual", x_range, [y_range[0], rim_edge], z_top, "tw_visual", rgba=table["top_rgba"]))
+    s.add(s.box("table_rim_visual", x_range, [rim_edge, y_range[1]], z_top, "tw_visual", rgba=table["rim_rgba"]))
+    size, inset = table["leg_size"], table["leg_inset"]
+    bed_top = params["bed"]["z"][1]
+    for ix, x0 in enumerate((x_range[0] + inset, x_range[1] - inset - size)):
+        for iy, y0 in enumerate((y_range[0] + inset, y_range[1] - inset - size)):
+            s.add(s.box(f"table_leg_{ix}{iy}", [x0, x0 + size], [y0, y0 + size], [bed_top, z_top[0]], "tw_visual", rgba=table["leg_rgba"]))
+    # camera stand (visual only) and the side camera
+    base = stand["base"]
+    s.add(s.cylinder("stand_base", base["center"], base["diameter"] / 2.0, [top, top + base["height"]], "tw_visual", stand["rgba"]))
+    points = stand["arm_points_cm"]
+    for index in range(len(points) - 1):
+        s.add(s.capsule(f"stand_arm_{index}", points[index], points[index + 1], stand["pole_radius"], stand["rgba"]))
+    cam_position = plan_to_world(cam["position_plan_cm"][0], cam["position_plan_cm"][1], top + cam["position_plan_cm"][2])
+    cam_right, cam_up = side_camera_world_axes(cam)
+    cam_axes = vec(np.concatenate([cam_right, cam_up]))
+    half_cm = cam["body_half_size_cm"]
+    s.add(
+        f'<body name="side_camera_mount" pos="{vec(cam_position)}" xyaxes="{cam_axes}">',
+        f'  <geom name="side_camera_body" type="box" class="tw_visual" pos="0 0 {num(half_cm[2] / 100.0 + 0.004)}" '
+        f'size="{vec([v / 100.0 for v in half_cm])}" rgba="{vec(stand["rgba"])}" />',
+        f'  <camera name="side_camera" resolution="{" ".join(str(v) for v in cam["intrinsics"]["resolution"])}" {camera_intrinsics_attrs(cam["intrinsics"])} />',
+        "</body>",
+    )
+    overview = params["overview_cameras"]
+    for name in ("view_back", "view_left", "view_front"):
+        spec = overview[name]
+        position = plan_to_world(*spec["position_plan_cm"])
+        target = plan_to_world(*spec["target_plan_cm"])
+        s.add(
+            f'<camera name="{name}" resolution="{" ".join(str(v) for v in overview["resolution"])}" '
+            f'fovy="{num(overview["fovy_deg"])}" pos="{vec(position)}" xyaxes="{look_at_axes(position, target)}" />'
+        )
+    s.add(*_bowl_lines(params))
+    s.add(*_cube_lines(params, "green", params["cubes"]["green"]))
+    s.add(*_cube_lines(params, "red", params["cubes"]["red"]))
+
+    green = plan_to_world(*_cell_world_cm(params, params["cubes"]["green"]["cell"]), top + params["cubes"]["edge"] / 2.0)
+    red = plan_to_world(*_cell_world_cm(params, params["cubes"]["red"]["cell"]), top + params["cubes"]["edge"] / 2.0)
+    rest = rest_pose_rad(params)
+    phys = params["physics"]
+    ambient = light["headlight_ambient"]
+    diffuse = light["headlight_diffuse"]
+    out = [
+        '<mujoco model="so101_real_twin_cube_bowl">',
+        "  <!-- GENERATED by scripts/build_real_twin_scene.py from twin_params.yaml. Do not edit by hand.",
+        "       Digital twin of the human's real SO-101 table: cube to bowl, with a distractor cube. Plan frame (cm) to world (m):",
+        "       world x = x / 100, world y = -y / 100, world z = z / 100; the plan origin (follower shoulder_pan axis on the table",
+        "       surface) is world (0, 0, 0.75). The robot faces world -y. Everything except the follower, the cubes, the bowl and",
+        "       the table top is visual only. Estimated values are listed under `estimated` in twin_params.yaml. -->",
+        f'  <include file="{FOLLOWER_FILE}" />',
+        f'  <include file="{LEADER_FILE}" />',
+        f'  <option timestep="{num(phys["timestep"])}" gravity="0 0 -9.81" integrator="{phys["integrator"]}" '
+        f'noslip_iterations="{phys["noslip_iterations"]}" />',
+        "  <!-- The statistic extent fixes the camera near plane (0.01 of the extent). The value is that of the existing indoor",
+        "       scene, so the wrist camera clips the jaw as it does there. -->",
+        f'  <statistic extent="{num(phys["statistic_extent"])}" />',
+        "  <asset>",
+        '    <texture name="twin_sky" type="skybox" builtin="flat" rgb1="0.86 0.87 0.89" rgb2="0.86 0.87 0.89" width="32" height="32" />',
+        f'    <material name="tw_wall" rgba="{vec(params["wall"]["rgba"])}" emission="{num(params["wall"]["emission"])}" specular="0" shininess="0" />',
+        "  </asset>",
+        "  <visual>",
+        f'    <headlight active="1" ambient="{vec([ambient] * 3)}" diffuse="{vec([diffuse] * 3)}" specular="0.1 0.1 0.1" />',
+        '    <global offwidth="1280" offheight="1280" />',
+        '    <quality shadowsize="4096" />',
+        "  </visual>",
+        "  <default>",
+        '    <default class="tw_visual">',
+        '      <geom group="0" contype="0" conaffinity="0" />',
+        "    </default>",
+        '    <default class="tw_collision">',
+        '      <geom group="2" contype="1" conaffinity="1" rgba="0 0 0 0" />',
+        "    </default>",
+        '    <default class="tw_solid">',
+        '      <geom group="0" contype="1" conaffinity="1" />',
+        "    </default>",
+        "  </default>",
+        "  <worldbody>",
+        *s.worldbody,
+        "  </worldbody>",
+        "  <contact>",
+        '    <exclude name="exclude_base_shoulder" body1="base" body2="shoulder" />',
+        "  </contact>",
+        "  <keyframe>",
+        f'    <key name="task_start" qpos="0 0 0 0 0 0 {vec(green)} 1 0 0 0 {vec(red)} 1 0 0 0" ctrl="0 0 0 0 0 0" />',
+        f'    <key name="rest_pose" qpos="{vec(rest)} {vec(green)} 1 0 0 0 {vec(red)} 1 0 0 0" ctrl="{vec(rest)}" />',
+        "  </keyframe>",
+        "</mujoco>",
+        "",
+    ]
+    return "\n".join(out)
+
+
+def generate(params: dict) -> dict[str, str]:
+    return {
+        FOLLOWER_FILE: build_follower(params),
+        LEADER_FILE: build_leader(params),
+        SCENE_FILE: build_scene(params),
+    }
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="compare with the files on disk, write nothing")
+    args = parser.parse_args(argv)
+    outputs = generate(load_params())
+    differing = []
+    for name, text in outputs.items():
+        target = TWIN_DIR / name
+        if args.check:
+            if not target.is_file() or target.read_text(encoding="utf-8") != text:
+                differing.append(name)
+        else:
+            target.write_text(text, encoding="utf-8")
+            print(f"wrote {target}")
+    if differing:
+        print("differs from a fresh generation: " + ", ".join(differing), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -13,8 +13,8 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_teleop_acceptance.acceptance import TeleopAcceptance
-from so101_demo.act.head_search_teleop_acceptance.receipts import (
+from so101_demo.act.head_search.teleop_acceptance.acceptance import TeleopAcceptance
+from so101_demo.act.head_search.teleop_acceptance.receipts import (
     acceptance_receipt,
     bridge_cleanup_receipt,
     check_socket_paths,
@@ -39,7 +39,7 @@ from so101_demo.act.head_search_teleop_acceptance.receipts import (
     TELEOP_TEARDOWN_UNPROVEN,
     validate_receipt,
 )
-from so101_demo.act.head_search_teleop_acceptance.runners import TeleopAcceptanceRefused
+from so101_demo.act.head_search.teleop_acceptance.runners import TeleopAcceptanceRefused
 
 # --- synthetic fixtures -------------------------------------------------------------------------------
 

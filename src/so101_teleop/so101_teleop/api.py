@@ -6,7 +6,7 @@ deleted (see the experiment ledger). What remains here is the small surface othe
 modules legitimately still import:
 
 - ``validate_bind_address``, re-exported from the leaf policy module;
-- the model re-exports below, which ``expert_validation/production.py`` imports from this path.
+- the model re-exports below, kept for existing importers.
 """
 
 from __future__ import annotations

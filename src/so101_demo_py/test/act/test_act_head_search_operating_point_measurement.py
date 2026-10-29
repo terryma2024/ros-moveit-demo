@@ -12,13 +12,13 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.act.head_search_operating_point import (
+from so101_demo.act.head_search.operating_point import (
     CAL_RULE_AFTER_MEASUREMENT,
     CAL_SPLIT_LEAK,
     record_selection_rule,
     select_operating_point,
 )
-from so101_demo.act.head_search_operating_point_measurement.documents import (
+from so101_demo.act.head_search.operating_point_measurement.documents import (
     episode_frame,
     operating_point_measurement_document,
     record_selection_rule_documents,
@@ -26,7 +26,7 @@ from so101_demo.act.head_search_operating_point_measurement.documents import (
     toolchain_identity,
     truth_from_instances,
 )
-from so101_demo.act.head_search_operating_point_measurement.planning import (
+from so101_demo.act.head_search.operating_point_measurement.planning import (
     CAL_OPERATING_POINT_EVIDENCE_CONTRADICTORY,
     CAL_OPERATING_POINT_EVIDENCE_MISSING,
     CalibrationOperatingPointMeasurementRefused,

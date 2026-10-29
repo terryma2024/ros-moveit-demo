@@ -109,8 +109,8 @@ def _run_arguments(
     a test can show what a run that fails to declare one of its inputs does.
     """
 
-    from so101_demo.act.head_search_candidate_freeze import freeze_candidate
-    from so101_demo.act.head_search_operating_point import record_selection_rule
+    from so101_demo.act.head_search.candidate_freeze import freeze_candidate
+    from so101_demo.act.head_search.operating_point import record_selection_rule
 
     declared = {}
     for name, payload in RUN_SEALED_CONTENTS.items():

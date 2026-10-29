@@ -1,7 +1,7 @@
 """The macOS MPS two-worker campaign entry point.
 
-`mujoco_parallel_batch` is the Linux container path: it requires a broker image, a CUDA device and
-`proc_fd_unix`. This is its macOS counterpart, and it exists because the v4 contract had no
+The Linux container batch (a broker image, a CUDA device and `proc_fd_unix`) was retired with the perception
+broker (migration M5). This macOS entry point exists because the v4 contract had no
 executable entry point at all — the schema, the broker, the IPC, the supervisor, the registry and
 the recovery were each tested but never driven together outside a test.
 

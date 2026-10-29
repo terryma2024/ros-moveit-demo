@@ -46,7 +46,7 @@ def test_measure_workspace_projection_hands_the_flight_to_the_library(
 ) -> None:
     """The CLI is a parser and a validator: the projection itself is the library module's."""
 
-    from so101_demo.act.head_search_workspace_projection import (
+    from so101_demo.act.head_search.workspace_projection import (
         writer as head_search_workspace_projection_writer,
     )
 
@@ -109,10 +109,10 @@ def test_measure_workspace_projection_hands_the_flight_to_the_library(
 def test_measure_workspace_projection_reports_the_library_refusal(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act.head_search_workspace_projection import (
+    from so101_demo.act.head_search.workspace_projection import (
         writer as head_search_workspace_projection_writer,
     )
-    from so101_demo.act.head_search_workspace_projection.projection import (
+    from so101_demo.act.head_search.workspace_projection.projection import (
         CAL_PROJECTION_POSE_SET_AMBIGUOUS,
         CalibrationWorkspaceProjectionRefused,
     )
@@ -224,8 +224,8 @@ def _patch_fine_correction_flight(monkeypatch, *, blind_seeds=()):
     the stubbed plant factory last produced rather than being handed one.
     """
 
-    from so101_demo.act import head_search_fine_correction_episodes as measurement
-    from so101_demo.act.head_search_fine_correction_episodes import writer as measurement_writer
+    from so101_demo.act.head_search import fine_correction_episodes as measurement
+    from so101_demo.act.head_search.fine_correction_episodes import writer as measurement_writer
 
     state = {"plant": None}
 
@@ -352,10 +352,10 @@ def test_measure_fine_correction_episodes_refuses_a_calibration_seed(tmp_path: P
 def test_measure_fine_correction_episodes_prints_the_librarys_refusal_and_returns_two(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
-    from so101_demo.act.head_search_fine_correction_episodes import (
+    from so101_demo.act.head_search.fine_correction_episodes import (
         contracts as measurement_contracts,
     )
-    from so101_demo.act.head_search_fine_correction_episodes import writer as measurement_writer
+    from so101_demo.act.head_search.fine_correction_episodes import writer as measurement_writer
 
     inputs = _fine_correction_inputs(tmp_path)
     output = tmp_path / "episodes"

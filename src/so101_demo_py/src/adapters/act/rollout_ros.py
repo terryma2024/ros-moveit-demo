@@ -78,6 +78,9 @@ class ObservationAssembler:
         self.rejected_count = 0
         self._skip_keys = {}
         self.poll_skips = {}            # diagnostics: complete image sets `poll` did not emit, by reason (rgb_skew, rgb_stale, joint_causal)
+        self.deferred = {}              # of those, sets emitted later unchanged (held until the joint state caught up), by first-skip reason
+        self.poll_rejects = {}          # of those, sets superseded or dropped without ever being emitted: the true rejects, by reason
+        self._pending = None            # (set key, [reasons]) of the newest skipped set whose fate is not decided yet
 
     @property
     def joint_names(self) -> tuple:
@@ -90,25 +93,46 @@ class ObservationAssembler:
             self._emitted = dict.fromkeys(self.cameras)
             self._floor_ns = time_ns(finite(source_floor_s, nonnegative=True))
             self.session_id = session_id
+            self._resolve_pending(emitted=False)
 
     def _reject(self, reason: str) -> bool:
         self.rejected.append(reason)
         self.rejected_count += 1
         return False
 
-    def _skip(self, reason: str, key) -> None:
-        """Count a complete set `poll` did not emit, once per set (poll runs every millisecond; one stale set is one skip, not hundreds)."""
+    def _skip(self, reason: str, key, set_key) -> None:
+        """Count a complete set `poll` did not emit, once per set (poll runs every millisecond; one stale set is one skip, not hundreds).
+
+        The set stays pending until its fate is known: emitted unchanged later (deferred, e.g. its stamp was ahead of the newest
+        joint state) or superseded / dropped without being emitted (a true reject)."""
 
         if self._skip_keys.get(reason) != key:
             self._skip_keys[reason] = key
             self.poll_skips[reason] = self.poll_skips.get(reason, 0) + 1
+            if self._pending is None or self._pending[0] != set_key:
+                self._resolve_pending(emitted=False)
+                self._pending = (set_key, [])
+            self._pending[1].append(reason)
+
+    def _resolve_pending(self, *, emitted: bool) -> None:
+        if self._pending is not None:
+            counts = self.deferred if emitted else self.poll_rejects
+            for reason in self._pending[1]:
+                counts[reason] = counts.get(reason, 0) + 1
+            self._pending = None
 
     def reject_document(self) -> dict:
-        """Diagnostics: the inputs the callbacks refused and the complete sets `poll` skipped; their sum is the rgb_sync reject count."""
+        """Diagnostics: the inputs the callbacks refused and the complete sets `poll` skipped.
+
+        `poll_skips` = `deferred_until_joint_state` + `poll_rejects` + `rgb_sync_pending` (by reason, a set skipped for two reasons counts
+        under both). The rgb_sync reject count is the refused inputs plus the true rejects; a deferred or still undecided set is not one."""
 
         with self._lock:
             return {"input_rejects": self.rejected_count, "recent_input_rejects": list(self.rejected)[-8:],
-                    "poll_skips": dict(self.poll_skips), "rgb_sync_rejects": self.rejected_count + sum(self.poll_skips.values())}
+                    "poll_skips": dict(self.poll_skips), "deferred_until_joint_state": dict(self.deferred),
+                    "poll_rejects": dict(self.poll_rejects),
+                    "rgb_sync_pending": len(self._pending[1]) if self._pending else 0,
+                    "rgb_sync_rejects": self.rejected_count + sum(self.poll_rejects.values())}
 
     def note_rejected(self, reason: str) -> None:
         """Count a message the ROS callback itself refused (wrong encoding or shape, unreadable joint names)."""
@@ -173,6 +197,9 @@ class ObservationAssembler:
             if not self._joints or any(not ring for ring in self._frames.values()):
                 return None
             newest = {name: ring[-1] for name, ring in self._frames.items()}
+            set_key = tuple(sorted((name, frame[0]) for name, frame in newest.items()))
+            if self._pending is not None and self._pending[0] != set_key:
+                self._resolve_pending(emitted=False)
             if any(self._emitted[name] is not None and time_ns(frame[0]) <= time_ns(self._emitted[name])
                    for name, frame in newest.items()):
                 return None
@@ -180,17 +207,17 @@ class ObservationAssembler:
             now_ns = time_ns(self._joints[-1][0])
             ages = [now_ns - time_ns(stamp) for stamp in stamps.values()]
             if max(map(time_ns, stamps.values())) - min(map(time_ns, stamps.values())) > time_ns(self.max_skew_s):
-                self._skip("rgb_skew", tuple(sorted(stamps.items())))
+                self._skip("rgb_skew", tuple(sorted(stamps.items())), set_key)
                 return None
             if not all(source_age_ok_ns(now_ns, time_ns(stamp), time_ns(self.max_age_s)) for stamp in stamps.values()):
-                self._skip("rgb_stale", tuple(sorted(stamps.items())))
+                self._skip("rgb_stale", tuple(sorted(stamps.items())), set_key)
                 return None
             at_s = max(stamps.values())
             try:
                 joint_stamp, values, joint_received = causal_sample(
                     [(stamp, (stamp, vector, received)) for stamp, vector, received in self._joints], at_s, self.max_age_s)
             except ValueError:
-                self._skip("joint_causal", at_s)
+                self._skip("joint_causal", at_s, set_key)
                 return None
             state = list(values[:6])
             if self.state_dim == STATE_WITH_NECK:
@@ -204,6 +231,8 @@ class ObservationAssembler:
             for name, frame in newest.items():
                 observation[name] = frame[1]
                 self._emitted[name] = frame[0]
+            if self._pending is not None and self._pending[0] == set_key:
+                self._resolve_pending(emitted=True)
             return observation, audit
 
 
@@ -352,10 +381,11 @@ class ThreadInferenceTransport:
 class WorldCupObserver:
     """The cup pose of the world evidence stream, as the Teacher's observation document (None when none is fresh)."""
 
-    def __init__(self, observer) -> None:
+    def __init__(self, observer, reset_epoch=None) -> None:
         if not callable(getattr(observer, "snapshot_with_receipt", None)):
             raise ValueError("ROLLOUT_WORLD_OBSERVER_INVALID")
         self.observer = observer
+        self.reset_epoch = reset_epoch      # the episode's reset epoch: a pose of any other epoch is no pose (to-do 35)
         self.last_error = None
 
     def cup_pose(self):
@@ -363,6 +393,10 @@ class WorldCupObserver:
             evidence = self.observer.snapshot_with_receipt().evidence
         except Exception as error:      # noqa: BLE001 - a stale or missing sample is "no pose", the machine decides what that means
             self.last_error = (str(error) or type(error).__name__)[:200]
+            return None
+        if self.reset_epoch is not None and evidence.reset_epoch != self.reset_epoch:
+            # A one-shot observer is first handed the transient-local replay of the PREVIOUS epoch: that pose is not this episode's.
+            self.last_error = f"WORLD_EPOCH_MISMATCH: pose of epoch {evidence.reset_epoch}, episode epoch {self.reset_epoch}"
             return None
         state = evidence.object_state
         x, y, z, w = state.orientation_xyzw
@@ -550,8 +584,10 @@ def _last_goals(adapter):
 
 
 def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_shape, session_id: str, source_floor_s: float,
-                      timing: dict, rgb_sync: dict, world_observer_factory):
+                      timing: dict, rgb_sync: dict, world_observer_factory, reset_epoch=None):
     """Create the executor's nodes (AFTER the initial gate) and return the `RolloutSession`.
+
+    `reset_epoch` is the reset epoch of the episode (the reset receipt's): the world pose of any other epoch is refused.
 
     `binding` is the ROS seam: `create_node(name)`, `message_types` (`Image`, `JointState`, `FollowJointTrajectory`), the QoS
     profiles, `action_client(node, type, name)`, `start_spinning(node)` (a background executor; returns a stop callable) and
@@ -618,7 +654,7 @@ def build_ros_session(*, binding, config: dict, cameras, state_dim: int, image_s
             accept_timeout_s=timing["accept_timeout_s"], stop_timeout_s=timing["stop_timeout_s"],
             reference_port=ControllerReference(measured=assembler.latest_arm,
                                                last_goals=lambda: _last_goals(adapter)))
-        world = WorldCupObserver(world_observer_factory(node, session_id))
+        world = WorldCupObserver(world_observer_factory(node, session_id), reset_epoch=reset_epoch)
         stop_spinning = binding.start_spinning(node)
         readiness = await_controllers_ready(binding, {"arm": arm_client, "gripper": gripper_client},
                                             timeout_s=timing.get("controller_ready_timeout_s", CONTROLLER_READY_TIMEOUT_S))
